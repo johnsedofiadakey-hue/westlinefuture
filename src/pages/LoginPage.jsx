@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Spinner } from '../components/Shared';
-import { 
-  Smartphone, Send, ArrowRight, MessageSquare, 
+import {
+  Smartphone, Send, ArrowRight, MessageSquare,
   ShieldCheck, Lock, ChevronLeft, Globe, Shield,
-  Mail, KeyRound, Fingerprint, Command
+  Mail, KeyRound, Fingerprint, Command, Eye, EyeOff
 } from 'lucide-react';
 import Button from '../components/ui/Button';
 
@@ -54,6 +54,7 @@ export default function LoginPage({ onLogin, onBack, brand, type = 'client', ...
 
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [newPass, setNewPass] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
 
   return (
     <div className="lxf" style={{ 
@@ -82,17 +83,21 @@ export default function LoginPage({ onLogin, onBack, brand, type = 'client', ...
                 value={newPass}
                 onChange={e => setNewPass(e.target.value)}
               />
-              <Button 
+              {newPass.length > 0 && newPass.length < 8 && (
+                <p style={{ color: '#DC2626', fontSize: 12, marginBottom: 8, textAlign: 'left' }}>Password must be at least 8 characters.</p>
+              )}
+              <Button
                 onClick={async () => {
-                   if(newPass.length < 6) return alert("Password must be at least 6 characters.");
-                   if(props.updateClientProfile) {
+                   if (newPass.length < 8) { return; }
+                   if (props.updateClientProfile) {
                      await props.updateClientProfile(props.user.id, { requiresPasswordChange: false });
                    }
                    setShowOnboarding(false);
                 }}
-                variant="dark" 
+                disabled={newPass.length < 8}
+                variant="dark"
                 size="lg"
-                style={{ width: '100%' }}
+                style={{ width: '100%', opacity: newPass.length < 8 ? 0.5 : 1 }}
               >Update & Continue</Button>
            </div>
         </div>
@@ -166,15 +171,23 @@ export default function LoginPage({ onLogin, onBack, brand, type = 'client', ...
           </div>
           <div style={{ position: 'relative' }}>
             <KeyRound size={18} style={{ position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)', color: ac }} />
-            <input 
-              type="password" 
-              placeholder="Access Password" 
+            <input
+              type={showPassword ? 'text' : 'password'}
+              placeholder="Access Password"
               aria-label="Access Password"
-              style={{ width: '100%', height: 56, paddingLeft: 48, background: isAdminLogin ? 'rgba(255,255,255,0.03)' : '#F9F7F4', border: isAdminLogin ? '1px solid rgba(255,255,255,0.1)' : '1px solid #F0EBE5', color: isAdminLogin ? '#fff' : '#121212', borderRadius: 12, outline: 'none' }}
-              value={isAdminLogin ? pw : password} 
-              onChange={e => isAdminLogin ? setPw(e.target.value) : setPassword(e.target.value)} 
-              onKeyPress={e => e.key === 'Enter' && handleLoginSubmit()}
+              style={{ width: '100%', height: 56, paddingLeft: 48, paddingRight: 48, background: isAdminLogin ? 'rgba(255,255,255,0.03)' : '#F9F7F4', border: isAdminLogin ? '1px solid rgba(255,255,255,0.1)' : '1px solid #F0EBE5', color: isAdminLogin ? '#fff' : '#121212', borderRadius: 12, outline: 'none' }}
+              value={isAdminLogin ? pw : password}
+              onChange={e => isAdminLogin ? setPw(e.target.value) : setPassword(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleLoginSubmit()}
             />
+            <button
+              type="button"
+              onClick={() => setShowPassword(p => !p)}
+              aria-label={showPassword ? 'Hide password' : 'Show password'}
+              style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: isAdminLogin ? 'rgba(255,255,255,0.3)' : '#B5AFA9', cursor: 'pointer', padding: 4, display: 'flex', alignItems: 'center' }}
+            >
+              {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+            </button>
           </div>
           <Button onClick={handleLoginSubmit} disabled={loading} variant={isAdminLogin ? 'primary' : 'dark'} size="lg" style={{ height: 60, marginTop: 12, width: '100%', gap: 12 }}>
             {loading ? <Spinner /> : isAdminLogin ? <><Shield size={18} /> Authorize Terminal</> : <><ArrowRight size={18} /> Enter Portal</>}

@@ -2,13 +2,50 @@ import React from 'react';
 import { DollarSign, Eye, MessageSquare, CheckCircle, Users, Factory, Truck } from 'lucide-react';
 
 export const PROJECT_STAGES = [
-  { id: 1, name: 'Choosing Materials', statusLabel: 'Selecting items', days: 7, color: '#C8A96E' },
-  { id: 2, name: 'Quote & Approval', statusLabel: 'Awaiting your OK', days: 3, color: '#2196F3', requiresApproval: true },
-  { id: 3, name: 'Deposit & Funding', statusLabel: 'Funds transferring', days: 2, color: '#4CAF50', requiresPayment: true, paymentPct: 50 },
-  { id: 4, name: 'Production', statusLabel: 'Factory is working', days: 21, color: '#1A1410' },
-  { id: 5, name: 'Shipping & Delivery', statusLabel: 'In transit to Ghana', days: 30, color: '#607D8B' },
-  { id: 6, name: 'On-Site Work', statusLabel: 'Active installation', days: 5, color: '#16A34A' },
-  { id: 7, name: 'Completed', statusLabel: 'Project Handover', days: 1, color: '#E5C387' }
+  {
+    id: 1, name: 'Design & Materials', statusLabel: 'Selecting items', days: 7, color: '#C8A96E',
+    icon: 'palette', description: 'Finalising specifications and selecting premium materials for your build.',
+    tasks: ['Confirm site measurements & survey', 'Select glass type and specifications', 'Choose aluminum finish and hardware', 'Approve material samples']
+  },
+  {
+    id: 2, name: 'Quote & Approval', statusLabel: 'Awaiting your OK', days: 3, color: '#2196F3', requiresApproval: true,
+    icon: 'file-check', description: 'Reviewing the full project quotation and technical drawings for your sign-off.',
+    tasks: ['Review detailed quotation', 'Sign off technical drawings', 'Confirm project scope & terms', 'Submit initial deposit']
+  },
+  {
+    id: 3, name: 'Funding Secured', statusLabel: 'Funds confirmed', days: 2, color: '#4CAF50', requiresPayment: true, paymentPct: 50,
+    icon: 'dollar-sign', description: 'Deposit received and materials ordered from our global supply chain.',
+    tasks: ['Deposit payment confirmed', 'Materials ordered from supplier', 'Production slot allocated', 'Client portal access granted']
+  },
+  {
+    id: 4, name: 'Production', statusLabel: 'Factory is working', days: 21, color: '#1A1410',
+    icon: 'factory', description: 'Your glass and aluminum components are being precision-fabricated at the factory.',
+    tasks: ['Cutting & processing complete', 'Tempering and coating applied', 'Quality control inspection passed', 'Components packed for dispatch']
+  },
+  {
+    id: 5, name: 'Shipping & Delivery', statusLabel: 'In transit to Ghana', days: 30, color: '#607D8B',
+    icon: 'ship', description: 'Cargo is in transit from the factory to your site via ocean freight.',
+    tasks: ['Dispatched from factory', 'Ocean freight booking confirmed', 'Customs clearance processed', 'Local delivery to site completed']
+  },
+  {
+    id: 6, name: 'Installation', statusLabel: 'Active installation', days: 5, color: '#16A34A',
+    icon: 'wrench', description: 'Our technical crew is on-site fitting and finishing all components.',
+    tasks: ['Site prepared and secured', 'Structural installation complete', 'Finishing and sealant applied', 'Snag list resolved & signed off']
+  },
+  {
+    id: 7, name: 'Completed', statusLabel: 'Project Handover', days: 1, color: '#E5C387',
+    icon: 'star', description: 'Project complete. Final inspection done and handover documents issued.',
+    tasks: ['Final inspection passed', 'Balance payment received', 'Handover documents signed', 'Client satisfaction confirmed']
+  }
+];
+
+export const KANBAN_COLUMNS = [
+  { id: 'design', label: 'Design & Quote', stages: [1, 2], color: '#C8A96E', bg: 'rgba(200,169,110,0.08)' },
+  { id: 'funded', label: 'Funded', stages: [3], color: '#4CAF50', bg: 'rgba(76,175,80,0.08)' },
+  { id: 'production', label: 'In Production', stages: [4], color: '#1A1410', bg: 'rgba(26,20,16,0.05)' },
+  { id: 'shipping', label: 'Shipping', stages: [5], color: '#607D8B', bg: 'rgba(96,125,139,0.08)' },
+  { id: 'installation', label: 'Installation', stages: [6], color: '#16A34A', bg: 'rgba(22,163,74,0.08)' },
+  { id: 'done', label: 'Completed', stages: [7], color: '#E5C387', bg: 'rgba(229,195,135,0.08)' },
 ];
 
 export const LIFE_RIBBON = [

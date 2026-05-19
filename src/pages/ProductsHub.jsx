@@ -246,7 +246,7 @@ export default function ProductsHub({ brand, user, onPortal, setPage, content })
     import('../catalog.jsx').then(m => {
       setCatalogData({ products: m.GLASS_CATALOG_DATA, categories: m.GLASS_CATALOG_CATEGORIES });
       setLoading(false);
-    });
+    }).catch(() => setLoading(false));
   }, []);
 
   const products = useMemo(() => content?.products || catalogData.products || [], [content?.products, catalogData.products]);

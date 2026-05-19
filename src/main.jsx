@@ -17,7 +17,24 @@ class ErrorBoundary extends Component {
     this.state = { hasError: false, error: null };
   }
   static getDerivedStateFromError(error) { return { hasError: true, error }; }
-  componentDidCatch(error, errorInfo) { console.error("CRASH:", error, errorInfo); }
+  componentDidCatch(error, errorInfo) {
+    const report = {
+      message: error.message,
+      stack: error.stack,
+      componentStack: errorInfo.componentStack,
+      timestamp: new Date().toISOString(),
+      url: window.location.href
+    };
+    console.error("CRASH:", report);
+    const endpoint = import.meta.env.VITE_ERROR_LOG_URL;
+    if (endpoint) {
+      fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(report)
+      }).catch(() => {});
+    }
+  }
   render() {
     if (this.state.hasError) {
       return (
@@ -46,7 +63,7 @@ class ErrorBoundary extends Component {
 
 const queryClient = new QueryClient();
 
-console.log("App Mounting...");
+if (import.meta.env.DEV) console.log("App Mounting...");
 
 createRoot(document.getElementById('root')).render(
   <ErrorBoundary>

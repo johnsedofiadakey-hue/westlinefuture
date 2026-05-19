@@ -18,6 +18,7 @@ import { PROJECT_STAGES } from '../data.jsx';
 import AdminShowcase from './admin/AdminShowcase';
 import AdminFinancials from './admin/AdminFinancials';
 import AdminAnalytics from './admin/AdminAnalytics';
+import ProjectKanban from './admin/ProjectKanban';
 
 export default function AdminPortal({ user, onLogout, onPreview, content, setContent, ...props }) {
   const location = useLocation();
@@ -67,6 +68,7 @@ export default function AdminPortal({ user, onLogout, onPreview, content, setCon
       case 'client-hub': return <ClientHub clientId={selectedClientId} onBack={() => setView('operations')} {...common} />;
       case 'logistics': return <AdminLogistics {...common} />;
       case 'installations': return <AdminInstallations {...common} />;
+      case 'projects': return <ProjectKanban {...common} clients={props.clients} updateProject={props.syncProjects} />;
       case 'cms': return <AdminCMS {...common} onPreview={onPreview} />;
       case 'portfolio': return <AdminPortfolio {...common} />;
       case 'showcase': return <AdminShowcase {...common} />;

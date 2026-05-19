@@ -1,74 +1,50 @@
 /**
  * Unified Messenger Service Hub
- * Acts as a bridge between the application and various messaging providers.
+ * Routes all messaging through the server-side Cloud Function proxy.
+ * API tokens are never exposed in the browser bundle.
  */
-import { TwilioService } from './TwilioService';
-import { MetaWhatsAppService } from './MetaWhatsAppService';
-import { ArkeselService } from './ArkeselService';
 
-const PROVIDER = import.meta.env.VITE_WHATSAPP_PROVIDER || 'mock'; // Defaults to mock for safety
+const PROVIDER = import.meta.env.VITE_WHATSAPP_PROVIDER || 'mock';
+const CLOUD_FN_URL = import.meta.env.VITE_WHATSAPP_CLOUD_FN_URL; // e.g. https://us-central1-<project>.cloudfunctions.net/sendWhatsApp
+
+async function callProxy(phone, message) {
+  if (!CLOUD_FN_URL) throw new Error('VITE_WHATSAPP_CLOUD_FN_URL is not configured');
+  const res = await fetch(CLOUD_FN_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ phone, message, provider: PROVIDER })
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `HTTP ${res.status}`);
+  }
+  return res.json();
+}
 
 export const MessengerService = {
-  /**
-   * Routes the OTP request to the active provider.
-   */
   sendOTP: async (phone, code) => {
-    console.log(`[MessengerService] Routing via provider: ${PROVIDER}`);
+    if (import.meta.env.DEV) console.log(`[MessengerService] OTP via provider: ${PROVIDER}`);
 
-    switch (PROVIDER.toLowerCase()) {
-      case 'twilio':
-        return await TwilioService.sendWhatsAppOTP(phone, code);
-      
-      case 'meta':
-        return await MetaWhatsAppService.sendWhatsAppOTP(phone, code);
-
-      case 'arkesel':
-        return await ArkeselService.sendOTP(phone, code);
-      
-      case 'mock':
-        // Simulation for local development
-        return await new Promise((resolve) => {
-          setTimeout(() => {
-            console.log("------------------------------------------");
-            console.log(`[MOCK WHATSAPP LOG] To: ${phone}`);
-            console.log(`[MOCK WHATSAPP LOG] Message: Your Glasstech Fab code is ${code}`);
-            console.log("------------------------------------------");
-            resolve({ success: true, sid: 'mock_sid_123' });
-          }, 1000);
-        });
-
-      default:
-        throw new Error(`Unsupported messaging provider: ${PROVIDER}`);
+    if (PROVIDER === 'mock') {
+      return new Promise((resolve) => setTimeout(() => {
+        if (import.meta.env.DEV) console.log(`[MOCK OTP] To: ${phone} | Code: ${code}`);
+        resolve({ success: true, sid: crypto.randomUUID() });
+      }, 800));
     }
+
+    return callProxy(phone, `Your Glasstech Fab verification code is: ${code}`);
   },
 
-  /**
-   * Sends a generic message to the client.
-   */
   sendMessage: async (phone, message) => {
-    console.log(`[MessengerService] Routing generic message via provider: ${PROVIDER}`);
+    if (import.meta.env.DEV) console.log(`[MessengerService] Message via provider: ${PROVIDER}`);
 
-    switch (PROVIDER.toLowerCase()) {
-      case 'meta':
-        return await MetaWhatsAppService.sendMessage(phone, message);
-      
-      case 'arkesel':
-        return await ArkeselService.sendMessage(phone, message, 'whatsapp');
-
-      case 'mock':
-        return await new Promise((resolve) => {
-          setTimeout(() => {
-            console.log("------------------------------------------");
-            console.log(`[MOCK WHATSAPP GENERIC] To: ${phone}`);
-            console.log(`[MOCK WHATSAPP GENERIC] Message: ${message}`);
-            console.log("------------------------------------------");
-            resolve({ success: true, sid: 'mock_msg_123' });
-          }, 800);
-        });
-
-      default:
-        console.warn(`Messaging provider ${PROVIDER} does not support generic messaging yet.`);
-        return { success: false, error: 'Provider not supported' };
+    if (PROVIDER === 'mock') {
+      return new Promise((resolve) => setTimeout(() => {
+        if (import.meta.env.DEV) console.log(`[MOCK MSG] To: ${phone} | ${message}`);
+        resolve({ success: true, sid: crypto.randomUUID() });
+      }, 600));
     }
+
+    return callProxy(phone, message);
   }
 };

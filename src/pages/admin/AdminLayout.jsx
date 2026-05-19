@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { 
+import {
   LayoutDashboard, Users, Settings, LogOut, Folder, FileCode,
   Eye, Calendar, Activity, Globe, Truck, Package, Mail, MessageSquare, Sparkles,
-  ChevronRight, ChevronDown, FolderOpen, FileText, Briefcase, TrendingUp
+  ChevronRight, ChevronDown, FolderOpen, FileText, Briefcase, TrendingUp, Kanban
 } from 'lucide-react';
 import { NotificationBell } from '../../components/Shared';
 
@@ -23,9 +23,18 @@ export default function AdminLayout({ user, onLogout, onPreview, brand, view, se
       ]
     },
     {
+      label: 'Projects',
+      items: [
+        { id: 'projects', label: 'Project Board', icon: <Kanban size={18} /> },
+        { id: 'installations', label: 'Installations', icon: <Activity size={18} /> },
+        { id: 'logistics', label: 'Logistics', icon: <Truck size={18} /> },
+      ]
+    },
+    {
       label: 'Clients',
       items: [
         { id: 'operations', label: 'Client Directory', icon: <Users size={18} /> },
+        { id: 'email', label: 'Inquiry Queue', icon: <Mail size={18} /> },
       ]
     },
     {
@@ -179,9 +188,10 @@ export default function AdminLayout({ user, onLogout, onPreview, brand, view, se
                  )}
                                 <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
                    <div style={{ flex: 1, position: 'relative' }}>
-                      <select 
-                        value={props.lang} 
+                      <select
+                        value={props.lang}
                         onChange={e => props.setLang(e.target.value)}
+                        aria-label="Language"
                         style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid #F0EBE5', background: '#fff', fontSize: 10, fontWeight: 800, cursor: 'pointer' }}
                       >
                         <option value="en">EN</option>
@@ -205,25 +215,6 @@ export default function AdminLayout({ user, onLogout, onPreview, brand, view, se
                  </div>
                </div>
                
-               {/* PREDICTIVE SEARCH RESULTS DROPDOWN (STUB) */}
-               {false && (
-                 <div style={{ 
-                   position: 'absolute', top: 70, left: '50%', transform: 'translateX(-50%)', 
-                   width: 500, background: '#fff', borderRadius: 20, boxShadow: '0 30px 60px rgba(0,0,0,0.1)',
-                   padding: 24, zIndex: 1000, border: '1px solid #F0EBE5' 
-                 }}>
-                    <div style={{ fontSize: 10, fontWeight: 900, color: '#B5AFA9', textTransform: 'uppercase', marginBottom: 16 }}>Top Results</div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                       <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: 12, borderRadius: 12, background: '#F9F7F4' }}>
-                          <Users size={16} color={ac} />
-                          <div>
-                             <div style={{ fontSize: 13, fontWeight: 700 }}>Elite Finish Ltd</div>
-                             <div style={{ fontSize: 11, color: '#B5AFA9' }}>Client • Spintex Road</div>
-                          </div>
-                       </div>
-                    </div>
-                 </div>
-               )}
             </div>
           </header>
 

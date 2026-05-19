@@ -6,6 +6,8 @@ import {
   Key, MoreVertical, Briefcase, CheckSquare, Square, AlertTriangle
 } from 'lucide-react';
 import { PAv, PSBadge } from '../../components/Shared';
+import EmptyState from '../../components/ui/EmptyState';
+import { Users as UsersIcon } from 'lucide-react';
 
 export default function AdminClients({ dbClients, createClient, updateClient, deleteClient, deleteSelectedClients, deleteAllClients, resetUserPassword, brand, ...props }) {
   const [showAdd, setShowAdd] = useState(false);
@@ -15,6 +17,9 @@ export default function AdminClients({ dbClients, createClient, updateClient, de
   const [confirmDelete, setConfirmDelete] = useState(null); 
   const [newC, setNewC] = useState({ name: '', email: '', phone: '', company: '' });
   const [loading, setLoading] = useState(false);
+  const [formErrors, setFormErrors] = useState({});
+
+  const PHONE_RE = /^\+?[\d\s\-().]{7,20}$/;
 
   const ac = brand.color || '#C8A96E';
   const { invoices = [], workOrders = [] } = props;
@@ -35,7 +40,12 @@ export default function AdminClients({ dbClients, createClient, updateClient, de
   };
 
   const handleSubmit = async () => {
-    if (!newC.name || !newC.phone) return alert("Required: Full Name and Phone Number");
+    const errs = {};
+    if (!newC.name.trim()) errs.name = 'Full name is required';
+    if (!newC.phone.trim()) errs.phone = 'Phone number is required';
+    else if (!PHONE_RE.test(newC.phone.trim())) errs.phone = 'Invalid phone format (e.g. +233 24 000 0000)';
+    setFormErrors(errs);
+    if (Object.keys(errs).length) return;
     setLoading(true);
     try {
       if (editingClient) await updateClient(editingClient.id, newC);
@@ -129,6 +139,16 @@ export default function AdminClients({ dbClients, createClient, updateClient, de
             </tr>
           </thead>
           <tbody>
+            {filtered.length === 0 && (
+              <tr><td colSpan={5}>
+                <EmptyState
+                  icon={<UsersIcon size={28} />}
+                  title={search ? 'No clients match your search' : 'No clients yet'}
+                  description={search ? 'Try a different name or phone number.' : 'Register your first client to get started.'}
+                  action={!search ? { label: 'Add Client', onClick: () => setShowAdd(true) } : undefined}
+                />
+              </td></tr>
+            )}
             {filtered.map(client => {
               const myProjects = (workOrders || []).filter(wo => wo.clientId === client.id);
               const latestProject = myProjects[myProjects.length - 1];
@@ -212,12 +232,14 @@ export default function AdminClients({ dbClients, createClient, updateClient, de
              <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
                 <div className="p-field">
                    <label style={{ fontSize: 10, textTransform: 'uppercase', fontWeight: 800, color: '#B5AFA9', marginBottom: 8, display: 'block' }}>Full Legal Name</label>
-                   <input className="p-inp" value={newC.name} onChange={e => setNewC({...newC, name: e.target.value})} placeholder="e.g. Samuel Amissah" />
+                   <input className="p-inp" value={newC.name} onChange={e => setNewC({...newC, name: e.target.value})} placeholder="e.g. Samuel Amissah" style={{ borderColor: formErrors.name ? '#EF4444' : undefined }} />
+                   {formErrors.name && <div style={{ color: '#DC2626', fontSize: 11, marginTop: 4 }}>{formErrors.name}</div>}
                 </div>
 
                 <div className="p-field">
                    <label style={{ fontSize: 10, textTransform: 'uppercase', fontWeight: 800, color: '#B5AFA9', marginBottom: 8, display: 'block' }}>Direct Phone (Primary ID)</label>
-                   <input className="p-inp" value={newC.phone} onChange={e => setNewC({...newC, phone: e.target.value})} placeholder="e.g. +233 ..." />
+                   <input className="p-inp" value={newC.phone} onChange={e => setNewC({...newC, phone: e.target.value})} placeholder="e.g. +233 24 000 0000" style={{ borderColor: formErrors.phone ? '#EF4444' : undefined }} />
+                   {formErrors.phone && <div style={{ color: '#DC2626', fontSize: 11, marginTop: 4 }}>{formErrors.phone}</div>}
                 </div>
                 <div className="p-field">
                    <label style={{ fontSize: 10, textTransform: 'uppercase', fontWeight: 800, color: '#B5AFA9', marginBottom: 8, display: 'block' }}>Company / Entity</label>

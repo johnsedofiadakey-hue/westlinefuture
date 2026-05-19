@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Search, ArrowLeft, Check, Plus, Camera, FileText, DollarSign, ArrowRight, MessageCircle } from 'lucide-react';
-import { PSBadge, SBadge } from '../../components/Shared';
+import { PSBadge, SBadge, FF as PFormField } from '../../components/Shared';
 import { PROJECT_STAGES } from '../../data';
 import AdminTasks from './AdminTasks';
 import AdminProcurement from './AdminProcurement';
@@ -14,8 +14,10 @@ export default function AdminInstallations({ clients = [], updateProject, dbClie
   const [showManual, setShowManual] = useState(false);
   const [manData, setManData] = useState({ amount: '', method: 'Bank Transfer', ref: '' });
 
+  const [manErr, setManErr] = useState('');
   const handleManual = async () => {
-    if (!manData.amount) return alert('Amount required');
+    if (!manData.amount) { setManErr('Amount is required'); return; }
+    setManErr('');
     await recordOfflinePayment(sel, manData.amount, manData.method, manData.ref);
     setShowManual(false);
     setManData({ amount: '', method: 'Bank Transfer', ref: '' });
@@ -139,11 +141,11 @@ export default function AdminInstallations({ clients = [], updateProject, dbClie
                <div style={{ marginTop: 24, paddingTop: 20, borderTop: '1px solid rgba(0,0,0,.05)' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
                     <span className="lxf" style={{ fontSize: 13, color: '#B5AFA9' }}>Total Verified</span>
-                    <span className="lxf" style={{ fontSize: 14, fontWeight: 700, color: '#16A34A' }}>${(transactions || []).filter(t => t.parentId === sel).reduce((a, b) => a + parseFloat(b.amount), 0).toLocaleString()}</span>
+                    <span className="lxf" style={{ fontSize: 14, fontWeight: 700, color: '#16A34A' }}>${(transactions || []).filter(t => t.parentId === sel).reduce((a, b) => a + (parseFloat(String(b.amount || '0').replace(/[^0-9.]/g, '')) || 0), 0).toLocaleString()}</span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <span className="lxf" style={{ fontSize: 13, color: '#B5AFA9' }}>Remaining Balance</span>
-                    <span className="lxf" style={{ fontSize: 14, fontWeight: 700, color: '#ff4444' }}>${(totalBudget - (transactions || []).filter(t => t.parentId === sel).reduce((a, b) => a + parseFloat(b.amount), 0)).toLocaleString()}</span>
+                    <span className="lxf" style={{ fontSize: 14, fontWeight: 700, color: '#ff4444' }}>${(totalBudget - (transactions || []).filter(t => t.parentId === sel).reduce((a, b) => a + (parseFloat(String(b.amount || '0').replace(/[^0-9.]/g, '')) || 0), 0)).toLocaleString()}</span>
                   </div>
                </div>
             </div>
@@ -168,6 +170,7 @@ export default function AdminInstallations({ clients = [], updateProject, dbClie
                 <h3 className="lxfh" style={{ fontSize: 22, marginBottom: 8 }}>Record External Payment</h3>
                 <p style={{ fontSize: 13, color: '#B5AFA9', marginBottom: 24 }}>Manually add a payment for audit purposes (Cash, Bank Trace, etc).</p>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                   {manErr && <div style={{ padding: '10px 14px', background: '#FEF2F2', border: '1px solid #FEE2E2', borderRadius: 8, color: '#DC2626', fontSize: 12 }}>{manErr}</div>}
                    <PFormField label="Amount ($)"><input className="p-inp" type="number" value={manData.amount} onChange={e => setManData({...manData, amount: e.target.value})} /></PFormField>
                    <PFormField label="Method">
                       <select className="p-inp" value={manData.method} onChange={e => setManData({...manData, method: e.target.value})}>

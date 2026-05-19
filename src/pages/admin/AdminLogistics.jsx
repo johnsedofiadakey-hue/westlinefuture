@@ -5,6 +5,7 @@ import {
   Download, ExternalLink, Share2, FileText, CheckCircle2, Clock
 } from 'lucide-react';
 import { FF as PFormField, PSBadge } from '../../components/Shared';
+import EmptyState from '../../components/ui/EmptyState';
 
 const LOGISTICS_MILESTONES = [
   { id: 'Dispatched', label: 'Supplier', icon: <Package size={14} /> },
@@ -37,11 +38,11 @@ export default function AdminLogistics({ containers = [], workOrders = [], clien
      if (['Sea', 'Customs', 'Local'].includes(status)) {
         const linkedWorkOrders = workOrders.filter(wo => container?.items?.includes(wo.id));
         const unpaidItems = linkedWorkOrders.filter(wo => {
-           const woInv = (props.invoices || []).find(inv => 
-             (inv.projectId === wo.id || inv.title?.includes(wo.id) || inv.projectId === container.id) 
-             && (inv.type === 'procurement' || inv.category === 'Materials')
+           const woInv = (props.invoices || []).find(inv =>
+             inv.parentId === wo.id || inv.parentId === container.id ||
+             inv.projectId === wo.id || inv.projectId === container.id
            );
-           return woInv && (woInv.status !== 'Paid' && woInv.status !== 'paid');
+           return woInv && woInv.status !== 'Paid' && woInv.status !== 'paid';
         });
 
         if (unpaidItems.length > 0) {
@@ -90,6 +91,16 @@ export default function AdminLogistics({ containers = [], workOrders = [], clien
 
       {activeTab === 'containers' && (
          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(400px, 1fr))', gap: 24 }}>
+            {containers.length === 0 && (
+              <div style={{ gridColumn: '1 / -1' }}>
+                <EmptyState
+                  icon={<Ship size={28} />}
+                  title="No shipments tracked"
+                  description="Add a container to start tracking your international glass shipments."
+                  action={{ label: '+ New Container', onClick: () => setShowAddContainer(true) }}
+                />
+              </div>
+            )}
             {containers.map(c => (
               <div key={c.id} className="p-card" style={{ padding: 24, border: c.atRisk ? '1px solid #EF4444' : '1px solid var(--border)' }}>
                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
@@ -154,7 +165,7 @@ export default function AdminLogistics({ containers = [], workOrders = [], clien
                  {c.atRisk && (
                     <div style={{ marginTop: 16, padding: 12, background: '#FEF2F2', borderRadius: 12, border: '1px solid #FEE2E2' }}>
                        <div style={{ fontSize: 11, fontWeight: 700, color: '#991B1B' }}>Delay Alert: {c.riskReason}</div>
-                       <div style={{ fontSize: 10, color: '#B91C1C', marginTop: 4 }}>System will automatically notify {c.items?.length} clients.</div>
+                       <div style={{ fontSize: 10, color: '#B91C1C', marginTop: 4 }}>Affected clients will be notified via WhatsApp.</div>
                     </div>
                  )}
               </div>
@@ -197,7 +208,7 @@ export default function AdminLogistics({ containers = [], workOrders = [], clien
                            <div style={{ fontSize: 11, color: '#B5AFA9' }}>ID: {wo.id}</div>
                         </td>
                         <td style={{ padding: 16, fontSize: 13 }}>{clients.find(c => c.id === wo.clientId)?.name || 'Guest'}</td>
-                        <td style={{ padding: 16, fontSize: 13, fontWeight: 700 }}>$12,400</td>
+                        <td style={{ padding: 16, fontSize: 13, fontWeight: 700 }}>{wo.budget || '—'}</td>
                         <td style={{ padding: 16 }}>
                            <span style={{ 
                              padding: '4px 10px', borderRadius: 20, fontSize: 10, fontWeight: 800, 

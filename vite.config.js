@@ -1,29 +1,14 @@
+// AUTHORITATIVE BUILD CONFIG — always build from this worktree, deploy from main project root.
+// Deploy command: cd /Users/truth/Developer/glasstechfab && bash deploy.sh
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
-import { VitePWA } from 'vite-plugin-pwa'
 
-// https://vite.dev/config/
 export default defineConfig({
+  build: {
+    outDir: '/Users/truth/Developer/glasstechfab/dist',
+    emptyOutDir: true,
+  },
   plugins: [
     react(),
-    VitePWA({
-      registerType: 'autoUpdate',
-      includeAssets: ['favicon.svg', 'logo.png'],
-      manifest: {
-        short_name: 'Glasstech',
-        name: 'Glasstech Fabrications Hub',
-        icons: [
-          {
-            src: '/favicon.svg',
-            type: 'image/svg+xml',
-            sizes: '512x512'
-          }
-        ],
-        start_url: '.',
-        display: 'standalone',
-        theme_color: '#1A1410',
-        background_color: '#F9F7F4'
-      }
-    })
   ],
 })

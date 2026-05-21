@@ -29,9 +29,9 @@ function CMSBranding({ brand, onSave, ac }) {
         <PFormField label="Company Name"><input className="p-inp" value={f.name || ''} onChange={e => setF({...f, name: e.target.value})} /></PFormField>
         <PFormField label="Tagline"><input className="p-inp" value={f.tagline || ''} onChange={e => setF({...f, tagline: e.target.value})} /></PFormField>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-          <PFormField label="Primary Background"><input type="color" className="p-inp" style={{ height: 44, padding: 4 }} value={f.bgPrimary || '#FDFCFB'} onChange={e => setF({...f, bgPrimary: e.target.value})} /></PFormField>
+          <PFormField label="Primary Background"><input type="color" className="p-inp" style={{ height: 44, padding: 4 }} value={f.bgPrimary || '#F8F8FD'} onChange={e => setF({...f, bgPrimary: e.target.value})} /></PFormField>
           <PFormField label="Secondary Surface"><input type="color" className="p-inp" style={{ height: 44, padding: 4 }} value={f.bgSecondary || '#FFFFFF'} onChange={e => setF({...f, bgSecondary: e.target.value})} /></PFormField>
-          <PFormField label="Accent Color"><input type="color" className="p-inp" style={{ height: 44, padding: 4 }} value={f.color || '#C8A96E'} onChange={e => setF({...f, color: e.target.value})} /></PFormField>
+          <PFormField label="Accent Color"><input type="color" className="p-inp" style={{ height: 44, padding: 4 }} value={f.color || '#231F78'} onChange={e => setF({...f, color: e.target.value})} /></PFormField>
           <PFormField label="Global Text Color"><input type="color" className="p-inp" style={{ height: 44, padding: 4 }} value={f.textColor || '#121212'} onChange={e => setF({...f, textColor: e.target.value})} /></PFormField>
         </div>
         <PFormField label="Site Aesthetic / Theme">
@@ -49,8 +49,8 @@ function CMSBranding({ brand, onSave, ac }) {
                   background: f.theme === t.id ? `${ac}10` : '#fff', cursor: 'pointer', transition: 'all .2s', textAlign: 'center'
                 }}
               >
-                <div className="lxfh" style={{ fontSize: 13, fontWeight: 700, color: f.theme === t.id ? ac : '#1A1410' }}>{t.n}</div>
-                <div className="lxf" style={{ fontSize: 9, color: '#B5AFA9', marginTop: 2 }}>{t.desc}</div>
+                <div className="lxfh" style={{ fontSize: 13, fontWeight: 700, color: f.theme === t.id ? ac : '#0D0B2E' }}>{t.n}</div>
+                <div className="lxf" style={{ fontSize: 9, color: '#9B99C8', marginTop: 2 }}>{t.desc}</div>
               </button>
             ))}
           </div>
@@ -92,7 +92,7 @@ function CMSHomepage({ hero, onSave, ac }) {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 32 }}>
        <h3 className="lxfh" style={{ fontSize: 20 }}>Hero Carousel</h3>
        {slides.map((s, i) => (
-         <div key={i} className="p-card" style={{ padding: 20, background: '#F9F7F4', border: '1px solid rgba(0,0,0,.04)' }}>
+         <div key={i} className="p-card" style={{ padding: 20, background: '#F4F4FA', border: '1px solid rgba(0,0,0,.04)' }}>
             <div style={{ display: 'grid', gridTemplateColumns: '150px 1fr', gap: 20 }}>
                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   <div style={{ height: 100, borderRadius: 6, overflow: 'hidden', background: '#eee' }}>
@@ -144,8 +144,8 @@ function CMSServices({ services, onSave, ac }) {
          {list.map((s, i) => (
            <div key={s.id} className="p-card" style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
              <div style={{ display: 'flex', gap: 16 }}>
-                <div style={{ width: 80, height: 80, borderRadius: 8, background: '#F9F7F4', overflow: 'hidden', flexShrink: 0, position: 'relative' }}>
-                   {s.img ? <img src={s.img} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#B5AFA9' }}><ImgIcon size={24} /></div>}
+                <div style={{ width: 80, height: 80, borderRadius: 8, background: '#F4F4FA', overflow: 'hidden', flexShrink: 0, position: 'relative' }}>
+                   {s.img ? <img src={s.img} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9B99C8' }}><ImgIcon size={24} /></div>}
                    <input type="file" accept="image/*" onChange={e => onFile(i, e.target.files[0])} style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer' }} />
                 </div>
                 <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -220,7 +220,7 @@ function CMSProducts({ products, categories, onSave, ac, syncCMS }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24, position: 'relative' }}>
        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-         <h3 className="lxfh" style={{ fontSize: 24, color: '#1A1410' }}>Marketplace Assets</h3>
+         <h3 className="lxfh" style={{ fontSize: 24, color: '#0D0B2E' }}>Marketplace Assets</h3>
          <div style={{ display: 'flex', gap: 12 }}>
             <button onClick={() => setIsManagingCats(true)} style={{ padding: '10px 20px', background: '#fff', border: '1px solid #ddd', borderRadius: 100, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Manage Categories</button>
             <button onClick={() => setIsAdding(true)} className="p-btn-gold lxf" style={{ padding: '10px 24px', display: 'flex', alignItems: 'center', gap: 8, borderRadius: 100 }}>
@@ -233,14 +233,14 @@ function CMSProducts({ products, categories, onSave, ac, syncCMS }) {
           <div style={{ position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <div style={{ position: 'absolute', inset: 0, background: 'rgba(13,11,9,0.7)', backdropFilter: 'blur(8px)' }} onClick={() => setIsManagingCats(false)} />
             <div className="fade-in" style={{ position: 'relative', width: '100%', maxWidth: 800, background: '#fff', borderRadius: 24, overflow: 'hidden', boxShadow: '0 32px 64px rgba(0,0,0,0.3)', display: 'flex', flexDirection: 'column' }}>
-              <div style={{ padding: '24px 32px', borderBottom: '1px solid #F0EBE5', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#F9F7F4' }}>
+              <div style={{ padding: '24px 32px', borderBottom: '1px solid #F0EBE5', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#F4F4FA' }}>
                 <h4 className="lxfh" style={{ fontSize: 20 }}>Category & Group Manager</h4>
-                <button onClick={() => setIsManagingCats(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#B5AFA9' }}><X size={20} /></button>
+                <button onClick={() => setIsManagingCats(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9B99C8' }}><X size={20} /></button>
               </div>
               <div style={{ padding: 32, display: 'flex', flexDirection: 'column', gap: 24, maxHeight: '70vh', overflowY: 'auto' }}>
                 
                 {/* Add Category Form */}
-                <div style={{ background: '#F9F7F4', padding: 20, borderRadius: 16, display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr auto', gap: 12, alignItems: 'flex-end' }}>
+                <div style={{ background: '#F4F4FA', padding: 20, borderRadius: 16, display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr auto', gap: 12, alignItems: 'flex-end' }}>
                   <PFormField label="Cat ID (Slug)"><input className="p-inp" placeholder="e.g. casement" value={newCat.id} onChange={e => setNewCat({...newCat, id: e.target.value.toLowerCase().replace(/\s/g, '-')})} /></PFormField>
                   <PFormField label="Label Name"><input className="p-inp" placeholder="e.g. Casement Windows" value={newCat.label} onChange={e => setNewCat({...newCat, label: e.target.value})} /></PFormField>
                   <PFormField label="Group">
@@ -278,22 +278,22 @@ function CMSProducts({ products, categories, onSave, ac, syncCMS }) {
          <div style={{ position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
            <div style={{ position: 'absolute', inset: 0, background: 'rgba(13,11,9,0.7)', backdropFilter: 'blur(8px)' }} onClick={() => setIsAdding(false)} />
            <div className="fade-in" style={{ position: 'relative', width: '100%', maxWidth: 700, background: '#fff', borderRadius: 24, overflow: 'hidden', boxShadow: '0 32px 64px rgba(0,0,0,0.3)', display: 'flex', flexDirection: 'column' }}>
-             <div style={{ padding: '24px 32px', borderBottom: '1px solid #F0EBE5', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#F9F7F4' }}>
+             <div style={{ padding: '24px 32px', borderBottom: '1px solid #F0EBE5', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#F4F4FA' }}>
                <h4 className="lxfh" style={{ fontSize: 20 }}>Create New Asset</h4>
-               <button onClick={() => setIsAdding(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#B5AFA9' }}><X size={20} /></button>
+               <button onClick={() => setIsAdding(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9B99C8' }}><X size={20} /></button>
              </div>
              
              <div style={{ padding: 32, display: 'flex', flexDirection: 'column', gap: 24, maxHeight: '70vh', overflowY: 'auto' }}>
                {/* Image Uploader */}
                <div>
                  <div className="lxf" style={{ fontSize: 12, fontWeight: 600, marginBottom: 8 }}>Asset Image</div>
-                 <div style={{ height: 200, background: newItem.img ? '#fff' : '#F9F7F4', border: newItem.img ? '1px solid #F0EBE5' : '2px dashed #DCD7D1', borderRadius: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', overflow: 'hidden' }}>
+                 <div style={{ height: 200, background: newItem.img ? '#fff' : '#F4F4FA', border: newItem.img ? '1px solid #F0EBE5' : '2px dashed #DCD7D1', borderRadius: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', overflow: 'hidden' }}>
                    {uploading ? (
                      <div className="lxf" style={{ color: ac, fontWeight: 600 }}>Uploading...</div>
                    ) : newItem.img ? (
                      <img src={newItem.img} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain', mixBlendMode: 'multiply' }} />
                    ) : (
-                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', color: '#B5AFA9' }}>
+                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', color: '#9B99C8' }}>
                        <Upload size={32} style={{ marginBottom: 12 }} />
                        <div className="lxf" style={{ fontSize: 13, fontWeight: 600 }}>Click to browse or drag image here</div>
                      </div>
@@ -353,7 +353,7 @@ function CMSProducts({ products, categories, onSave, ac, syncCMS }) {
                </div>
              </div>
 
-             <div style={{ padding: '24px 32px', background: '#F9F7F4', borderTop: '1px solid #F0EBE5', display: 'flex', justifyContent: 'flex-end', gap: 12 }}>
+             <div style={{ padding: '24px 32px', background: '#F4F4FA', borderTop: '1px solid #F0EBE5', display: 'flex', justifyContent: 'flex-end', gap: 12 }}>
                <button onClick={() => setIsAdding(false)} className="p-btn-outline lxf" style={{ padding: '12px 24px', borderRadius: 8 }}>Cancel</button>
                <button onClick={handleAddProduct} className="p-btn-gold lxf" style={{ padding: '12px 32px', borderRadius: 8 }}>Create Asset</button>
              </div>
@@ -364,8 +364,8 @@ function CMSProducts({ products, categories, onSave, ac, syncCMS }) {
        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 24 }}>
          {list.map(p => (
            <div key={p.id} className="p-card" style={{ padding: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-              <div style={{ height: 180, background: '#F9F7F4', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', borderBottom: '1px solid #F0EBE5' }}>
-                {p.img ? <img src={p.img} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain', mixBlendMode: 'multiply', padding: 24 }} /> : <div style={{ color: '#B5AFA9' }}>No Image</div>}
+              <div style={{ height: 180, background: '#F4F4FA', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', borderBottom: '1px solid #F0EBE5' }}>
+                {p.img ? <img src={p.img} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain', mixBlendMode: 'multiply', padding: 24 }} /> : <div style={{ color: '#9B99C8' }}>No Image</div>}
                 <div style={{ position: 'absolute', top: 12, right: 12, background: 'rgba(255,255,255,0.9)', padding: '4px 10px', borderRadius: 100, fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.1em', color: p.status === 'Pre-order' ? '#D97706' : '#059669', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
                   {p.status}
                 </div>
@@ -373,16 +373,16 @@ function CMSProducts({ products, categories, onSave, ac, syncCMS }) {
               
               <div style={{ padding: 24, flex: 1, display: 'flex', flexDirection: 'column' }}>
                 <div className="lxf" style={{ fontSize: 10, color: ac, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.1em', marginBottom: 6 }}>{p.cat}</div>
-                <div className="lxfh" style={{ fontSize: 18, marginBottom: 12, color: '#1A1410' }}>{p.name}</div>
+                <div className="lxfh" style={{ fontSize: 18, marginBottom: 12, color: '#0D0B2E' }}>{p.name}</div>
                 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, background: '#FDFCFB', padding: 12, borderRadius: 8, border: '1px solid #F0EBE5', marginBottom: 20 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, background: '#F8F8FD', padding: 12, borderRadius: 8, border: '1px solid #F0EBE5', marginBottom: 20 }}>
                   <div><div style={{ fontSize: 9, color: '#888', textTransform: 'uppercase', fontWeight: 700 }}>FOB</div><div style={{ fontSize: 13, fontWeight: 600 }}>{p.fobPrice || '-'}</div></div>
                   <div><div style={{ fontSize: 9, color: '#888', textTransform: 'uppercase', fontWeight: 700 }}>Landed</div><div style={{ fontSize: 13, fontWeight: 600, color: ac }}>{p.landedCost || '-'}</div></div>
                 </div>
 
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 'auto', borderTop: '1px solid #F0EBE5', paddingTop: 16 }}>
                   <button onClick={() => setList(list.filter(x => x.id !== p.id))} style={{ color: '#ff4444', fontSize: 12, background: 'none', border: 'none', padding: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, fontWeight: 500 }}><Trash size={14} /> Remove</button>
-                  <button className="lxf" style={{ color: '#1A1410', fontSize: 12, background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontWeight: 600 }}>Edit</button>
+                  <button className="lxf" style={{ color: '#0D0B2E', fontSize: 12, background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontWeight: 600 }}>Edit</button>
                 </div>
               </div>
            </div>
@@ -421,13 +421,13 @@ function CMSAbout({ about, onSave, ac }) {
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
         <h3 className="lxfh" style={{ fontSize: 20 }}>About Page Image</h3>
-        <div style={{ height: 300, background: '#F9F7F4', borderRadius: 8, overflow: 'hidden', position: 'relative' }}>
+        <div style={{ height: 300, background: '#F4F4FA', borderRadius: 8, overflow: 'hidden', position: 'relative' }}>
           {f.image ? <img src={f.image} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>No Image</div>}
           <div style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer' }}>
              <input type="file" accept="image/*" onChange={handleImageUpload} style={{ width: '100%', height: '100%', cursor: 'pointer' }} />
           </div>
         </div>
-        <div className="lxf" style={{ fontSize: 11, color: '#B5AFA9', textAlign: 'center' }}>Click the container above to change image</div>
+        <div className="lxf" style={{ fontSize: 11, color: '#9B99C8', textAlign: 'center' }}>Click the container above to change image</div>
       </div>
     </div>
   );
@@ -498,7 +498,7 @@ function CMSGallery({ portfolio, onSave, ac }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
        <h3 className="lxfh" style={{ fontSize: 20 }}>Showcase Project Settings</h3>
-       <div className="lxf" style={{ fontSize: 12, color: '#B5AFA9', marginBottom: -10 }}>Manage the technical projects displayed on your architectural profile.</div>
+       <div className="lxf" style={{ fontSize: 12, color: '#9B99C8', marginBottom: -10 }}>Manage the technical projects displayed on your architectural profile.</div>
        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
          {list.map((p, i) => (
            <div key={p.id} className="p-card" style={{ padding: 20 }}>
@@ -539,7 +539,7 @@ function CMSGallery({ portfolio, onSave, ac }) {
 
 export default function AdminCMS({ content, syncCMS, brand, onPreview, ...props }) {
   const [sub, setSub] = useState('branding');
-  const ac = brand.color || '#C8A96E';
+  const ac = brand.color || '#231F78';
   
   const tabs = [
     { id: 'branding', label: 'Branding', icon: <Sparkles size={16} /> },
@@ -579,13 +579,13 @@ export default function AdminCMS({ content, syncCMS, brand, onPreview, ...props 
         <button onClick={onPreview} className="p-btn-gold lxf" style={{ padding: '8px 16px' }}>View Live Site</button>
       </div>
 
-      <div style={{ display: 'flex', gap: 10, background: '#F9F7F4', padding: 4, borderRadius: 10, alignSelf: 'flex-start' }}>
+      <div style={{ display: 'flex', gap: 10, background: '#F4F4FA', padding: 4, borderRadius: 10, alignSelf: 'flex-start' }}>
         {tabs.map(t => (
           <button key={t.id} onClick={() => setSub(t.id)} 
             className="lxf"
             style={{ 
               display: 'flex', alignItems: 'center', gap: 8, padding: '8px 16px', borderRadius: 8, border: 'none', 
-              background: sub === t.id ? '#fff' : 'transparent', color: sub === t.id ? ac : '#7A6E62', 
+              background: sub === t.id ? '#fff' : 'transparent', color: sub === t.id ? ac : '#5B5894', 
               fontSize: 12, fontWeight: sub === t.id ? 600 : 400, cursor: 'pointer', transition: 'all .2s',
               boxShadow: sub === t.id ? '0 2px 8px rgba(0,0,0,.04)' : 'none'
             }}>

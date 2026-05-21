@@ -1,7 +1,7 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { Trash2, CheckCircle, PenTool } from 'lucide-react';
 
-export default function SignaturePad({ onSave, onClear, ac = '#C8A96E' }) {
+export default function SignaturePad({ onSave, onClear, ac = '#231F78' }) {
   const canvasRef = useRef(null);
   const [isDrawing, setIsDrawing] = useState(false);
   const [ctx, setCtx] = useState(null);
@@ -9,7 +9,7 @@ export default function SignaturePad({ onSave, onClear, ac = '#C8A96E' }) {
   useEffect(() => {
     const canvas = canvasRef.current;
     const context = canvas.getContext('2d');
-    context.strokeStyle = '#1A1410';
+    context.strokeStyle = '#0D0B2E';
     context.lineWidth = 2.5;
     context.lineCap = 'round';
     setCtx(context);

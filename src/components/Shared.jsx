@@ -2,7 +2,7 @@ import React, { useState, useRef } from 'react';
 import { X, Check, DollarSign, SplitSquareHorizontal, Bell } from 'lucide-react';
 
 const PRINT_CSS = `body{font-family:'DM Sans',sans-serif;color:#111;background:white;}
-.ph{background:#1A1410;color:white;padding:36px 44px;display:flex;justify-content:space-between;align-items:flex-start;}
+.ph{background:#0D0B2E;color:white;padding:36px 44px;display:flex;justify-content:space-between;align-items:flex-start;}
 .ph-name{font-family:'Cormorant Garamond',serif;font-size:13px;letter-spacing:.2em;text-transform:uppercase;color:rgba(255,255,255,.38);margin-bottom:4px;}
 .ph-title{font-family:'Cormorant Garamond',serif;font-size:30px;font-weight:300;color:white;margin-top:6px;}
 .gold-bar{height:3px;background:linear-gradient(90deg,var(--ac),#EDD59A);}
@@ -13,7 +13,7 @@ table{width:100%;border-collapse:collapse;margin-bottom:28px;} th{background:#F5
 .foot{margin-top:40px;padding-top:20px;border-top:1px solid #E0E0E0;display:flex;justify-content:space-between;font-size:11px;color:#AAA;}
 .stamp{display:inline-block;border:3px solid #4ADE80;color:#16A34A;padding:5px 16px;border-radius:3px;font-size:18px;font-weight:800;transform:rotate(-8deg);opacity:.65;}`;
 
-export const Av = ({ i, s = 36, c = '#C8A96E' }) => (
+export const Av = ({ i, s = 36, c = '#231F78' }) => (
   <div style={{
     width: s,
     height: s,
@@ -89,7 +89,7 @@ export function BA({ before, after, h = 340 }) {
 }
 
 export function printDoc(doc, type, brand) {
-  const ac = brand.color || '#C8A96E';
+  const ac = brand.color || '#231F78';
   const items = doc.items || [];
   const isPaid = doc.status === 'Paid' || doc.status === 'Completed';
   const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${type} ${doc.id}</title>
@@ -137,7 +137,7 @@ export function NotificationBell({ notifications = [], onMarkRead }) {
         className="glass-btn" 
         style={{ padding: '8px 12px', display: 'flex', alignItems: 'center', gap: 6, position: 'relative' }}
       >
-        <Bell size={18} color="#C8A96E" />
+        <Bell size={18} color="#231F78" />
         {unread > 0 && (
           <span style={{ 
             position: 'absolute', top: 4, right: 4, background: '#EF4444', color: 'white', 
@@ -149,10 +149,10 @@ export function NotificationBell({ notifications = [], onMarkRead }) {
       {open && (
         <div className="glass-panel" style={{ 
           position: 'absolute', top: '100%', right: 0, width: 320, marginTop: 12, 
-          zIndex: 1000, maxHeight: 400, overflowY: 'auto', padding: 12, border: '1px solid rgba(200,169,110,.2)' 
+          zIndex: 1000, maxHeight: 400, overflowY: 'auto', padding: 12, border: '1px solid rgba(35,31,120,.2)' 
         }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-            <span style={{ fontSize: 12, fontWeight: 600, color: '#C8A96E', textTransform: 'uppercase', letterSpacing: '.05em' }}>Notifications</span>
+            <span style={{ fontSize: 12, fontWeight: 600, color: '#231F78', textTransform: 'uppercase', letterSpacing: '.05em' }}>Notifications</span>
             <button onClick={() => setOpen(false)} style={{ background: 'none', border: 'none', color: '#666' }}><X size={14} /></button>
           </div>
           {notifications.length === 0 ? (
@@ -164,8 +164,8 @@ export function NotificationBell({ notifications = [], onMarkRead }) {
                   key={n.id} 
                   onClick={() => { onMarkRead(n.id); if (!n.read) setOpen(false); }}
                   style={{ 
-                    padding: 12, background: n.read ? 'rgba(255,255,255,.02)' : 'rgba(200,169,110,.08)', 
-                    borderRadius: 8, cursor: 'pointer', border: n.read ? '1px solid transparent' : '1px solid rgba(200,169,110,.15)',
+                    padding: 12, background: n.read ? 'rgba(255,255,255,.02)' : 'rgba(35,31,120,.08)', 
+                    borderRadius: 8, cursor: 'pointer', border: n.read ? '1px solid transparent' : '1px solid rgba(35,31,120,.15)',
                     transition: 'all .2s'
                   }}
                 >

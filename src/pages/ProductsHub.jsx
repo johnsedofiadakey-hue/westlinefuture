@@ -8,9 +8,9 @@ import {
 import { PubNav, Footer } from './PublicSite';
 // Removed static import of huge data file
 
-const LIGHT_BG = '#FDFCFB';
-const DARK_TEXT = '#1A1410';
-const AC = '#C8A96E';
+const LIGHT_BG = '#F8F8FD';
+const DARK_TEXT = '#0D0B2E';
+const AC = '#231F78';
 
 // --- HELPERS ---
 function useWindowWidth() {
@@ -47,7 +47,7 @@ const ProductCard = ({ product, onClick, ac, mob, onCompare, isComparing }) => {
         position: 'relative'
       }}
     >
-      <div style={{ height: mob ? 240 : 280, background: '#F9F7F4', position: 'relative', overflow: 'hidden' }}>
+      <div style={{ height: mob ? 240 : 280, background: '#F4F4FA', position: 'relative', overflow: 'hidden' }}>
         <img 
         src={product.img} 
         alt={product.name} 
@@ -72,7 +72,7 @@ const ProductCard = ({ product, onClick, ac, mob, onCompare, isComparing }) => {
       </div>
       <div style={{ padding: mob ? 20 : 24, flex: 1, display: 'flex', flexDirection: 'column' }}>
         <h3 style={{ fontSize: mob ? 16 : 18, fontWeight: 800, margin: '0 0 8px', color: DARK_TEXT }}>{product.name}</h3>
-        <p style={{ fontSize: mob ? 12 : 13, color: 'rgba(26,20,16,0.5)', lineHeight: 1.5, margin: '0 0 20px', flex: 1 }}>
+        <p style={{ fontSize: mob ? 12 : 13, color: 'rgba(13,11,46,0.5)', lineHeight: 1.5, margin: '0 0 20px', flex: 1 }}>
           {product.tagline || (descText.length > 80 ? descText.substring(0, 80) + '...' : descText)}
         </p>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid #f5f5f5', paddingTop: 16 }}>
@@ -96,7 +96,7 @@ const DetailModal = ({ product, onClose, ac, navigate, mob }) => {
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      style={{ position: 'fixed', inset: 0, zIndex: 10000, background: 'rgba(26,20,16,0.8)', backdropFilter: 'blur(10px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: mob ? 0 : 20 }}
+      style={{ position: 'fixed', inset: 0, zIndex: 10000, background: 'rgba(13,11,46,0.8)', backdropFilter: 'blur(10px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: mob ? 0 : 20 }}
       onClick={onClose}
     >
       <motion.div 
@@ -115,7 +115,7 @@ const DetailModal = ({ product, onClose, ac, navigate, mob }) => {
       >
         <div style={{ display: 'flex', flexWrap: 'wrap', height: '100%', overflowY: 'auto' }}>
           {/* Left: Image & Dynamic Finish Switcher */}
-          <div style={{ flex: '1 1 500px', background: '#F9F7F4', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: mob ? 20 : 40, minHeight: mob ? 300 : 400 }}>
+          <div style={{ flex: '1 1 500px', background: '#F4F4FA', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: mob ? 20 : 40, minHeight: mob ? 300 : 400 }}>
             <motion.img 
               key={selectedColor}
               initial={{ opacity: 0.8, scale: 0.98 }}
@@ -303,7 +303,7 @@ export default function ProductsHub({ brand, user, onPortal, setPage, content })
       <main style={{ padding: mob ? '100px 20px 100px' : '160px 5vw 100px', maxWidth: 1400, margin: '0 auto' }}>
         <div style={{ marginBottom: mob ? 40 : 60 }}>
           <h1 style={{ fontSize: mob ? 32 : 56, fontWeight: 800, letterSpacing: '-0.04em', margin: '0 0 16px' }}>Architectural <span style={{ color: ac }}>Catalog.</span></h1>
-          <p style={{ color: 'rgba(26,20,16,0.5)', fontSize: mob ? 14 : 18, maxWidth: 600 }}>Explore our curated collection of precision-engineered structural glass and interior finishing systems.</p>
+          <p style={{ color: 'rgba(13,11,46,0.5)', fontSize: mob ? 14 : 18, maxWidth: 600 }}>Explore our curated collection of precision-engineered structural glass and interior finishing systems.</p>
         </div>
 
         {loading && (
@@ -311,7 +311,7 @@ export default function ProductsHub({ brand, user, onPortal, setPage, content })
             <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1, ease: 'linear' }} style={{ display: 'inline-block' }}>
               <Zap size={40} color={ac} />
             </motion.div>
-            <p className="lxf" style={{ marginTop: 20, color: '#B5AFA9' }}>Syncing Global Catalog...</p>
+            <p className="lxf" style={{ marginTop: 20, color: '#9B99C8' }}>Syncing Global Catalog...</p>
           </div>
         )}
 
@@ -445,7 +445,7 @@ export default function ProductsHub({ brand, user, onPortal, setPage, content })
                 <div style={{ display: 'grid', gridTemplateColumns: `repeat(${comparing.length}, 1fr)`, gap: 32 }}>
                    {compareProducts.map(p => (
                      <div key={p.id}>
-                        <img src={p.img} style={{ width: '100%', height: 200, objectFit: 'contain', background: '#F9F7F4', borderRadius: 16, marginBottom: 24 }} />
+                        <img src={p.img} style={{ width: '100%', height: 200, objectFit: 'contain', background: '#F4F4FA', borderRadius: 16, marginBottom: 24 }} />
                         <h3 style={{ fontSize: 18, fontWeight: 800, marginBottom: 12 }}>{p.name}</h3>
                         
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>

@@ -4,7 +4,7 @@
  */
 
 const API_KEY = import.meta.env.VITE_ARKESEL_API_KEY;
-const SENDER_ID = import.meta.env.VITE_ARKESEL_SENDER_ID || 'Glasstech';
+const SENDER_ID = import.meta.env.VITE_ARKESEL_SENDER_ID || 'Westline Future';
 
 export const ArkeselService = {
   /**
@@ -52,7 +52,7 @@ export const ArkeselService = {
     const cleanPhone = phone.replace(/\D/g, '');
     const payload = {
       sender: SENDER_ID,
-      message: `*Glasstech Fabrications*\n\nYour security access code is: *${code}*\n\nThis code expires in 10 minutes.`,
+      message: `*Westline Future*\n\nYour security access code is: *${code}*\n\nThis code expires in 10 minutes.`,
       recipients: [cleanPhone],
       channel: channel
     };

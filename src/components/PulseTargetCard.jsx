@@ -8,7 +8,7 @@ const PulseTargetCard = ({
   unit = '', 
   icon, 
   sub, 
-  color = '#C8A96E',
+  color = '#231F78',
   trend = 0 
 }) => {
   // Simple heuristic to extract numeric value for achievement calculation
@@ -20,8 +20,8 @@ const PulseTargetCard = ({
       <div className="pulse-inner" style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <span className="lxf" style={{ fontSize: 11, letterSpacing: '.1em', textTransform: 'uppercase', color: '#B5AFA9' }}>{label}</span>
-            <div className="lxfh" style={{ fontSize: 28, marginBottom: 0, color: '#1A1410' }}>{value}{unit}</div>
+            <span className="lxf" style={{ fontSize: 11, letterSpacing: '.1em', textTransform: 'uppercase', color: '#9B99C8' }}>{label}</span>
+            <div className="lxfh" style={{ fontSize: 28, marginBottom: 0, color: '#0D0B2E' }}>{value}{unit}</div>
           </div>
           <div style={{ 
             width: 40, height: 40, borderRadius: 12, background: `${color}15`, 
@@ -35,7 +35,7 @@ const PulseTargetCard = ({
           {achievement !== null && (
             <div style={{ marginBottom: trend !== 0 ? 12 : 0 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-                <span className="lxf" style={{ fontSize: 10, color: '#B5AFA9', fontWeight: 600 }}>ACHIEVEMENT</span>
+                <span className="lxf" style={{ fontSize: 10, color: '#9B99C8', fontWeight: 600 }}>ACHIEVEMENT</span>
                 <span className="lxf" style={{ fontSize: 10, fontWeight: 800, color: achievement >= 100 ? '#16A34A' : color }}>{achievement}%</span>
               </div>
               <div className="prog" style={{ height: 4, background: 'rgba(0,0,0,.04)', overflow: 'visible' }}>

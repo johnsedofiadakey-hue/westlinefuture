@@ -1,6 +1,6 @@
 {
-  "short_name": "Glasstech",
-  "name": "Glasstech Fabrications Hub",
+  "short_name": "Westline",
+  "name": "Westline Future",
   "icons": [
     {
       "src": "/favicon.svg",
@@ -10,6 +10,6 @@
   ],
   "start_url": ".",
   "display": "standalone",
-  "theme_color": "#1A1410",
-  "background_color": "#F9F7F4"
+  "theme_color": "#231F78",
+  "background_color": "#F4F4FA"
 }

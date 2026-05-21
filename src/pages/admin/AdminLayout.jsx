@@ -7,7 +7,7 @@ import {
 import { NotificationBell } from '../../components/Shared';
 
 export default function AdminLayout({ user, onLogout, onPreview, brand, view, setView, userNotifications, markNotificationRead, children, ...props }) {
-  const ac = brand.color || '#C8A96E';
+  const ac = brand.color || '#231F78';
   const [expandedFolders, setExpandedFolders] = useState({});
 
   const toggleFolder = (id) => {
@@ -70,14 +70,23 @@ export default function AdminLayout({ user, onLogout, onPreview, brand, view, se
       {!isMobile && (
         <aside className="p-sidebar-narrow" style={{ 
           width: 280, 
-          background: '#1A1410', 
+          background: '#0D0B2E', 
           borderRight: '1px solid rgba(255, 255, 255, 0.05)',
           display: 'flex',
           flexDirection: 'column'
         }}>
-          <div style={{ padding: '32px 24px', display: 'flex', alignItems: 'center', gap: 12 }}>
-            {brand.logo ? <img src={brand.logo} alt="logo" style={{ height: 32, objectFit: 'contain' }} /> : <div className="lxfh" style={{ fontSize: 20, color: ac }}>G</div>}
-            <div className="lxfh" style={{ color: '#fff', fontSize: 16, letterSpacing: -0.5 }}>Command</div>
+          <div style={{ padding: '28px 24px 24px', borderBottom: '1px solid rgba(255,255,255,0.06)', marginBottom: 8 }}>
+            {brand.logo ? (
+              <img src={brand.logo} alt={brand.name} style={{ height: 40, width: 'auto', objectFit: 'contain', display: 'block' }} />
+            ) : (
+              <div>
+                <div className="lxfh" style={{ fontSize: 16, fontWeight: 900, color: '#fff', letterSpacing: '0.04em' }}>WESTLINE</div>
+                <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.3)', letterSpacing: '0.2em', marginTop: 2 }}>GLOBAL TRADING CO., LTD</div>
+              </div>
+            )}
+          </div>
+          <div style={{ padding: '8px 24px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div className="lxfh" style={{ color: 'rgba(255,255,255,0.4)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.2em' }}>Command</div>
           </div>
           
           <nav style={{ flex: 1, padding: '0 12px' }}>
@@ -100,7 +109,7 @@ export default function AdminLayout({ user, onLogout, onPreview, brand, view, se
                         background: view === m.id ? 'rgba(255,255,255,0.05)' : 'none', 
                         border: 'none', 
                         borderRadius: 12, 
-                        color: view === m.id ? ac : '#B5AFA9', 
+                        color: view === m.id ? ac : '#9B99C8', 
                         cursor: 'pointer', 
                         transition: 'all 0.2s',
                         position: 'relative'
@@ -176,14 +185,14 @@ export default function AdminLayout({ user, onLogout, onPreview, brand, view, se
                           paddingLeft: 44,
                           fontSize: 12,
                           fontWeight: 500,
-                          color: '#1A1410',
+                          color: '#0D0B2E',
                           outline: 'none',
                           transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
                         }}
                         onFocus={(e) => { e.target.style.background = '#fff'; e.target.style.boxShadow = '0 10px 30px rgba(0,0,0,0.05)'; }}
                         onBlur={(e) => { e.target.style.background = 'rgba(255,255,255,0.4)'; e.target.style.boxShadow = 'none'; }}
                       />
-                      <div style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', background: '#F9F7F4', padding: '4px 8px', borderRadius: 6, fontSize: 8, fontWeight: 900, color: '#B5AFA9', letterSpacing: 1 }}>CTRL + K</div>
+                      <div style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', background: '#F4F4FA', padding: '4px 8px', borderRadius: 6, fontSize: 8, fontWeight: 900, color: '#9B99C8', letterSpacing: 1 }}>CTRL + K</div>
                    </div>
                  )}
                                 <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
@@ -210,7 +219,7 @@ export default function AdminLayout({ user, onLogout, onPreview, brand, view, se
                    </div>
                    
                    {!isMobile && (
-                     <button onClick={onLogout} style={{ background: 'none', border: 'none', color: '#B5AFA9', padding: 8, cursor: 'pointer' }}><LogOut size={18} /></button>
+                     <button onClick={onLogout} style={{ background: 'none', border: 'none', color: '#9B99C8', padding: 8, cursor: 'pointer' }}><LogOut size={18} /></button>
                    )}
                  </div>
                </div>
@@ -220,14 +229,14 @@ export default function AdminLayout({ user, onLogout, onPreview, brand, view, se
 
           <div className="fade-in admin-content-wrap" style={{ padding: isMobile ? '20px 20px 120px' : '40px 60px' }}>
             {view === 'dash' && (
-              <div style={{ padding: 32, background: '#FDFCFB', border: '1px solid #F0EBE5', borderRadius: 32, marginBottom: 40 }}>
+              <div style={{ padding: 32, background: '#F8F8FD', border: '1px solid #F0EBE5', borderRadius: 32, marginBottom: 40 }}>
                  <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 24 }}>
-                    <div style={{ width: 48, height: 48, background: '#1A1410', borderRadius: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', color: ac }}>
+                    <div style={{ width: 48, height: 48, background: '#0D0B2E', borderRadius: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', color: ac }}>
                        <Briefcase size={24} />
                     </div>
                     <div>
                        <h3 className="lxfh" style={{ fontSize: 22, margin: 0 }}>Operational Guide</h3>
-                       <p className="lxf" style={{ color: '#B5AFA9', fontSize: 13 }}>Follow these steps to run your business</p>
+                       <p className="lxf" style={{ color: '#9B99C8', fontSize: 13 }}>Follow these steps to run your business</p>
                     </div>
                  </div>
                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 24 }}>
@@ -237,10 +246,10 @@ export default function AdminLayout({ user, onLogout, onPreview, brand, view, se
                       { t: '3. Add Sourcing', d: 'Add items in Sourcing Hub for client approval.', i: <Package size={18} /> },
                       { t: '4. Get Paid', d: 'Trigger an Invoice and share the portal link.', i: <FileText size={18} /> }
                     ].map(step => (
-                       <div key={step.t} style={{ padding: 20, background: '#fff', borderRadius: 20, border: '1px solid #F9F7F4' }}>
+                       <div key={step.t} style={{ padding: 20, background: '#fff', borderRadius: 20, border: '1px solid #F4F4FA' }}>
                           <div style={{ color: ac, marginBottom: 12 }}>{step.i}</div>
                           <h4 className="lxfh" style={{ fontSize: 14, marginBottom: 6 }}>{step.t}</h4>
-                          <p className="lxf" style={{ fontSize: 11, color: '#B5AFA9', lineHeight: 1.5 }}>{step.d}</p>
+                          <p className="lxf" style={{ fontSize: 11, color: '#9B99C8', lineHeight: 1.5 }}>{step.d}</p>
                        </div>
                     ))}
                  </div>
@@ -255,7 +264,7 @@ export default function AdminLayout({ user, onLogout, onPreview, brand, view, se
       {isMobile && (
         <div className="glass-dock" style={{ 
           position: 'fixed', bottom: 20, left: 20, right: 20, height: 72, 
-          background: 'rgba(26, 20, 16, 0.95)', backdropFilter: 'blur(20px)', 
+          background: 'rgba(13, 11, 46, 0.95)', backdropFilter: 'blur(20px)', 
           borderRadius: 24, border: '1px solid rgba(255,255,255,0.1)', 
           display: 'flex', justifyContent: 'space-around', alignItems: 'center', 
           padding: '0 10px', zIndex: 1000, boxShadow: '0 20px 50px rgba(0,0,0,0.3)'
@@ -265,7 +274,7 @@ export default function AdminLayout({ user, onLogout, onPreview, brand, view, se
               key={m.id} 
               onClick={() => setView(m.id)} 
               style={{ 
-                background: 'none', border: 'none', color: view === m.id ? ac : '#B5AFA9', 
+                background: 'none', border: 'none', color: view === m.id ? ac : '#9B99C8', 
                 display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, cursor: 'pointer' 
               }}
             >

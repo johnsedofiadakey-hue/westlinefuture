@@ -29,7 +29,7 @@ export const TwilioService = {
     const body = new URLSearchParams();
     body.append('To', formattedTo);
     body.append('From', formattedFrom);
-    body.append('Body', `*Glasstech Fabrications*\n\nYour secure authentication code is: *${code}*\n\nThis code expires in 10 minutes. Please do not share it with anyone.`);
+    body.append('Body', `*Westline Future*\n\nYour secure authentication code is: *${code}*\n\nThis code expires in 10 minutes. Please do not share it with anyone.`);
 
     try {
       const response = await fetch(

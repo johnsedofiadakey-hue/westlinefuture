@@ -10,7 +10,7 @@ const BADGES = [
 ];
 
 export default function AdminStaff({ team = [], brand, ...props }) {
-  const ac = brand.color || '#C8A96E';
+  const ac = brand.color || '#231F78';
   
   const addMember = () => {
     alert('Invite new staff via Firebase Console to enable login.');
@@ -37,7 +37,7 @@ export default function AdminStaff({ team = [], brand, ...props }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <h2 className="lxfh" style={{ fontSize: 32, fontWeight: 400, color: '#1A1410' }}>Staff Governance</h2>
+        <h2 className="lxfh" style={{ fontSize: 32, fontWeight: 400, color: '#0D0B2E' }}>Staff Governance</h2>
         <button onClick={addMember} className="p-btn-dark lxf" style={{ padding: '10px 20px', fontSize: 13, gap: 8, display: 'flex', alignItems: 'center' }}><Plus size={16} /> Add Staff</button>
       </div>
 
@@ -55,13 +55,13 @@ export default function AdminStaff({ team = [], brand, ...props }) {
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                     <PAv i={m.av || m.name?.charAt(0)} s={40} c={ac} />
                     <div>
-                      <div className="lxf" style={{ fontSize: 14, fontWeight: 600, color: '#1A1410' }}>{m.name}</div>
-                      <div className="lxf" style={{ fontSize: 11, color: '#B5AFA9' }}>{m.email}</div>
+                      <div className="lxf" style={{ fontSize: 14, fontWeight: 600, color: '#0D0B2E' }}>{m.name}</div>
+                      <div className="lxf" style={{ fontSize: 11, color: '#9B99C8' }}>{m.email}</div>
                     </div>
                   </div>
                 </td>
                 <td style={{ padding: '16px' }}>
-                  <select className="lxf" style={{ fontSize: 13, border: 'none', background: 'none', color: '#1A1410', cursor: 'pointer', fontWeight: 600 }} value={m.role} onChange={e => updateM(m.id, { role: e.target.value })}>
+                  <select className="lxf" style={{ fontSize: 13, border: 'none', background: 'none', color: '#0D0B2E', cursor: 'pointer', fontWeight: 600 }} value={m.role} onChange={e => updateM(m.id, { role: e.target.value })}>
                     {['Admin', 'Project Manager', 'Technical Lead', 'Installer', 'CAD Engineer'].map(r => <option key={r} value={r}>{r}</option>)}
                   </select>
                 </td>
@@ -76,7 +76,7 @@ export default function AdminStaff({ team = [], brand, ...props }) {
                            title={b.label}
                            style={{ 
                              width: 28, height: 28, borderRadius: '50%', background: has ? b.color : 'rgba(0,0,0,.05)', 
-                             color: has ? '#fff' : '#B5AFA9', display: 'flex', alignItems: 'center', justifyContent: 'center', 
+                             color: has ? '#fff' : '#9B99C8', display: 'flex', alignItems: 'center', justifyContent: 'center', 
                              cursor: 'pointer', transition: 'all .2s', opacity: has ? 1 : 0.4
                            }}
                          >

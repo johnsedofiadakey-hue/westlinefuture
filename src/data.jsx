@@ -3,7 +3,7 @@ import { DollarSign, Eye, MessageSquare, CheckCircle, Users, Factory, Truck } fr
 
 export const PROJECT_STAGES = [
   {
-    id: 1, name: 'Design & Materials', statusLabel: 'Selecting items', days: 7, color: '#C8A96E',
+    id: 1, name: 'Design & Materials', statusLabel: 'Selecting items', days: 7, color: '#231F78',
     icon: 'palette', description: 'Finalising specifications and selecting premium materials for your build.',
     tasks: ['Confirm site measurements & survey', 'Select glass type and specifications', 'Choose aluminum finish and hardware', 'Approve material samples']
   },
@@ -18,7 +18,7 @@ export const PROJECT_STAGES = [
     tasks: ['Deposit payment confirmed', 'Materials ordered from supplier', 'Production slot allocated', 'Client portal access granted']
   },
   {
-    id: 4, name: 'Production', statusLabel: 'Factory is working', days: 21, color: '#1A1410',
+    id: 4, name: 'Production', statusLabel: 'Factory is working', days: 21, color: '#0D0B2E',
     icon: 'factory', description: 'Your glass and aluminum components are being precision-fabricated at the factory.',
     tasks: ['Cutting & processing complete', 'Tempering and coating applied', 'Quality control inspection passed', 'Components packed for dispatch']
   },
@@ -33,69 +33,69 @@ export const PROJECT_STAGES = [
     tasks: ['Site prepared and secured', 'Structural installation complete', 'Finishing and sealant applied', 'Snag list resolved & signed off']
   },
   {
-    id: 7, name: 'Completed', statusLabel: 'Project Handover', days: 1, color: '#E5C387',
+    id: 7, name: 'Completed', statusLabel: 'Project Handover', days: 1, color: '#4945BE',
     icon: 'star', description: 'Project complete. Final inspection done and handover documents issued.',
     tasks: ['Final inspection passed', 'Balance payment received', 'Handover documents signed', 'Client satisfaction confirmed']
   }
 ];
 
 export const KANBAN_COLUMNS = [
-  { id: 'design', label: 'Design & Quote', stages: [1, 2], color: '#C8A96E', bg: 'rgba(200,169,110,0.08)' },
+  { id: 'design', label: 'Design & Quote', stages: [1, 2], color: '#231F78', bg: 'rgba(35,31,120,0.08)' },
   { id: 'funded', label: 'Funded', stages: [3], color: '#4CAF50', bg: 'rgba(76,175,80,0.08)' },
-  { id: 'production', label: 'In Production', stages: [4], color: '#1A1410', bg: 'rgba(26,20,16,0.05)' },
+  { id: 'production', label: 'In Production', stages: [4], color: '#0D0B2E', bg: 'rgba(13,11,46,0.05)' },
   { id: 'shipping', label: 'Shipping', stages: [5], color: '#607D8B', bg: 'rgba(96,125,139,0.08)' },
   { id: 'installation', label: 'Installation', stages: [6], color: '#16A34A', bg: 'rgba(22,163,74,0.08)' },
-  { id: 'done', label: 'Completed', stages: [7], color: '#E5C387', bg: 'rgba(229,195,135,0.08)' },
+  { id: 'done', label: 'Completed', stages: [7], color: '#4945BE', bg: 'rgba(229,195,135,0.08)' },
 ];
 
 export const LIFE_RIBBON = [
-  { id: 'onboard', label: 'Start', icon: <Users size={24} />, stages: [1], color: '#C8A96E', text: 'We are setting up your project and checking all the details.' },
+  { id: 'onboard', label: 'Start', icon: <Users size={24} />, stages: [1], color: '#231F78', text: 'We are setting up your project and checking all the details.' },
   { id: 'design', label: 'Design', icon: <Eye size={24} />, stages: [2], color: '#2196F3', text: 'Our engineers are drawing the technical plans for your space.' },
   { id: 'deposit', label: 'Secure', icon: <DollarSign size={24} />, stages: [3], color: '#4CAF50', text: 'We are securing the high-quality materials for your build.' },
-  { id: 'factory', label: 'Build', icon: <Factory size={24} />, stages: [4], color: '#1A1410', text: 'Your items are being carefully built in our factory.' },
+  { id: 'factory', label: 'Build', icon: <Factory size={24} />, stages: [4], color: '#0D0B2E', text: 'Your items are being carefully built in our factory.' },
   { id: 'shipping', label: 'Move', icon: <Truck size={24} />, stages: [5], color: '#607D8B', text: 'Your order is packed and moving toward your location.' },
   { id: 'delivered', label: 'Finish', icon: <CheckCircle size={24} />, stages: [6], color: '#16A34A', text: 'Everything is installed and ready for you to enjoy.' }
 ];
 
 export const PROCUREMENT_STAGES = [
-  { id: 'to-buy', name: 'To Buy', icon: '🛒', color: '#DFD9D1' },
+  { id: 'to-buy', name: 'To Buy', icon: '🛒', color: '#E4E3F0' },
   { id: 'ordered', name: 'Order Placed', icon: '📝', color: '#FF9800' },
-  { id: 'production', name: 'In Production', icon: '🏭', color: '#1A1410' },
+  { id: 'production', name: 'In Production', icon: '🏭', color: '#0D0B2E' },
   { id: 'warehouse', name: 'At Warehouse', icon: '📦', color: '#3F51B5' },
   { id: 'transit', name: 'In Transit', icon: '🚢', color: '#9C27B0' },
   { id: 'site', name: 'At Site', icon: '🏠', color: '#16A34A' }
 ];
 
 export const ABOUT_DATA = {
-  founder: 'John Dakey',
+  founder: 'Managing Director',
   role: 'Managing Director',
   storyTitle: 'Crafting the Future of Structural Glass & Interiors',
-  story: 'Under the leadership of John Dakey, Managing Director, Glasstech Fabrications has evolved from a structural glass specialist into Ghana’s premier hub for complete interior finishing. Our mission is to bridge the gap between industrial engineering and luxury design.',
-  bio: 'John Dakey leads Glasstech with a commitment to sub-millimeter precision and aesthetic excellence. From Spintex to the most exclusive developments in Accra, his vision is to provide a "million-dollar finish" for every project, leveraging global sourcing and local technical expertise.',
+  story: 'Under the leadership of Managing Director, Managing Director, Westline Future has evolved from a structural glass specialist into Ghana’s premier hub for complete interior finishing. Our mission is to bridge the gap between industrial engineering and luxury design.',
+  bio: 'Managing Director leads Westline Future with a commitment to sub-millimeter precision and aesthetic excellence. From Spintex to the most exclusive developments in Accra, his vision is to provide a "million-dollar finish" for every project, leveraging global sourcing and local technical expertise.',
   image: 'https://images.unsplash.com/photo-1600607687920-4e2a09cf159d?q=80&w=2070&auto=format&fit=crop'
 };
 
 export const BRAND0 = {
-  name: 'Glasstech Fabrications',
+  name: 'Westline Future',
   tagline: 'Complete Interior & Finishing Solutions',
   logo: '/logo.png',
-  color: '#C8A96E',
+  color: '#231F78',
   phone: '+233 59 845 5012',
-  email: 'contact@glasstech.com.gh',
+  email: 'admin@westlinefuture.com',
   location: 'Spintex Road Industrial Area, Accra',
-  instagram: '@glasstech_gh',
-  facebook: 'GlasstechFabrications',
-  twitter: '@glasstech_gh',
-  linkedin: 'glasstech-fabrications',
+  instagram: '@westlinefuture_gh',
+  facebook: 'WestlineFuture',
+  twitter: '@westlinefuture_gh',
+  linkedin: 'westlinefuture-fabrications',
   whatsapp: '+233598455012',
-  website: 'www.glasstech.com.gh'
+  website: 'www.westlinefuture.com.gh'
 };
 
 export const TEAM_MEMBERS = [
-  {id:1,name:'John Dakey',role:'Managing Director',bio:'Visionary leader with a focus on structural glass and interior finishing engineering.',img:'https://images.unsplash.com/photo-1531746020798-e6953c6e8e04?w=400&q=80',av:'JD',email:'john@glasstechfab.com',phone:'+233 59 845 5012',status:'Online'},
-  {id:2,name:'Kwame Osei',role:'Technical Lead',bio:'Expert in curtain wall systems and high-pressure glazing.',img:'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&q=80',av:'KO',email:'kwame@glasstechfab.com',phone:'+233 24 111 0002',status:'Online'},
-  {id:3,name:'Abena Darko',role:'admin',bio:'Ensures on-site precision and safety across all glass installations.',img:'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=400&q=80',av:'AD',email:'admin@glasstechfab.com',phone:'+233 24 111 0003',status:'Idle'},
-  {id:4,name:'Nana Boateng',role:'CAD Engineer',bio:'Specializes in precision technical drawings and fabrication specs.',img:'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=400&q=80',av:'NB',email:'nana@glasstechfab.com',phone:'+233 24 111 0004',status:'Idle'},
+  {id:1,name:'Managing Director',role:'Managing Director',bio:'Visionary leader with a focus on structural glass and interior finishing engineering.',img:'https://images.unsplash.com/photo-1531746020798-e6953c6e8e04?w=400&q=80',av:'JD',email:'admin@westlinefuture.com',phone:'+233 59 845 5012',status:'Online'},
+  {id:2,name:'Kwame Osei',role:'Technical Lead',bio:'Expert in curtain wall systems and high-pressure glazing.',img:'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&q=80',av:'KO',email:'kwame@westlinefuture.com',phone:'+233 24 111 0002',status:'Online'},
+  {id:3,name:'Abena Darko',role:'admin',bio:'Ensures on-site precision and safety across all glass installations.',img:'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=400&q=80',av:'AD',email:'admin@westlinefuture.com',phone:'+233 24 111 0003',status:'Idle'},
+  {id:4,name:'Nana Boateng',role:'CAD Engineer',bio:'Specializes in precision technical drawings and fabrication specs.',img:'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=400&q=80',av:'NB',email:'nana@westlinefuture.com',phone:'+233 24 111 0004',status:'Idle'},
 ];
 
 export const PORTFOLIO_DATA = [
@@ -142,14 +142,14 @@ export const REV = [
 ];
 
 export const PIE_D = [
-  { name: 'Residential', value: 45, color: '#C8A96E' },
-  { name: 'Commercial', value: 35, color: '#1A1410' },
+  { name: 'Residential', value: 45, color: '#231F78' },
+  { name: 'Commercial', value: 35, color: '#0D0B2E' },
   { name: 'Industrial', value: 20, color: '#607D8B' }
 ];
 
 export const PIE_C = [
-  { name: 'Ghana', value: 70, color: '#C8A96E' },
-  { name: 'Togo', value: 15, color: '#1A1410' },
+  { name: 'Ghana', value: 70, color: '#231F78' },
+  { name: 'Togo', value: 15, color: '#0D0B2E' },
   { name: 'Nigeria', value: 15, color: '#607D8B' }
 ];
 
@@ -221,11 +221,11 @@ export const INITIAL_CONTENT = {
   hero: { slides: HERO_SLIDES },
   about: {
     ...ABOUT_DATA,
-    founder: 'John Dakey',
+    founder: 'Managing Director',
     role: 'Managing Director',
     storyTitle: 'Crafting the Future of Structural Glass & Interiors',
-    story: 'Under the leadership of John Dakey, Managing Director, Glasstech Fabrications has evolved from a structural glass specialist into Ghana’s premier hub for complete interior finishing. Our mission is to bridge the gap between industrial engineering and luxury design.',
-    bio: 'John Dakey leads Glasstech with a commitment to sub-millimeter precision and aesthetic excellence. From Spintex to the most exclusive developments in Accra, his vision is to provide a "million-dollar finish" for every project, leveraging global sourcing and local technical expertise.'
+    story: 'Under the leadership of Managing Director, Managing Director, Westline Future has evolved from a structural glass specialist into Ghana’s premier hub for complete interior finishing. Our mission is to bridge the gap between industrial engineering and luxury design.',
+    bio: 'Managing Director leads Westline Future with a commitment to sub-millimeter precision and aesthetic excellence. From Spintex to the most exclusive developments in Accra, his vision is to provide a "million-dollar finish" for every project, leveraging global sourcing and local technical expertise.'
   },
   services: SERVICES_DATA,
   process: PROCESS_STEPS,

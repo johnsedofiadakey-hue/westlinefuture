@@ -13,7 +13,7 @@ function exportCSV(rows, filename) {
 }
 
 export default function AdminAnalytics({ invoices = [], clients = [], brand }) {
-  const ac = brand?.color || '#C8A96E';
+  const ac = brand?.color || '#231F78';
 
   const revenueData = useMemo(() => {
     const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -47,7 +47,7 @@ export default function AdminAnalytics({ invoices = [], clients = [], brand }) {
   const pendingRevenue = invoices.filter(i => i.status === 'Pending')
     .reduce((a, b) => a + (parseFloat(String(b.amount || '0').replace(/[^0-9.]/g, '')) || 0), 0);
 
-  const COLORS = [ac, '#1A1410', '#B5AFA9', '#7A6E62', '#607D8B', '#16A34A'];
+  const COLORS = [ac, '#0D0B2E', '#9B99C8', '#5B5894', '#607D8B', '#16A34A'];
 
   const handleExportRevenue = () => {
     exportCSV(revenueData, 'revenue_by_month.csv');
@@ -70,14 +70,14 @@ export default function AdminAnalytics({ invoices = [], clients = [], brand }) {
     <div className="fade-in" style={{ padding: '20px 0' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 32 }}>
         <div>
-          <h2 className="lxfh" style={{ fontSize: 28, fontWeight: 700, color: '#1A1410' }}>Business Analytics</h2>
-          <p className="lxf" style={{ color: '#B5AFA9', fontSize: 13, marginTop: 4 }}>Revenue trends, project pipeline, and operational metrics.</p>
+          <h2 className="lxfh" style={{ fontSize: 28, fontWeight: 700, color: '#0D0B2E' }}>Business Analytics</h2>
+          <p className="lxf" style={{ color: '#9B99C8', fontSize: 13, marginTop: 4 }}>Revenue trends, project pipeline, and operational metrics.</p>
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
-          <button onClick={handleExportRevenue} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 16px', background: '#fff', border: '1px solid #F0EBE5', borderRadius: 10, fontSize: 12, fontWeight: 700, cursor: 'pointer', color: '#1A1410' }}>
+          <button onClick={handleExportRevenue} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 16px', background: '#fff', border: '1px solid #F0EBE5', borderRadius: 10, fontSize: 12, fontWeight: 700, cursor: 'pointer', color: '#0D0B2E' }}>
             <Download size={14} /> Revenue CSV
           </button>
-          <button onClick={handleExportInvoices} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 16px', background: '#1A1410', border: 'none', borderRadius: 10, fontSize: 12, fontWeight: 700, cursor: 'pointer', color: '#fff' }}>
+          <button onClick={handleExportInvoices} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 16px', background: '#0D0B2E', border: 'none', borderRadius: 10, fontSize: 12, fontWeight: 700, cursor: 'pointer', color: '#fff' }}>
             <Download size={14} /> Invoice Export
           </button>
         </div>
@@ -91,12 +91,12 @@ export default function AdminAnalytics({ invoices = [], clients = [], brand }) {
           { label: 'Active Clients', value: clients.length, icon: <Users size={20} /> },
           { label: 'Total Invoices', value: invoices.length, icon: <Activity size={20} /> },
         ].map(card => (
-          <div key={card.label} className="p-card" style={{ padding: 20, border: '1px solid #F0EBE5', background: card.dark ? '#1A1410' : '#fff', color: card.dark ? '#fff' : '#1A1410' }}>
+          <div key={card.label} className="p-card" style={{ padding: 20, border: '1px solid #F0EBE5', background: card.dark ? '#0D0B2E' : '#fff', color: card.dark ? '#fff' : '#0D0B2E' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
               <div style={{ fontSize: 11, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.1em', opacity: card.dark ? 0.5 : 0.6 }}>{card.label}</div>
               <div style={{ color: ac }}>{card.icon}</div>
             </div>
-            <div className="lxfh" style={{ fontSize: 28, fontWeight: 900, color: card.dark ? ac : '#1A1410' }}>{card.value}</div>
+            <div className="lxfh" style={{ fontSize: 28, fontWeight: 900, color: card.dark ? ac : '#0D0B2E' }}>{card.value}</div>
           </div>
         ))}
       </div>
@@ -115,15 +115,15 @@ export default function AdminAnalytics({ invoices = [], clients = [], brand }) {
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="#F0EBE5" />
-                <XAxis dataKey="month" stroke="#B5AFA9" fontSize={11} />
-                <YAxis stroke="#B5AFA9" fontSize={11} tickFormatter={v => `$${(v/1000).toFixed(0)}k`} />
+                <XAxis dataKey="month" stroke="#9B99C8" fontSize={11} />
+                <YAxis stroke="#9B99C8" fontSize={11} tickFormatter={v => `$${(v/1000).toFixed(0)}k`} />
                 <Tooltip formatter={(v) => [`$${v.toLocaleString()}`, 'Revenue']} />
                 <Area type="monotone" dataKey="revenue" stroke={ac} strokeWidth={2} fillOpacity={1} fill="url(#revGrad)" />
                 <Area type="monotone" dataKey="paid" stroke="#16A34A" strokeWidth={2} strokeDasharray="4 2" fill="none" />
               </AreaChart>
             </ResponsiveContainer>
           </div>
-          <div style={{ display: 'flex', gap: 20, marginTop: 12, fontSize: 11, color: '#B5AFA9' }}>
+          <div style={{ display: 'flex', gap: 20, marginTop: 12, fontSize: 11, color: '#9B99C8' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><div style={{ width: 12, height: 2, background: ac }} /> Total Invoiced</div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><div style={{ width: 12, height: 2, background: '#16A34A', borderTop: '2px dashed #16A34A' }} /> Paid</div>
           </div>
@@ -145,7 +145,7 @@ export default function AdminAnalytics({ invoices = [], clients = [], brand }) {
               </ResponsiveContainer>
             </div>
           ) : (
-            <div style={{ height: 280, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#B5AFA9', fontSize: 13 }}>
+            <div style={{ height: 280, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9B99C8', fontSize: 13 }}>
               No project data yet
             </div>
           )}
@@ -156,25 +156,25 @@ export default function AdminAnalytics({ invoices = [], clients = [], brand }) {
       <div className="p-card" style={{ border: '1px solid #F0EBE5', overflow: 'hidden' }}>
         <div style={{ padding: '20px 24px', borderBottom: '1px solid #F0EBE5', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <h3 className="lxfh" style={{ fontSize: 16, margin: 0 }}>Invoice Ledger</h3>
-          <button onClick={handleExportInvoices} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: '#F9F7F4', border: '1px solid #F0EBE5', borderRadius: 8, fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
+          <button onClick={handleExportInvoices} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: '#F4F4FA', border: '1px solid #F0EBE5', borderRadius: 8, fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
             <Download size={13} /> Export CSV
           </button>
         </div>
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead style={{ background: '#F9F7F4' }}>
+            <thead style={{ background: '#F4F4FA' }}>
               <tr>
                 {['Reference', 'Client', 'Date', 'Amount', 'Status'].map(h => (
-                  <th key={h} style={{ padding: '12px 20px', textAlign: 'left', fontSize: 10, color: '#B5AFA9', textTransform: 'uppercase', letterSpacing: '.1em' }}>{h}</th>
+                  <th key={h} style={{ padding: '12px 20px', textAlign: 'left', fontSize: 10, color: '#9B99C8', textTransform: 'uppercase', letterSpacing: '.1em' }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {invoices.slice(0, 10).map(inv => (
-                <tr key={inv.id} style={{ borderBottom: '1px solid #F9F7F4' }}>
+                <tr key={inv.id} style={{ borderBottom: '1px solid #F4F4FA' }}>
                   <td style={{ padding: '14px 20px', fontSize: 12, fontWeight: 800 }}>{inv.id}</td>
                   <td style={{ padding: '14px 20px', fontSize: 13 }}>{inv.client || inv.clientName || '—'}</td>
-                  <td style={{ padding: '14px 20px', fontSize: 12, color: '#B5AFA9' }}>{inv.date || '—'}</td>
+                  <td style={{ padding: '14px 20px', fontSize: 12, color: '#9B99C8' }}>{inv.date || '—'}</td>
                   <td style={{ padding: '14px 20px', fontSize: 14, fontWeight: 700 }}>{inv.amount || '—'}</td>
                   <td style={{ padding: '14px 20px' }}>
                     <span style={{
@@ -186,7 +186,7 @@ export default function AdminAnalytics({ invoices = [], clients = [], brand }) {
                 </tr>
               ))}
               {invoices.length === 0 && (
-                <tr><td colSpan={5} style={{ padding: 40, textAlign: 'center', color: '#B5AFA9', fontSize: 13 }}>No invoices to display</td></tr>
+                <tr><td colSpan={5} style={{ padding: 40, textAlign: 'center', color: '#9B99C8', fontSize: 13 }}>No invoices to display</td></tr>
               )}
             </tbody>
           </table>

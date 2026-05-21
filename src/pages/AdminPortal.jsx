@@ -123,14 +123,14 @@ export default function AdminPortal({ user, onLogout, onPreview, content, setCon
 }
 function AdminChat({ messages, sendMessage, clients, brand }) {
   const [activeClient, setActiveClient] = useState(null);
-  const ac = brand.color || '#C8A96E';
+  const ac = brand.color || '#231F78';
   
   return (
     <div className="p-card" style={{ height: 'calc(100vh - 120px)', display: 'grid', gridTemplateColumns: '300px 1fr' }}>
       <div style={{ borderRight: '1px solid var(--border)', overflowY: 'auto' }}>
         <div style={{ padding: 24, borderBottom: '1px solid var(--border)', fontWeight: 800 }}>Client Discussions</div>
         {clients.map(c => (
-          <button key={c.id} onClick={() => setActiveClient(c)} style={{ width: '100%', padding: 16, textAlign: 'left', background: activeClient?.id === c.id ? 'rgba(200, 169, 110, 0.05)' : 'none', border: 'none', borderBottom: '1px solid var(--border)', cursor: 'pointer', display: 'flex', gap: 12, alignItems: 'center' }}>
+          <button key={c.id} onClick={() => setActiveClient(c)} style={{ width: '100%', padding: 16, textAlign: 'left', background: activeClient?.id === c.id ? 'rgba(35, 31, 120, 0.05)' : 'none', border: 'none', borderBottom: '1px solid var(--border)', cursor: 'pointer', display: 'flex', gap: 12, alignItems: 'center' }}>
             <div style={{ width: 40, height: 40, borderRadius: '50%', background: ac, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800 }}>{c.name?.[0]}</div>
             <div>
                <div style={{ fontSize: 13, fontWeight: 700 }}>{c.name}</div>
@@ -187,7 +187,7 @@ function AdminChat({ messages, sendMessage, clients, brand }) {
 }
 
 function AdminTestimonials({ testimonials, brand }) {
-  const ac = brand.color || '#C8A96E';
+  const ac = brand.color || '#231F78';
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 32 }}>
        <div className="p-card" style={{ padding: 32 }}>

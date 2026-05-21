@@ -172,7 +172,7 @@ export default function App() {
         setUser(updatedUser);
         const cacheData = { ...updatedUser };
         delete cacheData.password;
-        localStorage.setItem('glasstech_user_cache', JSON.stringify(cacheData));
+        localStorage.setItem('westlinefuture_user_cache', JSON.stringify(cacheData));
       }
     } catch (e) {
       notify('error', 'Failed to update profile');
@@ -186,17 +186,17 @@ export default function App() {
   const migrateToFirebase = async () => {
     if (!db) return;
     try {
-      notify('pending', 'Initializing Glasstech CMS...');
+      notify('pending', 'Initializing Westline Future CMS...');
       setLoading(true);
 
-      const _seedPw = import.meta.env.VITE_SEED_CLIENT_PASSWORD || 'Glasstech2026';
+      const _seedPw = import.meta.env.VITE_SEED_CLIENT_PASSWORD || 'Westline Future2026';
       const _adminUid1 = import.meta.env.VITE_ADMIN_UID_1 || 'qRcOaTkJ6rYmjha9jNAadrYW6pK2';
       const _adminUid2 = import.meta.env.VITE_ADMIN_UID_2 || 'pBkrb38P9NaXXjIILQXlqxxC33p2';
       const _clientUid1 = import.meta.env.VITE_CLIENT_UID_1 || 'GQL4qVw3NIe9XVq8gZFkuU4Q9dD3';
       const DEMO_ACCOUNTS = [
         { email: 'admin@stormglide.com', role: 'admin', name: 'Super Admin', uid: _adminUid1 },
-        { email: 'admin@glasstechfab.com', role: 'admin', name: 'Factory Admin', uid: _adminUid2 },
-        { email: 'client@glasstechfab.com', role: 'client', name: 'Elite Client', username: 'elite_finish', password: _seedPw, uid: _clientUid1 },
+        { email: 'admin@westlinefuture.com', role: 'admin', name: 'Factory Admin', uid: _adminUid2 },
+        { email: 'client@westlinefuture.com', role: 'client', name: 'Elite Client', username: 'elite_finish', password: _seedPw, uid: _clientUid1 },
         { email: 'client@demo.com', role: 'client', name: 'Demo Client', username: 'demo_user', password: _seedPw },
         { phone: '233547748678', role: 'client', name: 'Authorized Tester', username: 'tester_01', password: _seedPw }
       ];
@@ -242,7 +242,7 @@ export default function App() {
         const ALL_PROJECT_DATA = [
           {
             id: 'PROJ_001', title: 'Glasshouse Penthouse', name: 'Elite Client',
-            email: 'client@glasstechfab.com', budget: '$250,000', progress: 45, stage: 5,
+            email: 'client@westlinefuture.com', budget: '$250,000', progress: 45, stage: 5,
             cat: 'Structural Glazing & Interior',
             milestones: [
               { id: 'm1', name: 'Deposit (Initial)', amount: '$100,000', stageId: 1, status: 'Paid', paidAt: new Date().toISOString() },
@@ -252,7 +252,7 @@ export default function App() {
           },
           {
             id: 'PROJ_002', title: 'Coastal Villa Skylight', name: 'Elite Client',
-            email: 'client@glasstechfab.com', budget: '$85,000', progress: 15, stage: 2,
+            email: 'client@westlinefuture.com', budget: '$85,000', progress: 15, stage: 2,
             cat: 'Custom Aluminum Fit-out',
             milestones: [
               { id: 'm1', name: 'Down Payment', amount: '$34,000', stageId: 1, status: 'Paid', paidAt: new Date().toISOString() },
@@ -260,7 +260,7 @@ export default function App() {
               { id: 'm3', name: 'On-site Installation', amount: '$17,000', stageId: 10, status: 'Pending' }
             ]
           },
-          ...CLIENTS_DATA.filter(c => c.email !== 'client@glasstechfab.com')
+          ...CLIENTS_DATA.filter(c => c.email !== 'client@westlinefuture.com')
         ];
 
         for (const item of ALL_PROJECT_DATA) {
@@ -325,7 +325,7 @@ export default function App() {
       };
 
       const seedProjectProcurement = async (pid, item) => {
-        if (item.email !== 'client@glasstechfab.com') return;
+        if (item.email !== 'client@westlinefuture.com') return;
         await setDoc(doc(collection(db, 'projects', pid, 'procurements'), 'SHIP_' + pid + '_GLS'), {
           itemName: 'Reflective Glass Panels', source: 'Foshan, China',
           status: item.stage > 5 ? 'Received' : 'Shipped',
@@ -378,7 +378,7 @@ export default function App() {
         const woId = `WO-${pid}-KITCHEN`;
         await setDoc(doc(db, 'work_orders', woId), {
           id: woId, projectId: pid,
-          clientId: item.email === 'client@glasstechfab.com' ? 'ELITE-CLIENT' : (item.clientId || 'DEMO-CLIENT'),
+          clientId: item.email === 'client@westlinefuture.com' ? 'ELITE-CLIENT' : (item.clientId || 'DEMO-CLIENT'),
           title: 'Modern Kitchen Fit-out', stage: item.stage,
           status: 'In Progress', atRisk: false, createdAt: new Date().toISOString()
         });
@@ -386,7 +386,7 @@ export default function App() {
       };
 
       const seedProjectContainer = async (pid, item) => {
-        if (item.email !== 'client@glasstechfab.com') return;
+        if (item.email !== 'client@westlinefuture.com') return;
         const woId = `WO-${pid}-KITCHEN`;
         const contId = 'CONT-FOSHAN-098';
         await setDoc(doc(db, 'containers', contId), {
@@ -423,7 +423,7 @@ export default function App() {
       await seedBookings();
       await seedEmailQueue();
 
-      notify('success', 'Glasstech Production Ecosystem Deployed');
+      notify('success', 'Westline Future Production Ecosystem Deployed');
     } catch (err) {
       console.error("[MIGRATION ERROR]:", err);
       notify('error', 'Seeding failed. Check console for details.');
@@ -474,7 +474,7 @@ export default function App() {
   };
 
   const checkManualSession = async () => {
-    const savedSession = localStorage.getItem('glasstech_session');
+    const savedSession = localStorage.getItem('westlinefuture_session');
     if (savedSession) {
       try {
         const sessionData = JSON.parse(savedSession);
@@ -504,12 +504,12 @@ export default function App() {
   const loginWithCredentials = async (username, password) => {
     checkRateLimit(username || 'unknown-client');
     if (!db || !isFirebaseEnabled) {
-      const _demoPw = import.meta.env.VITE_SEED_CLIENT_PASSWORD || 'Glasstech2026';
-      if ((username === 'elite_finish' || username === 'demo_user' || username === 'client@demo.com' || username === 'client@glasstechfab.com') && password === _demoPw) {
+      const _demoPw = import.meta.env.VITE_SEED_CLIENT_PASSWORD || 'Westline Future2026';
+      if ((username === 'elite_finish' || username === 'demo_user' || username === 'client@demo.com' || username === 'client@westlinefuture.com') && password === _demoPw) {
         const uMatch = CLIENTS_DATA.find(c => c.email === username) || CLIENTS_DATA[0] || { id: 1, name: 'Demo Client', email: username };
         const fullUser = { ...uMatch, role: 'client' };
         setUser(fullUser);
-        localStorage.setItem('glasstech_session', JSON.stringify({ id: fullUser.id, expiry: Date.now() + 86400000 }));
+        localStorage.setItem('westlinefuture_session', JSON.stringify({ id: fullUser.id, expiry: Date.now() + 86400000 }));
         navigate('/portal');
         notify('success', `Welcome back, ${fullUser.name}`);
         return;
@@ -520,7 +520,7 @@ export default function App() {
       setAuthLoading(true);
       const isEmail = username.includes('@');
       const cleanUsername = isEmail ? username.trim().toLowerCase() : normalizePhone(username);
-      const loginEmail = isEmail ? cleanUsername : `${cleanUsername}@clients.glasstechfab.com`;
+      const loginEmail = isEmail ? cleanUsername : `${cleanUsername}@clients.westlinefuture.com`;
 
       notify('pending', 'Authenticating with secure vault...');
 
@@ -553,7 +553,7 @@ export default function App() {
       const fullUser = { ...uData, id: normalizePhone(uData.phone || uDoc.id), uid: sessionUser.uid };
       delete fullUser.password;
       
-      localStorage.setItem('glasstech_user_cache', JSON.stringify(fullUser));
+      localStorage.setItem('westlinefuture_user_cache', JSON.stringify(fullUser));
       setUser(fullUser);
       clearRateLimit(username || 'unknown-client');
       setAuthLoading(false);
@@ -630,7 +630,7 @@ export default function App() {
         await setDoc(userRef, {
           id: userId,
           name: inquiry.fromName,
-          email: inquiry.fromEmail || `${userId}@clients.glasstechfab.com`,
+          email: inquiry.fromEmail || `${userId}@clients.westlinefuture.com`,
           phone: inquiry.fromPhone || '',
           role: 'client',
           status: 'Active',
@@ -678,7 +678,7 @@ export default function App() {
       });
 
       // 5. Create Notification
-      await createNotification(userId, `Welcome to Glasstech! Your project "${projectTitle}" has been provisioned. Access your portal to track progress.`, 'success', '/portal');
+      await createNotification(userId, `Welcome to Westline Future! Your project "${projectTitle}" has been provisioned. Access your portal to track progress.`, 'success', '/portal');
 
       notify('success', `Ecosystem Deployed: Project ${projectId} is now live.`);
       logAction(projectId, 'Provisioning', `Administrator converted inquiry ${inquiry.id} into active project.`, projectTitle);
@@ -768,7 +768,7 @@ export default function App() {
 
          // FEEDBACK LOOP: If stage is 12 (Handover), request feedback
          if (stageId === 12 && project) {
-           createNotification(project.clientId, "Project Complete! We'd love to hear your feedback on your Glasstech experience.", "success", "/portal?action=feedback");
+           createNotification(project.clientId, "Project Complete! We'd love to hear your feedback on your Westline Future experience.", "success", "/portal?action=feedback");
          }
       }
       
@@ -1004,7 +1004,7 @@ export default function App() {
     
     try {
       notify('pending', `Dispatching WhatsApp to ${c.name}...`);
-      const message = stageName.includes(' ') ? stageName : `High-End Update: Hello ${c.name}, your project "${p.project || p.title}" has moved to the ${stageName} phase at Glasstech Fab.`;
+      const message = stageName.includes(' ') ? stageName : `High-End Update: Hello ${c.name}, your project "${p.project || p.title}" has moved to the ${stageName} phase at Westline Future Fab.`;
       
       await MessengerService.sendMessage(c.phone || clientId, message);
       notify('success', 'WhatsApp update dispatched');
@@ -1086,7 +1086,7 @@ export default function App() {
       const id = normalizePhone(data.phone || data.username);
       if (!id) throw new Error("A valid phone number is required for client identity.");
 
-      const proxyEmail = `${id}@clients.glasstechfab.com`;
+      const proxyEmail = `${id}@clients.westlinefuture.com`;
       const tempPassword = import.meta.env.VITE_TEMP_CLIENT_PASSWORD || `GT@${new Date().getFullYear()}!`;
       
       notify('pending', 'Provisioning client environment...');
@@ -1137,7 +1137,7 @@ export default function App() {
       
       notify('success', `Client ${data.name} Registered Successfully`);
       
-      const message = `Hi ${data.name},\nWelcome to Glasstech Fabrications. We are thrilled to partner with you!\nYour Project Command Center is ready:\n- URL: glasstechfab.com/login\n- Username: ${id}\n- Password: ${tempPassword}\nPlease change your password after login.`;
+      const message = `Hi ${data.name},\nWelcome to Westline Future. We are thrilled to partner with you!\nYour Project Command Center is ready:\n- URL: westlinefuture.com/login\n- Username: ${id}\n- Password: ${tempPassword}\nPlease change your password after login.`;
       
       try {
         await MessengerService.sendMessage(data.phone || id, message);
@@ -1149,7 +1149,7 @@ export default function App() {
       logAction(null, 'CRM', `Onboarded Client: ${id}`);
       
       // Send a system notification for the client
-      await createNotification(id, "Welcome to Glasstech! Your Project Command Center is now active.", "success", "/portal");
+      await createNotification(id, "Welcome to Westline Future! Your Project Command Center is now active.", "success", "/portal");
 
     } catch (e) {
       console.error("[CRM] Registration Error:", e);
@@ -1215,7 +1215,7 @@ export default function App() {
       const details = emailData.details || {};
       const payload = {
          itemName: `${details.productName || 'Marketplace Item'} (x${details.quantity || 1})`,
-         source: 'Glasstech Marketplace',
+         source: 'Westline Future Marketplace',
          estimatedCost: details.price || 0,
          actualCost: details.price || 0,
          status: 'to-buy',
@@ -1354,7 +1354,7 @@ export default function App() {
         userMatch = snap.docs.find(d => normalizePhone(d.data().phone) === clean)?.data();
       }
       
-      if (!userMatch) throw new Error("Phone number not registered with Glasstech.");
+      if (!userMatch) throw new Error("Phone number not registered with Westline Future.");
       
       // Generate code
       const code = Math.floor(100000 + Math.random() * 900000).toString();
@@ -1389,7 +1389,7 @@ export default function App() {
       if (userMatch) {
          const hardenedUser = { ...userMatch, id: clean };
          setUser(hardenedUser);
-         localStorage.setItem('glasstech_session', JSON.stringify({
+         localStorage.setItem('westlinefuture_session', JSON.stringify({
            id: clean,
            phone: phone,
            expiry: Date.now() + (24 * 60 * 60 * 1000)
@@ -1405,7 +1405,7 @@ export default function App() {
   const handleLogout = async () => {
     try {
       if (auth) await signOut(auth);
-      localStorage.removeItem('glasstech_session');
+      localStorage.removeItem('westlinefuture_session');
       setUser(null);
       navigate('/login');
     } catch (e) {
@@ -1503,15 +1503,15 @@ export default function App() {
 
   const loginHandler = async (e, p, mode = 'admin') => {
     try {
-      notify('pending', `Authenticating with Glasstech Hub...`);
+      notify('pending', `Authenticating with Westline Future...`);
 
-      const isAdminEmail = (e === 'admin@stormglide.com' || e === 'admin@glasstechfab.com');
+      const isAdminEmail = (e === 'admin@stormglide.com' || e === 'admin@westlinefuture.com');
       const isActualAdminMode = mode === 'admin' || isAdminEmail;
 
       if (isActualAdminMode) {
         checkRateLimit(e || 'admin-unknown');
         if (!isFirebaseEnabled || !auth) {
-          const _offlinePw = import.meta.env.VITE_ADMIN_OFFLINE_PASSWORD || 'Glasstech2026';
+          const _offlinePw = import.meta.env.VITE_ADMIN_OFFLINE_PASSWORD || 'Westline Future2026';
           if (isAdminEmail && p === _offlinePw) {
             const mockUser = { email: e, role: 'admin', uid: 'mock-admin' };
             setUser(mockUser);
@@ -1566,9 +1566,9 @@ export default function App() {
   const isProtectedRoute = location.pathname.startsWith('/admin') || location.pathname.startsWith('/portal');
 
   if (authLoading && isProtectedRoute) return (
-    <div style={{ background: '#1A1410', height: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#C8A96E', fontFamily: 'Inter' }}>
+    <div style={{ background: '#0D0B2E', height: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#231F78', fontFamily: 'Inter' }}>
       <div className="pulse" style={{ fontSize: '1.2rem', letterSpacing: '4px', textTransform: 'uppercase' }}>Authenticating</div>
-      <div style={{ marginTop: '20px', fontSize: '0.8rem', opacity: 0.6 }}>Securing Glasstech Gateway...</div>
+      <div style={{ marginTop: '20px', fontSize: '0.8rem', opacity: 0.6 }}>Securing Westline Future Gateway...</div>
     </div>
   );
 
@@ -1576,7 +1576,7 @@ export default function App() {
     <div className="lxf-platform">
       <div className="mesh-bg" />
       <Suspense fallback={
-        <div style={{ background: '#1A1410', height: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#C8A96E', fontFamily: 'Inter' }}>
+        <div style={{ background: '#0D0B2E', height: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#231F78', fontFamily: 'Inter' }}>
           <div className="pulse" style={{ fontSize: '1.2rem', letterSpacing: '4px', textTransform: 'uppercase' }}>Loading Portal</div>
         </div>
       }>
@@ -1642,7 +1642,7 @@ export default function App() {
       </Suspense>
 
       {notification && (
-        <div style={{ position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)', zIndex: 10000, padding: '12px 24px', borderRadius: 100, background: notification.type === 'error' ? '#EF4444' : '#1A1410', color: '#fff', fontSize: 13, boxShadow: '0 8px 32px rgba(0,0,0,.15)' }}>
+        <div style={{ position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)', zIndex: 10000, padding: '12px 24px', borderRadius: 100, background: notification.type === 'error' ? '#EF4444' : '#0D0B2E', color: '#fff', fontSize: 13, boxShadow: '0 8px 32px rgba(0,0,0,.15)' }}>
            {notification.msg}
         </div>
       )}

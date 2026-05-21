@@ -12,7 +12,7 @@ function SkeletonBlock({ width = '100%', height = 16, radius = 8, style = {} }) 
   return (
     <div style={{
       width, height, borderRadius: radius,
-      background: 'linear-gradient(90deg, #F0EBE5 25%, #F9F7F4 50%, #F0EBE5 75%)',
+      background: 'linear-gradient(90deg, #F0EBE5 25%, #F4F4FA 50%, #F0EBE5 75%)',
       backgroundSize: '200% 100%',
       animation: 'skeleton-pulse 1.5s ease-in-out infinite',
       flexShrink: 0,
@@ -40,7 +40,7 @@ export function SkeletonCard({ lines = 3 }) {
 
 export function SkeletonRow() {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '14px 0', borderBottom: '1px solid #F9F7F4' }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '14px 0', borderBottom: '1px solid #F4F4FA' }}>
       <SkeletonBlock width={36} height={36} radius={10} />
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6 }}>
         <SkeletonBlock width="50%" height={13} />

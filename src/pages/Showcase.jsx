@@ -11,9 +11,9 @@ import { db } from '../lib/firebase';
 import { collection, onSnapshot, query, orderBy, doc, updateDoc } from 'firebase/firestore';
 import { DEFAULT_SCENES as CATALOG_DEFAULTS } from '../catalog.jsx';
 
-const LIGHT_BG = '#FDFCFB';
-const DARK_TEXT = '#1A1410';
-const AC = '#C8A96E';
+const LIGHT_BG = '#F8F8FD';
+const DARK_TEXT = '#0D0B2E';
+const AC = '#231F78';
 
 
 const Hotspot = ({ h, ac, mob }) => {
@@ -128,7 +128,7 @@ export default function LuxeShowcase({ brand }) {
   return (
     <div style={{ height: '100vh', width: '100vw', background: '#000', overflow: 'hidden', position: 'relative', fontFamily: 'var(--font-p)' }}>
       {loading ? (
-        <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#1A1410' }}>
+        <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#0D0B2E' }}>
            <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1, ease: 'linear' }}>
               <Zap size={48} color={ac} />
            </motion.div>

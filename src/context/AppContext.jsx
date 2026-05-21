@@ -73,7 +73,7 @@ export const AppProvider = ({ children }) => {
     if (userProfile && JSON.stringify(userProfile) !== JSON.stringify(user)) {
       setUser(userProfile);
     } else if (!currentUser && user !== null) {
-      const savedSession = localStorage.getItem('glasstech_session');
+      const savedSession = localStorage.getItem('westlinefuture_session');
       if (savedSession) {
         try {
           const sessionData = JSON.parse(savedSession);

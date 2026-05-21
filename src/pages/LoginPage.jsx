@@ -25,7 +25,7 @@ export default function LoginPage({ onLogin, onBack, brand, type = 'client', ...
   const [err, setErr] = useState('');
   const [isAdminLogin, setIsAdminLogin] = useState(type === 'admin');
 
-  const ac = brand.color || '#C8A96E';
+  const ac = brand.color || '#231F78';
 
   useEffect(() => {
     setIsAdminLogin(type === 'admin');
@@ -59,7 +59,7 @@ export default function LoginPage({ onLogin, onBack, brand, type = 'client', ...
   return (
     <div className="lxf" style={{ 
       minHeight: '100vh', 
-      background: isAdminLogin ? '#0D0B09' : '#F9F7F4', 
+      background: isAdminLogin ? '#0D0B2E' : '#F4F4FA', 
       display: 'flex', 
       flexDirection: 'column', 
       alignItems: 'center', 
@@ -68,13 +68,13 @@ export default function LoginPage({ onLogin, onBack, brand, type = 'client', ...
       transition: 'background 0.8s'
     }}>
       {showOnboarding && (
-        <div className="overlay-modal" style={{ zIndex: 10000, background: 'rgba(26, 20, 16, 0.95)', backdropFilter: 'blur(20px)', position: 'fixed', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+        <div className="overlay-modal" style={{ zIndex: 10000, background: 'rgba(13, 11, 46, 0.95)', backdropFilter: 'blur(20px)', position: 'fixed', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
            <div className="p-card" style={{ maxWidth: 400, width: '100%', padding: 40, textAlign: 'center', background: '#fff', borderRadius: 24 }}>
               <div style={{ width: 64, height: 64, borderRadius: '50%', background: `${ac}20`, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 24px', color: ac }}>
                  <KeyRound size={32} />
               </div>
               <h2 className="lxfh" style={{ fontSize: 24, marginBottom: 12 }}>Secure Your Portal</h2>
-              <p style={{ color: '#B5AFA9', fontSize: 14, marginBottom: 32 }}>Welcome! For your security, please create a new private password to replace your temporary one.</p>
+              <p style={{ color: '#9B99C8', fontSize: 14, marginBottom: 32 }}>Welcome! For your security, please create a new private password to replace your temporary one.</p>
               <input 
                 type="password" 
                 placeholder="New Secure Password" 
@@ -109,7 +109,7 @@ export default function LoginPage({ onLogin, onBack, brand, type = 'client', ...
           onClick={onBack} 
           variant="ghost"
           size="sm"
-          style={{ color: isAdminLogin ? '#625C54' : '#B5AFA9', fontSize: 13, gap: 6, fontWeight: 500 }}
+          style={{ color: isAdminLogin ? '#9B99C8' : '#9B99C8', fontSize: 13, gap: 6, fontWeight: 500 }}
         >
           <ChevronLeft size={16} /> Return to Public Site
         </Button>
@@ -120,8 +120,8 @@ export default function LoginPage({ onLogin, onBack, brand, type = 'client', ...
         maxWidth: 440, 
         padding: '56px 48px', 
         borderRadius: 24, 
-        boxShadow: isAdminLogin ? '0 32px 64px rgba(0,0,0,0.5)' : '0 24px 48px -12px rgba(26,20,16,0.08)',
-        background: isAdminLogin ? '#1A1410' : '#ffffff',
+        boxShadow: isAdminLogin ? '0 32px 64px rgba(0,0,0,0.5)' : '0 24px 48px -12px rgba(13,11,46,0.08)',
+        background: isAdminLogin ? '#0D0B2E' : '#ffffff',
         border: `1px solid ${isAdminLogin ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'}`,
         position: 'relative',
         overflow: 'hidden'
@@ -136,12 +136,12 @@ export default function LoginPage({ onLogin, onBack, brand, type = 'client', ...
 
         <div style={{ textAlign: 'center', marginBottom: 48, position: 'relative', zIndex: 1 }}>
            {brand.logo ? <img src={brand.logo} alt="logo" style={{ height: 60, marginBottom: 24 }} />
-             : <div className="lxfh" style={{ fontSize: 24, fontWeight: 700, color: isAdminLogin ? '#fff' : '#1A1410', marginBottom: 24 }}>{brand.name}</div>}
+             : <div className="lxfh" style={{ fontSize: 24, fontWeight: 700, color: isAdminLogin ? '#fff' : '#0D0B2E', marginBottom: 24 }}>{brand.name}</div>}
            
-          <h1 className="lxfh" style={{ fontSize: isAdminLogin ? 28 : 32, fontWeight: 300, color: isAdminLogin ? '#fff' : '#1A1410', marginBottom: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
+          <h1 className="lxfh" style={{ fontSize: isAdminLogin ? 28 : 32, fontWeight: 300, color: isAdminLogin ? '#fff' : '#0D0B2E', marginBottom: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
             {isAdminLogin ? 'Staff Entry' : 'Client Portal'} {isAdminLogin ? <Lock size={20} color={ac} /> : <ShieldCheck size={24} color={ac} />}
           </h1>
-          <p style={{ fontSize: 13, color: isAdminLogin ? '#625C54' : '#6A635C', textTransform: isAdminLogin ? 'uppercase' : 'none', letterSpacing: isAdminLogin ? '.1em' : 'normal' }}>
+          <p style={{ fontSize: 13, color: isAdminLogin ? '#9B99C8' : '#5B5894', textTransform: isAdminLogin ? 'uppercase' : 'none', letterSpacing: isAdminLogin ? '.1em' : 'normal' }}>
             {isAdminLogin ? 'Secured Terminal Environment' : 'Enter your designated credentials to access your dashboard.'}
           </p>
         </div>
@@ -164,7 +164,7 @@ export default function LoginPage({ onLogin, onBack, brand, type = 'client', ...
             <input 
               placeholder={isAdminLogin ? "Staff ID (Email)" : "Username"} 
               aria-label={isAdminLogin ? "Staff ID (Email)" : "Username"}
-              style={{ width: '100%', height: 56, paddingLeft: 48, background: isAdminLogin ? 'rgba(255,255,255,0.03)' : '#F9F7F4', border: isAdminLogin ? '1px solid rgba(255,255,255,0.1)' : '1px solid #F0EBE5', color: isAdminLogin ? '#fff' : '#121212', borderRadius: 12, outline: 'none' }}
+              style={{ width: '100%', height: 56, paddingLeft: 48, background: isAdminLogin ? 'rgba(255,255,255,0.03)' : '#F4F4FA', border: isAdminLogin ? '1px solid rgba(255,255,255,0.1)' : '1px solid #F0EBE5', color: isAdminLogin ? '#fff' : '#121212', borderRadius: 12, outline: 'none' }}
               value={isAdminLogin ? email : username} 
               onChange={e => isAdminLogin ? setEmail(e.target.value) : setUsername(e.target.value)} 
             />
@@ -175,7 +175,7 @@ export default function LoginPage({ onLogin, onBack, brand, type = 'client', ...
               type={showPassword ? 'text' : 'password'}
               placeholder="Access Password"
               aria-label="Access Password"
-              style={{ width: '100%', height: 56, paddingLeft: 48, paddingRight: 48, background: isAdminLogin ? 'rgba(255,255,255,0.03)' : '#F9F7F4', border: isAdminLogin ? '1px solid rgba(255,255,255,0.1)' : '1px solid #F0EBE5', color: isAdminLogin ? '#fff' : '#121212', borderRadius: 12, outline: 'none' }}
+              style={{ width: '100%', height: 56, paddingLeft: 48, paddingRight: 48, background: isAdminLogin ? 'rgba(255,255,255,0.03)' : '#F4F4FA', border: isAdminLogin ? '1px solid rgba(255,255,255,0.1)' : '1px solid #F0EBE5', color: isAdminLogin ? '#fff' : '#121212', borderRadius: 12, outline: 'none' }}
               value={isAdminLogin ? pw : password}
               onChange={e => isAdminLogin ? setPw(e.target.value) : setPassword(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && handleLoginSubmit()}
@@ -184,7 +184,7 @@ export default function LoginPage({ onLogin, onBack, brand, type = 'client', ...
               type="button"
               onClick={() => setShowPassword(p => !p)}
               aria-label={showPassword ? 'Hide password' : 'Show password'}
-              style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: isAdminLogin ? 'rgba(255,255,255,0.3)' : '#B5AFA9', cursor: 'pointer', padding: 4, display: 'flex', alignItems: 'center' }}
+              style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: isAdminLogin ? 'rgba(255,255,255,0.3)' : '#9B99C8', cursor: 'pointer', padding: 4, display: 'flex', alignItems: 'center' }}
             >
               {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
             </button>
@@ -197,15 +197,15 @@ export default function LoginPage({ onLogin, onBack, brand, type = 'client', ...
         {/* SECURITY INFO FOOTER */}
         <div style={{ marginTop: 48, borderTop: `1px solid ${isAdminLogin ? 'rgba(255,255,255,0.05)' : '#F0EBE5'}`, paddingTop: 32, textAlign: 'center' }}>
           <div style={{ display: 'flex', justifyContent: 'center', gap: 24, marginBottom: 16 }}>
-             <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#B5AFA9', fontSize: 11 }}>
+             <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#9B99C8', fontSize: 11 }}>
                 <Shield size={14} /> End-to-End Encrypted
              </div>
-             <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#B5AFA9', fontSize: 11 }}>
+             <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#9B99C8', fontSize: 11 }}>
                 <Globe size={14} /> Global Availability
              </div>
           </div>
           {!isAdminLogin && (
-            <p style={{ fontSize: 12, color: '#B5AFA9', lineHeight: 1.6 }}>
+            <p style={{ fontSize: 12, color: '#9B99C8', lineHeight: 1.6 }}>
               Lost your credentials? Your project manager can reset your access password anytime.
             </p>
           )}

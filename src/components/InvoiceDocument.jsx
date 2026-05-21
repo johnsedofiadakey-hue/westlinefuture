@@ -23,7 +23,7 @@ export default function InvoiceDocument({ inv, isQuote = false, finSettings, ac,
   return (
     <div id="printable-financial" style={{
       width: '100%', minHeight: '1120px', background: '#fff',
-      padding: isMinimal ? '40px' : '80px', color: '#1A1410',
+      padding: isMinimal ? '40px' : '80px', color: '#0D0B2E',
       fontFamily: isMinimal ? 'sans-serif' : 'serif',
       position: 'relative', overflow: 'hidden',
       border: isCorporate ? `10px solid ${ac}20` : 'none'
@@ -40,18 +40,18 @@ export default function InvoiceDocument({ inv, isQuote = false, finSettings, ac,
       {isCorporate && <div style={{ height: 20, background: ac, margin: '-80px -80px 60px -80px' }} />}
 
       {/* HEADER */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 60, borderBottom: isMinimal ? 'none' : '2px solid #1A1410', paddingBottom: 40 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 60, borderBottom: isMinimal ? 'none' : '2px solid #0D0B2E', paddingBottom: 40 }}>
         <div style={{ display: 'flex', gap: 20, alignItems: 'center' }}>
           {brand.logo ? <img src={brand.logo} style={{ height: isMinimal ? 40 : 64, objectFit: 'contain' }} alt="logo" /> : <div style={{ fontSize: 32, fontWeight: 900, color: ac }}>G</div>}
           <div>
-            <h1 style={{ fontSize: 20, fontWeight: 800, textTransform: 'uppercase', letterSpacing: 2 }}>{brand.name || 'GLASSTECH'}</h1>
+            <h1 style={{ fontSize: 20, fontWeight: 800, textTransform: 'uppercase', letterSpacing: 2 }}>{brand.name || 'WESTLINE FUTURE'}</h1>
             <p style={{ fontSize: 10, opacity: 0.6, textTransform: 'uppercase', letterSpacing: 1 }}>{brand.tagline}</p>
           </div>
         </div>
         <div style={{ textAlign: 'right' }}>
           <h2 style={{ fontSize: isMinimal ? 32 : 48, fontWeight: 300, margin: 0, textTransform: 'uppercase', color: isCorporate ? ac : 'inherit' }}>{isQuote ? 'Quotation' : 'Invoice'}</h2>
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4, marginTop: 8 }}>
-            <span style={{ fontSize: 12, background: '#1A1410', color: '#fff', padding: '2px 8px', borderRadius: 4 }}>Ref: {inv.id || 'DRAFT-001'}</span>
+            <span style={{ fontSize: 12, background: '#0D0B2E', color: '#fff', padding: '2px 8px', borderRadius: 4 }}>Ref: {inv.id || 'DRAFT-001'}</span>
             <span style={{ fontSize: 12, fontWeight: 600 }}>Date: {inv.date}</span>
           </div>
         </div>
@@ -59,7 +59,7 @@ export default function InvoiceDocument({ inv, isQuote = false, finSettings, ac,
 
       {/* CLIENT & VENDOR */}
       <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: 60, marginBottom: 60 }}>
-        <div style={{ padding: isMinimal ? '20px' : '0', background: isMinimal ? '#F9F7F4' : 'none', borderRadius: 12 }}>
+        <div style={{ padding: isMinimal ? '20px' : '0', background: isMinimal ? '#F4F4FA' : 'none', borderRadius: 12 }}>
           <div style={{ fontSize: 9, textTransform: 'uppercase', color: ac, fontWeight: 900, marginBottom: 12, letterSpacing: 1.5 }}>PREPARED FOR</div>
           <p style={{ fontSize: 16, fontWeight: 800, marginBottom: 6 }}>{inv.clientName || 'Valued Client'}</p>
           <div style={{ fontSize: 12, lineHeight: 1.6, opacity: 0.7 }}>
@@ -88,7 +88,7 @@ export default function InvoiceDocument({ inv, isQuote = false, finSettings, ac,
           </div>
           <div style={{ textAlign: 'right' }}>
             <div style={{ fontSize: 9, textTransform: 'uppercase', color: ac, fontWeight: 800, marginBottom: 4 }}>Billable Type</div>
-            <div style={{ fontSize: 12, fontWeight: 800, background: '#1A1410', color: '#fff', padding: '4px 12px', borderRadius: 20 }}>
+            <div style={{ fontSize: 12, fontWeight: 800, background: '#0D0B2E', color: '#fff', padding: '4px 12px', borderRadius: 20 }}>
               {inv.invoiceType === 'unit' ? 'UNIT-ITEM BILLING' : 'PROJECT-BASED MILESTONE'}
             </div>
           </div>
@@ -98,7 +98,7 @@ export default function InvoiceDocument({ inv, isQuote = false, finSettings, ac,
       {/* ITEMS TABLE */}
       <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 40 }}>
         <thead>
-          <tr style={{ background: isCorporate ? ac : '#1A1410', color: '#fff' }}>
+          <tr style={{ background: isCorporate ? ac : '#0D0B2E', color: '#fff' }}>
             <th style={{ padding: '14px 20px', textAlign: 'left', fontSize: 10, textTransform: 'uppercase', letterSpacing: 1 }}>Service Description</th>
             <th style={{ padding: '14px 20px', textAlign: 'center', fontSize: 10, textTransform: 'uppercase', width: 100 }}>{inv.invoiceType === 'unit' ? 'Quantity' : 'Phase'}</th>
             <th style={{ padding: '14px 20px', textAlign: 'right', fontSize: 10, textTransform: 'uppercase', width: 150 }}>Unit Price</th>
@@ -146,7 +146,7 @@ export default function InvoiceDocument({ inv, isQuote = false, finSettings, ac,
             <span style={{ fontSize: 14, opacity: 0.6 }}>Subtotal</span>
             <span style={{ fontSize: 14, fontWeight: 600 }}>{formatMoney(total, inv.currency)}</span>
           </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '24px 0', borderTop: `3px solid ${isCorporate ? ac : '#1A1410'}`, marginTop: 12 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '24px 0', borderTop: `3px solid ${isCorporate ? ac : '#0D0B2E'}`, marginTop: 12 }}>
             <span style={{ fontSize: 18, fontWeight: 900, textTransform: 'uppercase' }}>Grand Total</span>
             <span style={{ fontSize: 24, fontWeight: 900, color: ac }}>{formatMoney(total, inv.currency)}</span>
           </div>
@@ -160,7 +160,7 @@ export default function InvoiceDocument({ inv, isQuote = false, finSettings, ac,
             <Landmark size={16} color={ac} />
             <span style={{ fontSize: 10, textTransform: 'uppercase', color: ac, fontWeight: 900, letterSpacing: 1 }}>Electronic Fund Transfer</span>
           </div>
-          <div style={{ padding: 24, background: '#F9F7F4', borderRadius: 16, border: '1px solid #F0EBE5' }}>
+          <div style={{ padding: 24, background: '#F4F4FA', borderRadius: 16, border: '1px solid #F0EBE5' }}>
             <p style={{ fontSize: 13, fontWeight: 800, lineHeight: 1.8, whiteSpace: 'pre-line' }}>{inv.bankDetails || finSettings.bankDetails}</p>
           </div>
           <div style={{ marginTop: 32 }}>
@@ -181,15 +181,15 @@ export default function InvoiceDocument({ inv, isQuote = false, finSettings, ac,
                 transform: 'rotate(-15deg)', margin: '0 0 20px auto'
               }}>
                 <div style={{ textAlign: 'center', padding: 10 }}>
-                  <div style={{ fontSize: 10, fontWeight: 900 }}>GLASSTECH</div>
+                  <div style={{ fontSize: 10, fontWeight: 900 }}>WESTLINE FUTURE</div>
                   <div style={{ fontSize: 16, fontWeight: 900, borderY: '2px solid' }}>CERTIFIED</div>
                   <div style={{ fontSize: 8 }}>OFFICIAL RELEASE</div>
                 </div>
               </div>
             )}
-            <div style={{ width: 180, borderBottom: '1px solid #1A1410', marginBottom: 8 }} />
+            <div style={{ width: 180, borderBottom: '1px solid #0D0B2E', marginBottom: 8 }} />
             <div style={{ fontSize: 11, fontWeight: 800 }}>Finance Director</div>
-            <div style={{ fontSize: 9, opacity: 0.5 }}>Glasstech Fabrications Ltd.</div>
+            <div style={{ fontSize: 9, opacity: 0.5 }}>Westline Future Ltd.</div>
           </div>
         </div>
       </div>

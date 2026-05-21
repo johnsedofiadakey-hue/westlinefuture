@@ -8,7 +8,7 @@ import AdminProjectGallery from './AdminProjectGallery';
 import AdminGovernance from './AdminGovernance';
 
 export default function AdminInstallations({ clients = [], updateProject, dbClients, brand, transactions = [], recordOfflinePayment, calculateProjectPulse, ...props }) {
-  const ac = brand.color || '#C8A96E';
+  const ac = brand.color || '#231F78';
   const [search, setSearch] = useState('');
   const [sel, setSel] = useState(null);
   const [showManual, setShowManual] = useState(false);
@@ -38,13 +38,13 @@ export default function AdminInstallations({ clients = [], updateProject, dbClie
             <button onClick={() => setSel(null)} className="p-btn-light" style={{ width: 40, height: 40, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><ArrowLeft size={18} /></button>
             <div>
               <h2 className="lxfh" style={{ fontSize: 24, fontWeight: 400 }}>{proj.project}</h2>
-              <div className="lxf" style={{ fontSize: 13, color: '#B5AFA9' }}>{proj.cat || 'Full Interior Finishing'} • {proj.name}</div>
+              <div className="lxf" style={{ fontSize: 13, color: '#9B99C8' }}>{proj.cat || 'Full Interior Finishing'} • {proj.name}</div>
             </div>
           </div>
           <div style={{ textAlign: 'right', display: 'flex', gap: 24 }}>
             <div>
-              <div className="lxf" style={{ fontSize: 10, color: '#B5AFA9', textTransform: 'uppercase', letterSpacing: '.15em' }}>Fabrication Progress</div>
-              <div className="lxfh" style={{ fontSize: 18, color: '#7A6E62', textAlign: 'right' }}>{proj.progress || 0}%</div>
+              <div className="lxf" style={{ fontSize: 10, color: '#9B99C8', textTransform: 'uppercase', letterSpacing: '.15em' }}>Fabrication Progress</div>
+              <div className="lxfh" style={{ fontSize: 18, color: '#5B5894', textAlign: 'right' }}>{proj.progress || 0}%</div>
             </div>
             <div style={{ paddingLeft: 24, borderLeft: '1px solid #F0EBE5' }}>
               <div className="lxf" style={{ fontSize: 10, color: ac, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.15em' }}>Overall Project Pulse</div>
@@ -74,23 +74,23 @@ export default function AdminInstallations({ clients = [], updateProject, dbClie
                         style={{ 
                           width: 32, height: 32, borderRadius: '50%', 
                           background: isPast ? s.color : isCurrent ? '#fff' : '#fff',
-                          border: isPast ? `2px solid ${s.color}` : isCurrent ? `2px solid ${s.color}` : '2px solid #DFD9D1',
+                          border: isPast ? `2px solid ${s.color}` : isCurrent ? `2px solid ${s.color}` : '2px solid #E4E3F0',
                           display: 'flex', alignItems: 'center', justifyContent: 'center',
                           zIndex: 2, cursor: 'pointer', transition: 'all .3s'
                         }}
                       >
-                        {isPast ? <Check size={16} color="#fff" strokeWidth={3} /> : <div style={{ width: 8, height: 8, borderRadius: '50%', background: isCurrent ? s.color : '#DFD9D1' }} />}
+                        {isPast ? <Check size={16} color="#fff" strokeWidth={3} /> : <div style={{ width: 8, height: 8, borderRadius: '50%', background: isCurrent ? s.color : '#E4E3F0' }} />}
                       </div>
 
                       <div style={{ flex: 1, paddingTop: 4 }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                           <div>
-                            <div className="lxf" style={{ fontSize: 15, fontWeight: isCurrent ? 700 : 500, color: isCurrent ? '#1A1410' : isPast ? '#7A6E62' : '#B5AFA9', display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <div className="lxf" style={{ fontSize: 15, fontWeight: isCurrent ? 700 : 500, color: isCurrent ? '#0D0B2E' : isPast ? '#5B5894' : '#9B99C8', display: 'flex', alignItems: 'center', gap: 8 }}>
                                {s.name}
                                {s.requiresPayment && <span style={{ fontSize: 9, background: 'rgba(239,68,68,0.1)', color: '#EF4444', padding: '2px 6px', borderRadius: 4, fontWeight: 800 }}>PAYMENT GATE</span>}
                                {s.requiresApproval && <span style={{ fontSize: 9, background: 'rgba(33,150,243,0.1)', color: '#2196F3', padding: '2px 6px', borderRadius: 4, fontWeight: 800 }}>APPROVAL GATE</span>}
                             </div>
-                            {isCurrent && <div className="lxf" style={{ fontSize: 12, color: '#B5AFA9', marginTop: 4 }}>Active stage • Estimated {s.days} days remaining</div>}
+                            {isCurrent && <div className="lxf" style={{ fontSize: 12, color: '#9B99C8', marginTop: 4 }}>Active stage • Estimated {s.days} days remaining</div>}
                           </div>
                           {isCurrent && (
                             <div style={{ display: 'flex', gap: 8 }}>
@@ -125,26 +125,26 @@ export default function AdminInstallations({ clients = [], updateProject, dbClie
                </div>
                
                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                  <div className="lxf" style={{ fontSize: 10, color: '#B5AFA9', textTransform: 'uppercase', letterSpacing: '.05em' }}>Transactions</div>
+                  <div className="lxf" style={{ fontSize: 10, color: '#9B99C8', textTransform: 'uppercase', letterSpacing: '.05em' }}>Transactions</div>
                   {(transactions || []).filter(t => t.parentId === sel).map(t => (
-                    <div key={t.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', background: '#F9F7F4', borderRadius: 8, borderLeft: `3px solid ${ac}` }}>
+                    <div key={t.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', background: '#F4F4FA', borderRadius: 8, borderLeft: `3px solid ${ac}` }}>
                        <div>
                           <div className="lxf" style={{ fontSize: 12, fontWeight: 700 }}>${parseFloat(t.amount).toLocaleString()}</div>
-                          <div className="lxf" style={{ fontSize: 10, color: '#B5AFA9' }}>{t.date} via {t.method}</div>
+                          <div className="lxf" style={{ fontSize: 10, color: '#9B99C8' }}>{t.date} via {t.method}</div>
                        </div>
                        <SBadge s="VERIFIED" />
                     </div>
                   ))}
-                  {(transactions || []).filter(t => t.parentId === sel).length === 0 && <div className="lxf" style={{ fontSize: 11, color: '#B5AFA9', fontStyle: 'italic' }}>No transactions recorded.</div>}
+                  {(transactions || []).filter(t => t.parentId === sel).length === 0 && <div className="lxf" style={{ fontSize: 11, color: '#9B99C8', fontStyle: 'italic' }}>No transactions recorded.</div>}
                </div>
 
                <div style={{ marginTop: 24, paddingTop: 20, borderTop: '1px solid rgba(0,0,0,.05)' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                    <span className="lxf" style={{ fontSize: 13, color: '#B5AFA9' }}>Total Verified</span>
+                    <span className="lxf" style={{ fontSize: 13, color: '#9B99C8' }}>Total Verified</span>
                     <span className="lxf" style={{ fontSize: 14, fontWeight: 700, color: '#16A34A' }}>${(transactions || []).filter(t => t.parentId === sel).reduce((a, b) => a + (parseFloat(String(b.amount || '0').replace(/[^0-9.]/g, '')) || 0), 0).toLocaleString()}</span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span className="lxf" style={{ fontSize: 13, color: '#B5AFA9' }}>Remaining Balance</span>
+                    <span className="lxf" style={{ fontSize: 13, color: '#9B99C8' }}>Remaining Balance</span>
                     <span className="lxf" style={{ fontSize: 14, fontWeight: 700, color: '#ff4444' }}>${(totalBudget - (transactions || []).filter(t => t.parentId === sel).reduce((a, b) => a + (parseFloat(String(b.amount || '0').replace(/[^0-9.]/g, '')) || 0), 0)).toLocaleString()}</span>
                   </div>
                </div>
@@ -168,7 +168,7 @@ export default function AdminInstallations({ clients = [], updateProject, dbClie
           <div className="overlay-modal" onClick={() => setShowManual(false)}>
              <div className="modal-box lxf" style={{ maxWidth: 400 }} onClick={e => e.stopPropagation()}>
                 <h3 className="lxfh" style={{ fontSize: 22, marginBottom: 8 }}>Record External Payment</h3>
-                <p style={{ fontSize: 13, color: '#B5AFA9', marginBottom: 24 }}>Manually add a payment for audit purposes (Cash, Bank Trace, etc).</p>
+                <p style={{ fontSize: 13, color: '#9B99C8', marginBottom: 24 }}>Manually add a payment for audit purposes (Cash, Bank Trace, etc).</p>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                    {manErr && <div style={{ padding: '10px 14px', background: '#FEF2F2', border: '1px solid #FEE2E2', borderRadius: 8, color: '#DC2626', fontSize: 12 }}>{manErr}</div>}
                    <PFormField label="Amount ($)"><input className="p-inp" type="number" value={manData.amount} onChange={e => setManData({...manData, amount: e.target.value})} /></PFormField>
@@ -195,7 +195,7 @@ export default function AdminInstallations({ clients = [], updateProject, dbClie
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <h2 className="lxfh" style={{ fontSize: 32, fontWeight: 400 }}>Fabrication & Installations</h2>
         <div style={{ position: 'relative' }}>
-          <Search size={14} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#B5AFA9' }} />
+          <Search size={14} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#9B99C8' }} />
           <input className="p-inp" placeholder="Search projects..." value={search} onChange={e => setSearch(e.target.value)} style={{ paddingLeft: 34, width: 240 }} />
         </div>
       </div>
@@ -213,16 +213,16 @@ export default function AdminInstallations({ clients = [], updateProject, dbClie
                   <div style={{ flex: 1 }}>
                      <div className="lxf" style={{ fontSize: 10, color: ac, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.1em', marginBottom: 4 }}>{c.cat || 'Full Interior'}</div>
                      <div className="lxfh" style={{ fontSize: 18, fontWeight: 700 }}>{c.project}</div>
-                     <div className="lxf" style={{ fontSize: 12, color: '#B5AFA9', marginTop: 3 }}>{c.name}</div>
+                     <div className="lxf" style={{ fontSize: 12, color: '#9B99C8', marginTop: 3 }}>{c.name}</div>
                   </div>
-                  <div style={{ width: 44, height: 44, borderRadius: 12, background: '#F9F7F4', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <div style={{ width: 44, height: 44, borderRadius: 12, background: '#F4F4FA', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                      <PSBadge s={currentStageObj?.name || 'Order Confirmed'} />
                   </div>
                </div>
 
                <div style={{ marginTop: 8 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8, fontSize: 11, fontWeight: 700 }}>
-                     <span style={{ color: '#7A6E62' }}>PROGRESS</span>
+                     <span style={{ color: '#5B5894' }}>PROGRESS</span>
                      <span>{c.progress || 0}%</span>
                   </div>
                   <div className="prog" style={{ height: 6, width: '100%', background: '#F0EBE5' }}>
@@ -230,7 +230,7 @@ export default function AdminInstallations({ clients = [], updateProject, dbClie
                   </div>
                </div>
 
-               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 16, borderTop: '1px solid #F9F7F4' }}>
+               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 16, borderTop: '1px solid #F4F4FA' }}>
                   <div style={{ display: 'flex', gap: 8 }}>
                      <button 
                         onClick={() => props.sendWhatsAppUpdate(c.id, c.id, currentStageObj?.name || 'New Stage')}
@@ -247,7 +247,7 @@ export default function AdminInstallations({ clients = [], updateProject, dbClie
                      style={{ 
                         background: 'none', 
                         border: 'none', 
-                        color: '#1A1410', 
+                        color: '#0D0B2E', 
                         fontWeight: 700, 
                         fontSize: 12, 
                         cursor: 'pointer',

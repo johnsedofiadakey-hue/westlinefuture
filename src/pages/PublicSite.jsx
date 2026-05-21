@@ -24,9 +24,9 @@ export function useWindowWidth() {
   return width;
 }
 export const isMob = (w) => w <= 1024;
-export const LIGHT_BG = '#FDFCFB';
-export const DARK_TEXT = '#1A1410';
-export const AC = '#C8A96E';
+export const LIGHT_BG = '#F8F8FD';
+export const DARK_TEXT = '#0D0B2E';
+export const AC = '#231F78';
 
 // --- SHARED COMPONENTS ---
 
@@ -59,10 +59,10 @@ export function PubNav({ brand, setPage, activePage, onPortal, user, menuOpen, s
   return (
     <nav style={{
       position: 'fixed', top: 0, left: 0, right: 0, zIndex: 1000,
-      background: isScrolled ? 'rgba(255,255,255,0.92)' : 'transparent',
-      backdropFilter: isScrolled ? 'blur(24px) saturate(180%)' : 'none',
-      WebkitBackdropFilter: isScrolled ? 'blur(24px) saturate(180%)' : 'none',
-      borderBottom: isScrolled ? '1px solid rgba(0,0,0,0.06)' : 'none',
+      background: isScrolled ? 'rgba(35,31,120,0.97)' : 'rgba(35,31,120,0.15)',
+      backdropFilter: 'blur(24px) saturate(180%)',
+      WebkitBackdropFilter: 'blur(24px) saturate(180%)',
+      borderBottom: isScrolled ? '1px solid rgba(255,255,255,0.08)' : 'none',
       transition: 'all 0.5s cubic-bezier(0.16, 1, 0.3, 1)',
       height: mob ? (scrolled ? 64 : 80) : (scrolled ? 80 : 120), 
       display: 'flex', alignItems: 'center', padding: '0 5vw'
@@ -72,20 +72,22 @@ export function PubNav({ brand, setPage, activePage, onPortal, user, menuOpen, s
         {/* LOGO */}
         <div onClick={() => { navigate('/'); if (setPage) setPage('home'); setMenuOpen(false); }} style={{ cursor: 'pointer', zIndex: 1001 }}>
             {brand.logo ? (
-              <div 
-                style={{ 
-                  height: mob ? (scrolled ? 36 : 48) : (scrolled ? 64 : 88), 
-                  width: mob ? (scrolled ? 100 : 120) : (scrolled ? 180 : 220),
-                  background: ac,
-                  WebkitMask: `url(${brand.logo}) no-repeat center / contain`,
-                  mask: `url(${brand.logo}) no-repeat center / contain`,
+              <img
+                src={brand.logo}
+                alt={brand.name}
+                style={{
+                  height: mob ? (scrolled ? 36 : 44) : (scrolled ? 52 : 68),
+                  width: 'auto',
+                  maxWidth: mob ? 160 : 240,
+                  objectFit: 'contain',
+                  display: 'block',
                   transition: 'all 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
-                }} 
+                }}
               />
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1, gap: 2 }}>
-                <div style={{ fontSize: mob ? 18 : 24, fontWeight: 900, color: ac, letterSpacing: '0.05em' }}>GLASSTECH</div>
-                <div style={{ fontSize: mob ? 8 : 10, fontWeight: 400, color: isScrolled ? DARK_TEXT : (mob ? DARK_TEXT : '#fff'), letterSpacing: '0.45em', opacity: 0.8 }}>FABRICATIONS</div>
+                <div style={{ fontSize: mob ? 18 : 24, fontWeight: 900, color: '#ffffff', letterSpacing: '0.05em' }}>WESTLINE</div>
+                <div style={{ fontSize: mob ? 8 : 10, fontWeight: 400, color: 'rgba(255,255,255,0.6)', letterSpacing: '0.45em' }}>FUTURE</div>
               </div>
             )}
         </div>
@@ -106,10 +108,10 @@ export function PubNav({ brand, setPage, activePage, onPortal, user, menuOpen, s
                   }
                 }} style={{
                   background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, fontWeight: 700,
-                  color: activePage === l.id ? ac : DARK_TEXT,
+                  color: activePage === l.id ? '#ffffff' : 'rgba(255,255,255,0.65)',
                   textTransform: 'uppercase', letterSpacing: '0.22em', transition: 'all 0.3s',
-                  opacity: activePage === l.id ? 1 : 0.65, whiteSpace: 'nowrap', padding: '4px 0',
-                  borderBottom: activePage === l.id ? `2px solid ${ac}` : '2px solid transparent',
+                  opacity: activePage === l.id ? 1 : 0.8, whiteSpace: 'nowrap', padding: '4px 0',
+                  borderBottom: activePage === l.id ? '2px solid rgba(255,255,255,0.8)' : '2px solid transparent',
                   position: 'relative'
                 }}>
                   {l.n}
@@ -135,12 +137,12 @@ export function PubNav({ brand, setPage, activePage, onPortal, user, menuOpen, s
                     <div style={{ fontSize: 12, fontWeight: 800, marginBottom: 12, textTransform: 'uppercase', color: DARK_TEXT }}>Notifications</div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 12, maxHeight: 300, overflowY: 'auto' }}>
                       {userNotifications.length > 0 ? userNotifications.map(n => (
-                        <div key={n.id} style={{ fontSize: 12, color: n.read ? '#B5AFA9' : '#1A1410', borderBottom: '1px solid #F9F7F4', paddingBottom: 8 }}>
+                        <div key={n.id} style={{ fontSize: 12, color: n.read ? '#9B99C8' : '#0D0B2E', borderBottom: '1px solid #F4F4FA', paddingBottom: 8 }}>
                           {n.message}
-                          <div style={{ fontSize: 10, color: '#B5AFA9', marginTop: 4 }}>{new Date(n.createdAt).toLocaleDateString()}</div>
+                          <div style={{ fontSize: 10, color: '#9B99C8', marginTop: 4 }}>{new Date(n.createdAt).toLocaleDateString()}</div>
                         </div>
                       )) : (
-                        <div style={{ fontSize: 12, color: '#B5AFA9', textAlign: 'center' }}>No notifications</div>
+                        <div style={{ fontSize: 12, color: '#9B99C8', textAlign: 'center' }}>No notifications</div>
                       )}
                     </div>
                   </div>
@@ -148,12 +150,13 @@ export function PubNav({ brand, setPage, activePage, onPortal, user, menuOpen, s
               </div>
             )}
             {onPortal && (
-              <button onClick={() => onPortal && onPortal('client')} style={{ 
-                padding: '12px 28px', fontSize: 10, fontWeight: 800, 
-                background: DARK_TEXT, 
-                color: '#ffffff', 
-                borderRadius: 12, border: 'none',
-                textTransform: 'uppercase', letterSpacing: '0.12em', cursor: 'pointer'
+              <button onClick={() => onPortal && onPortal('client')} style={{
+                padding: '12px 28px', fontSize: 10, fontWeight: 800,
+                background: 'rgba(255,255,255,0.15)',
+                color: '#ffffff',
+                borderRadius: 12, border: '1px solid rgba(255,255,255,0.25)',
+                textTransform: 'uppercase', letterSpacing: '0.12em', cursor: 'pointer',
+                backdropFilter: 'blur(8px)', transition: 'all 0.3s'
               }}>Client Portal</button>
             )}
           </div>
@@ -223,9 +226,9 @@ export function PubNav({ brand, setPage, activePage, onPortal, user, menuOpen, s
               <div style={{ fontSize: 12, fontWeight: 800, marginBottom: 12, textTransform: 'uppercase', color: ac }}>Notifications</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12, maxHeight: 200, overflowY: 'auto' }}>
                 {userNotifications.map(n => (
-                  <div key={n.id} style={{ fontSize: 13, color: n.read ? '#B5AFA9' : DARK_TEXT, borderBottom: '1px solid #F9F7F4', paddingBottom: 8 }}>
+                  <div key={n.id} style={{ fontSize: 13, color: n.read ? '#9B99C8' : DARK_TEXT, borderBottom: '1px solid #F4F4FA', paddingBottom: 8 }}>
                     {n.message}
-                    <div style={{ fontSize: 10, color: '#B5AFA9', marginTop: 4 }}>{new Date(n.createdAt).toLocaleDateString()}</div>
+                    <div style={{ fontSize: 10, color: '#9B99C8', marginTop: 4 }}>{new Date(n.createdAt).toLocaleDateString()}</div>
                   </div>
                 ))}
               </div>
@@ -250,12 +253,19 @@ export function Footer({ brand, setPage, onPortal, navigate }) {
   const mob = isMob(winW);
 
   return (
-    <footer style={{ background: '#1A1410', color: '#ffffff', padding: mob ? '60px 24px' : '100px 5vw 60px' }}>
+    <footer style={{ background: '#0D0B2E', color: '#ffffff', padding: mob ? '60px 24px' : '100px 5vw 60px' }}>
       <div style={{ maxWidth: 1400, margin: '0 auto' }}>
         <div style={{ display: 'grid', gridTemplateColumns: mob ? '1fr' : 'repeat(4, 1fr)', gap: 48, marginBottom: 80 }}>
           <div>
-            <h3 style={{ fontSize: 24, fontWeight: 900, marginBottom: 20 }}>GLASSTECH<span style={{ color: ac }}>FAB</span></h3>
-            <p style={{ color: 'rgba(255,255,255,0.5)', lineHeight: 1.8, fontSize: 14 }}>Industrial precision meets architectural luxury. Premier structural glass and interior finishing solutions for modern developments.</p>
+            {brand.logo ? (
+              <img src={brand.logo} alt={brand.name} style={{ height: 48, width: 'auto', objectFit: 'contain', display: 'block', marginBottom: 20 }} />
+            ) : (
+              <div style={{ marginBottom: 20 }}>
+                <div style={{ fontSize: 22, fontWeight: 900, color: '#ffffff', letterSpacing: '0.04em' }}>WESTLINE FUTURE</div>
+                <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', letterSpacing: '0.2em', marginTop: 2 }}>GLOBAL TRADING CO., LTD</div>
+              </div>
+            )}
+            <p style={{ color: 'rgba(255,255,255,0.5)', lineHeight: 1.8, fontSize: 14 }}>Global precision meets local delivery. Premium structural glass, aluminum works, and interior finishing solutions for ambitious architectural projects worldwide.</p>
           </div>
           <div>
             <h4 style={{ fontSize: 12, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.2em', marginBottom: 24 }}>Navigation</h4>
@@ -294,7 +304,7 @@ export function Footer({ brand, setPage, onPortal, navigate }) {
           </div>
         </div>
         <div style={{ paddingTop: 40, borderTop: '1px solid rgba(255,255,255,0.05)', textAlign: 'center', fontSize: 12, color: 'rgba(255,255,255,0.3)', display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'center' }}>
-          <span>© 2026 Glasstech Fabrications Ltd. All rights reserved.</span>
+          <span>© 2026 Westline Future Ltd. All rights reserved.</span>
           <button onClick={() => navigate('/login')} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.1)', cursor: 'pointer', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.1em' }}>Management Portal</button>
         </div>
 
@@ -322,7 +332,7 @@ export function Hero({ slides, brand, navigate, setPage }) {
         <div key={i} style={{
           position: 'absolute', inset: 0, transition: 'opacity 0.8s cubic-bezier(0.4, 0, 0.2, 1)',
           opacity: active === i ? 1 : 0, zIndex: active === i ? 1 : 0,
-          background: '#1A1410' 
+          background: '#0D0B2E' 
         }}>
           <img 
             src={s.img} 
@@ -355,7 +365,7 @@ export function Hero({ slides, brand, navigate, setPage }) {
                 {s.sub && (
                   <p style={{ 
                     fontSize: mob ? 12 : 20, 
-                    color: 'rgba(26,20,16,0.65)', 
+                    color: 'rgba(13,11,46,0.65)', 
                     maxWidth: 600, 
                     lineHeight: 1.5, 
                     marginBottom: mob ? 20 : 48,
@@ -392,7 +402,7 @@ export function ServicesPreview({ brand, navigate }) {
   ];
 
   return (
-    <section style={{ padding: mob ? '80px 24px' : '140px 5vw', background: '#FDFCFB' }}>
+    <section style={{ padding: mob ? '80px 24px' : '140px 5vw', background: '#F8F8FD' }}>
       <div style={{ maxWidth: 1400, margin: '0 auto' }}>
         <div style={{ marginBottom: 80, textAlign: mob ? 'center' : 'left' }}>
           <span style={{ color: ac, fontSize: 10, fontWeight: 800, letterSpacing: '0.3em', textTransform: 'uppercase' }}>CAPABILITIES</span>
@@ -404,7 +414,7 @@ export function ServicesPreview({ brand, navigate }) {
 
               <div style={{ color: ac, marginBottom: 32 }}>{s.icon}</div>
               <h3 style={{ fontSize: 24, fontWeight: 800, marginBottom: 16, color: DARK_TEXT }}>{s.title}</h3>
-              <p style={{ color: 'rgba(26,20,16,0.6)', lineHeight: 1.8, marginBottom: 32 }}>{s.desc}</p>
+              <p style={{ color: 'rgba(13,11,46,0.6)', lineHeight: 1.8, marginBottom: 32 }}>{s.desc}</p>
               <button onClick={() => navigate('/portfolio')} style={{ background: 'none', border: 'none', color: ac, fontWeight: 800, fontSize: 11, textTransform: 'uppercase', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}>
                 View Portfolio <ChevronRight size={14} />
               </button>
@@ -447,7 +457,7 @@ export default function PublicSite({ brand, setPage, page, onPortal, user, conte
       <>
         <Hero slides={content?.hero?.slides || HERO_SLIDES} brand={brand} navigate={navigate} />
         <ServicesPreview brand={brand} navigate={navigate} />
-        <section style={{ padding: '100px 5vw', background: '#F9F7F4', color: DARK_TEXT, textAlign: 'center' }}>
+        <section style={{ padding: '100px 5vw', background: '#F4F4FA', color: DARK_TEXT, textAlign: 'center' }}>
            <h2 style={{ fontSize: mob ? 32 : 64, fontWeight: 800, marginBottom: 40 }}>Ready to transform your space?</h2>
            <button onClick={() => navigate('/portfolio')} style={{ padding: '24px 64px', background: brand.color || AC, color: '#fff', border: 'none', borderRadius: 16, fontWeight: 900, fontSize: 16, cursor: 'pointer', boxShadow: '0 20px 40px rgba(0,0,0,0.1)' }}>Explore Portfolio</button>
         </section>

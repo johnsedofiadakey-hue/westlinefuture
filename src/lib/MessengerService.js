@@ -32,7 +32,7 @@ export const MessengerService = {
       }, 800));
     }
 
-    return callProxy(phone, `Your Glasstech Fab verification code is: ${code}`);
+    return callProxy(phone, `Your Westline Future Fab verification code is: ${code}`);
   },
 
   sendMessage: async (phone, message) => {

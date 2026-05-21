@@ -57,7 +57,7 @@ export const MetaWhatsAppService = {
       type: "text",
       text: {
         preview_url: false,
-        body: `*Glasstech Fabrications*\n\nYour security access code is: *${code}*\n\nThis code expires in 10 minutes.`
+        body: `*Westline Future*\n\nYour security access code is: *${code}*\n\nThis code expires in 10 minutes.`
       }
     };
 

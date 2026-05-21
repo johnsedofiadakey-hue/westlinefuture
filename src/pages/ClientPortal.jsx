@@ -10,7 +10,7 @@ import {
 import { PAv, PSBadge } from '../components/Shared';
 import { PROJECT_STAGES } from '../data';
 
-const AC = '#C8A96E';
+const AC = '#231F78';
 
 function MilestoneCard({ stage, isCurrent, isPast, isFuture, completedTasks = [], ac }) {
   const pct = stage.tasks?.length > 0
@@ -20,7 +20,7 @@ function MilestoneCard({ stage, isCurrent, isPast, isFuture, completedTasks = []
   return (
     <div style={{
       minWidth: 240, maxWidth: 260,
-      background: isCurrent ? '#fff' : isFuture ? '#FDFCFB' : '#F9F7F4',
+      background: isCurrent ? '#fff' : isFuture ? '#F8F8FD' : '#F4F4FA',
       border: isCurrent ? `2px solid ${stage.color}` : isPast ? '1px solid #E8E3DD' : '1px dashed #E8E3DD',
       borderRadius: 20,
       padding: 20,
@@ -41,7 +41,7 @@ function MilestoneCard({ stage, isCurrent, isPast, isFuture, completedTasks = []
           {isPast
             ? <Check size={18} color="#fff" strokeWidth={3} />
             : isFuture
-              ? <Lock size={14} color="#B5AFA9" />
+              ? <Lock size={14} color="#9B99C8" />
               : <span style={{ fontSize: 13, fontWeight: 800, color: stage.color }}>{stage.id}</span>
           }
         </div>
@@ -55,13 +55,13 @@ function MilestoneCard({ stage, isCurrent, isPast, isFuture, completedTasks = []
         )}
       </div>
 
-      <div style={{ fontSize: 14, fontWeight: 700, color: '#1A1410', marginBottom: 4 }}>{stage.name}</div>
-      <div style={{ fontSize: 11, color: '#B5AFA9', marginBottom: 14, lineHeight: 1.5 }}>{stage.description}</div>
+      <div style={{ fontSize: 14, fontWeight: 700, color: '#0D0B2E', marginBottom: 4 }}>{stage.name}</div>
+      <div style={{ fontSize: 11, color: '#9B99C8', marginBottom: 14, lineHeight: 1.5 }}>{stage.description}</div>
 
       {/* Progress ring */}
       {!isFuture && (
         <div style={{ marginBottom: 14 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, fontWeight: 700, color: '#B5AFA9', marginBottom: 5 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, fontWeight: 700, color: '#9B99C8', marginBottom: 5 }}>
             <span>Progress</span>
             <span style={{ color: isPast ? '#16A34A' : stage.color }}>{pct}%</span>
           </div>
@@ -77,7 +77,7 @@ function MilestoneCard({ stage, isCurrent, isPast, isFuture, completedTasks = []
           {stage.tasks.map((task, ti) => {
             const done = completedTasks.includes(task) || isPast;
             return (
-              <div key={ti} style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 11, color: done ? '#16A34A' : '#7A6E62' }}>
+              <div key={ti} style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 11, color: done ? '#16A34A' : '#5B5894' }}>
                 {done
                   ? <CheckCircle2 size={12} color="#16A34A" style={{ flexShrink: 0 }} />
                   : <Circle size={12} color="#DDD" style={{ flexShrink: 0 }} />
@@ -90,7 +90,7 @@ function MilestoneCard({ stage, isCurrent, isPast, isFuture, completedTasks = []
       )}
 
       {isFuture && (
-        <div style={{ fontSize: 11, color: '#B5AFA9', display: 'flex', alignItems: 'center', gap: 6 }}>
+        <div style={{ fontSize: 11, color: '#9B99C8', display: 'flex', alignItems: 'center', gap: 6 }}>
           <Clock size={11} /> ~{stage.days} day{stage.days > 1 ? 's' : ''}
         </div>
       )}
@@ -151,17 +151,17 @@ export default function ClientPortal({ user, dbClients = [], clients = [], ...pr
   ];
 
   return (
-    <div className="client-portal-layout fade-in" style={{ background: '#FDFCFB', minHeight: '100vh', padding: mob ? '20px 20px 100px' : '40px 60px' }}>
+    <div className="client-portal-layout fade-in" style={{ background: '#F8F8FD', minHeight: '100vh', padding: mob ? '20px 20px 100px' : '40px 60px' }}>
 
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: mob ? 32 : 48, position: mob ? 'sticky' : 'relative', top: 0, zIndex: 100, background: '#FDFCFB', padding: mob ? '10px 0' : 0 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: mob ? 32 : 48, position: mob ? 'sticky' : 'relative', top: 0, zIndex: 100, background: '#F8F8FD', padding: mob ? '10px 0' : 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: mob ? 12 : 20 }}>
-          <div style={{ width: mob ? 36 : 48, height: mob ? 36 : 48, background: '#1A1410', borderRadius: mob ? 12 : 16, display: 'flex', alignItems: 'center', justifyContent: 'center', color: ac }}>
+          <div style={{ width: mob ? 36 : 48, height: mob ? 36 : 48, background: '#0D0B2E', borderRadius: mob ? 12 : 16, display: 'flex', alignItems: 'center', justifyContent: 'center', color: ac }}>
             <Sparkles size={mob ? 18 : 24} />
           </div>
           <div>
             <h1 className="lxfh" style={{ fontSize: mob ? 18 : 26, margin: 0, lineHeight: 1 }}>My Account</h1>
-            <p className="lxf" style={{ color: '#B5AFA9', fontSize: 10, margin: 0 }}>Glasstech Client Portal</p>
+            <p className="lxf" style={{ color: '#9B99C8', fontSize: 10, margin: 0 }}>Westline Future Client Portal</p>
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
@@ -184,8 +184,8 @@ export default function ClientPortal({ user, dbClients = [], clients = [], ...pr
                 onClick={() => setTab(item.id)}
                 style={{
                   display: 'flex', alignItems: 'center', gap: 14, padding: '14px 20px',
-                  borderRadius: 14, background: tab === item.id ? '#1A1410' : 'transparent',
-                  color: tab === item.id ? '#fff' : '#6A635C', border: 'none',
+                  borderRadius: 14, background: tab === item.id ? '#0D0B2E' : 'transparent',
+                  color: tab === item.id ? '#fff' : '#5B5894', border: 'none',
                   textAlign: 'left', fontWeight: 700, fontSize: 13, cursor: 'pointer',
                   transition: 'all 0.2s ease',
                 }}
@@ -198,7 +198,7 @@ export default function ClientPortal({ user, dbClients = [], clients = [], ...pr
             {/* Project switcher */}
             {myProjects.length > 1 && (
               <div style={{ marginTop: 24 }}>
-                <div style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.15em', color: '#B5AFA9', marginBottom: 10, padding: '0 20px' }}>Switch Project</div>
+                <div style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.15em', color: '#9B99C8', marginBottom: 10, padding: '0 20px' }}>Switch Project</div>
                 {myProjects.map(p => (
                   <button
                     key={p.id}
@@ -208,7 +208,7 @@ export default function ClientPortal({ user, dbClients = [], clients = [], ...pr
                       background: activeProject?.id === p.id ? `${ac}15` : 'transparent',
                       border: 'none', borderRadius: 12, width: '100%', textAlign: 'left',
                       cursor: 'pointer', fontSize: 12, fontWeight: activeProject?.id === p.id ? 700 : 500,
-                      color: activeProject?.id === p.id ? ac : '#7A6E62',
+                      color: activeProject?.id === p.id ? ac : '#5B5894',
                     }}
                   >
                     <div style={{ width: 8, height: 8, borderRadius: '50%', background: activeProject?.id === p.id ? ac : '#DDD', flexShrink: 0 }} />
@@ -219,16 +219,16 @@ export default function ClientPortal({ user, dbClients = [], clients = [], ...pr
             )}
 
             {/* Quality check widget */}
-            <div className="p-card" style={{ marginTop: 32, padding: 20, background: '#F9F7F4', border: 'none' }}>
+            <div className="p-card" style={{ marginTop: 32, padding: 20, background: '#F4F4FA', border: 'none' }}>
               <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 10 }}>
                 <Zap size={16} color={ac} fill={ac} />
                 <span style={{ fontSize: 11, fontWeight: 800, textTransform: 'uppercase', letterSpacing: 1 }}>Quality Check</span>
               </div>
-              <p style={{ fontSize: 11, color: '#B5AFA9', marginBottom: 16, lineHeight: 1.5 }}>Verify your installation progress with our precision audit tool.</p>
+              <p style={{ fontSize: 11, color: '#9B99C8', marginBottom: 16, lineHeight: 1.5 }}>Verify your installation progress with our precision audit tool.</p>
               <button
                 onClick={() => props.notify('info', 'Quality audit feature coming soon.')}
                 className="p-btn-dark"
-                style={{ width: '100%', height: 40, fontSize: 11, background: ac, color: '#1A1410', border: 'none' }}
+                style={{ width: '100%', height: 40, fontSize: 11, background: ac, color: '#0D0B2E', border: 'none' }}
               >
                 Request Audit
               </button>
@@ -253,13 +253,13 @@ export default function ClientPortal({ user, dbClients = [], clients = [], ...pr
                 <div style={{ padding: mob ? 60 : 100, textAlign: 'center', background: '#fff', borderRadius: mob ? 24 : 40, border: '1px dashed #F0EBE5' }}>
                   <Briefcase size={mob ? 48 : 64} color="#F0EBE5" style={{ marginBottom: 24 }} />
                   <h3 className="lxfh" style={{ fontSize: mob ? 20 : 24 }}>Your project dashboard is ready</h3>
-                  <p className="lxf" style={{ color: '#B5AFA9', maxWidth: 400, margin: '16px auto', fontSize: 13 }}>We'll populate your project data as soon as engineering confirms the site survey.</p>
+                  <p className="lxf" style={{ color: '#9B99C8', maxWidth: 400, margin: '16px auto', fontSize: 13 }}>We'll populate your project data as soon as engineering confirms the site survey.</p>
                 </div>
               ) : activeProject ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: mob ? 24 : 32 }}>
 
                   {/* Overall progress hero */}
-                  <div className="p-card" style={{ padding: mob ? 24 : 36, background: '#1A1410', color: '#fff', border: 'none' }}>
+                  <div className="p-card" style={{ padding: mob ? 24 : 36, background: '#0D0B2E', color: '#fff', border: 'none' }}>
                     <div style={{ display: 'flex', flexDirection: mob ? 'column' : 'row', justifyContent: 'space-between', alignItems: mob ? 'flex-start' : 'center', gap: 16, marginBottom: 24 }}>
                       <div>
                         <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.1em', marginBottom: 6 }}>Current Phase</div>
@@ -284,7 +284,7 @@ export default function ClientPortal({ user, dbClients = [], clients = [], ...pr
                   <div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
                       <h3 className="lxfh" style={{ fontSize: mob ? 16 : 20 }}>Project Roadmap</h3>
-                      <div style={{ fontSize: 11, color: '#B5AFA9' }}>Scroll to see all stages →</div>
+                      <div style={{ fontSize: 11, color: '#9B99C8' }}>Scroll to see all stages →</div>
                     </div>
                     <div style={{ display: 'flex', gap: 16, overflowX: 'auto', paddingBottom: 12, scrollSnapType: 'x mandatory' }}>
                       {PROJECT_STAGES.map((stage) => {
@@ -327,12 +327,12 @@ export default function ClientPortal({ user, dbClients = [], clients = [], ...pr
                                     ? <CheckCircle2 size={16} color="#16A34A" style={{ flexShrink: 0 }} />
                                     : <Circle size={16} color="#DDD" style={{ flexShrink: 0 }} />
                                   }
-                                  <span style={{ color: isDone ? '#16A34A' : '#1A1410', textDecoration: isDone ? 'line-through' : 'none', opacity: isDone ? 0.6 : 1 }}>{task}</span>
+                                  <span style={{ color: isDone ? '#16A34A' : '#0D0B2E', textDecoration: isDone ? 'line-through' : 'none', opacity: isDone ? 0.6 : 1 }}>{task}</span>
                                 </div>
                               );
                             })}
                           </div>
-                          <div style={{ marginTop: 16, paddingTop: 14, borderTop: '1px solid rgba(0,0,0,.05)', display: 'flex', justifyContent: 'space-between', fontSize: 11, fontWeight: 700, color: '#B5AFA9' }}>
+                          <div style={{ marginTop: 16, paddingTop: 14, borderTop: '1px solid rgba(0,0,0,.05)', display: 'flex', justifyContent: 'space-between', fontSize: 11, fontWeight: 700, color: '#9B99C8' }}>
                             <span>Tasks complete</span>
                             <span style={{ color: done === total ? '#16A34A' : s.color }}>{done}/{total}</span>
                           </div>
@@ -342,12 +342,12 @@ export default function ClientPortal({ user, dbClients = [], clients = [], ...pr
                           <div className="p-card" style={{ padding: mob ? 20 : 24, border: '1px solid #F0EBE5' }}>
                             <Activity size={20} color={ac} style={{ marginBottom: 10 }} />
                             <div className="lxfh" style={{ fontSize: 15 }}>{s.name}</div>
-                            <div className="lxf" style={{ fontSize: 11, color: '#B5AFA9', marginTop: 4, lineHeight: 1.5 }}>{s.description}</div>
+                            <div className="lxf" style={{ fontSize: 11, color: '#9B99C8', marginTop: 4, lineHeight: 1.5 }}>{s.description}</div>
                           </div>
                           <div className="p-card" style={{ padding: mob ? 20 : 24, border: '1px solid #F0EBE5' }}>
                             <Clock size={20} color={ac} style={{ marginBottom: 10 }} />
                             <div className="lxfh" style={{ fontSize: 15 }}>~{s.days} days remaining</div>
-                            <div className="lxf" style={{ fontSize: 11, color: '#B5AFA9', marginTop: 4 }}>Typical duration for this phase</div>
+                            <div className="lxf" style={{ fontSize: 11, color: '#9B99C8', marginTop: 4 }}>Typical duration for this phase</div>
                           </div>
                         </div>
                       </div>
@@ -363,14 +363,14 @@ export default function ClientPortal({ user, dbClients = [], clients = [], ...pr
             <div className="fade-in">
               <h2 className="lxfh" style={{ fontSize: mob ? 24 : 32, marginBottom: mob ? 24 : 40 }}>Material Sourcing</h2>
               <div className="p-card" style={{ padding: mob ? 24 : 40, border: '1px solid #F0EBE5' }}>
-                <p className="lxf" style={{ color: '#B5AFA9', marginBottom: 32 }}>Review the high-precision materials sourced for your project from our global factory partners.</p>
+                <p className="lxf" style={{ color: '#9B99C8', marginBottom: 32 }}>Review the high-precision materials sourced for your project from our global factory partners.</p>
                 <div style={{ display: 'grid', gridTemplateColumns: mob ? '1fr' : '1fr 1fr', gap: 24 }}>
                   {(props.procurements || []).filter(p => p.clientId === uId).map(p => (
                     <div key={p.id} style={{ border: '1px solid #F0EBE5', borderRadius: 20, overflow: 'hidden' }}>
                       <img src={p.img || 'https://images.unsplash.com/photo-1581094794329-c8112a89af12?w=800'} alt={p.name} style={{ width: '100%', height: 200, objectFit: 'cover' }} />
                       <div style={{ padding: 20 }}>
                         <h4 className="lxfh" style={{ fontSize: 16, marginBottom: 4 }}>{p.name}</h4>
-                        <p className="lxf" style={{ fontSize: 12, color: '#B5AFA9', marginBottom: 16 }}>{p.specs}</p>
+                        <p className="lxf" style={{ fontSize: 12, color: '#9B99C8', marginBottom: 16 }}>{p.specs}</p>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                           <PSBadge s={p.status} />
                           <button onClick={() => props.notify('success', 'Selection confirmed.')} className="p-btn-dark" style={{ height: 32, fontSize: 10, padding: '0 16px' }}>Approve</button>
@@ -379,9 +379,9 @@ export default function ClientPortal({ user, dbClients = [], clients = [], ...pr
                     </div>
                   ))}
                   {(props.procurements || []).filter(p => p.clientId === uId).length === 0 && (
-                    <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: 60, background: '#F9F7F4', borderRadius: 20 }}>
+                    <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: 60, background: '#F4F4FA', borderRadius: 20 }}>
                       <Package size={48} color="#F0EBE5" style={{ marginBottom: 16 }} />
-                      <p style={{ color: '#B5AFA9', fontSize: 13 }}>Sourcing documents are being prepared by the procurement team.</p>
+                      <p style={{ color: '#9B99C8', fontSize: 13 }}>Sourcing documents are being prepared by the procurement team.</p>
                     </div>
                   )}
                 </div>
@@ -404,21 +404,21 @@ export default function ClientPortal({ user, dbClients = [], clients = [], ...pr
                       const active = activeProject.stage >= s.id;
                       return (
                         <div key={i} style={{ display: 'flex', gap: 24, position: 'relative' }}>
-                          <div style={{ width: 40, height: 40, borderRadius: 12, background: active ? ac : '#F9F7F4', color: active ? '#1A1410' : '#B5AFA9', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, zIndex: 1 }}>
+                          <div style={{ width: 40, height: 40, borderRadius: 12, background: active ? ac : '#F4F4FA', color: active ? '#0D0B2E' : '#9B99C8', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, zIndex: 1 }}>
                             {active ? <CheckCircle2 size={20} /> : <Clock size={20} />}
                           </div>
                           <div style={{ flex: 1 }}>
-                            <h4 className="lxfh" style={{ fontSize: 16, color: active ? '#1A1410' : '#B5AFA9' }}>{s.name}</h4>
-                            <p className="lxf" style={{ fontSize: 12, color: '#B5AFA9' }}>{s.desc}</p>
+                            <h4 className="lxfh" style={{ fontSize: 16, color: active ? '#0D0B2E' : '#9B99C8' }}>{s.name}</h4>
+                            <p className="lxf" style={{ fontSize: 12, color: '#9B99C8' }}>{s.desc}</p>
                           </div>
-                          {i < 2 && <div style={{ position: 'absolute', top: 40, left: 20, width: 2, height: 32, background: activeProject.stage > s.id ? ac : '#F9F7F4' }} />}
+                          {i < 2 && <div style={{ position: 'absolute', top: 40, left: 20, width: 2, height: 32, background: activeProject.stage > s.id ? ac : '#F4F4FA' }} />}
                         </div>
                       );
                     })}
                   </div>
                 </div>
               ) : (
-                <div style={{ textAlign: 'center', padding: 60, color: '#B5AFA9', background: '#F9F7F4', borderRadius: 24 }}>
+                <div style={{ textAlign: 'center', padding: 60, color: '#9B99C8', background: '#F4F4FA', borderRadius: 24 }}>
                   No active project to track.
                 </div>
               )}
@@ -433,11 +433,11 @@ export default function ClientPortal({ user, dbClients = [], clients = [], ...pr
                 <div className="p-card" style={{ padding: mob ? 24 : 40, border: '1px solid #F0EBE5' }}>
                   <ShieldCheck size={mob ? 24 : 32} color={ac} style={{ marginBottom: 16 }} />
                   <h3 className="lxfh" style={{ fontSize: 18, marginBottom: 8 }}>Material Grades</h3>
-                  <p className="lxf" style={{ color: '#B5AFA9', fontSize: 13, marginBottom: 24 }}>Official technical specifications for your site materials.</p>
+                  <p className="lxf" style={{ color: '#9B99C8', fontSize: 13, marginBottom: 24 }}>Official technical specifications for your site materials.</p>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                     {[{ l: 'Glass Type', v: '12mm Tempered' }, { l: 'Coating', v: 'Solar Control' }, { l: 'Safety', v: 'BS EN Certified' }].map(x => (
-                      <div key={x.l} style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #F9F7F4', paddingBottom: 10 }}>
-                        <span className="lxf" style={{ fontSize: 12, color: '#B5AFA9' }}>{x.l}</span>
+                      <div key={x.l} style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #F4F4FA', paddingBottom: 10 }}>
+                        <span className="lxf" style={{ fontSize: 12, color: '#9B99C8' }}>{x.l}</span>
                         <span className="lxf" style={{ fontSize: 12, fontWeight: 700 }}>{x.v}</span>
                       </div>
                     ))}
@@ -446,7 +446,7 @@ export default function ClientPortal({ user, dbClients = [], clients = [], ...pr
                 <div className="p-card" style={{ padding: mob ? 24 : 40, border: '1px solid #F0EBE5' }}>
                   <Download size={mob ? 24 : 32} color={ac} style={{ marginBottom: 16 }} />
                   <h3 className="lxfh" style={{ fontSize: 18, marginBottom: 8 }}>Care Protocol</h3>
-                  <p className="lxf" style={{ color: '#B5AFA9', fontSize: 13, marginBottom: 24 }}>Maintenance guidelines for longevity.</p>
+                  <p className="lxf" style={{ color: '#9B99C8', fontSize: 13, marginBottom: 24 }}>Maintenance guidelines for longevity.</p>
                   <button className="p-btn-dark" style={{ width: '100%', height: 48, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, fontSize: 12 }}>
                     <Download size={16} /> Download Guides
                   </button>
@@ -461,19 +461,19 @@ export default function ClientPortal({ user, dbClients = [], clients = [], ...pr
               <h2 className="lxfh" style={{ fontSize: mob ? 24 : 32, marginBottom: mob ? 24 : 40 }}>Financial Ledger</h2>
               <div className="p-card" style={{ padding: 0, border: '1px solid #F0EBE5', overflowX: mob ? 'auto' : 'hidden' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: mob ? 500 : 'auto' }}>
-                  <thead style={{ background: '#F9F7F4', borderBottom: '1px solid #F0EBE5' }}>
+                  <thead style={{ background: '#F4F4FA', borderBottom: '1px solid #F0EBE5' }}>
                     <tr>
                       {['Invoice', 'Description', 'Status', 'Amount', 'Action'].map(h => (
-                        <th key={h} style={{ padding: mob ? '16px 16px' : '20px 28px', textAlign: h === 'Amount' ? 'right' : h === 'Action' ? 'center' : 'left', fontSize: 9, color: '#B5AFA9', textTransform: 'uppercase', fontWeight: 800 }}>{h}</th>
+                        <th key={h} style={{ padding: mob ? '16px 16px' : '20px 28px', textAlign: h === 'Amount' ? 'right' : h === 'Action' ? 'center' : 'left', fontSize: 9, color: '#9B99C8', textTransform: 'uppercase', fontWeight: 800 }}>{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
                     {myInvoices.map(inv => (
-                      <tr key={inv.id} style={{ borderBottom: '1px solid #F9F7F4' }}>
+                      <tr key={inv.id} style={{ borderBottom: '1px solid #F4F4FA' }}>
                         <td style={{ padding: mob ? '14px 16px' : '20px 28px' }}>
                           <div style={{ fontSize: 13, fontWeight: 900 }}>REF-{inv.id.slice(-4).toUpperCase()}</div>
-                          <div style={{ fontSize: 10, color: '#B5AFA9' }}>{inv.date}</div>
+                          <div style={{ fontSize: 10, color: '#9B99C8' }}>{inv.date}</div>
                         </td>
                         <td style={{ padding: mob ? '14px 16px' : '20px 28px' }}>
                           <div style={{ fontSize: 12, fontWeight: 600 }}>{inv.title || 'Installation'}</div>
@@ -487,7 +487,7 @@ export default function ClientPortal({ user, dbClients = [], clients = [], ...pr
                     ))}
                     {myInvoices.length === 0 && (
                       <tr>
-                        <td colSpan={5} style={{ padding: 60, textAlign: 'center', color: '#B5AFA9', fontSize: 13 }}>No financial transactions to display yet.</td>
+                        <td colSpan={5} style={{ padding: 60, textAlign: 'center', color: '#9B99C8', fontSize: 13 }}>No financial transactions to display yet.</td>
                       </tr>
                     )}
                   </tbody>
@@ -504,20 +504,20 @@ export default function ClientPortal({ user, dbClients = [], clients = [], ...pr
                 <div style={{ padding: mob ? '16px 20px' : '20px 28px', borderBottom: '1px solid #F0EBE5', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div>
                     <h4 className="lxfh" style={{ fontSize: mob ? 14 : 18, margin: 0 }}>Direct Support</h4>
-                    <p className="lxf" style={{ fontSize: 9, color: isAgentOnline ? '#16A34A' : '#B5AFA9', fontWeight: 800, margin: 0 }}>{isAgentOnline ? 'AGENT ONLINE' : 'OFFICE HOURS: 8AM–6PM'}</p>
+                    <p className="lxf" style={{ fontSize: 9, color: isAgentOnline ? '#16A34A' : '#9B99C8', fontWeight: 800, margin: 0 }}>{isAgentOnline ? 'AGENT ONLINE' : 'OFFICE HOURS: 8AM–6PM'}</p>
                   </div>
                   <PSBadge s="Secured" />
                 </div>
-                <div style={{ flex: 1, padding: mob ? 20 : 28, overflowY: 'auto', background: '#F9F7F4', display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <div style={{ flex: 1, padding: mob ? 20 : 28, overflowY: 'auto', background: '#F4F4FA', display: 'flex', flexDirection: 'column', gap: 12 }}>
                   {myMessages.length > 0 ? myMessages.map((m, i) => {
                     const isMe = m.senderId === uId;
                     return (
-                      <div key={i} style={{ alignSelf: isMe ? 'flex-end' : 'flex-start', background: isMe ? '#1A1410' : '#fff', color: isMe ? '#fff' : '#1A1410', padding: mob ? '12px 16px' : '14px 18px', borderRadius: 16, maxWidth: '85%', fontSize: 13, boxShadow: '0 4px 12px rgba(0,0,0,0.03)', border: isMe ? 'none' : '1px solid #F0EBE5' }}>
+                      <div key={i} style={{ alignSelf: isMe ? 'flex-end' : 'flex-start', background: isMe ? '#0D0B2E' : '#fff', color: isMe ? '#fff' : '#0D0B2E', padding: mob ? '12px 16px' : '14px 18px', borderRadius: 16, maxWidth: '85%', fontSize: 13, boxShadow: '0 4px 12px rgba(0,0,0,0.03)', border: isMe ? 'none' : '1px solid #F0EBE5' }}>
                         {m.text}
                       </div>
                     );
                   }) : (
-                    <div style={{ textAlign: 'center', padding: 60, color: '#B5AFA9', fontSize: 13 }} className="lxf">Awaiting your first inquiry.</div>
+                    <div style={{ textAlign: 'center', padding: 60, color: '#9B99C8', fontSize: 13 }} className="lxf">Awaiting your first inquiry.</div>
                   )}
                 </div>
                 <div style={{ padding: mob ? 16 : 20, borderTop: '1px solid #F0EBE5', display: 'flex', gap: 8 }}>
@@ -528,7 +528,7 @@ export default function ClientPortal({ user, dbClients = [], clients = [], ...pr
                     style={{ flex: 1, height: mob ? 48 : 52, borderRadius: 12, fontSize: 13 }}
                     onKeyDown={e => { if (e.key === 'Enter') handleSendMessage(); }}
                   />
-                  <button onClick={handleSendMessage} className="p-btn-dark" style={{ width: mob ? 48 : 52, height: mob ? 48 : 52, borderRadius: 12, background: ac, color: '#1A1410', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <button onClick={handleSendMessage} className="p-btn-dark" style={{ width: mob ? 48 : 52, height: mob ? 48 : 52, borderRadius: 12, background: ac, color: '#0D0B2E', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     <Send size={18} />
                   </button>
                 </div>
@@ -542,8 +542,8 @@ export default function ClientPortal({ user, dbClients = [], clients = [], ...pr
       {mob && (
         <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, background: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(20px)', borderTop: '1px solid #F0EBE5', display: 'flex', justifyContent: 'space-around', padding: '10px 10px 28px', zIndex: 1000 }}>
           {navItems.map(item => (
-            <button key={item.id} onClick={() => setTab(item.id)} style={{ background: 'none', border: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, color: tab === item.id ? '#1A1410' : '#B5AFA9', cursor: 'pointer', transition: 'color 0.2s' }}>
-              <div style={{ width: 38, height: 38, borderRadius: 12, background: tab === item.id ? '#1A1410' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', color: tab === item.id ? ac : 'inherit' }}>{item.icon}</div>
+            <button key={item.id} onClick={() => setTab(item.id)} style={{ background: 'none', border: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, color: tab === item.id ? '#0D0B2E' : '#9B99C8', cursor: 'pointer', transition: 'color 0.2s' }}>
+              <div style={{ width: 38, height: 38, borderRadius: 12, background: tab === item.id ? '#0D0B2E' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', color: tab === item.id ? ac : 'inherit' }}>{item.icon}</div>
               <span style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase' }}>{item.label}</span>
             </button>
           ))}
@@ -552,15 +552,15 @@ export default function ClientPortal({ user, dbClients = [], clients = [], ...pr
 
       {/* Feedback modal */}
       {showFeedback && (
-        <div className="overlay-modal" style={{ background: 'rgba(26,20,16,0.95)', zIndex: 6000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+        <div className="overlay-modal" style={{ background: 'rgba(13,11,46,0.95)', zIndex: 6000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
           <div className="modal-box" style={{ maxWidth: 480, padding: mob ? 32 : 48, textAlign: 'center', borderRadius: mob ? 24 : 40 }}>
             <Star size={mob ? 48 : 64} color={ac} fill={ac} style={{ marginBottom: 24 }} />
             <h2 className="lxfh" style={{ fontSize: mob ? 24 : 28, marginBottom: 12 }}>Rate the Craftsmanship</h2>
-            <p className="lxf" style={{ color: '#B5AFA9', marginBottom: 32, fontSize: 14 }}>Your project is complete. Please share your feedback.</p>
+            <p className="lxf" style={{ color: '#9B99C8', marginBottom: 32, fontSize: 14 }}>Your project is complete. Please share your feedback.</p>
             <textarea className="p-inp" style={{ height: 100, borderRadius: 16, marginBottom: 24, padding: 16, fontSize: 13, width: '100%' }} placeholder="Share your experience..." value={feedbackText} onChange={e => setFeedbackText(e.target.value)} />
             <div style={{ display: 'flex', gap: 12 }}>
               <button onClick={() => setShowFeedback(false)} className="p-btn-light" style={{ flex: 1, height: 48, borderRadius: 12, fontSize: 12 }}>Skip</button>
-              <button onClick={() => { props.notify('success', 'Feedback recorded. Thank you!'); setShowFeedback(false); }} className="p-btn-dark" style={{ flex: 1, height: 48, borderRadius: 12, background: ac, color: '#1A1410', border: 'none', fontSize: 12 }}>Submit</button>
+              <button onClick={() => { props.notify('success', 'Feedback recorded. Thank you!'); setShowFeedback(false); }} className="p-btn-dark" style={{ flex: 1, height: 48, borderRadius: 12, background: ac, color: '#0D0B2E', border: 'none', fontSize: 12 }}>Submit</button>
             </div>
           </div>
         </div>
@@ -568,30 +568,30 @@ export default function ClientPortal({ user, dbClients = [], clients = [], ...pr
 
       {/* Invoice detail modal */}
       {activeInvoice && (
-        <div className="overlay-modal" style={{ background: 'rgba(26,20,16,0.95)', zIndex: 6000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+        <div className="overlay-modal" style={{ background: 'rgba(13,11,46,0.95)', zIndex: 6000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
           <div className="modal-box" style={{ maxWidth: 580, width: '100%', padding: mob ? 32 : 48, borderRadius: mob ? 24 : 40, background: '#fff' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 32 }}>
               <div>
                 <h2 className="lxfh" style={{ fontSize: 24, margin: 0 }}>INVOICE</h2>
-                <div style={{ fontSize: 12, color: '#B5AFA9' }}>Ref: {activeInvoice.id.toUpperCase()}</div>
+                <div style={{ fontSize: 12, color: '#9B99C8' }}>Ref: {activeInvoice.id.toUpperCase()}</div>
               </div>
-              <button onClick={() => setActiveInvoice(null)} style={{ background: '#F9F7F4', border: 'none', color: '#1A1410', width: 36, height: 36, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><X size={18} /></button>
+              <button onClick={() => setActiveInvoice(null)} style={{ background: '#F4F4FA', border: 'none', color: '#0D0B2E', width: 36, height: 36, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><X size={18} /></button>
             </div>
             <div style={{ borderTop: '1px solid #F0EBE5', borderBottom: '1px solid #F0EBE5', padding: '20px 0', marginBottom: 28 }}>
               {[{ l: 'Description', v: activeInvoice.title || 'Installation Service' }, { l: 'Date', v: activeInvoice.date }, { l: 'Status', v: activeInvoice.status }].map(r => (
                 <div key={r.l} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
-                  <span style={{ fontSize: 12, color: '#B5AFA9' }}>{r.l}:</span>
+                  <span style={{ fontSize: 12, color: '#9B99C8' }}>{r.l}:</span>
                   {r.l === 'Status' ? <PSBadge s={r.v} /> : <span style={{ fontSize: 13, fontWeight: 700 }}>{r.v}</span>}
                 </div>
               ))}
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 36 }}>
               <span style={{ fontSize: 14, fontWeight: 700 }}>Total Amount:</span>
-              <span style={{ fontSize: 24, fontWeight: 900, color: '#1A1410' }}>{props.formatPrice(activeInvoice.amount)}</span>
+              <span style={{ fontSize: 24, fontWeight: 900, color: '#0D0B2E' }}>{props.formatPrice(activeInvoice.amount)}</span>
             </div>
             <div style={{ display: 'flex', gap: 12 }}>
               <button onClick={() => setActiveInvoice(null)} className="p-btn-light" style={{ flex: 1, height: 48, borderRadius: 12 }}>Close</button>
-              <button onClick={() => window.print()} className="p-btn-dark" style={{ flex: 1, height: 48, borderRadius: 12, background: ac, color: '#1A1410', border: 'none' }}>Print Invoice</button>
+              <button onClick={() => window.print()} className="p-btn-dark" style={{ flex: 1, height: 48, borderRadius: 12, background: ac, color: '#0D0B2E', border: 'none' }}>Print Invoice</button>
             </div>
           </div>
         </div>

@@ -27,12 +27,12 @@
 }
 
 .btn-dark {
-  background: #1A1410;
+  background: #0D0B2E;
   color: #fff;
 }
 
 .btn-dark:hover:not(:disabled) {
-  background: #2E241D;
+  background: #1A166B;
 }
 
 .btn-secondary {

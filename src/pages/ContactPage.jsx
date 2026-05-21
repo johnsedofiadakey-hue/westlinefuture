@@ -63,10 +63,10 @@ export default function ContactPage({ brand, submitContact }) {
 
   return (
     <div style={{ paddingTop: mob ? 80 : 120 }}>
-      <section style={{ padding: '100px 5vw', background: '#F9F7F4', color: DARK_TEXT }}>
+      <section style={{ padding: '100px 5vw', background: '#F4F4FA', color: DARK_TEXT }}>
         <div style={{ maxWidth: 1400, margin: '0 auto' }}>
           <h1 style={{ fontSize: mob ? 48 : 96, fontWeight: 800, letterSpacing: '-0.04em' }}>Let's <em style={{ fontStyle: 'italic', color: ac, fontWeight: 400 }}>Collaborate</em>.</h1>
-          <p style={{ fontSize: 20, color: 'rgba(26,20,16,0.6)' }}>Speak to a technical lead about your finishing requirements.</p>
+          <p style={{ fontSize: 20, color: 'rgba(13,11,46,0.6)' }}>Speak to a technical lead about your finishing requirements.</p>
         </div>
       </section>
       <section style={{ padding: mob ? '60px 24px' : '100px 5vw', background: '#fff' }}>
@@ -139,7 +139,7 @@ export default function ContactPage({ brand, submitContact }) {
                 />
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}>
                   <FieldError field="message" />
-                  <span style={{ fontSize: 11, color: '#B5AFA9', marginLeft: 'auto' }}>{formData.message.length}/2000</span>
+                  <span style={{ fontSize: 11, color: '#9B99C8', marginLeft: 'auto' }}>{formData.message.length}/2000</span>
                 </div>
               </div>
               <button
@@ -154,7 +154,7 @@ export default function ContactPage({ brand, submitContact }) {
             <div>
               <h4 style={{ fontSize: 11, fontWeight: 800, color: ac, letterSpacing: '0.2em', textTransform: 'uppercase', marginBottom: 16 }}>Direct Contact</h4>
               <p style={{ fontSize: 24, fontWeight: 800, margin: 0, color: DARK_TEXT }}>{brand.phone}</p>
-              <p style={{ color: 'rgba(26,20,16,0.5)', margin: '8px 0 0' }}>{brand.email}</p>
+              <p style={{ color: 'rgba(13,11,46,0.5)', margin: '8px 0 0' }}>{brand.email}</p>
             </div>
             <div>
               <h4 style={{ fontSize: 11, fontWeight: 800, color: ac, letterSpacing: '0.2em', textTransform: 'uppercase', marginBottom: 16 }}>Regional Hubs</h4>

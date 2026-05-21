@@ -15,3 +15,13 @@ yarn-error.log*
 *.zip
 *.pdf
 .aider*
+.claude/
+.firebase/
+build_*.txt
+build_output*.txt
+build_debug.txt
+build_log.txt
+REENGINEERING_PLAN_FULL.md
+PROJECT_AUDIT.md
+LUXESPACE_SETUP_MANUAL.md
+AGENTS.md

@@ -12,7 +12,7 @@ const LOGISTICS_MILESTONES = [
   { id: 'Warehouse', label: 'Warehouse', icon: <Box size={14} /> },
   { id: 'Sea', label: 'On Sea', icon: <Ship size={14} /> },
   { id: 'Customs', label: 'Customs', icon: <Anchor size={14} /> },
-  { id: 'Local', label: 'Accra Hub', icon: <MapPin size={14} /> }
+  { id: 'Local', label: 'Local Hub', icon: <MapPin size={14} /> }
 ];
 
 export default function AdminLogistics({ containers = [], workOrders = [], clients = [], brand, ...props }) {

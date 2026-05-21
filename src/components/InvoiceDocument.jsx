@@ -65,7 +65,7 @@ export default function InvoiceDocument({ inv, isQuote = false, finSettings, ac,
           <div style={{ fontSize: 12, lineHeight: 1.6, opacity: 0.7 }}>
             {inv.clientEmail}<br />
             {inv.clientPhone || 'Commercial Division'}<br />
-            {inv.clientAddress || 'Accra, Ghana'}
+            {inv.clientAddress || 'Client Address'}
           </div>
         </div>
         <div style={{ textAlign: 'right' }}>

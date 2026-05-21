@@ -1045,7 +1045,7 @@ export const DEFAULT_SCENES = [
   {
     id: 'def-1',
     title: 'The Panoramic Penthouse',
-    location: 'Airport Residential, Accra',
+    location: 'Premium Residential Development',
     img: 'https://images.unsplash.com/photo-1519302959554-a75be0afc82a?q=80&w=2084&auto=format&fit=crop',
     description: 'A study in transparency and structural integrity. Our ultra-narrow sliding systems dissolve the boundary between interior luxury and the city skyline.',
     hotspots: [
@@ -1056,7 +1056,7 @@ export const DEFAULT_SCENES = [
   {
     id: 'def-2',
     title: 'The Innovation Facility',
-    location: 'Spintex Industrial Area',
+    location: 'Industrial Campus',
     img: 'https://images.unsplash.com/photo-1581094794329-c8112a89af12?q=80&w=2070&auto=format&fit=crop',
     description: 'Where precision meets scale. Our fabrication facility utilizes high-tech CNC processing to ensure sub-millimeter accuracy for every component.',
     hotspots: [
@@ -1067,7 +1067,7 @@ export const DEFAULT_SCENES = [
   {
     id: 'def-3',
     title: 'Structural Luxe Interior',
-    location: 'East Legon',
+    location: 'Commercial Tower',
     img: 'https://images.unsplash.com/photo-1600607687920-4e2a09cf159d?q=80&w=2070&auto=format&fit=crop',
     description: 'Bespoke interior finishing where architectural glass partitions define luxury living and working spaces.',
     hotspots: [
@@ -1078,9 +1078,9 @@ export const DEFAULT_SCENES = [
   {
     id: 'def-4',
     title: 'Reflective Facade Detail',
-    location: 'Tema Waterfront',
+    location: 'Waterfront Development',
     img: 'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?q=80&w=2070&auto=format&fit=crop',
-    description: 'High-performance curtain wall systems engineered for the harsh West African climate.',
+    description: 'High-performance curtain wall systems engineered for demanding climates and ambitious architectural visions.',
     hotspots: [
       { x: 45, y: 55, title: 'Structural Silicone Glazing', desc: 'Frameless exterior appearance with mechanical fixings.', specs: { wind_load: '3.5 kPa', sealant: 'Dow Corning 993', movement: '±25%' } },
       { x: 70, y: 40, title: 'Solar Control Coating', desc: 'Reflective coating for energy efficiency and privacy.', specs: { shgc: '0.22', vlt: '18%', reflectance: '34%' } }

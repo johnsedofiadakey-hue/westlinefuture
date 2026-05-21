@@ -13,7 +13,7 @@ export default function AboutPage({ brand, content }) {
           <div style={{ maxWidth: 1400, margin: '0 auto' }}>
             <span style={{ color: ac, fontSize: 10, fontWeight: 800, letterSpacing: '0.3em', textTransform: 'uppercase' }}>{data.storyTitle || 'THE HUB'}</span>
             <h1 style={{ fontSize: mob ? 48 : 96, fontWeight: 800, letterSpacing: '-0.04em', margin: '20px 0' }}>Our Legacy.</h1>
-            <p style={{ fontSize: mob ? 18 : 24, color: 'rgba(13,11,46,0.6)', maxWidth: 800, lineHeight: 1.6 }}>{data.story || 'Industrial precision meets architectural luxury across West Africa\'s premium residential and commercial landscape.'}</p>
+            <p style={{ fontSize: mob ? 18 : 24, color: 'rgba(13,11,46,0.6)', maxWidth: 800, lineHeight: 1.6 }}>{data.story || 'Global precision meets local delivery. Premium structural glass, aluminum works, and interior finishing solutions for the world\'s most ambitious architectural projects.'}</p>
           </div>
        </section>
        <section style={{ padding: '100px 5vw', background: '#fff' }}>
@@ -23,8 +23,8 @@ export default function AboutPage({ brand, content }) {
                 <div style={{ color: ac, fontSize: 12, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.2em', marginBottom: 32 }}>{data.role || 'Managing Director'}</div>
                 <p style={{ color: 'rgba(13,11,46,0.6)', lineHeight: 1.8, fontSize: 16, marginBottom: 24 }}>{data.bio || 'From structural glass to full interior finishing, our evolution has been driven by a commitment to technical mastery and aesthetic perfection.'}</p>
                 <div style={{ padding: 32, background: '#F4F4FA', borderRadius: 24, border: '1px solid #F0EBE5' }}>
-                   <h4 style={{ fontSize: 20, fontWeight: 800, marginBottom: 8, color: DARK_TEXT }}>Accra Headquarters</h4>
-                   <p style={{ color: 'rgba(13,11,46,0.5)', margin: 0 }}>{brand.location || 'Spintex Road Industrial Area, Accra'}</p>
+                   <h4 style={{ fontSize: 20, fontWeight: 800, marginBottom: 8, color: DARK_TEXT }}>Headquarters</h4>
+                   <p style={{ color: 'rgba(13,11,46,0.5)', margin: 0 }}>{brand.location || 'Westline Future — Global Trading Co, Ltd'}</p>
                 </div>
              </div>
              <img src={data.image || "https://images.unsplash.com/photo-1497366216548-37526070297c?w=1200&q=80"} style={{ width: '100%', borderRadius: 24, boxShadow: '0 30px 60px rgba(0,0,0,0.05)' }} />

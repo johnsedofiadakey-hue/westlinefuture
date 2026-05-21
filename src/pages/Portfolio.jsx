@@ -233,7 +233,7 @@ export default function Portfolio({ brand, user, onPortal, setPage, content }) {
         {/* Intro */}
         <div style={{ marginBottom: mob ? 40 : 80 }}>
            <h1 style={{ fontSize: mob ? 40 : 96, fontWeight: 800, letterSpacing: '-0.05em', margin: '0 0 24px', lineHeight: 1 }}>Selected <br/><span style={{ color: ac }}>Masterpieces.</span></h1>
-           <p style={{ fontSize: mob ? 16 : 20, color: 'rgba(13,11,46,0.5)', maxWidth: 600 }}>A collection of our most ambitious structural glass and interior finishing projects across Ghana.</p>
+           <p style={{ fontSize: mob ? 16 : 20, color: 'rgba(13,11,46,0.5)', maxWidth: 600 }}>A collection of our most ambitious structural glass and interior finishing projects worldwide.</p>
         </div>
 
         {/* Filter */}

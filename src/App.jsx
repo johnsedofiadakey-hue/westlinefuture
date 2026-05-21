@@ -393,7 +393,7 @@ export default function App() {
           id: contId, shipmentRef: 'MSC-GT-2026-098', clientId: 'ELITE-CLIENT',
           origin: 'Foshan, China', status: 'Sea',
           eta: 'May 12, 2026', atRisk: true,
-          riskReason: 'Port Congestion at Tema', items: [woId]
+          riskReason: 'Port Congestion at Destination', items: [woId]
         });
       };
 

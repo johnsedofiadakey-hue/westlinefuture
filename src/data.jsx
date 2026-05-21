@@ -23,7 +23,7 @@ export const PROJECT_STAGES = [
     tasks: ['Cutting & processing complete', 'Tempering and coating applied', 'Quality control inspection passed', 'Components packed for dispatch']
   },
   {
-    id: 5, name: 'Shipping & Delivery', statusLabel: 'In transit to Ghana', days: 30, color: '#607D8B',
+    id: 5, name: 'Shipping & Delivery', statusLabel: 'In transit to site', days: 30, color: '#607D8B',
     icon: 'ship', description: 'Cargo is in transit from the factory to your site via ocean freight.',
     tasks: ['Dispatched from factory', 'Ocean freight booking confirmed', 'Customs clearance processed', 'Local delivery to site completed']
   },
@@ -45,7 +45,7 @@ export const KANBAN_COLUMNS = [
   { id: 'production', label: 'In Production', stages: [4], color: '#0D0B2E', bg: 'rgba(13,11,46,0.05)' },
   { id: 'shipping', label: 'Shipping', stages: [5], color: '#607D8B', bg: 'rgba(96,125,139,0.08)' },
   { id: 'installation', label: 'Installation', stages: [6], color: '#16A34A', bg: 'rgba(22,163,74,0.08)' },
-  { id: 'done', label: 'Completed', stages: [7], color: '#4945BE', bg: 'rgba(229,195,135,0.08)' },
+  { id: 'done', label: 'Completed', stages: [7], color: '#4945BE', bg: 'rgba(73,69,190,0.08)' },
 ];
 
 export const LIFE_RIBBON = [
@@ -69,43 +69,43 @@ export const PROCUREMENT_STAGES = [
 export const ABOUT_DATA = {
   founder: 'Managing Director',
   role: 'Managing Director',
-  storyTitle: 'Crafting the Future of Structural Glass & Interiors',
-  story: 'Under the leadership of Managing Director, Managing Director, Westline Future has evolved from a structural glass specialist into Ghana’s premier hub for complete interior finishing. Our mission is to bridge the gap between industrial engineering and luxury design.',
-  bio: 'Managing Director leads Westline Future with a commitment to sub-millimeter precision and aesthetic excellence. From Spintex to the most exclusive developments in Accra, his vision is to provide a "million-dollar finish" for every project, leveraging global sourcing and local technical expertise.',
+  storyTitle: 'Precision Sourcing. Global Delivery. Lasting Spaces.',
+  story: 'Westline Future — Global Trading Co, Ltd bridges the gap between world-class manufacturing and on-site excellence. From precision glass engineering to full interior fit-out, we source globally and deliver locally for the most ambitious architectural projects worldwide.',
+  bio: 'The leadership of Westline Future brings together deep expertise in structural glass, aluminum systems, and international procurement. Our mission is to provide a world-class finish on every project — combining China-sourced precision materials with expert local installation.',
   image: 'https://images.unsplash.com/photo-1600607687920-4e2a09cf159d?q=80&w=2070&auto=format&fit=crop'
 };
 
 export const BRAND0 = {
   name: 'Westline Future',
-  tagline: 'Complete Interior & Finishing Solutions',
+  tagline: 'Global Trading Co, Ltd',
   logo: '/logo.png',
   color: '#231F78',
-  phone: '+233 59 845 5012',
+  phone: '',
   email: 'admin@westlinefuture.com',
-  location: 'Spintex Road Industrial Area, Accra',
-  instagram: '@westlinefuture_gh',
+  location: '',
+  instagram: '@westlinefuture',
   facebook: 'WestlineFuture',
-  twitter: '@westlinefuture_gh',
-  linkedin: 'westlinefuture-fabrications',
-  whatsapp: '+233598455012',
-  website: 'www.westlinefuture.com.gh'
+  twitter: '@westlinefuture',
+  linkedin: 'westlinefuture',
+  whatsapp: '',
+  website: 'www.westlinefuture.com'
 };
 
 export const TEAM_MEMBERS = [
-  {id:1,name:'Managing Director',role:'Managing Director',bio:'Visionary leader with a focus on structural glass and interior finishing engineering.',img:'https://images.unsplash.com/photo-1531746020798-e6953c6e8e04?w=400&q=80',av:'JD',email:'admin@westlinefuture.com',phone:'+233 59 845 5012',status:'Online'},
-  {id:2,name:'Kwame Osei',role:'Technical Lead',bio:'Expert in curtain wall systems and high-pressure glazing.',img:'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&q=80',av:'KO',email:'kwame@westlinefuture.com',phone:'+233 24 111 0002',status:'Online'},
-  {id:3,name:'Abena Darko',role:'admin',bio:'Ensures on-site precision and safety across all glass installations.',img:'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=400&q=80',av:'AD',email:'admin@westlinefuture.com',phone:'+233 24 111 0003',status:'Idle'},
-  {id:4,name:'Nana Boateng',role:'CAD Engineer',bio:'Specializes in precision technical drawings and fabrication specs.',img:'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=400&q=80',av:'NB',email:'nana@westlinefuture.com',phone:'+233 24 111 0004',status:'Idle'},
+  {id:1,name:'Managing Director',role:'Managing Director',bio:'Visionary leader driving global sourcing strategy and architectural finishing excellence.',img:'https://images.unsplash.com/photo-1531746020798-e6953c6e8e04?w=400&q=80',av:'MD',email:'admin@westlinefuture.com',phone:'',status:'Online'},
+  {id:2,name:'Technical Lead',role:'Technical Lead',bio:'Expert in curtain wall systems, structural glazing, and high-performance aluminum.',img:'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&q=80',av:'TL',email:'technical@westlinefuture.com',phone:'',status:'Online'},
+  {id:3,name:'Operations Manager',role:'Operations',bio:'Ensures on-site precision, logistics coordination, and safety across all installations.',img:'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=400&q=80',av:'OM',email:'ops@westlinefuture.com',phone:'',status:'Idle'},
+  {id:4,name:'CAD Engineer',role:'CAD Engineer',bio:'Specializes in precision technical drawings and fabrication specifications.',img:'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=400&q=80',av:'CE',email:'cad@westlinefuture.com',phone:'',status:'Idle'},
 ];
 
 export const PORTFOLIO_DATA = [
-  {id:1,title:'The Volta Suite',cat:'Full Interior',after:'https://images.unsplash.com/photo-1618221195710-dd6b41faaea6?w=1600&q=80',before:'',year:'2024',loc:'East Legon, Accra',area:'4,200 sq ft',duration:'5 months',budget:'$195,000',style:'Modern Industrial',hasBA:false,desc:'Total interior finishing including kitchens, tiling, and lighting.',imgs:['https://images.unsplash.com/photo-1618221195710-dd6b41faaea6?w=1600&q=80']},
-  {id:2,title:'Airport Hills Kitchen',cat:'Kitchen Installation',after:'https://images.unsplash.com/photo-1556911223-e1534ff6f755?w=1600&q=80',before:'',year:'2024',loc:'Airport Hills',area:'1,100 sq ft',duration:'2 months',budget:'$72,000',style:'Minimalist',hasBA:false,desc:'Bespoke smart kitchen installation with high-gloss finish.',imgs:['https://images.unsplash.com/photo-1556911223-e1534ff6f755?w=1600&q=80']},
+  {id:1,title:'The Panoramic Residence',cat:'Full Interior',after:'https://images.unsplash.com/photo-1618221195710-dd6b41faaea6?w=1600&q=80',before:'',year:'2024',loc:'Private Development',area:'4,200 sq ft',duration:'5 months',budget:'$195,000',style:'Modern Industrial',hasBA:false,desc:'Total interior finishing including kitchens, tiling, and lighting systems.',imgs:['https://images.unsplash.com/photo-1618221195710-dd6b41faaea6?w=1600&q=80']},
+  {id:2,title:'Premium Kitchen Suite',cat:'Kitchen Installation',after:'https://images.unsplash.com/photo-1556911223-e1534ff6f755?w=1600&q=80',before:'',year:'2024',loc:'Commercial Tower',area:'1,100 sq ft',duration:'2 months',budget:'$72,000',style:'Minimalist',hasBA:false,desc:'Bespoke smart kitchen installation with high-gloss finish.',imgs:['https://images.unsplash.com/photo-1556911223-e1534ff6f755?w=1600&q=80']},
 ];
 
 export const HERO_SLIDES = [
-  { img: '/hero_seo.png', title: 'Complete Interior\nSolutions.', sub: 'Industrial precision for West Africa’s most ambitious architectural projects.' },
-  { img: 'https://images.unsplash.com/photo-1600607687920-4e2a09cf159d?q=80&w=2070&auto=format&fit=crop', title: 'Architectural\nPrecision.', sub: 'Premier structural glass and luxury aluminum finishing systems.' }
+  { img: '/hero_seo.png', title: 'Complete Interior\nSolutions.', sub: 'Precision global sourcing and local delivery for the world\'s most ambitious architectural projects.' },
+  { img: 'https://images.unsplash.com/photo-1600607687920-4e2a09cf159d?q=80&w=2070&auto=format&fit=crop', title: 'Architectural\nPrecision.', sub: 'Premier structural glass and luxury aluminum finishing systems, delivered worldwide.' }
 ];
 
 export const SERVICES_DATA = [
@@ -115,8 +115,6 @@ export const SERVICES_DATA = [
 export const PROCESS_STEPS = [
   {n:'01',title:'Technical Survey',body:'Measurements.',img:'https://images.unsplash.com/photo-1552664730-d307ca884978?w=500&q=80'}
 ];
-
-
 
 export const ROOM_GALLERY = {
   'Living Room':['https://images.unsplash.com/photo-1618221195710-dd6b41faaea6?w=700&q=80']
@@ -148,19 +146,19 @@ export const PIE_D = [
 ];
 
 export const PIE_C = [
-  { name: 'Ghana', value: 70, color: '#231F78' },
-  { name: 'Togo', value: 15, color: '#0D0B2E' },
-  { name: 'Nigeria', value: 15, color: '#607D8B' }
+  { name: 'Africa', value: 45, color: '#231F78' },
+  { name: 'Asia', value: 30, color: '#0D0B2E' },
+  { name: 'Europe', value: 25, color: '#607D8B' }
 ];
 
 export const NOTIFS_DATA = [
-  { id: 1, title: 'New Project Request', body: 'The Volta Suite requires technical survey.', time: '2h ago', type: 'project' },
-  { id: 2, title: 'Payment Verified', body: 'Airport Hills Kitchen deposit confirmed.', time: '5h ago', type: 'payment' }
+  { id: 1, title: 'New Project Request', body: 'Panoramic Residence requires technical survey.', time: '2h ago', type: 'project' },
+  { id: 2, title: 'Payment Verified', body: 'Premium Kitchen Suite deposit confirmed.', time: '5h ago', type: 'payment' }
 ];
 
-export const CLIENT_NAMES = ['LuxeSpace Ghana', 'AFCFTA Secretariat', 'Airport Hills Dev'];
+export const CLIENT_NAMES = ['Meridian Developments', 'Global Architecture Group', 'Summit Properties'];
 export const AWARDS = [
-  { id: 1, name: 'Excellence in Structural Glass', year: '2023', body: 'Ghana Property Awards' }
+  { id: 1, name: 'Excellence in Structural Glass', year: '2023', body: 'International Property Awards' }
 ];
 
 export const WORKSPACES_DATA = [
@@ -174,7 +172,7 @@ export const DEFAULT_SCENES = [
   {
     id: 'def-1',
     title: 'The Panoramic Penthouse',
-    location: 'Airport Residential, Accra',
+    location: 'Premium Residential Development',
     img: 'https://images.unsplash.com/photo-1519302959554-a75be0afc82a?q=80&w=2084&auto=format&fit=crop',
     description: 'A study in transparency and structural integrity. Our ultra-narrow sliding systems dissolve the boundary between interior luxury and the city skyline.',
     hotspots: [
@@ -185,9 +183,9 @@ export const DEFAULT_SCENES = [
   {
     id: 'def-2',
     title: 'The Innovation Facility',
-    location: 'Spintex Industrial Area',
+    location: 'Industrial Campus',
     img: 'https://images.unsplash.com/photo-1581094794329-c8112a89af12?q=80&w=2070&auto=format&fit=crop',
-    description: 'Where precision meets scale. Our fabrication facility utilizes high-tech CNC processing to ensure sub-millimeter accuracy for every component.',
+    description: 'Where precision meets scale. Our processing facility utilizes high-tech CNC equipment to ensure sub-millimeter accuracy for every component.',
     hotspots: [
       { x: 50, y: 60, title: 'CNC Glass Processing', desc: 'Automated edge grinding and drilling for structural safety.', specs: { precision: '±0.2mm', speed: '45m/min', max_size: '3000x6000mm' } },
       { x: 20, y: 40, title: 'Toughening Line', desc: 'High-speed tempering for maximum mechanical strength.', specs: { temp: '700°C', stress: '>95 MPa', standard: 'EN 12150' } }
@@ -196,7 +194,7 @@ export const DEFAULT_SCENES = [
   {
     id: 'def-3',
     title: 'Structural Luxe Interior',
-    location: 'East Legon',
+    location: 'Commercial Tower',
     img: 'https://images.unsplash.com/photo-1600607687920-4e2a09cf159d?q=80&w=2070&auto=format&fit=crop',
     description: 'Bespoke interior finishing where architectural glass partitions define luxury living and working spaces.',
     hotspots: [
@@ -207,9 +205,9 @@ export const DEFAULT_SCENES = [
   {
     id: 'def-4',
     title: 'Reflective Facade Detail',
-    location: 'Tema Waterfront',
+    location: 'Waterfront Development',
     img: 'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?q=80&w=2070&auto=format&fit=crop',
-    description: 'High-performance curtain wall systems engineered for the harsh West African climate.',
+    description: 'High-performance curtain wall systems engineered for demanding climates and ambitious architectural visions.',
     hotspots: [
       { x: 45, y: 55, title: 'Structural Silicone Glazing', desc: 'Frameless exterior appearance with mechanical fixings.', specs: { wind_load: '3.5 kPa', sealant: 'Dow Corning 993', movement: '±25%' } },
       { x: 70, y: 40, title: 'Solar Control Coating', desc: 'Reflective coating for energy efficiency and privacy.', specs: { shgc: '0.22', vlt: '18%', reflectance: '34%' } }
@@ -223,9 +221,9 @@ export const INITIAL_CONTENT = {
     ...ABOUT_DATA,
     founder: 'Managing Director',
     role: 'Managing Director',
-    storyTitle: 'Crafting the Future of Structural Glass & Interiors',
-    story: 'Under the leadership of Managing Director, Managing Director, Westline Future has evolved from a structural glass specialist into Ghana’s premier hub for complete interior finishing. Our mission is to bridge the gap between industrial engineering and luxury design.',
-    bio: 'Managing Director leads Westline Future with a commitment to sub-millimeter precision and aesthetic excellence. From Spintex to the most exclusive developments in Accra, his vision is to provide a "million-dollar finish" for every project, leveraging global sourcing and local technical expertise.'
+    storyTitle: 'Precision Sourcing. Global Delivery. Lasting Spaces.',
+    story: 'Westline Future — Global Trading Co, Ltd bridges the gap between world-class manufacturing and on-site excellence. From precision glass engineering to full interior fit-out, we source globally and deliver locally for the most ambitious architectural projects worldwide.',
+    bio: 'The leadership of Westline Future brings together deep expertise in structural glass, aluminum systems, and international procurement. Our mission is to provide a world-class finish on every project — combining China-sourced precision materials with expert local installation.'
   },
   services: SERVICES_DATA,
   process: PROCESS_STEPS,

@@ -157,9 +157,9 @@ export default function ContactPage({ brand, submitContact }) {
               <p style={{ color: 'rgba(13,11,46,0.5)', margin: '8px 0 0' }}>{brand.email}</p>
             </div>
             <div>
-              <h4 style={{ fontSize: 11, fontWeight: 800, color: ac, letterSpacing: '0.2em', textTransform: 'uppercase', marginBottom: 16 }}>Regional Hubs</h4>
+              <h4 style={{ fontSize: 11, fontWeight: 800, color: ac, letterSpacing: '0.2em', textTransform: 'uppercase', marginBottom: 16 }}>Global Reach</h4>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
-                {['Accra', 'Kumasi', 'Takoradi', 'Koforidua'].map(c => (
+                {['Africa', 'Asia', 'Europe', 'Americas'].map(c => (
                   <span key={c} style={{ padding: '6px 12px', background: '#F5F5F5', borderRadius: 6, fontSize: 11, fontWeight: 700, color: DARK_TEXT }}>{c.toUpperCase()}</span>
                 ))}
               </div>

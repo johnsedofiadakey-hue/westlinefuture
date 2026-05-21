@@ -34,7 +34,7 @@ export default function AdminFinancials({ invoices = [], transactions = [], clie
     taxRate: 0,
     showStamp: true,
     autoNumbering: true,
-    bankDetails: 'EcoBank Ghana | Acct: 1441000928271 | Branch: Spintex Road',
+    bankDetails: 'Bank Name | Account Number | Branch',
     terms: '1. 50% deposit required for fabrication.\n2. Final payment due upon installation.\n3. This document is valid for 14 days.',
     kpiTargets: { revenue: 500000, pending: 100000, quotes: 20, conversion: 90 }
   });
@@ -399,7 +399,7 @@ export default function AdminFinancials({ invoices = [], transactions = [], clie
                <div className="p-card" style={{ padding: 32, textAlign: 'left' }}>
                   <CreditCard size={24} color="#16A34A" style={{ marginBottom: 16 }} />
                   <h4 style={{ fontSize: 15, fontWeight: 800, marginBottom: 8 }}>VAT & Tax Compliance</h4>
-                  <div style={{ fontSize: 12, color: '#9B99C8' }}>Real-time export to Ghana Revenue Authority.</div>
+                  <div style={{ fontSize: 12, color: '#9B99C8' }}>Real-time export for tax and compliance reporting.</div>
                </div>
                <div className="p-card" style={{ padding: 32, textAlign: 'left' }}>
                   <History size={24} color="#0D0B2E" style={{ marginBottom: 16 }} />

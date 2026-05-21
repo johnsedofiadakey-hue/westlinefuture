@@ -95,7 +95,7 @@ export default function AdminEmailCenter({ emails = [], projects = [], brand, ..
                     <PFormField label="Site Address / Location">
                        <div style={{ position: 'relative' }}>
                           <MapPin size={16} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', opacity: 0.4 }} />
-                          <input className="p-inp" style={{ paddingLeft: 40 }} placeholder="e.g. Spintex Road, Accra" value={conversionData.site} onChange={v => setConversionData({...conversionData, site: v.target.value})} />
+                          <input className="p-inp" style={{ paddingLeft: 40 }} placeholder="e.g. Project site address" value={conversionData.site} onChange={v => setConversionData({...conversionData, site: v.target.value})} />
                        </div>
                     </PFormField>
                  </div>

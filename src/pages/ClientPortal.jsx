@@ -398,8 +398,8 @@ export default function ClientPortal({ user, dbClients = [], clients = [], ...pr
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 32 }}>
                     {[
                       { id: 4, name: 'China Production', desc: 'Items being built at the factory.' },
-                      { id: 5, name: 'Global Shipping', desc: 'Cargo moving via ocean freight to Tema Port.' },
-                      { id: 6, name: 'Ghana Site Delivery', desc: 'Materials dispatched to your physical location.' }
+                      { id: 5, name: 'Global Shipping', desc: 'Cargo moving via ocean freight to destination port.' },
+                      { id: 6, name: 'Local Site Delivery', desc: 'Materials dispatched to your physical location.' }
                     ].map((s, i) => {
                       const active = activeProject.stage >= s.id;
                       return (

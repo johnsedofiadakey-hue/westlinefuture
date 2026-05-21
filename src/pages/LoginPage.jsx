@@ -8,12 +8,14 @@ import {
 import Button from '../components/ui/Button';
 
 const COUNTRIES = [
-  { name: 'Ghana', code: '+233', flag: '🇬🇭' },
   { name: 'United States', code: '+1', flag: '🇺🇸' },
   { name: 'United Kingdom', code: '+44', flag: '🇬🇧' },
-  { name: 'Nigeria', code: '+234', flag: '🇳🇬' },
-  { name: 'Canada', code: '+1', flag: '🇨🇦' },
   { name: 'China', code: '+86', flag: '🇨🇳' },
+  { name: 'Nigeria', code: '+234', flag: '🇳🇬' },
+  { name: 'Ghana', code: '+233', flag: '🇬🇭' },
+  { name: 'Canada', code: '+1', flag: '🇨🇦' },
+  { name: 'South Africa', code: '+27', flag: '🇿🇦' },
+  { name: 'UAE', code: '+971', flag: '🇦🇪' },
 ];
 
 export default function LoginPage({ onLogin, onBack, brand, type = 'client', ...props }) {

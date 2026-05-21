@@ -1,6 +1,6 @@
 /**
- * Arkesel Service for Ghanaian SMS and WhatsApp Delivery
- * Provides a streamlined integration for local Ghanaian networks.
+ * Arkesel Service for SMS and WhatsApp Delivery
+ * Provides a streamlined integration for SMS and WhatsApp notifications.
  */
 
 const API_KEY = import.meta.env.VITE_ARKESEL_API_KEY;

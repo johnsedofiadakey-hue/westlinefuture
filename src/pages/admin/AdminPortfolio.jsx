@@ -21,7 +21,7 @@ export default function AdminPortfolio({ content, syncCMS, brand }) {
       after: 'https://images.unsplash.com/photo-1616137466211-f939a420be84?w=900&q=80',
       before: '',
       year: new Date().getFullYear().toString(),
-      loc: 'Accra, Ghana',
+      loc: 'International Project',
       area: 'TBD',
       duration: 'TBD',
       budget: 'TBD',

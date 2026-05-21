@@ -6,7 +6,7 @@ import {
   collection, query, onSnapshot, getDocs, getDoc, doc,
   orderBy, limit, where, serverTimestamp
 } from 'firebase/firestore';
-import { BRAND0, INITIAL_CONTENT, HERO_SLIDES, SERVICES_DATA, PORTFOLIO_DATA, ABOUT_DATA, GLASS_CATALOG_DATA, GLASS_CATALOG_CATEGORIES, CLIENTS_DATA, PROPOSALS_DATA, INVOICES_DATA, BOOKINGS_DATA, TEAM_MEMBERS } from '../data';
+import { BRAND0, INITIAL_CONTENT, HERO_SLIDES, SERVICES_DATA, PORTFOLIO_DATA, ABOUT_DATA, GLASS_CATALOG_DATA, GLASS_CATALOG_CATEGORIES, CLIENTS_DATA, PROPOSALS_DATA, INVOICES_DATA, BOOKINGS_DATA, TEAM_MEMBERS, normalizeStageId } from '../data';
 
 export const AppContext = createContext();
 
@@ -73,7 +73,7 @@ export const AppProvider = ({ children }) => {
     if (userProfile && JSON.stringify(userProfile) !== JSON.stringify(user)) {
       setUser(userProfile);
     } else if (!currentUser && user !== null) {
-      const savedSession = localStorage.getItem('westlinefuture_session');
+      const savedSession = localStorage.getItem('glasstech_session');
       if (savedSession) {
         try {
           const sessionData = JSON.parse(savedSession);
@@ -105,16 +105,23 @@ export const AppProvider = ({ children }) => {
 
     devLog("[FETCH] Initializing Data Pipeline for user:", user.id);
 
-    const projectQuery = user.role === 'admin'
+    const isAdminOrStaff = user.role === 'admin' || user.role === 'staff';
+
+    const projectQuery = isAdminOrStaff
       ? collection(db, 'projects')
       : query(collection(db, 'projects'), where('clientId', '==', user.id), limit(100));
 
     const unsubProject = onSnapshot(projectQuery, (snap) => {
-      setClients(snap.docs.map(d => ({ id: d.id, ...d.data(), name: d.data().title || d.data().project })));
+      setClients(snap.docs.map(d => {
+        const data = d.data();
+        // Normalize legacy 12-stage IDs → current 7-stage IDs at read time
+        const rawStageId = data.stageId ?? data.stage ?? 1;
+        return { id: d.id, ...data, stageId: normalizeStageId(rawStageId), name: data.title || data.project };
+      }));
     }, (err) => devWarn("Project Sync Error:", err));
 
     let unsubUser = () => {};
-    if (user.role === 'admin') {
+    if (isAdminOrStaff) {
       unsubUser = onSnapshot(collection(db, 'users'), (snap) => {
         const { team, clientList } = snap.docs.reduce((acc, d) => {
           const u = { id: d.id, ...d.data() };
@@ -133,14 +140,14 @@ export const AppProvider = ({ children }) => {
       }, (err) => devWarn("Client Profile Sync Error:", err));
     }
 
-    const unsubInvoices = onSnapshot(user.role === 'admin'
+    const unsubInvoices = onSnapshot(isAdminOrStaff
       ? query(collection(db, 'invoices'), orderBy('createdAt', 'desc'), limit(invoiceLimit))
       : query(collection(db, 'invoices'), where('clientId', '==', user.id), limit(invoiceLimit)), (snap) => {
       const all = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      setInvoices(user.role === 'admin' ? all : all.sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt)));
+      setInvoices(all);
     }, (err) => devWarn("Invoice Sync Error:", err));
 
-    const unsubTasks = onSnapshot(user.role === 'admin' ? collection(db, 'tasks') : query(collection(db, 'tasks'), where('clientId', '==', user.id)), (snap) => {
+    const unsubTasks = onSnapshot(isAdminOrStaff ? collection(db, 'tasks') : query(collection(db, 'tasks'), where('clientId', '==', user.id)), (snap) => {
       setTasks(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     }, (err) => devWarn("Global Task Sync Error:", err));
 
@@ -190,9 +197,14 @@ export const AppProvider = ({ children }) => {
       setProposals(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     }, (err) => devWarn("Proposal Sync Error:", err));
 
-    const unsubBookings = onSnapshot(user.role === 'admin' ? collection(db, 'bookings') : query(collection(db, 'bookings'), where('userId', '==', user.id)), (snap) => {
-      setBookings(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    }, (err) => devWarn("Booking Sync Error:", err));
+    // Bookings are admin-only in Firestore rules — clients don't need them
+    let unsubBookings = () => {};
+    if (user.role === 'admin') {
+      unsubBookings = onSnapshot(collection(db, 'bookings'),
+        (snap) => setBookings(snap.docs.map(d => ({ id: d.id, ...d.data() }))),
+        (err) => devWarn("Booking Sync Error:", err)
+      );
+    }
 
     const unsubTrans = onSnapshot(user.role === 'admin' ? query(collection(db, 'transactions'), orderBy('date', 'desc')) : query(collection(db, 'transactions'), where('clientId', '==', user.id)), (snap) => {
       setTransactions(snap.docs.map(d => ({ id: d.id, ...d.data() })));
@@ -204,14 +216,15 @@ export const AppProvider = ({ children }) => {
       setUserNotifications(sorted.slice(0, 20));
     }, (err) => devWarn("Notifications listener failed:", err));
 
-    const unsubMsg = onSnapshot(query(collection(db, 'messages'), orderBy('createdAt', 'desc'), limit(messageLimit)), (snap) => {
-      const allMsgs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      if (user.role === 'admin') {
-        setMessages(allMsgs);
-      } else {
-        setMessages(allMsgs.filter(m => m.senderId === user.id || m.receiverId === user.id));
-      }
-    }, (err) => devWarn("Msg Sync Error:", err));
+    // Clients use per-project subcollection messages — skip the global messages collection for them
+    let unsubMsg = () => {};
+    if (user.role === 'admin') {
+      unsubMsg = onSnapshot(
+        query(collection(db, 'messages'), orderBy('createdAt', 'desc'), limit(messageLimit)),
+        (snap) => setMessages(snap.docs.map(d => ({ id: d.id, ...d.data() }))),
+        (err) => devWarn("Msg Sync Error:", err)
+      );
+    }
 
     let unsubEmails = () => {};
     if (user.role === 'admin') {
@@ -279,7 +292,7 @@ export const AppProvider = ({ children }) => {
 
   return (
     <AppContext.Provider value={{
-      user,
+      user, setUser,
       clients, proposals, invoices, bookings, emails, setEmails, dbClients, teamMembers, logs, shipments, messages, testimonials, tasks, transactions, changeRequests, userNotifications, procurements, jobs, notes, media, approvals, materials, assets, workOrders, containers,
       brand, content, currency, lang,
       setCurrency, setLang, setBrand, setContent,

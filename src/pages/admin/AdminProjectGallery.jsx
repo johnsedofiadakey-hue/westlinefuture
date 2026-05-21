@@ -3,13 +3,13 @@ import { Camera, Trash2 } from 'lucide-react';
 import { FF as PFormField } from '../../components/Shared';
 import { PROJECT_STAGES } from '../../data';
 
-export default function AdminProjectGallery({ projectId, media = [], uploadMedia, deleteMedia, ac }) {
+export default function AdminProjectGallery({ projectId, media = [], uploadMedia, deleteMedia, ac, notify }) {
   const [showAdd, setShowAdd] = useState(false);
   const [nm, setNm] = useState({ stage: 1, file: null, preview: '' });
   const myMedia = media.filter(m => m.parentId === projectId);
 
   const handleUpload = async () => {
-    if (!nm.file) return alert('Select a photo');
+    if (!nm.file) { notify?.('error', 'Select a photo first.'); return; };
     await uploadMedia(projectId, nm.file, parseInt(nm.stage));
     setNm({ stage: 1, file: null, preview: '' });
     setShowAdd(false);
@@ -30,8 +30,8 @@ export default function AdminProjectGallery({ projectId, media = [], uploadMedia
        </div>
 
        {showAdd && (
-         <div style={{ background: '#F4F4FA', padding: 20, borderRadius: 12, marginBottom: 24, display: 'flex', gap: 20 }}>
-            <div style={{ width: 120, height: 120, borderRadius: 12, border: '2px dashed #E4E3F0', overflow: 'hidden', position: 'relative', background: '#fff' }}>
+         <div style={{ background: '#F8F8FD', padding: 20, borderRadius: 12, marginBottom: 24, display: 'flex', gap: 20 }}>
+            <div style={{ width: 120, height: 120, borderRadius: 12, border: '2px dashed #DFD9D1', overflow: 'hidden', position: 'relative', background: '#fff' }}>
                {nm.preview ? <img src={nm.preview} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Camera size={24} color="#9B99C8" /></div>}
                <input type="file" accept="image/*" onChange={e => onFile(e.target.files[0])} style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer' }} />
             </div>

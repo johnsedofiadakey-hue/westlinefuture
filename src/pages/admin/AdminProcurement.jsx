@@ -3,7 +3,7 @@ import { FF as PFormField } from '../../components/Shared';
 import { PROCUREMENT_STAGES } from '../../data';
 import { Camera, Package, Truck, CheckCircle, Factory, Warehouse } from 'lucide-react';
 
-export default function AdminProcurement({ projectId, procurements = [], createProcurement, updateProcurement, deleteProcurement, brand }) {
+export default function AdminProcurement({ projectId, procurements = [], createProcurement, updateProcurement, deleteProcurement, brand, notify }) {
   const ac = brand.color || '#231F78';
   const myProcs = (procurements || []).filter(p => p.parentId === projectId);
   
@@ -17,7 +17,7 @@ export default function AdminProcurement({ projectId, procurements = [], createP
   const totalAct = myProcs.reduce((acc, p) => acc + (parseFloat(p.actualCost) || 0), 0);
 
   const handleAdd = async () => {
-    if (!na.itemName || !na.estimatedCost) return alert('Name and Estimated Cost required');
+    if (!na.itemName || !na.estimatedCost) { notify?.('error', 'Name and Estimated Cost required'); return; };
     if (createProcurement) {
       await createProcurement(projectId, {
         itemName: na.itemName, source: na.source, estimatedCost: na.estimatedCost, 
@@ -42,11 +42,11 @@ export default function AdminProcurement({ projectId, procurements = [], createP
        </div>
        
        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 20 }}>
-          <div style={{ background: '#F4F4FA', borderRadius: 8, padding: 12 }}>
+          <div style={{ background: '#F8F8FD', borderRadius: 8, padding: 12 }}>
              <div className="lxf" style={{ fontSize: 11, color: '#9B99C8', textTransform: 'uppercase' }}>Total Estimated</div>
              <div className="lxf" style={{ fontSize: 18, fontWeight: 700 }}>${totalEst.toLocaleString()}</div>
           </div>
-          <div style={{ background: '#F4F4FA', borderRadius: 8, padding: 12 }}>
+          <div style={{ background: '#F8F8FD', borderRadius: 8, padding: 12 }}>
              <div className="lxf" style={{ fontSize: 11, color: '#9B99C8', textTransform: 'uppercase' }}>Actual Spent</div>
              <div className="lxf" style={{ fontSize: 18, fontWeight: 700, color: totalAct > totalEst ? '#ff4444' : '#16A34A' }}>${totalAct.toLocaleString()}</div>
           </div>
@@ -83,7 +83,7 @@ export default function AdminProcurement({ projectId, procurements = [], createP
              </div>
            )}
 
-           <div style={{ padding: '12px', background: '#F4F4FA', borderRadius: 12, display: 'flex', flexDirection: 'column', gap: 12 }}>
+           <div style={{ padding: '12px', background: '#F8F8FD', borderRadius: 12, display: 'flex', flexDirection: 'column', gap: 12 }}>
                <label className="lxf" style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
                   <input type="checkbox" checked={na.isShipment} onChange={e => setNa({...na, isShipment: e.target.checked})} />
                   Track as Shipment (Logistics Gateway)
@@ -106,7 +106,7 @@ export default function AdminProcurement({ projectId, procurements = [], createP
             return (
               <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 12, border: '1px solid rgba(0,0,0,.05)', borderRadius: 8 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                   <div style={{ width: 32, height: 32, borderRadius: 8, background: '#F4F4FA', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16 }}>
+                   <div style={{ width: 32, height: 32, borderRadius: 8, background: '#F8F8FD', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16 }}>
                       {stage.icon}
                    </div>
                    <div>

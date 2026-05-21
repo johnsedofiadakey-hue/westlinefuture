@@ -4,7 +4,7 @@ import { FF as PFormField } from '../../components/Shared';
 import { uploadFile } from '../../lib/firebase';
 import { compressImage } from '../../lib/image-utils';
 
-export default function AdminPortfolio({ content, syncCMS, brand }) {
+export default function AdminPortfolio({ content, syncCMS, brand, notify }) {
   const ac = brand?.color || '#231F78';
   const portfolio = content?.portfolio || [];
   
@@ -21,7 +21,7 @@ export default function AdminPortfolio({ content, syncCMS, brand }) {
       after: 'https://images.unsplash.com/photo-1616137466211-f939a420be84?w=900&q=80',
       before: '',
       year: new Date().getFullYear().toString(),
-      loc: 'International Project',
+      loc: 'International',
       area: 'TBD',
       duration: 'TBD',
       budget: 'TBD',
@@ -55,7 +55,7 @@ export default function AdminPortfolio({ content, syncCMS, brand }) {
         const compressed = await compressImage(file, { maxWidth: 1600, quality: 0.7 });
         const url = await uploadFile('assets', `portfolio/${Date.now()}_${field}_${file.name}`, compressed);
         updateProj(idx, { [field]: url, hasBA: field === 'before' ? true : portfolio[idx].hasBA });
-      } catch (err) { alert('Upload failed: ' + err.message); }
+      } catch (err) { notify?.('error', 'Upload failed: ' + err.message); }
     }
   };
 
@@ -71,7 +71,7 @@ export default function AdminPortfolio({ content, syncCMS, brand }) {
           <div key={p.id} className="p-card" style={{ padding: 24 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 20 }}>
               <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
-                <div style={{ width: 100, height: 60, borderRadius: 6, overflow: 'hidden', background: '#F4F4FA' }}>
+                <div style={{ width: 100, height: 60, borderRadius: 6, overflow: 'hidden', background: '#F8F8FD' }}>
                   <img src={p.after} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                 </div>
                 <div>

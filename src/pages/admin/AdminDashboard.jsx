@@ -6,7 +6,7 @@ import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, 
   ResponsiveContainer 
 } from 'recharts';
-import { REV } from '../../data';
+import { REV, CLIENT_PROJECT_STAGES } from '../../data';
 
 export default function AdminDashboard({ clients, invoices, proposals, brand, getSLA, stats, ...props }) {
   const ac = brand.color || '#231F78';
@@ -26,8 +26,8 @@ export default function AdminDashboard({ clients, invoices, proposals, brand, ge
   const activeShipments = (props.procurements || []).filter(p => p?.isShipment && p?.status !== 'Delivered' && p?.status !== 'delivered').length;
 
   const dashboardStats = [
-    { label: 'Settled Revenue', value: `$${(totalRev / 1000).toFixed(1)}k`, icon: <DollarSign size={22} />, sub: 'Validated liquidity', color: '#16A34A', trend: 18 },
-    { label: 'Awaiting Capital', value: `$${(totalUnpaid / 1000).toFixed(1)}k`, icon: <Receipt size={22} />, sub: `${pendingInvs.length} active invoices`, color: '#B45309', trend: 2 },
+    { label: 'Settled Revenue', value: `GH₵${(totalRev / 1000).toFixed(1)}k`, icon: <DollarSign size={22} />, sub: 'Validated liquidity', color: '#16A34A', trend: 18 },
+    { label: 'Awaiting Capital', value: `GH₵${(totalUnpaid / 1000).toFixed(1)}k`, icon: <Receipt size={22} />, sub: `${pendingInvs.length} active invoices`, color: '#B45309', trend: 2 },
     { label: 'Risk Exposure', value: delayedProjects, icon: <AlertTriangle size={22} />, sub: 'SLA priority alerts', color: '#EF4444', trend: -5 },
     { label: 'Client Approvals', value: pendingApprovals, icon: <CheckCircle size={22} />, sub: 'Pending terminal sign-offs', color: ac, trend: 12 },
   ];
@@ -114,7 +114,7 @@ export default function AdminDashboard({ clients, invoices, proposals, brand, ge
                <div className="lxf eyebrow" style={{ fontSize: 10, letterSpacing: '.1em', color: 'rgba(255,255,255,0.5)', fontWeight: 800 }}>Total Value in Transit</div>
             </div>
             <div className="lxfh" style={{ fontSize: 32, letterSpacing: '-0.03em' }}>
-              ${(( (props.containers || []).filter(c => c.status !== 'Delivered').reduce((acc, c) => acc + (c.value || 25000), 0) ) / 1000).toFixed(1)}k
+              GH₵{(( (props.containers || []).filter(c => c.status !== 'Delivered').reduce((acc, c) => acc + (c.value || 0), 0) ) / 1000).toFixed(1)}k
             </div>
             <div style={{ fontSize: 11, color: '#16A34A', fontWeight: 700 }}>Active Shipments Risk</div>
          </div>
@@ -127,7 +127,7 @@ export default function AdminDashboard({ clients, invoices, proposals, brand, ge
                <div className="lxf eyebrow" style={{ fontSize: 10, letterSpacing: '.1em', color: 'rgba(255,255,255,0.5)', fontWeight: 800 }}>Settled Liquidity</div>
             </div>
             <div className="lxfh" style={{ fontSize: 32, letterSpacing: '-0.03em' }}>
-               ${(totalRev / 1000).toFixed(1)}k
+               GH₵{(totalRev / 1000).toFixed(1)}k
             </div>
             <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>Valid cash on hand</div>
          </div>
@@ -140,7 +140,7 @@ export default function AdminDashboard({ clients, invoices, proposals, brand, ge
                <div className="lxf eyebrow" style={{ fontSize: 10, letterSpacing: '.1em', color: 'rgba(255,255,255,0.5)', fontWeight: 800 }}>Awaiting Release</div>
             </div>
             <div className="lxfh" style={{ fontSize: 32, letterSpacing: '-0.03em' }}>
-               ${(( (clients || []).filter(c => c.stage >= 11).reduce((acc, c) => acc + parseFloat(c.amount?.replace(/[$,]/g, '') || 0), 0) ) / 1000).toFixed(1)}k
+               GH₵{(( (clients || []).filter(c => c.stage >= 11).reduce((acc, c) => acc + (parseFloat(String(c.amount || 0).replace(/[₵,GH]/g, '')) || 0), 0) ) / 1000).toFixed(1)}k
             </div>
             <div style={{ fontSize: 11, color: '#EF4444', fontWeight: 700 }}>Installation Escrow</div>
          </div>
@@ -221,6 +221,75 @@ export default function AdminDashboard({ clients, invoices, proposals, brand, ge
         ))}
       </div>
  
+      {/* 3.5 NEEDS ATTENTION */}
+      {clients && clients.length > 0 && (() => {
+        const getDays = (p) => {
+          const entry = [...(p.stageHistory || [])].reverse().find(h => h.stageId === p.stageId);
+          const ts = entry?.timestamp;
+          if (!ts) return 0;
+          const d = ts?.toDate ? ts.toDate() : new Date(ts);
+          return Math.floor((Date.now() - d.getTime()) / 86400000);
+        };
+        const stuckProjects = clients.filter(project => {
+          if (!project.stageId || project.stageId === 7) return false;
+          const history = project.stageHistory || [];
+          const entry = [...history].reverse().find(h => h.stageId === project.stageId);
+          const ts = entry?.timestamp;
+          if (!ts) return false;
+          const d = ts?.toDate ? ts.toDate() : new Date(ts);
+          const days = Math.floor((Date.now() - d.getTime()) / 86400000);
+          return days >= 5;
+        }).sort((a, b) => getDays(b) - getDays(a)).slice(0, 8);
+
+        return (
+          <div style={{ background: '#fff', border: '1px solid #E8E6F5', borderRadius: 20, padding: 28 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
+              <div style={{ width: 44, height: 44, borderRadius: 12, background: '#FFF7ED', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <AlertTriangle size={20} color="#D97706" />
+              </div>
+              <div>
+                <div className="lxfh" style={{ fontSize: 18, letterSpacing: '-0.01em' }}>Needs Attention</div>
+                <div className="lxf" style={{ fontSize: 12, color: '#9B99C8' }}>Projects stuck in their current stage for 5+ days</div>
+              </div>
+            </div>
+            {stuckProjects.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '32px 16px', border: '1px dashed #E8E6F5', borderRadius: 16, color: '#16A34A', fontSize: 13, background: 'rgba(22,163,74,0.03)' }}>
+                <CheckCircle size={22} style={{ marginBottom: 8 }} />
+                <div style={{ fontWeight: 700 }}>All projects are moving ✓</div>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {stuckProjects.map(project => {
+                  const days = getDays(project);
+                  const stageObj = CLIENT_PROJECT_STAGES.find(s => s.id === project.stageId);
+                  const badgeBg = days > 14 ? '#EF4444' : '#D97706';
+                  return (
+                    <div key={project.id} style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '12px 16px', background: '#F8F8FD', borderRadius: 12 }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 14, fontWeight: 700, color: '#0D0B2E', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{project.title || project.name || 'Untitled Project'}</div>
+                        <div style={{ fontSize: 11, color: '#5B5894', marginTop: 2 }}>{project.clientName || ''} · {stageObj?.name || `Stage ${project.stageId}`}</div>
+                      </div>
+                      <div style={{ background: badgeBg, color: '#fff', padding: '4px 10px', borderRadius: 100, fontSize: 11, fontWeight: 800, whiteSpace: 'nowrap' }}>
+                        {days}d stuck
+                      </div>
+                      <button
+                        onClick={() => {
+                          props.onSelectClient && props.onSelectClient(project.clientId);
+                          props.setView && props.setView('client-hub');
+                        }}
+                        style={{ padding: '8px 14px', borderRadius: 10, background: '#0D0B2E', color: '#fff', border: 'none', fontSize: 12, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}
+                      >
+                        View →
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
       {/* 3. PERFORMANCE ARCHITECTURE */}
       <div className="hub-grid">
         {/* REVENUE MOMENTUM */}
@@ -238,7 +307,7 @@ export default function AdminDashboard({ clients, invoices, proposals, brand, ge
                <AreaChart data={dynamicRevData} margin={{ top: 20, right: 30, left: 0, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,.03)" vertical={false} />
                 <XAxis dataKey="m" tick={{ fill: '#9B99C8', fontSize: 10 }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fill: '#9B99C8', fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={v => `$${v}k`} />
+                <YAxis tick={{ fill: '#9B99C8', fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={v => `GH₵${v}k`} />
                 <Tooltip 
                   contentStyle={{ borderRadius: 16, border: 'none', boxShadow: '0 20px 40px rgba(0,0,0,0.1)', background: '#0D0B2E', color: '#fff' }} 
                   itemStyle={{ fontSize: 12, fontWeight: 800 }}
@@ -259,17 +328,26 @@ export default function AdminDashboard({ clients, invoices, proposals, brand, ge
         <div style={{ display: 'flex', flexDirection: 'column', gap: 32 }}>
           {/* PRODUCTION CAPACITY GAUGE */}
           <div className="p-card" style={{ padding: 40, background: '#0D0B2E', color: '#fff', borderRadius: 32, border: 'none' }}>
-             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 32 }}>
-                <h3 className="lxfh" style={{ fontSize: 24 }}>Factory Throughput</h3>
-                <div style={{ fontSize: 10, fontWeight: 800, color: ac }}>94% EFFICIENCY</div>
-             </div>
-             <div style={{ height: 8, background: 'rgba(255,255,255,0.1)', borderRadius: 10, overflow: 'hidden', marginBottom: 20 }}>
-                <div style={{ width: '82%', height: '100%', background: ac }} />
-             </div>
-             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, fontWeight: 700, opacity: 0.6 }}>
-                <span>Active Fabrication: {activeJobs} Jobs</span>
-                <span>Max Capacity: 50 Jobs</span>
-             </div>
+             {(() => {
+               const maxCap = 50;
+               const pct = Math.min(100, Math.round((activeJobs / maxCap) * 100));
+               const barColor = pct >= 90 ? '#EF4444' : pct >= 70 ? '#D97706' : ac;
+               return (
+                 <>
+                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 32 }}>
+                     <h3 className="lxfh" style={{ fontSize: 24 }}>Factory Throughput</h3>
+                     <div style={{ fontSize: 10, fontWeight: 800, color: barColor }}>{pct}% LOAD</div>
+                   </div>
+                   <div style={{ height: 8, background: 'rgba(255,255,255,0.1)', borderRadius: 10, overflow: 'hidden', marginBottom: 20 }}>
+                     <div style={{ width: `${pct}%`, height: '100%', background: barColor, transition: 'width 0.8s ease' }} />
+                   </div>
+                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, fontWeight: 700, opacity: 0.6 }}>
+                     <span>Active Fabrication: {activeJobs} Jobs</span>
+                     <span>Max Capacity: {maxCap} Jobs</span>
+                   </div>
+                 </>
+               );
+             })()}
           </div>
           {/* OPERATIONS FEED */}
           <div className="p-card" style={{ padding: 40, background: 'rgba(255,255,255,0.6)', backdropFilter: 'blur(20px)', borderRadius: 32, border: '1px solid rgba(255,255,255,0.5)' }}>
@@ -280,8 +358,8 @@ export default function AdminDashboard({ clients, invoices, proposals, brand, ge
              
              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                 {(props.logs || []).slice(0, 5).map(l => (
-                  <div key={l.id} style={{ display: 'flex', gap: 16, alignItems: 'center', padding: '12px', borderRadius: 16, border: '1px solid #F4F4FA' }}>
-                     <div style={{ width: 44, height: 44, borderRadius: 12, background: '#F4F4FA', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <div key={l.id} style={{ display: 'flex', gap: 16, alignItems: 'center', padding: '12px', borderRadius: 16, border: '1px solid #F8F8FD' }}>
+                     <div style={{ width: 44, height: 44, borderRadius: 12, background: '#F8F8FD', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                         <Activity size={18} color={ac} />
                      </div>
                      <div style={{ flex: 1 }}>
@@ -294,7 +372,7 @@ export default function AdminDashboard({ clients, invoices, proposals, brand, ge
              
               <button 
                 onClick={() => typeof props.setMod === 'function' && props.setMod('AuditLog')}
-                style={{ width: '100%', marginTop: 24, padding: 14, borderRadius: 12, background: '#F4F4FA', border: '1px solid #E8E6F5', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}
+                style={{ width: '100%', marginTop: 24, padding: 14, borderRadius: 12, background: '#F8F8FD', border: '1px solid #E8E6F5', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}
               >
                 Full Operations Audit
               </button>

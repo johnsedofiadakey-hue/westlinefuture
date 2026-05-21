@@ -1,10 +1,12 @@
 import React, { useState, useEffect, lazy, Suspense, useContext } from 'react';
 import { AppContext } from '../context/AppContext';
-import { 
-  ChevronRight, ChevronLeft, Award, Check, Play, X, ArrowLeft, Star, 
-  SplitSquareHorizontal, Layout, Home, Layers, Droplet, Zap, Settings, 
-  Hammer, Palette, Package, Mail, Truck, CreditCard, Building, 
-  CheckCircle, Send, Sparkles, MapPin, Calendar, Menu, Bell
+import {
+  ChevronRight, ChevronLeft, Award, Check, Play, X, ArrowLeft, Star,
+  SplitSquareHorizontal, Layout, Home, Layers, Droplet, Zap, Settings,
+  Hammer, Palette, Package, Mail, Truck, CreditCard, Building,
+  CheckCircle, Send, Sparkles, MapPin, Calendar, Menu, Bell,
+  ShieldCheck, Clock, Globe2, Wrench, Quote,
+  AppWindow, ShowerHead, ChefHat, Shirt, LayoutGrid, DoorOpen, Droplets, PlugZap
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useSearchParams } from 'react-router-dom';
@@ -12,6 +14,7 @@ import { HERO_SLIDES, ABOUT_DATA } from '../data';
 
 const ContactPage = lazy(() => import('./ContactPage'));
 const AboutPage = lazy(() => import('./AboutPage'));
+const ServicesPage = lazy(() => import('./ServicesPage'));
 
 // --- HELPERS ---
 export function useWindowWidth() {
@@ -46,6 +49,7 @@ export function PubNav({ brand, setPage, activePage, onPortal, user, menuOpen, s
 
   const links = [
     { n: 'Home', id: 'home' },
+    { n: 'Services', id: 'services' },
     { n: 'Products', id: 'products' },
     { n: 'Showroom', id: 'showcase', badge: 'LUXE' },
     { n: 'Portfolio', id: 'portfolio' },
@@ -77,10 +81,8 @@ export function PubNav({ brand, setPage, activePage, onPortal, user, menuOpen, s
                 alt={brand.name}
                 style={{
                   height: mob ? (scrolled ? 36 : 44) : (scrolled ? 52 : 68),
-                  width: 'auto',
-                  maxWidth: mob ? 160 : 240,
-                  objectFit: 'contain',
-                  display: 'block',
+                  width: 'auto', maxWidth: mob ? 160 : 240,
+                  objectFit: 'contain', display: 'block',
                   transition: 'all 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
                 }}
               />
@@ -99,7 +101,8 @@ export function PubNav({ brand, setPage, activePage, onPortal, user, menuOpen, s
             <div style={{ display: 'flex', gap: 36, alignItems: 'center' }}>
               {links.map(l => (
                 <button key={l.id} onClick={() => {
-                  if (l.id === 'products') navigate('/products');
+                  if (l.id === 'home') { navigate('/'); if (setPage) setPage('home'); }
+                  else if (l.id === 'products') navigate('/products');
                   else if (l.id === 'showcase') navigate('/showcase');
                   else if (l.id === 'portfolio') navigate('/portfolio');
                   else if (setPage) {
@@ -123,7 +126,7 @@ export function PubNav({ brand, setPage, activePage, onPortal, user, menuOpen, s
               <div style={{ position: 'relative', marginRight: 16 }}>
                 <button 
                   onClick={() => setShowNotifDropdown(!showNotifDropdown)}
-                  style={{ background: 'none', border: 'none', color: isScrolled ? DARK_TEXT : '#fff', cursor: 'pointer', padding: 8, display: 'flex', alignItems: 'center' }}
+                  style={{ background: 'none', border: 'none', color: '#ffffff', cursor: 'pointer', padding: 8, display: 'flex', alignItems: 'center' }}
                 >
                   <Bell size={20} />
                   {userNotifications.filter(n => !n.read).length > 0 && (
@@ -137,7 +140,7 @@ export function PubNav({ brand, setPage, activePage, onPortal, user, menuOpen, s
                     <div style={{ fontSize: 12, fontWeight: 800, marginBottom: 12, textTransform: 'uppercase', color: DARK_TEXT }}>Notifications</div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 12, maxHeight: 300, overflowY: 'auto' }}>
                       {userNotifications.length > 0 ? userNotifications.map(n => (
-                        <div key={n.id} style={{ fontSize: 12, color: n.read ? '#9B99C8' : '#0D0B2E', borderBottom: '1px solid #F4F4FA', paddingBottom: 8 }}>
+                        <div key={n.id} style={{ fontSize: 12, color: n.read ? '#9B99C8' : '#0D0B2E', borderBottom: '1px solid #F8F8FD', paddingBottom: 8 }}>
                           {n.message}
                           <div style={{ fontSize: 10, color: '#9B99C8', marginTop: 4 }}>{new Date(n.createdAt).toLocaleDateString()}</div>
                         </div>
@@ -152,8 +155,7 @@ export function PubNav({ brand, setPage, activePage, onPortal, user, menuOpen, s
             {onPortal && (
               <button onClick={() => onPortal && onPortal('client')} style={{
                 padding: '12px 28px', fontSize: 10, fontWeight: 800,
-                background: 'rgba(255,255,255,0.15)',
-                color: '#ffffff',
+                background: 'rgba(255,255,255,0.15)', color: '#ffffff',
                 borderRadius: 12, border: '1px solid rgba(255,255,255,0.25)',
                 textTransform: 'uppercase', letterSpacing: '0.12em', cursor: 'pointer',
                 backdropFilter: 'blur(8px)', transition: 'all 0.3s'
@@ -200,9 +202,10 @@ export function PubNav({ brand, setPage, activePage, onPortal, user, menuOpen, s
           {links.map((l, i) => (
             <button 
               key={l.id} 
-              onClick={() => { 
+              onClick={() => {
                 setMenuOpen(false);
-                if (l.id === 'products') navigate('/products');
+                if (l.id === 'home') { navigate('/'); if (setPage) setPage('home'); }
+                else if (l.id === 'products') navigate('/products');
                 else if (l.id === 'showcase') navigate('/showcase');
                 else if (l.id === 'portfolio') navigate('/portfolio');
                 else if (setPage) {
@@ -226,7 +229,7 @@ export function PubNav({ brand, setPage, activePage, onPortal, user, menuOpen, s
               <div style={{ fontSize: 12, fontWeight: 800, marginBottom: 12, textTransform: 'uppercase', color: ac }}>Notifications</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12, maxHeight: 200, overflowY: 'auto' }}>
                 {userNotifications.map(n => (
-                  <div key={n.id} style={{ fontSize: 13, color: n.read ? '#9B99C8' : DARK_TEXT, borderBottom: '1px solid #F4F4FA', paddingBottom: 8 }}>
+                  <div key={n.id} style={{ fontSize: 13, color: n.read ? '#9B99C8' : DARK_TEXT, borderBottom: '1px solid #F8F8FD', paddingBottom: 8 }}>
                     {n.message}
                     <div style={{ fontSize: 10, color: '#9B99C8', marginTop: 4 }}>{new Date(n.createdAt).toLocaleDateString()}</div>
                   </div>
@@ -261,16 +264,16 @@ export function Footer({ brand, setPage, onPortal, navigate }) {
               <img src={brand.logo} alt={brand.name} style={{ height: 48, width: 'auto', objectFit: 'contain', display: 'block', marginBottom: 20 }} />
             ) : (
               <div style={{ marginBottom: 20 }}>
-                <div style={{ fontSize: 22, fontWeight: 900, color: '#ffffff', letterSpacing: '0.04em' }}>WESTLINE FUTURE</div>
+                <div style={{ fontSize: 20, fontWeight: 900, color: '#ffffff', letterSpacing: '0.04em' }}>WESTLINE FUTURE</div>
                 <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', letterSpacing: '0.2em', marginTop: 2 }}>GLOBAL TRADING CO., LTD</div>
               </div>
             )}
-            <p style={{ color: 'rgba(255,255,255,0.5)', lineHeight: 1.8, fontSize: 14 }}>Global precision meets local delivery. Premium structural glass, aluminum works, and interior finishing solutions for ambitious architectural projects worldwide.</p>
+            <p style={{ color: 'rgba(255,255,255,0.5)', lineHeight: 1.8, fontSize: 14 }}>Global precision meets local delivery. Premium structural glass, aluminum works, and interior finishing solutions for the world's most ambitious architectural projects.</p>
           </div>
           <div>
             <h4 style={{ fontSize: 12, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.2em', marginBottom: 24 }}>Navigation</h4>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              {['Home', 'Products', 'Showroom', 'Portfolio', 'About', 'Contact'].map(n => (
+              {['Home', 'Services', 'Products', 'Showroom', 'Portfolio', 'About', 'Contact'].map(n => (
                 <button key={n} onClick={() => {
                   const id = n.toLowerCase();
                   if (id === 'products') navigate('/products');
@@ -287,19 +290,53 @@ export function Footer({ brand, setPage, onPortal, navigate }) {
           </div>
           <div>
             <h4 style={{ fontSize: 12, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.2em', marginBottom: 24 }}>Capabilities</h4>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, fontSize: 14, color: 'rgba(255,255,255,0.5)' }}>
-              <span>Glass Engineering</span>
-              <span>Interior Fit-out</span>
-              <span>China Procurement</span>
-              <span>Technical Systems</span>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 11 }}>
+              {[
+                { Icon: Layers,     label: 'Glass & Glazing'       },
+                { Icon: AppWindow,  label: 'Aluminium Windows'      },
+                { Icon: ShowerHead, label: 'Bathroom Installation'  },
+                { Icon: ChefHat,    label: 'Kitchen Renovation'     },
+                { Icon: Shirt,      label: 'Wardrobes & Storage'    },
+                { Icon: LayoutGrid, label: 'Tiles & Flooring'       },
+                { Icon: DoorOpen,   label: 'Doors'                  },
+                { Icon: Zap,        label: 'Electrical Works'       },
+                { Icon: Droplets,   label: 'Plumbing Works'         },
+              ].map(({ Icon, label }) => (
+                <button
+                  key={label}
+                  onClick={() => navigate('/?page=services')}
+                  style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.45)', cursor: 'pointer', textAlign: 'left', fontSize: 13, padding: 0, display: 'flex', alignItems: 'center', gap: 10, transition: 'color 0.2s' }}
+                  onMouseOver={e => e.currentTarget.style.color = ac}
+                  onMouseOut={e => e.currentTarget.style.color = 'rgba(255,255,255,0.45)'}
+                >
+                  <Icon size={13} strokeWidth={1.75} style={{ flexShrink: 0 }} />
+                  {label}
+                </button>
+              ))}
             </div>
           </div>
           <div>
             <h4 style={{ fontSize: 12, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.2em', marginBottom: 24 }}>Contact</h4>
-            <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 14, lineHeight: 1.8 }}>
+            <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 14, lineHeight: 1.8, marginBottom: 24 }}>
               {brand.location}<br />
               {brand.phone}<br />
               {brand.email}
+            </div>
+            <h4 style={{ fontSize: 12, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.2em', marginBottom: 16 }}>Follow Us</h4>
+            <div style={{ display: 'flex', gap: 12 }}>
+              {[
+                { label: 'Instagram', href: brand.instagram, svg: <svg viewBox="0 0 24 24" width={18} height={18} fill="currentColor"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/></svg> },
+                { label: 'Facebook', href: brand.facebook, svg: <svg viewBox="0 0 24 24" width={18} height={18} fill="currentColor"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg> },
+                { label: 'LinkedIn', href: brand.linkedin, svg: <svg viewBox="0 0 24 24" width={18} height={18} fill="currentColor"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg> },
+                { label: 'TikTok', href: brand.tiktok, svg: <svg viewBox="0 0 24 24" width={18} height={18} fill="currentColor"><path d="M12.525.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.05-2.89-.35-4.2-.97-.57-.26-1.1-.59-1.62-.93-.01 2.92.01 5.84-.02 8.75-.08 1.4-.54 2.79-1.35 3.94-1.31 1.92-3.58 3.17-5.91 3.21-1.43.08-2.86-.31-4.08-1.03-2.02-1.19-3.44-3.37-3.65-5.71-.02-.5-.03-1-.01-1.49.18-1.9 1.12-3.72 2.58-4.96 1.66-1.44 3.98-2.13 6.15-1.72.02 1.48-.04 2.96-.04 4.44-.99-.32-2.15-.23-3.02.37-.63.41-1.11 1.04-1.36 1.75-.21.51-.15 1.07-.14 1.61.24 1.64 1.82 3.02 3.5 2.87 1.12-.01 2.19-.66 2.77-1.61.19-.33.4-.67.41-1.06.1-1.79.06-3.57.07-5.36.01-4.03-.01-8.05.02-12.07z"/></svg> },
+                { label: 'YouTube', href: brand.youtube, svg: <svg viewBox="0 0 24 24" width={18} height={18} fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg> },
+              ].filter(s => s.href).map(s => (
+                <a key={s.label} href={s.href} target="_blank" rel="noopener noreferrer" title={s.label}
+                  style={{ width: 38, height: 38, borderRadius: 10, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(255,255,255,0.5)', transition: 'all 0.2s', textDecoration: 'none' }}
+                  onMouseOver={e => { e.currentTarget.style.background = ac; e.currentTarget.style.color = '#fff'; e.currentTarget.style.borderColor = ac; }}
+                  onMouseOut={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.06)'; e.currentTarget.style.color = 'rgba(255,255,255,0.5)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)'; }}
+                >{s.svg}</a>
+              ))}
             </div>
           </div>
         </div>
@@ -329,7 +366,7 @@ export function Hero({ slides, brand, navigate, setPage }) {
   return (
     <section style={{ height: '100vh', position: 'relative', background: LIGHT_BG, overflow: 'hidden' }}>
       {slides.map((s, i) => (
-        <div key={i} style={{
+        <div key={s.title || i} style={{
           position: 'absolute', inset: 0, transition: 'opacity 0.8s cubic-bezier(0.4, 0, 0.2, 1)',
           opacity: active === i ? 1 : 0, zIndex: active === i ? 1 : 0,
           background: '#0D0B2E' 
@@ -390,37 +427,242 @@ export function Hero({ slides, brand, navigate, setPage }) {
   );
 }
 
-export function ServicesPreview({ brand, navigate }) {
+export function ServicesPreview({ brand, navigate, services }) {
   const winW = useWindowWidth();
   const mob = isMob(winW);
   const ac = brand.color || AC;
 
-  const services = [
-    { title: 'Glass Engineering', desc: 'Custom structural glazing, balustrades, and washroom systems.', icon: <Droplet /> },
-    { title: 'Interior Fit-out', desc: 'Luxury finishing, kitchen systems, and custom cabinetry.', icon: <Layout /> },
-    { title: 'China Sourcing', desc: 'Direct procurement and logistics for premium materials.', icon: <Package /> }
+  const DEFAULT_SVCS = [
+    { Icon: Layers,     name: 'Glass & Glazing',       short: 'Frameless glass, balustrades, curtain walls, glass partitions & shopfronts.', id: 'glass' },
+    { Icon: AppWindow,  name: 'Aluminium Windows',      short: 'Casement, sliding & louvre aluminium windows and doors — fabricated to spec.', id: 'aluminium' },
+    { Icon: ShowerHead, name: 'Bathroom Installation',  short: 'Full bathroom fit-out — shower cubicles, vanities, WC, tiles & plumbing.', id: 'washroom' },
+    { Icon: ChefHat,    name: 'Kitchen Renovation',     short: 'Custom kitchen cabinets, worktops, sinks — modular kitchen supply & install.', id: 'kitchen' },
+    { Icon: Shirt,      name: 'Wardrobes & Storage',    short: 'Sliding wardrobes, walk-in closets & fitted storage systems for every room.', id: 'wardrobe' },
+    { Icon: LayoutGrid, name: 'Tiles Supply & Fixing',  short: 'Porcelain, ceramic & outdoor tiles — supply only or full supply-and-fix.', id: 'tiles' },
+    { Icon: DoorOpen,   name: 'Doors Installation',     short: 'Timber, WPC & security doors — frames, handles & complete door systems.', id: 'doors' },
+    { Icon: Zap,        name: 'Electrical Works',        short: 'Full wiring, LED lighting, smart switches, DB boards & socket installations.', id: 'electrical' },
+    { Icon: Droplets,   name: 'Plumbing Works',          short: 'Plumbing installations, sanitary fittings, water heaters & pipe systems.', id: 'plumbing' },
   ];
+  const items = (services && services.length >= 6) ? services : DEFAULT_SVCS;
 
   return (
-    <section style={{ padding: mob ? '80px 24px' : '140px 5vw', background: '#F8F8FD' }}>
+    <section style={{ padding: mob ? '80px 24px' : '120px 5vw', background: '#FDFCFB' }}>
       <div style={{ maxWidth: 1400, margin: '0 auto' }}>
-        <div style={{ marginBottom: 80, textAlign: mob ? 'center' : 'left' }}>
-          <span style={{ color: ac, fontSize: 10, fontWeight: 800, letterSpacing: '0.3em', textTransform: 'uppercase' }}>CAPABILITIES</span>
-          <h2 style={{ fontSize: mob ? 40 : 72, fontWeight: 800, letterSpacing: '-0.04em', margin: '16px 0 0', color: DARK_TEXT }}>Structural <em style={{ fontStyle: 'italic', fontWeight: 400, color: ac }}>Precision</em>.</h2>
+        <div style={{ marginBottom: mob ? 48 : 64, display: 'flex', flexDirection: mob ? 'column' : 'row', justifyContent: 'space-between', alignItems: mob ? 'flex-start' : 'flex-end', gap: 24 }}>
+          <div>
+            <span style={{ color: ac, fontSize: 10, fontWeight: 800, letterSpacing: '0.3em', textTransform: 'uppercase' }}>EVERYTHING INTERIOR</span>
+            <h2 style={{ fontSize: mob ? 36 : 64, fontWeight: 800, letterSpacing: '-0.04em', margin: '16px 0 0', color: DARK_TEXT, lineHeight: 1.05 }}>
+              One company,<br />
+              <em style={{ fontStyle: 'italic', fontWeight: 400, color: ac }}>every service.</em>
+            </h2>
+          </div>
+          <button
+            onClick={() => navigate('/?page=services')}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '14px 28px', background: DARK_TEXT, color: '#fff', border: 'none', borderRadius: 14, fontWeight: 800, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}
+          >
+            All Services <ChevronRight size={15} />
+          </button>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: mob ? '1fr' : 'repeat(3, 1fr)', gap: mob ? 16 : 32 }}>
-          {services.map((s, i) => (
-            <div key={i} style={{ padding: mob ? '32px 24px' : '48px', background: '#fff', border: '1px solid rgba(0,0,0,0.05)', borderRadius: 24, boxShadow: '0 10px 30px rgba(0,0,0,0.02)' }}>
-
-              <div style={{ color: ac, marginBottom: 32 }}>{s.icon}</div>
-              <h3 style={{ fontSize: 24, fontWeight: 800, marginBottom: 16, color: DARK_TEXT }}>{s.title}</h3>
-              <p style={{ color: 'rgba(13,11,46,0.6)', lineHeight: 1.8, marginBottom: 32 }}>{s.desc}</p>
-              <button onClick={() => navigate('/portfolio')} style={{ background: 'none', border: 'none', color: ac, fontWeight: 800, fontSize: 11, textTransform: 'uppercase', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}>
-                View Portfolio <ChevronRight size={14} />
-              </button>
+        <div style={{ display: 'grid', gridTemplateColumns: mob ? '1fr 1fr' : 'repeat(3, 1fr)', gap: mob ? 12 : 20 }}>
+          {items.slice(0, 9).map((s, i) => (
+            <div
+              key={s.id || s.name || i}
+              onClick={() => navigate('/?page=services')}
+              style={{ padding: mob ? '20px 16px' : '36px 32px', background: '#fff', border: '1px solid rgba(0,0,0,0.05)', borderRadius: 20, boxShadow: '0 4px 16px rgba(0,0,0,0.02)', transition: 'transform 0.25s ease, box-shadow 0.25s ease', cursor: 'pointer' }}
+              onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-4px)'; e.currentTarget.style.boxShadow = '0 20px 40px rgba(0,0,0,0.08)'; }}
+              onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 4px 16px rgba(0,0,0,0.02)'; }}
+            >
+              <div style={{ width: 44, height: 44, borderRadius: 14, background: `${ac}15`, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: mob ? 16 : 24, color: ac }}>
+                {s.Icon ? <s.Icon size={20} strokeWidth={1.75} /> : <Layers size={20} strokeWidth={1.75} />}
+              </div>
+              <h3 style={{ fontSize: mob ? 14 : 18, fontWeight: 800, marginBottom: 10, color: DARK_TEXT, lineHeight: 1.2 }}>{s.name || s.title}</h3>
+              {!mob && <p style={{ color: 'rgba(13,11,46,0.55)', lineHeight: 1.7, marginBottom: 20, fontSize: 13 }}>{s.short || s.desc}</p>}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: ac, fontWeight: 800, fontSize: 11, textTransform: 'uppercase' }}>
+                Learn more <ChevronRight size={12} />
+              </div>
             </div>
           ))}
         </div>
+      </div>
+    </section>
+  );
+}
+
+// --- STATS BAR ---
+const DEFAULT_STATS = [
+  { value: '200+', label: 'Projects Delivered', labelMob: 'Projects' },
+  { value: '12+',  label: 'Years Experience',   labelMob: 'Years' },
+  { value: '98%',  label: 'Client Satisfaction', labelMob: 'Satisfaction' },
+  { value: '8',    label: 'Countries Served',    labelMob: 'Countries' },
+];
+
+function StatsBar({ brand, stats }) {
+  const ac = brand.color || AC;
+  const items = (stats && stats.length) ? stats : DEFAULT_STATS;
+  return (
+    <section style={{ background: '#0D0B2E', padding: '48px 5vw' }}>
+      <div style={{ maxWidth: 1400, margin: '0 auto', display: 'grid', gridTemplateColumns: `repeat(${items.length}, 1fr)`, gap: 32 }}>
+        {items.map((s, i) => (
+          <div key={s.label || i} style={{ textAlign: 'center', borderRight: i < items.length - 1 ? '1px solid rgba(255,255,255,0.08)' : 'none', padding: '8px 16px' }}>
+            <div style={{ fontSize: 48, fontWeight: 900, color: ac, letterSpacing: '-0.03em', lineHeight: 1 }}>{s.value}</div>
+            <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.45)', marginTop: 8, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em' }}>{s.label}</div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function StatsBarMobile({ brand, stats }) {
+  const ac = brand.color || AC;
+  const items = (stats && stats.length) ? stats : DEFAULT_STATS;
+  return (
+    <section style={{ background: '#0D0B2E', padding: '40px 24px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px 16px' }}>
+        {items.map((s, i) => (
+          <div key={s.label || i} style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: 40, fontWeight: 900, color: ac, letterSpacing: '-0.03em', lineHeight: 1 }}>{s.value}</div>
+            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)', marginTop: 6, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>{s.labelMob || s.label}</div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+// --- WHY WESTLINE FUTURE ---
+const DEFAULT_WHY_US = [
+  { Icon: ShieldCheck, title: 'Guaranteed Quality',    desc: 'Every installation backed by a 2-year workmanship warranty and certified materials from vetted manufacturers.' },
+  { Icon: Clock,       title: 'On-Time Delivery',      desc: 'Our dedicated logistics team tracks every shipment. 94% of projects completed on or ahead of schedule.' },
+  { Icon: Globe2,      title: 'Direct China Sourcing', desc: 'We cut out middlemen. Factory-direct procurement means premium glass at 20–35% below market rates.' },
+  { Icon: Wrench,      title: 'Technical Expertise',   desc: 'CNC precision, sub-millimeter tolerances. Our engineers have handled façades, curtain walls, and interior systems for 12+ years.' },
+];
+
+function WhyWestline({ brand, navigate, reasons }) {
+  const ac = brand.color || AC;
+  const winW = useWindowWidth();
+  const mob = isMob(winW);
+  const items = (reasons && reasons.length) ? reasons : DEFAULT_WHY_US;
+
+  return (
+    <section style={{ padding: mob ? '80px 24px' : '140px 5vw', background: '#fff' }}>
+      <div style={{ maxWidth: 1400, margin: '0 auto' }}>
+        <div style={{ marginBottom: mob ? 48 : 80 }}>
+          <span style={{ color: ac, fontSize: 10, fontWeight: 800, letterSpacing: '0.3em', textTransform: 'uppercase' }}>WHY WESTLINE FUTURE</span>
+          <h2 style={{ fontSize: mob ? 36 : 64, fontWeight: 800, letterSpacing: '-0.04em', margin: '16px 0 0', color: DARK_TEXT, lineHeight: 1.1 }}>
+            Built to a{' '}
+            <em style={{ fontStyle: 'italic', fontWeight: 400, color: ac }}>higher standard.</em>
+          </h2>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: mob ? '1fr' : '1fr 1fr', gap: mob ? 20 : 32 }}>
+          {items.map((r, i) => (
+            <div key={r.title || i} style={{
+              display: 'flex', gap: 24, padding: mob ? '28px 24px' : '40px',
+              background: '#F8F8FD', borderRadius: 24,
+              border: '1px solid rgba(0,0,0,0.04)',
+              transition: 'transform 0.2s, box-shadow 0.2s',
+            }}
+              onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-4px)'; e.currentTarget.style.boxShadow = '0 20px 40px rgba(0,0,0,0.08)'; }}
+              onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = 'none'; }}
+            >
+              <div style={{ width: 52, height: 52, borderRadius: 16, background: `${ac}15`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: ac }}>
+                {r.Icon ? <r.Icon size={22} strokeWidth={1.75} /> : <ShieldCheck size={22} strokeWidth={1.75} />}
+              </div>
+              <div>
+                <h3 style={{ fontSize: 18, fontWeight: 800, color: DARK_TEXT, marginBottom: 10 }}>{r.title}</h3>
+                <p style={{ fontSize: 14, color: 'rgba(13,11,46,0.6)', lineHeight: 1.7, margin: 0 }}>{r.desc}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div style={{ marginTop: mob ? 40 : 64, textAlign: 'center' }}>
+          <button
+            onClick={() => navigate('/?page=contact')}
+            style={{ padding: '18px 48px', background: '#0D0B2E', color: '#fff', border: 'none', borderRadius: 14, fontWeight: 800, fontSize: 15, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 10 }}
+            onMouseEnter={e => e.currentTarget.style.background = ac}
+            onMouseLeave={e => e.currentTarget.style.background = '#0D0B2E'}
+          >
+            Start Your Project <ChevronRight size={16} />
+          </button>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// --- TESTIMONIALS ---
+const DEFAULT_TESTIMONIALS = [
+  { author: 'Kwame Asante',      text: 'Westline Future transformed our office with exceptional precision. The structural glazing exceeded every expectation — on time and on budget.',  projectTitle: 'Airport Hills Commercial Tower',  rating: 5 },
+  { author: 'Adwoa Mensah',      text: 'From site survey to final polish, the team was professional throughout. Sourcing directly from China kept costs reasonable without compromising on quality.', projectTitle: 'East Legon Residence',           rating: 5 },
+  { author: 'Richard Osei-Bonsu', text: 'The bespoke kitchen installation is flawless. Their CAD team got every measurement right, and installation was completed in under a week.', projectTitle: 'Cantonments Luxury Kitchen',       rating: 5 },
+];
+
+function TestimonialsSection({ brand, testimonials: propTestimonials, cmsTestimonials }) {
+  const ac = brand.color || AC;
+  const winW = useWindowWidth();
+  const mob = isMob(winW);
+  const [active, setActive] = useState(0);
+
+  // CMS-authored testimonials (admin-curated) take priority over client-submitted ones
+  const pool = (cmsTestimonials && cmsTestimonials.length >= 2)
+    ? cmsTestimonials
+    : (propTestimonials || []).filter(t => t.approved !== false);
+  const items = pool.length >= 2 ? pool : DEFAULT_TESTIMONIALS;
+
+  useEffect(() => {
+    if (items.length <= 1) return;
+    const t = setInterval(() => setActive(a => (a + 1) % items.length), 6000);
+    return () => clearInterval(t);
+  }, [items.length]);
+
+  const item = items[active];
+
+  return (
+    <section style={{ padding: mob ? '80px 24px' : '140px 5vw', background: '#F8F8FD' }}>
+      <div style={{ maxWidth: 900, margin: '0 auto' }}>
+        <div style={{ textAlign: 'center', marginBottom: mob ? 40 : 64 }}>
+          <span style={{ color: ac, fontSize: 10, fontWeight: 800, letterSpacing: '0.3em', textTransform: 'uppercase' }}>CLIENT STORIES</span>
+          <h2 style={{ fontSize: mob ? 36 : 56, fontWeight: 800, letterSpacing: '-0.04em', margin: '16px 0 0', color: DARK_TEXT }}>
+            Trusted by{' '}
+            <em style={{ fontStyle: 'italic', fontWeight: 400, color: ac }}>decision-makers.</em>
+          </h2>
+        </div>
+
+        <div style={{ background: '#fff', borderRadius: 28, padding: mob ? '40px 28px' : '64px 80px', boxShadow: '0 24px 60px rgba(0,0,0,0.06)', position: 'relative', minHeight: 240 }}>
+          <div style={{ color: ac, marginBottom: 24, opacity: 0.4 }}>
+            <Quote size={40} />
+          </div>
+
+          <p style={{ fontSize: mob ? 18 : 24, fontWeight: 500, color: DARK_TEXT, lineHeight: 1.65, margin: '0 0 40px', fontStyle: 'italic' }}>
+            "{item.text}"
+          </p>
+
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16 }}>
+            <div>
+              <div style={{ fontWeight: 800, fontSize: 15, color: DARK_TEXT }}>{item.author || item.name}</div>
+              <div style={{ fontSize: 12, color: 'rgba(13,11,46,0.45)', marginTop: 4 }}>{item.projectTitle || item.role}</div>
+            </div>
+            <div style={{ display: 'flex', gap: 4 }}>
+              {Array.from({ length: item.rating || 5 }).map((_, i) => (
+                <Star key={i} size={16} fill={ac} color={ac} />
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {items.length > 1 && (
+          <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 28 }}>
+            {items.map((_, i) => (
+              <button
+                key={i}
+                onClick={() => setActive(i)}
+                style={{ width: i === active ? 28 : 8, height: 8, borderRadius: 4, background: i === active ? ac : '#E8E6F5', border: 'none', cursor: 'pointer', transition: 'all 0.3s', padding: 0 }}
+              />
+            ))}
+          </div>
+        )}
       </div>
     </section>
   );
@@ -432,7 +674,7 @@ export function ServicesPreview({ brand, navigate }) {
 
 
 
-export default function PublicSite({ brand, setPage, page, onPortal, user, content, navigate, submitContact }) {
+export default function PublicSite({ brand, setPage, page, onPortal, user, content, navigate, submitContact, testimonials = [] }) {
   const [searchParams] = useSearchParams();
   const urlPage = searchParams.get('page');
   const p = urlPage || page || 'home';
@@ -453,19 +695,52 @@ export default function PublicSite({ brand, setPage, page, onPortal, user, conte
   useEffect(() => { window.scrollTo(0, 0); }, [p]);
 
   const render = () => {
+    const cta = content?.hero?.cta || {};
+    const ctaHeading = cta.heading || "Ready to build something remarkable?";
+    const ctaSub     = cta.sub     || "From concept to installation — our team handles every detail.";
+    const ctaBtn1    = cta.btn1    || "Request a Quote";
+    const ctaBtn2    = cta.btn2    || "View Portfolio";
+
     if (p === 'home') return (
       <>
         <Hero slides={content?.hero?.slides || HERO_SLIDES} brand={brand} navigate={navigate} />
-        <ServicesPreview brand={brand} navigate={navigate} />
-        <section style={{ padding: '100px 5vw', background: '#F4F4FA', color: DARK_TEXT, textAlign: 'center' }}>
-           <h2 style={{ fontSize: mob ? 32 : 64, fontWeight: 800, marginBottom: 40 }}>Ready to transform your space?</h2>
-           <button onClick={() => navigate('/portfolio')} style={{ padding: '24px 64px', background: brand.color || AC, color: '#fff', border: 'none', borderRadius: 16, fontWeight: 900, fontSize: 16, cursor: 'pointer', boxShadow: '0 20px 40px rgba(0,0,0,0.1)' }}>Explore Portfolio</button>
+        {mob
+          ? <StatsBarMobile brand={brand} stats={content?.stats} />
+          : <StatsBar brand={brand} stats={content?.stats} />}
+        <ServicesPreview brand={brand} navigate={navigate} services={content?.homeServices || content?.services} />
+        <WhyWestline brand={brand} navigate={navigate} reasons={content?.whyUs} />
+        <TestimonialsSection brand={brand} testimonials={testimonials} cmsTestimonials={content?.testimonials} />
+        <section style={{ padding: mob ? '80px 24px' : '120px 5vw', background: '#0D0B2E', color: '#fff', textAlign: 'center' }}>
+          <div style={{ maxWidth: 700, margin: '0 auto' }}>
+            <span style={{ color: brand.color || AC, fontSize: 10, fontWeight: 800, letterSpacing: '0.3em', textTransform: 'uppercase' }}>GET STARTED</span>
+            <h2 style={{ fontSize: mob ? 36 : 60, fontWeight: 800, marginBottom: 16, marginTop: 16, letterSpacing: '-0.04em', lineHeight: 1.1 }}>
+              {ctaHeading.split('something remarkable?')[0]}
+              {ctaHeading.includes('something remarkable?')
+                ? <><em style={{ fontStyle: 'italic', fontWeight: 400, color: brand.color || AC }}>something remarkable?</em></>
+                : null}
+              {!ctaHeading.includes('something remarkable?') && ctaHeading}
+            </h2>
+            <p style={{ fontSize: 16, color: 'rgba(255,255,255,0.5)', marginBottom: 40, lineHeight: 1.7 }}>{ctaSub}</p>
+            <div style={{ display: 'flex', gap: 16, justifyContent: 'center', flexWrap: 'wrap' }}>
+              <button onClick={() => navigate('/?page=contact')} style={{ padding: '18px 48px', background: brand.color || AC, color: '#0D0B2E', border: 'none', borderRadius: 14, fontWeight: 900, fontSize: 15, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                {ctaBtn1} <ChevronRight size={16} />
+              </button>
+              <button onClick={() => navigate('/portfolio')} style={{ padding: '18px 48px', background: 'rgba(255,255,255,0.06)', color: '#fff', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 14, fontWeight: 700, fontSize: 15, cursor: 'pointer' }}>
+                {ctaBtn2}
+              </button>
+            </div>
+          </div>
         </section>
       </>
     );
+    if (p === 'services') return (
+      <Suspense fallback={<div style={{ padding: 100, textAlign: 'center' }}>Loading...</div>}>
+        <ServicesPage brand={brand} navigate={navigate} />
+      </Suspense>
+    );
     if (p === 'about') return (
       <Suspense fallback={<div style={{ padding: 100, textAlign: 'center' }}>Loading About Page...</div>}>
-        <AboutPage brand={brand} content={content} />
+        <AboutPage brand={brand} content={content} navigate={navigate} />
       </Suspense>
     );
     if (p === 'contact') return (
@@ -486,7 +761,7 @@ export default function PublicSite({ brand, setPage, page, onPortal, user, conte
       
       {/* FLOATING WHATSAPP SUPPORT */}
       <a 
-        href={`https://wa.me/${brand.whatsapp || '233598455012'}`} 
+        href={`https://wa.me/${brand.whatsapp || '233598455012'}?text=${encodeURIComponent("Hi, I'm interested in a glass installation quote from Westline Future.")}`}
         target="_blank" 
         rel="noopener noreferrer"
         style={{

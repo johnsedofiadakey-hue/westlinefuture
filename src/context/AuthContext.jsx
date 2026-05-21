@@ -13,10 +13,16 @@ export const AuthProvider = ({ children }) => {
       setLoading(false);
       return;
     }
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setCurrentUser(user);
+    let unsubscribe = () => {};
+    try {
+      unsubscribe = onAuthStateChanged(auth, (user) => {
+        setCurrentUser(user);
+        setLoading(false);
+      });
+    } catch (e) {
+      if (import.meta.env.DEV) console.error('[AuthContext] onAuthStateChanged failed:', e);
       setLoading(false);
-    });
+    }
     return unsubscribe;
   }, []);
 

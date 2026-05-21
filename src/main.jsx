@@ -6,6 +6,18 @@ import App from './App.jsx'
 // Project-wide safety net for legacy/minified React references
 window.React = React;
 
+// Unregister any stale service workers and clear their caches
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.getRegistrations().then(regs => {
+    if (regs.length > 0) {
+      Promise.all([
+        ...regs.map(r => r.unregister()),
+        caches.keys().then(keys => Promise.all(keys.map(k => caches.delete(k))))
+      ]).then(() => window.location.reload());
+    }
+  });
+}
+
 import { BrowserRouter } from 'react-router-dom'
 import { AuthProvider } from './context/AuthContext'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'

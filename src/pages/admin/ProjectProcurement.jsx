@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { 
-  Plus, Search, ShoppingCart, Truck, 
+  Plus, Search, ShoppingCart, Truck,
   MapPin, CheckCircle, Package, Globe,
-  MoreVertical, FileText, AlertTriangle
+  MoreVertical, FileText, AlertTriangle, Printer
 } from 'lucide-react';
 import { PAv, SBadge, Modal } from '../../components/Shared';
 import SignaturePad from '../../components/SignaturePad';
@@ -167,7 +167,7 @@ export default function ProjectProcurement({ clients = [], procurements = [], br
               <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '2px solid #0D0B2E', paddingBottom: 20, marginBottom: 40 }}>
                  <div>
                     <h1 className="lxfh" style={{ fontSize: 32 }}>PURCHASE ORDER</h1>
-                    <div style={{ fontSize: 12, color: '#9B99C8' }}>WESTLINE FUTURE GLOBAL TRADING CO., LTD</div>
+                    <div style={{ fontSize: 12, color: '#9B99C8' }}>GLASSTECH FABRICATIONS LTD.</div>
                  </div>
                  <div style={{ textAlign: 'right' }}>
                     <div style={{ fontWeight: 800 }}>PO-{Math.floor(Math.random() * 100000)}</div>
@@ -185,12 +185,12 @@ export default function ProjectProcurement({ clients = [], procurements = [], br
                  </div>
               </div>
               <table style={{ width: '100%', marginBottom: 40 }}>
-                 <thead style={{ background: '#F4F4FA' }}><tr style={{ textAlign: 'left' }}><th style={{ padding: 12 }}>Component List</th><th style={{ padding: 12, textAlign: 'right' }}>Specs</th><th style={{ padding: 12, textAlign: 'right' }}>Unit Cost</th></tr></thead>
+                 <thead style={{ background: '#F8F8FD' }}><tr style={{ textAlign: 'left' }}><th style={{ padding: 12 }}>Component List</th><th style={{ padding: 12, textAlign: 'right' }}>Specs</th><th style={{ padding: 12, textAlign: 'right' }}>Unit Cost</th></tr></thead>
                  <tbody>
                     {activeProcs.filter(p => selectedIds.includes(p.id)).map(p => (
                       <tr key={p.id} style={{ borderBottom: '1px solid #eee' }}><td style={{ padding: 12 }}>{p.item}</td><td style={{ padding: 12, textAlign: 'right' }}>{p.type}</td><td style={{ padding: 12, textAlign: 'right', fontWeight: 700 }}>${p.unitCost}</td></tr>
                     ))}
-                    <tr style={{ background: '#F4F4FA' }}>
+                    <tr style={{ background: '#F8F8FD' }}>
                        <td colSpan={2} style={{ padding: 12, fontWeight: 800 }}>TOTAL (USD)</td>
                        <td style={{ padding: 12, textAlign: 'right', fontWeight: 800 }}>${activeProcs.filter(p => selectedIds.includes(p.id)).reduce((acc, curr) => acc + parseFloat(curr.unitCost), 0).toFixed(2)}</td>
                     </tr>

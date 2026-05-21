@@ -22,7 +22,7 @@ export default function AdminSystem({ onReset, syncCatalog, brand }) {
 
         <div className="p-card" style={{ padding: 32, border: confirm ? `2px solid #EF4444` : '1px solid var(--border)' }}>
           <div style={{ display: 'flex', gap: 24 }}>
-             <div style={{ width: 64, height: 64, borderRadius: 20, background: confirm ? '#FEF2F2' : '#F4F4FA', display: 'flex', alignItems: 'center', justifyContent: 'center', color: confirm ? '#EF4444' : ac }}>
+             <div style={{ width: 64, height: 64, borderRadius: 20, background: confirm ? '#FEF2F2' : '#F8F8FD', display: 'flex', alignItems: 'center', justifyContent: 'center', color: confirm ? '#EF4444' : ac }}>
                 <Database size={32} />
              </div>
              <div style={{ flex: 1 }}>

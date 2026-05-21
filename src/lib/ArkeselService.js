@@ -1,6 +1,6 @@
 /**
  * Arkesel Service for SMS and WhatsApp Delivery
- * Provides a streamlined integration for SMS and WhatsApp notifications.
+ * Provides a streamlined integration for local carrier networks.
  */
 
 const API_KEY = import.meta.env.VITE_ARKESEL_API_KEY;

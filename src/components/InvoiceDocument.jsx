@@ -44,7 +44,7 @@ export default function InvoiceDocument({ inv, isQuote = false, finSettings, ac,
         <div style={{ display: 'flex', gap: 20, alignItems: 'center' }}>
           {brand.logo ? <img src={brand.logo} style={{ height: isMinimal ? 40 : 64, objectFit: 'contain' }} alt="logo" /> : <div style={{ fontSize: 32, fontWeight: 900, color: ac }}>G</div>}
           <div>
-            <h1 style={{ fontSize: 20, fontWeight: 800, textTransform: 'uppercase', letterSpacing: 2 }}>{brand.name || 'WESTLINE FUTURE'}</h1>
+            <h1 style={{ fontSize: 20, fontWeight: 800, textTransform: 'uppercase', letterSpacing: 2 }}>{brand.name || 'GLASSTECH'}</h1>
             <p style={{ fontSize: 10, opacity: 0.6, textTransform: 'uppercase', letterSpacing: 1 }}>{brand.tagline}</p>
           </div>
         </div>
@@ -59,13 +59,13 @@ export default function InvoiceDocument({ inv, isQuote = false, finSettings, ac,
 
       {/* CLIENT & VENDOR */}
       <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: 60, marginBottom: 60 }}>
-        <div style={{ padding: isMinimal ? '20px' : '0', background: isMinimal ? '#F4F4FA' : 'none', borderRadius: 12 }}>
+        <div style={{ padding: isMinimal ? '20px' : '0', background: isMinimal ? '#F8F8FD' : 'none', borderRadius: 12 }}>
           <div style={{ fontSize: 9, textTransform: 'uppercase', color: ac, fontWeight: 900, marginBottom: 12, letterSpacing: 1.5 }}>PREPARED FOR</div>
           <p style={{ fontSize: 16, fontWeight: 800, marginBottom: 6 }}>{inv.clientName || 'Valued Client'}</p>
           <div style={{ fontSize: 12, lineHeight: 1.6, opacity: 0.7 }}>
             {inv.clientEmail}<br />
             {inv.clientPhone || 'Commercial Division'}<br />
-            {inv.clientAddress || 'Client Address'}
+            {inv.clientAddress || 'International'}
           </div>
         </div>
         <div style={{ textAlign: 'right' }}>
@@ -110,7 +110,7 @@ export default function InvoiceDocument({ inv, isQuote = false, finSettings, ac,
             <tr key={it.id} style={{ borderBottom: '1px solid #E8E6F5' }}>
               <td style={{ padding: '18px 20px' }}>
                 <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
-                  {it.img && <img src={it.img} style={{ width: 44, height: 44, borderRadius: 8, objectFit: 'contain', background: '#F8F8FD' }} alt="it" />}
+                  {it.img && <img src={it.img} style={{ width: 44, height: 44, borderRadius: 8, objectFit: 'contain', background: '#f9f7f4' }} alt="it" />}
                   <div>
                     <div style={{ fontSize: 14, fontWeight: 700 }}>{it.desc || 'Standard Glazing Work'}</div>
                     <div style={{ fontSize: 11, opacity: 0.5, marginTop: 4 }}>Precision manufacturing & site installation</div>
@@ -160,7 +160,7 @@ export default function InvoiceDocument({ inv, isQuote = false, finSettings, ac,
             <Landmark size={16} color={ac} />
             <span style={{ fontSize: 10, textTransform: 'uppercase', color: ac, fontWeight: 900, letterSpacing: 1 }}>Electronic Fund Transfer</span>
           </div>
-          <div style={{ padding: 24, background: '#F4F4FA', borderRadius: 16, border: '1px solid #E8E6F5' }}>
+          <div style={{ padding: 24, background: '#F8F8FD', borderRadius: 16, border: '1px solid #E8E6F5' }}>
             <p style={{ fontSize: 13, fontWeight: 800, lineHeight: 1.8, whiteSpace: 'pre-line' }}>{inv.bankDetails || finSettings.bankDetails}</p>
           </div>
           <div style={{ marginTop: 32 }}>
@@ -181,7 +181,7 @@ export default function InvoiceDocument({ inv, isQuote = false, finSettings, ac,
                 transform: 'rotate(-15deg)', margin: '0 0 20px auto'
               }}>
                 <div style={{ textAlign: 'center', padding: 10 }}>
-                  <div style={{ fontSize: 10, fontWeight: 900 }}>WESTLINE FUTURE</div>
+                  <div style={{ fontSize: 10, fontWeight: 900 }}>GLASSTECH</div>
                   <div style={{ fontSize: 16, fontWeight: 900, borderY: '2px solid' }}>CERTIFIED</div>
                   <div style={{ fontSize: 8 }}>OFFICIAL RELEASE</div>
                 </div>

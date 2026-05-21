@@ -25,7 +25,7 @@ export default function AccountManagerPortal({ user, brand, onLogout, ...props }
   ];
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', background: '#F4F4FA' }}>
+    <div style={{ display: 'flex', minHeight: '100vh', background: '#F8F8FD' }}>
        {/* OPERATIONS SIDEBAR */}
        <aside style={{ width: 280, background: '#0D0B2E', display: 'flex', flexDirection: 'column' }}>
           <div style={{ padding: '32px 24px', display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -103,7 +103,7 @@ export default function AccountManagerPortal({ user, brand, onLogout, ...props }
                       <h3 style={{ fontSize: 18, fontWeight: 800, marginBottom: 24 }}>Active Work Orders</h3>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                          {myWorkOrders.length > 0 ? myWorkOrders.map(wo => (
-                           <div key={wo.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 16, background: '#F4F4FA', borderRadius: 16 }}>
+                           <div key={wo.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 16, background: '#F8F8FD', borderRadius: 16 }}>
                               <div>
                                  <div style={{ fontSize: 14, fontWeight: 700 }}>{wo.title}</div>
                                  <div style={{ fontSize: 11, color: '#9B99C8' }}>{wo.id} • {wo.project}</div>
@@ -140,13 +140,13 @@ export default function AccountManagerPortal({ user, brand, onLogout, ...props }
                    {/* Simplified task list matching the new ERP style */}
                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 16 }}>
                       {(tasks || []).filter(t => t.assignedTo === user.id).map(t => (
-                        <div key={t.id} style={{ padding: 20, background: '#F4F4FA', borderRadius: 20, border: '1px solid #E8E6F5' }}>
+                        <div key={t.id} style={{ padding: 20, background: '#F8F8FD', borderRadius: 20, border: '1px solid #E8E6F5' }}>
                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
                               <div style={{ fontSize: 10, fontWeight: 900, color: ac }}>{t.project_title}</div>
                               <PSBadge s={t.status} />
                            </div>
                            <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 8 }}>{t.title}</div>
-                           <div style={{ fontSize: 12, color: '#9B99C8' }}>{t.description}</div>
+                           <div style={{ fontSize: 12, color: '#625C54' }}>{t.description}</div>
                         </div>
                       ))}
                    </div>

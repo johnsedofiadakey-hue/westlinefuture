@@ -33,7 +33,7 @@ export default function MaterialSelector({ materials = [], onApprove, onReject, 
              key={status} onClick={() => setFilter(status)}
              className={`lxf ${filter === status ? 'active' : ''}`}
              style={{ 
-               background: filter === status ? '#0D0B2E' : '#F4F4FA', 
+               background: filter === status ? '#0D0B2E' : '#F8F8FD', 
                color: filter === status ? '#fff' : '#0D0B2E',
                border: 'none', padding: '8px 16px', borderRadius: 100, fontSize: 12, fontWeight: 600, cursor: 'pointer' 
              }}
@@ -91,10 +91,10 @@ export default function MaterialSelector({ materials = [], onApprove, onReject, 
              </div>
           </div>
         ))}
-        {filtered.length === 0 && <div className="lxf" style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '60px 0', border: '2px dashed #E4E3F0', borderRadius: 20, color: '#9B99C8' }}>No materials match this filter.</div>}
+        {filtered.length === 0 && <div className="lxf" style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '60px 0', border: '2px dashed #DFD9D1', borderRadius: 20, color: '#9B99C8' }}>No materials match this filter.</div>}
       </div>
 
-      <div className="p-card" style={{ padding: 24, textAlign: 'center', background: '#F4F4FA' }}>
+      <div className="p-card" style={{ padding: 24, textAlign: 'center', background: '#F8F8FD' }}>
          <Sparkles size={24} color={ac} style={{ marginBottom: 12 }} />
          <h4 className="lxfh" style={{ fontSize: 18 }}>Can't find what you're looking for?</h4>
          <p className="lxf" style={{ color: '#5B5894', fontSize: 13, maxWidth: 600, margin: '0 auto 20px' }}>Our technical team can source custom glass tints, high-performance facade systems, and architectural profiles from our international logistics partners.</p>

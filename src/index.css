@@ -9,16 +9,16 @@ html{scroll-behavior:smooth;}
   --ac-rgb: 35, 31, 120;
   --ac-deep: #1A166B;
   --ac-light: #C5C3EC;
-  
-  --bg: #F4F4FA; 
+
+  --bg: #F4F4FA;
   --bg-alt: #F8F8FD;
-  --bg-deep: #120E3A;
-  
-  --fg: #0D0B2E; 
+  --bg-deep: #0D0B2E;
+
+  --fg: #0D0B2E;
   --dim: #5B5894;
   --muted: #9B99C8;
   --border: rgba(13, 11, 46, 0.08);
-  
+
   /* Shadows & Depth */
   --sh-sm: 0 4px 12px rgba(13, 11, 46, 0.03);
   --sh-md: 0 12px 40px rgba(13, 11, 46, 0.06);
@@ -150,10 +150,10 @@ html{scroll-behavior:smooth;}
 
 .dark-theme {
   --bg: #0D0B2E; 
-  --bg-alt: #120E3A;
-  --fg: #F4F4FA;
+  --bg-alt: #0D0B2E;
+  --fg: #F8F8FD;
   --dim: #A8A095;
-  --muted: #9B99C8;
+  --muted: #5B5894;
   --border: rgba(255, 255, 255, 0.1);
   --glass-bg: rgba(13, 11, 46, 0.85);
   --glass-border: rgba(255, 255, 255, 0.1);
@@ -658,12 +658,12 @@ body {
 }
 
 .pub-btn-gold:hover {
-  background: #121212;
+  background: #0D0B2E;
   transform: translateY(-2px);
 }
 
 .pub-btn-dark {
-  background: #121212;
+  background: #0D0B2E;
   color: #fff;
   border: none;
   cursor: pointer;
@@ -680,8 +680,8 @@ body {
 
 .pub-btn-outline {
   background: transparent;
-  border: 1px solid #121212;
-  color: #121212;
+  border: 1px solid #0D0B2E;
+  color: #ffffff;
   cursor: pointer;
   font-weight: 700;
   transition: all 0.3s;
@@ -690,7 +690,7 @@ body {
 }
 
 .pub-btn-outline:hover {
-  background: #121212;
+  background: #0D0B2E;
   color: #fff;
 }
 
@@ -750,7 +750,7 @@ body {
 }
 
 .minimal-btn {
-  background: #121212;
+  background: #0D0B2E;
   color: #fff;
   border: none;
   padding: 12px 24px;
@@ -873,7 +873,7 @@ body {
 }
 
 .pub-bottom-item.active {
-  color: #0D0B2E;
+  color: #ffffff;
   transform: translateY(-4px);
 }
 

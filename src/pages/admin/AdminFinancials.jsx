@@ -15,20 +15,20 @@ import InvoiceDocument from '../../components/InvoiceDocument';
 import { GLASS_CATALOG_DATA } from '../../data.jsx';
 
 /**
- * WESTLINE FUTURE FINANCIAL ENGINE v3.0 - DUAL CURRENCY & UNIT INVOICING
+ * GLASSTECH FINANCIAL ENGINE v3.0 - DUAL CURRENCY & UNIT INVOICING
  * The Absolute Gold Standard in Financial Management
  */
 
-export default function AdminFinancials({ invoices = [], transactions = [], clients = [], dbClients = [], brand, ...props }) {
+export default function AdminFinancials({ invoices = [], transactions = [], clients = [], dbClients = [], brand, deleteInvoice, deleteProposal, ...props }) {
   const [tab, setTab] = useState('overview'); // overview, sales, quotations, banking, settings
   const [showAdd, setShowAdd] = useState(null); // 'invoice', 'quotation'
   const ac = brand.color || '#231F78';
-  const notify = props.notify || ((type, msg) => alert(`${type.toUpperCase()}: ${msg}`));
+  const notify = props.notify || ((type, msg) => { if (import.meta.env.DEV) console.warn(`[Financials] ${type}: ${msg}`); });
 
   // --- FINANCIAL SETTINGS ---
   const [finSettings, setFinSettings] = useState(brand.finSettings || {
-    baseCurrency: 'USD',
-    secondaryCurrency: 'GHS',
+    baseCurrency: 'GHS',
+    secondaryCurrency: 'USD',
     exchangeRate: 15.5,
     invoiceTheme: 'classic',
     taxRate: 0,
@@ -40,31 +40,38 @@ export default function AdminFinancials({ invoices = [], transactions = [], clie
   });
 
   // --- DRAFT STATE ---
-  const [draft, setDraft] = useState({
-    projectId: '',
+  const blankDraft = (invoiceType = 'unit') => ({
+    projectId: '', clientId: '',
     clientName: '', clientEmail: '', clientPhone: '',
-    title: '', currency: 'USD',
+    title: '', currency: 'GHS',
     date: new Date().toISOString().split('T')[0],
-    due: '', 
-    invoiceType: 'project', // 'project' or 'unit'
+    due: '',
+    invoiceType,
     items: [{ id: Date.now(), desc: '', qty: 1, rate: 0, unit: 'pcs', total: 0 }],
     bankDetails: finSettings.bankDetails,
     terms: finSettings.terms,
     status: 'Pending'
   });
+  const [draft, setDraft] = useState(blankDraft());
 
   const issueDocument = async () => {
     try {
+      if (!draft.clientName.trim()) { notify('error', 'Client name is required'); return; }
+      if (draft.invoiceType === 'project' && !draft.projectId) { notify('error', 'Please select a project'); return; }
+      if (!draft.items.some(i => i.desc && i.rate > 0)) { notify('error', 'Add at least one line item with a description and rate'); return; }
       const isQuote = showAdd === 'quotation';
+      const isReceipt = draft.invoiceType === 'receipt';
       const total = calculateTotal(draft.items);
+      const docType = isQuote ? 'Quotation' : isReceipt ? 'Receipt' : 'Invoice';
       const payload = {
         ...draft,
+        clientId: draft.clientId,
         amount: formatMoney(total, draft.currency),
         total,
         client: draft.clientName,
-        status: isQuote ? 'pending' : 'Pending',
-        type: isQuote ? 'Quotation' : 'Invoice',
-        parentId: draft.projectId // Linking to project
+        status: isQuote ? 'pending' : isReceipt ? 'Paid' : 'Pending',
+        type: docType,
+        parentId: draft.projectId || null,
       };
 
       notify('pending', `Processing ${showAdd}...`);
@@ -77,15 +84,27 @@ export default function AdminFinancials({ invoices = [], transactions = [], clie
       }
 
       if (docId) {
+        // Auto-open PDF preview immediately after issuing
+        const printContent = document.getElementById('printable-financial');
+        if (printContent) {
+          const safeTitle = DOMPurify.sanitize(draft.title || (showAdd === 'quotation' ? 'Quotation' : 'Invoice'));
+          const safeBody = DOMPurify.sanitize(printContent.innerHTML);
+          const htmlContent = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${safeTitle}</title><style>@page{size:A4;margin:0}body{margin:0;background:#E8E6F5;font-family:sans-serif}#printable-financial{width:210mm!important;min-height:297mm!important;border:none!important;margin:40px auto!important;padding:40px!important;box-shadow:0 0 60px rgba(0,0,0,0.12);background:#fff}@media print{body{background:#fff}#printable-financial{margin:0 auto!important;box-shadow:none!important}button{display:none!important}}</style></head><body><div id="printable-financial">${safeBody}</div></body></html>`;
+          const blob = new Blob([htmlContent], { type: 'text/html' });
+          const blobUrl = URL.createObjectURL(blob);
+          const pdfWin = window.open(blobUrl, '_blank');
+          if (!pdfWin) {
+            const a = document.createElement('a');
+            a.href = blobUrl;
+            a.target = '_blank';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+          }
+          setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+        }
         setShowAdd(null);
-        setDraft({
-          projectId: '', clientName: '', clientEmail: '', clientPhone: '',
-          title: '', currency: 'USD',
-          date: new Date().toISOString().split('T')[0],
-          due: '', invoiceType: 'project',
-          items: [{ id: Date.now(), desc: '', qty: 1, rate: 0, unit: 'pcs', total: 0 }],
-          bankDetails: finSettings.bankDetails, terms: finSettings.terms, status: 'Pending'
-        });
+        setDraft(blankDraft());
       }
     } catch (e) {
       console.error(e);
@@ -126,8 +145,8 @@ export default function AdminFinancials({ invoices = [], transactions = [], clie
              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
                 <PFormField label="Base Currency">
                    <select className="p-inp" value={finSettings.baseCurrency} onChange={e => setFinSettings({...finSettings, baseCurrency: e.target.value})}>
-                      <option value="USD">USD ($)</option>
                       <option value="GHS">GHS (GH₵)</option>
+                      <option value="USD">USD ($)</option>
                    </select>
                 </PFormField>
                 <PFormField label="Secondary Currency">
@@ -167,10 +186,10 @@ export default function AdminFinancials({ invoices = [], transactions = [], clie
              
              <h3 className="lxfh" style={{ fontSize: 20, marginTop: 20 }}>KPI Targets</h3>
              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-                <PFormField label="Revenue Target (USD)">
+                <PFormField label="Revenue Target (GHS)">
                    <input className="p-inp" type="number" value={finSettings.kpiTargets?.revenue ?? 500000} onChange={e => setFinSettings(s => ({ ...s, kpiTargets: { ...s.kpiTargets, revenue: parseFloat(e.target.value) } }))} />
                 </PFormField>
-                <PFormField label="Pending Ceiling (USD)">
+                <PFormField label="Pending Ceiling (GHS)">
                    <input className="p-inp" type="number" value={finSettings.kpiTargets?.pending ?? 100000} onChange={e => setFinSettings(s => ({ ...s, kpiTargets: { ...s.kpiTargets, pending: parseFloat(e.target.value) } }))} />
                 </PFormField>
                 <PFormField label="Open Tenders Target">
@@ -216,18 +235,19 @@ export default function AdminFinancials({ invoices = [], transactions = [], clie
           </div>
           <div style={{ display: 'flex', gap: 12 }}>
              <button onClick={() => setTab('settings')} className="p-btn-light" style={{ gap: 8, display: 'flex', alignItems: 'center' }}><Settings size={16}/> Config</button>
-             <button onClick={() => setShowAdd('invoice')} className="p-btn-gold" style={{ gap: 8, display: 'flex', alignItems: 'center' }}><Plus size={16}/> New Document</button>
+             <button onClick={() => { setDraft(blankDraft('unit')); setShowAdd('invoice'); }} className="p-btn-gold" style={{ gap: 8, display: 'flex', alignItems: 'center' }}><Plus size={16}/> New Document</button>
           </div>
        </div>
 
        {/* TABS */}
        <div style={{ display: 'flex', gap: 8, background: 'rgba(255,255,255,0.5)', padding: 6, borderRadius: 20, alignSelf: 'flex-start', border: '1px solid var(--border)' }}>
           {[
-            { id: 'overview', label: 'Dashboard', icon: <Landmark size={14}/> },
-            { id: 'sales', label: 'Sales Ledger', icon: <TrendingUp size={14}/> },
-            { id: 'quotations', label: 'Quotations', icon: <FileText size={14}/> },
-            { id: 'banking', label: 'Banking & Audit', icon: <ShieldCheck size={14}/> },
-            { id: 'settings', label: 'Settings', icon: <Settings size={14}/> }
+            { id: 'overview',   label: 'Dashboard',      icon: <Landmark size={14}/> },
+            { id: 'sales',      label: 'Sales Ledger',   icon: <TrendingUp size={14}/> },
+            { id: 'quotations', label: 'Quotations',     icon: <FileText size={14}/> },
+            { id: 'margins',    label: 'Margins & P&L',  icon: <ArrowUpRight size={14}/> },
+            { id: 'banking',    label: 'Banking & Audit',icon: <ShieldCheck size={14}/> },
+            { id: 'settings',   label: 'Settings',       icon: <Settings size={14}/> }
           ].map(t => (
             <button 
               key={t.id} 
@@ -247,9 +267,9 @@ export default function AdminFinancials({ invoices = [], transactions = [], clie
        {tab === 'overview' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }} className="fade-in">
              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14 }}>
-                <PulseTargetCard label="VERIFIED CASH" value={formatMoney(stats.revenue, 'USD')} target={finSettings.kpiTargets?.revenue ?? 500000} icon={<TrendingUp size={20}/>} color="#16A34A" trend={18} sub="Settled payments" />
-                <PulseTargetCard label="UNSETTLED CAPITAL" value={formatMoney(stats.pending, 'USD')} target={finSettings.kpiTargets?.pending ?? 100000} icon={<Wallet size={20}/>} color={ac} trend={-5} sub="Active invoices" />
-                <PulseTargetCard label="OPEN TENDERS" value={stats.quotes} target={finSettings.kpiTargets?.quotes ?? 20} icon={<FileText size={20}/>} color="#0D0B2E" trend={12} sub="Value: $142.5k" />
+                <PulseTargetCard label="VERIFIED CASH" value={formatMoney(stats.revenue, 'GHS')} target={finSettings.kpiTargets?.revenue ?? 500000} icon={<TrendingUp size={20}/>} color="#16A34A" trend={18} sub="Settled payments" />
+                <PulseTargetCard label="UNSETTLED CAPITAL" value={formatMoney(stats.pending, 'GHS')} target={finSettings.kpiTargets?.pending ?? 100000} icon={<Wallet size={20}/>} color={ac} trend={-5} sub="Active invoices" />
+                <PulseTargetCard label="OPEN TENDERS" value={stats.quotes} target={finSettings.kpiTargets?.quotes ?? 20} icon={<FileText size={20}/>} color="#0D0B2E" trend={12} sub={`Value: ${formatMoney((props.proposals||[]).filter(p=>p.status==='Pending').reduce((a,b)=>a+(parseAmount(b.amount)||0),0),'GHS')}`} />
                 <PulseTargetCard label="CONVERSION RATE" value={`${stats.conversions}%`} target={finSettings.kpiTargets?.conversion ?? 90} icon={<ShieldCheck size={20}/>} color={ac} trend={4} sub="Quotation to Invoice" />
              </div>
 
@@ -261,7 +281,7 @@ export default function AdminFinancials({ invoices = [], transactions = [], clie
                    </div>
                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                       {transactions.slice(0, 5).map(t => (
-                        <div key={t.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', background: '#F4F4FA', borderRadius: 16 }}>
+                        <div key={t.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', background: '#F8F8FD', borderRadius: 16 }}>
                            <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
                               <div style={{ width: 44, height: 44, borderRadius: 12, background: t.amount > 0 ? 'rgba(22, 163, 74, 0.1)' : 'rgba(239, 68, 68, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                                  {t.amount > 0 ? <ArrowUpRight size={20} color="#16A34A" /> : <ArrowDownRight size={20} color="#EF4444" />}
@@ -272,7 +292,7 @@ export default function AdminFinancials({ invoices = [], transactions = [], clie
                               </div>
                            </div>
                            <div style={{ textAlign: 'right' }}>
-                              <div style={{ fontSize: 18, fontWeight: 900, color: t.amount > 0 ? '#16A34A' : '#EF4444' }}>{t.amount > 0 ? '+' : ''}{formatMoney(t.amount, 'USD')}</div>
+                              <div style={{ fontSize: 18, fontWeight: 900, color: t.amount > 0 ? '#16A34A' : '#EF4444' }}>{t.amount > 0 ? '+' : ''}{formatMoney(t.amount, 'GHS')}</div>
                               <div style={{ fontSize: 10, color: '#16A34A', fontWeight: 900, display: 'flex', alignItems: 'center', gap: 4, justifyContent: 'flex-end' }}><ShieldCheck size={10}/> VERIFIED</div>
                            </div>
                         </div>
@@ -283,14 +303,14 @@ export default function AdminFinancials({ invoices = [], transactions = [], clie
                 <div className="p-card" style={{ padding: 24, background: '#0D0B2E', color: '#fff' }}>
                    <h3 className="lxfh" style={{ fontSize: 18, marginBottom: 20 }}>Document Generation</h3>
                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                      <button onClick={() => { setDraft({...draft, invoiceType: 'unit'}); setShowAdd('invoice'); }} className="p-btn-gold" style={{ width: '100%', padding: 20, borderRadius: 20, display: 'flex', alignItems: 'center', gap: 14 }}>
+                      <button onClick={() => { setDraft(blankDraft('unit')); setShowAdd('invoice'); }} className="p-btn-gold" style={{ width: '100%', padding: 20, borderRadius: 20, display: 'flex', alignItems: 'center', gap: 14 }}>
                          <div style={{ width: 40, height: 40, borderRadius: 12, background: 'rgba(13, 11, 46, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Package size={20}/></div>
                          <div style={{ textAlign: 'left' }}>
                             <div style={{ fontSize: 14, fontWeight: 800 }}>Unit Item Invoice</div>
                             <div style={{ fontSize: 11, opacity: 0.7 }}>Products, glass units, accessories</div>
                          </div>
                       </button>
-                      <button onClick={() => { setDraft({...draft, invoiceType: 'project'}); setShowAdd('invoice'); }} style={{ width: '100%', padding: 20, borderRadius: 20, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', display: 'flex', alignItems: 'center', gap: 14, cursor: 'pointer' }}>
+                      <button onClick={() => { setDraft(blankDraft('project')); setShowAdd('invoice'); }} style={{ width: '100%', padding: 20, borderRadius: 20, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', display: 'flex', alignItems: 'center', gap: 14, cursor: 'pointer' }}>
                          <div style={{ width: 40, height: 40, borderRadius: 12, background: 'rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Briefcase size={20}/></div>
                          <div style={{ textAlign: 'left' }}>
                             <div style={{ fontSize: 14, fontWeight: 800 }}>Project Milestone</div>
@@ -298,8 +318,8 @@ export default function AdminFinancials({ invoices = [], transactions = [], clie
                          </div>
                       </button>
                       <div style={{ marginTop: 24, padding: 24, borderRadius: 20, background: `${ac}15`, textAlign: 'center', border: `1px solid ${ac}30` }}>
-                         <div style={{ fontSize: 11, color: ac, fontWeight: 800, textTransform: 'uppercase', marginBottom: 8 }}>Internal Exchange Rate</div>
-                         <div style={{ fontSize: 24, fontWeight: 900 }}>1 USD : {finSettings.exchangeRate} GHS</div>
+                         <div style={{ fontSize: 11, color: ac, fontWeight: 800, textTransform: 'uppercase', marginBottom: 8 }}>USD Reference Rate</div>
+                         <div style={{ fontSize: 24, fontWeight: 900 }}>1 USD = GH₵{finSettings.exchangeRate}</div>
                          <button onClick={() => setTab('settings')} style={{ background: 'none', border: 'none', color: ac, fontSize: 11, fontWeight: 700, marginTop: 12, cursor: 'pointer' }}>Update Rate</button>
                       </div>
                    </div>
@@ -321,7 +341,7 @@ export default function AdminFinancials({ invoices = [], transactions = [], clie
                     onClick={() => {
                       const rows = (tab === 'sales' ? invoices : (props.proposals || []));
                       if (!rows.length) return;
-                      const data = rows.map(r => ({ id: r.id||'', client: r.client||'', date: r.date||'', currency: r.currency||'USD', amount: r.amount||'', status: r.status||'' }));
+                      const data = rows.map(r => ({ id: r.id||'', client: r.client||'', date: r.date||'', currency: r.currency||'GHS', amount: r.amount||'', status: r.status||'' }));
                       const header = Object.keys(data[0]).join(',');
                       const body = data.map(r => Object.values(r).map(v => `"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
                       const blob = new Blob([header+'\n'+body], { type: 'text/csv' });
@@ -333,13 +353,13 @@ export default function AdminFinancials({ invoices = [], transactions = [], clie
                   >
                     <Download size={14} /> CSV
                   </button>
-                  <button onClick={() => setShowAdd(tab === 'sales' ? 'invoice' : 'quotation')} className="p-btn-dark" style={{ height: 40, padding: '0 20px', fontSize: 12 }}>+ Create New</button>
+                  <button onClick={() => { setDraft(blankDraft('unit')); setShowAdd(tab === 'sales' ? 'invoice' : 'quotation'); }} className="p-btn-dark" style={{ height: 40, padding: '0 20px', fontSize: 12 }}>+ Create New</button>
                </div>
             </div>
             <div className="p-scroll" style={{ overflowX: 'auto' }}>
                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <thead>
-                     <tr style={{ background: '#F4F4FA' }}>
+                     <tr style={{ background: '#F8F8FD' }}>
                         {['Reference', 'Client Entity', 'Date Issued', 'Currency', 'Amount', 'Status', 'Actions'].map(h => <th key={h} style={{ textAlign: 'left', padding: '16px 24px', fontSize: 10, color: '#9B99C8', textTransform: 'uppercase', letterSpacing: '.1em' }}>{h}</th>)}
                      </tr>
                   </thead>
@@ -350,27 +370,37 @@ export default function AdminFinancials({ invoices = [], transactions = [], clie
                            icon={<Receipt size={28} />}
                            title={tab === 'sales' ? 'No invoices yet' : 'No quotations yet'}
                            description={tab === 'sales' ? 'Create your first invoice to start tracking revenue.' : 'Send a quotation to a client to begin a project.'}
-                           action={{ label: `+ Create ${tab === 'sales' ? 'Invoice' : 'Quotation'}`, onClick: () => setShowAdd(tab === 'sales' ? 'invoice' : 'quotation') }}
+                           action={{ label: `+ Create ${tab === 'sales' ? 'Invoice' : 'Quotation'}`, onClick: () => { setDraft(blankDraft('unit')); setShowAdd(tab === 'sales' ? 'invoice' : 'quotation'); } }}
                          />
                        </td></tr>
                      )}
                      {(tab === 'sales' ? invoices : (props.proposals || [])).map(item => (
                        <tr key={item.id} style={{ borderBottom: '1px solid var(--border)' }}>
-                          <td style={{ padding: '20px 24px', fontSize: 13, fontWeight: 800 }}>{item.id}</td>
+                          <td style={{ padding: '20px 24px', fontSize: 11, fontWeight: 800, fontFamily: 'monospace', color: '#5B5894' }}>{(item.id || '').slice(0, 12).toUpperCase()}</td>
                           <td style={{ padding: '20px 24px' }}>
-                             <div style={{ fontSize: 14, fontWeight: 700 }}>{item.client}</div>
-                             <div style={{ fontSize: 11, color: '#9B99C8' }}>{item.clientEmail}</div>
+                             <div style={{ fontSize: 14, fontWeight: 700 }}>{item.client || item.clientName}</div>
+                             <div style={{ fontSize: 11, color: '#9B99C8' }}>{item.clientEmail || item.title || '—'}</div>
                           </td>
                           <td style={{ padding: '20px 24px', fontSize: 13 }}>{item.date}</td>
                           <td style={{ padding: '20px 24px' }}>
-                             <span style={{ fontSize: 11, fontWeight: 900, background: '#eee', padding: '2px 6px', borderRadius: 4 }}>{item.currency || 'USD'}</span>
+                             <span style={{ fontSize: 11, fontWeight: 900, background: '#eee', padding: '2px 6px', borderRadius: 4 }}>{item.currency || 'GHS'}</span>
                           </td>
                           <td style={{ padding: '20px 24px', fontSize: 16, fontWeight: 900 }}>{item.amount}</td>
                           <td style={{ padding: '20px 24px' }}><SBadge s={item.status} /></td>
                           <td style={{ padding: '20px 24px' }}>
-                             <div style={{ display: 'flex', gap: 10 }}>
-                                <button className="p-btn-light" style={{ width: 36, height: 36, padding: 0 }}><Eye size={16}/></button>
-                                <button className="p-btn-light" style={{ width: 36, height: 36, padding: 0 }}><Send size={16}/></button>
+                             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                                <button className="p-btn-light" style={{ width: 36, height: 36, padding: 0 }} title="View"><Eye size={16}/></button>
+                                <button
+                                  onClick={() => {
+                                    if (!window.confirm(`Delete this ${tab === 'sales' ? 'invoice' : 'quotation'}? This cannot be undone.`)) return;
+                                    if (tab === 'sales') deleteInvoice?.(item.id);
+                                    else deleteProposal?.(item.id);
+                                  }}
+                                  title="Delete"
+                                  style={{ width: 36, height: 36, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8, background: '#FEF2F2', border: '1px solid #FECACA', cursor: 'pointer', color: '#DC2626', transition: 'background .15s' }}
+                                >
+                                  <Trash2 size={15}/>
+                                </button>
                              </div>
                           </td>
                        </tr>
@@ -380,6 +410,121 @@ export default function AdminFinancials({ invoices = [], transactions = [], clie
             </div>
          </div>
        )}
+
+       {tab === 'margins' && (() => {
+         const jobs = props.jobs || [];
+         const fmt = v => `GHS ${Number(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+         const rows = jobs.map(j => {
+           const c = j.costs || {};
+           const product      = c.product?.enabled      ? (Number(c.product?.amount)      || 0) : 0;
+           const shipping     = c.shipping?.enabled     ? (Number(c.shipping?.amount)     || 0) : 0;
+           const installation = c.installation?.enabled ? (Number(c.installation?.amount) || 0) : 0;
+           const totalCOGS    = product + shipping + installation;
+           const salePrice    = Number(j.budget) || 0;
+           const grossProfit  = salePrice - totalCOGS;
+           const margin       = salePrice > 0 ? (grossProfit / salePrice) * 100 : null;
+           return { ...j, product, shipping, installation, totalCOGS, salePrice, grossProfit, margin };
+         }).filter(r => r.salePrice > 0 || r.totalCOGS > 0);
+
+         const totalRevenue    = rows.reduce((s, r) => s + r.salePrice,   0);
+         const totalCOGSAll    = rows.reduce((s, r) => s + r.totalCOGS,   0);
+         const totalProfit     = rows.reduce((s, r) => s + r.grossProfit,  0);
+         const avgMargin       = totalRevenue > 0 ? (totalProfit / totalRevenue) * 100 : 0;
+
+         const exportCSV = () => {
+           if (!rows.length) return;
+           const header = 'Project,Client,Sale Price (GHS),Product Cost,Shipping,Installation,Total COGS,Gross Profit,Margin %';
+           const body = rows.map(r =>
+             [r.title||r.name, r.clientId||'', r.salePrice, r.product, r.shipping, r.installation, r.totalCOGS, r.grossProfit, r.margin !== null ? r.margin.toFixed(1) : '—']
+               .map(v => `"${String(v).replace(/"/g,'""')}"`)
+               .join(',')
+           ).join('\n');
+           const blob = new Blob([header+'\n'+body], { type: 'text/csv' });
+           const url = URL.createObjectURL(blob);
+           const a = document.createElement('a'); a.href = url; a.download = 'margins_export.csv'; a.click();
+           URL.revokeObjectURL(url);
+         };
+
+         return (
+           <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+             {/* Summary KPIs */}
+             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14 }}>
+               {[
+                 { label: 'Total Revenue',   value: fmt(totalRevenue),  color: '#16A34A', bg: '#F0FDF4' },
+                 { label: 'Total COGS',      value: fmt(totalCOGSAll),  color: '#DC2626', bg: '#FEF2F2' },
+                 { label: 'Gross Profit',    value: fmt(totalProfit),   color: totalProfit >= 0 ? '#16A34A' : '#DC2626', bg: '#F8F8FD' },
+                 { label: 'Avg Net Margin',  value: `${avgMargin.toFixed(1)}%`, color: avgMargin >= 20 ? '#16A34A' : avgMargin >= 10 ? '#D97706' : '#DC2626', bg: '#F8F8FD' },
+               ].map(({ label, value, color, bg }) => (
+                 <div key={label} className="p-card" style={{ padding: '20px 24px', background: bg }}>
+                   <div style={{ fontSize: 10, fontWeight: 800, color: '#9B99C8', textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 6 }}>{label}</div>
+                   <div style={{ fontSize: 22, fontWeight: 900, color }}>{value}</div>
+                 </div>
+               ))}
+             </div>
+
+             {/* Table */}
+             <div className="p-card" style={{ overflow: 'hidden' }}>
+               <div style={{ padding: '20px 24px', borderBottom: '1px solid #E8E6F5', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                 <div>
+                   <div style={{ fontSize: 16, fontWeight: 900, color: '#0D0B2E' }}>Project P&L Breakdown</div>
+                   <div style={{ fontSize: 12, color: '#9B99C8', marginTop: 2 }}>Cost data entered via the Economics panel in each project.</div>
+                 </div>
+                 <button
+                   onClick={exportCSV}
+                   style={{ height: 38, padding: '0 16px', display: 'flex', alignItems: 'center', gap: 6, background: '#fff', border: '1px solid #E8E6F5', borderRadius: 10, cursor: 'pointer', fontSize: 12, fontWeight: 700 }}
+                 >
+                   <Download size={13} /> Export CSV
+                 </button>
+               </div>
+               {rows.length === 0 ? (
+                 <div style={{ padding: 56, textAlign: 'center' }}>
+                   <TrendingUp size={40} color="#E8E6F5" style={{ marginBottom: 12 }} />
+                   <div style={{ fontSize: 14, fontWeight: 700, color: '#9B99C8', marginBottom: 4 }}>No cost data yet</div>
+                   <div style={{ fontSize: 12, color: '#DFD9D1' }}>Open a project in the Operations tab and fill in the Project Economics panel.</div>
+                 </div>
+               ) : (
+                 <div style={{ overflowX: 'auto' }}>
+                   <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                     <thead>
+                       <tr style={{ background: '#F8F8FD' }}>
+                         {['Project', 'Sale Price', 'Product Cost', 'Shipping', 'Installation', 'COGS', 'Gross Profit', 'Margin'].map(h => (
+                           <th key={h} style={{ padding: '14px 20px', textAlign: 'left', fontSize: 10, fontWeight: 800, color: '#9B99C8', textTransform: 'uppercase', letterSpacing: '.08em', whiteSpace: 'nowrap' }}>{h}</th>
+                         ))}
+                       </tr>
+                     </thead>
+                     <tbody>
+                       {rows.map(r => {
+                         const mc = r.margin !== null ? (r.margin >= 20 ? '#16A34A' : r.margin >= 10 ? '#D97706' : '#DC2626') : '#9B99C8';
+                         return (
+                           <tr key={r.id} style={{ borderBottom: '1px solid #F8F8FD' }}>
+                             <td style={{ padding: '14px 20px' }}>
+                               <div style={{ fontSize: 13, fontWeight: 700, color: '#0D0B2E' }}>{r.title || r.name || 'Untitled'}</div>
+                               <div style={{ fontSize: 11, color: '#9B99C8', marginTop: 2 }}>{r.id?.slice(0, 8).toUpperCase()}</div>
+                             </td>
+                             <td style={{ padding: '14px 20px', fontSize: 13, fontWeight: 800, color: '#0D0B2E', whiteSpace: 'nowrap' }}>{fmt(r.salePrice)}</td>
+                             <td style={{ padding: '14px 20px', fontSize: 12, color: r.product > 0 ? '#7C3AED' : '#DFD9D1', fontWeight: 700, whiteSpace: 'nowrap' }}>{r.product > 0 ? fmt(r.product) : '—'}</td>
+                             <td style={{ padding: '14px 20px', fontSize: 12, color: r.shipping > 0 ? '#0284C7' : '#DFD9D1', fontWeight: 700, whiteSpace: 'nowrap' }}>{r.shipping > 0 ? fmt(r.shipping) : '—'}</td>
+                             <td style={{ padding: '14px 20px', fontSize: 12, color: r.installation > 0 ? '#D97706' : '#DFD9D1', fontWeight: 700, whiteSpace: 'nowrap' }}>{r.installation > 0 ? fmt(r.installation) : '—'}</td>
+                             <td style={{ padding: '14px 20px', fontSize: 13, fontWeight: 800, color: '#DC2626', whiteSpace: 'nowrap' }}>{r.totalCOGS > 0 ? fmt(r.totalCOGS) : '—'}</td>
+                             <td style={{ padding: '14px 20px', fontSize: 13, fontWeight: 900, color: r.grossProfit >= 0 ? '#16A34A' : '#DC2626', whiteSpace: 'nowrap' }}>{r.totalCOGS > 0 ? fmt(r.grossProfit) : '—'}</td>
+                             <td style={{ padding: '14px 20px' }}>
+                               {r.margin !== null && r.totalCOGS > 0 ? (
+                                 <span style={{ display: 'inline-flex', alignItems: 'center', padding: '4px 10px', borderRadius: 20, background: `${mc}15`, fontSize: 12, fontWeight: 900, color: mc }}>
+                                   {r.margin.toFixed(1)}%
+                                 </span>
+                               ) : <span style={{ color: '#DFD9D1', fontSize: 12 }}>—</span>}
+                             </td>
+                           </tr>
+                         );
+                       })}
+                     </tbody>
+                   </table>
+                 </div>
+               )}
+             </div>
+           </div>
+         );
+       })()}
 
        {tab === 'banking' && (
          <div className="p-card fade-in" style={{ padding: 60, textAlign: 'center' }}>
@@ -399,7 +544,7 @@ export default function AdminFinancials({ invoices = [], transactions = [], clie
                <div className="p-card" style={{ padding: 32, textAlign: 'left' }}>
                   <CreditCard size={24} color="#16A34A" style={{ marginBottom: 16 }} />
                   <h4 style={{ fontSize: 15, fontWeight: 800, marginBottom: 8 }}>VAT & Tax Compliance</h4>
-                  <div style={{ fontSize: 12, color: '#9B99C8' }}>Real-time export for tax and compliance reporting.</div>
+                  <div style={{ fontSize: 12, color: '#9B99C8' }}>Real-time export to Tax Authority.</div>
                </div>
                <div className="p-card" style={{ padding: 32, textAlign: 'left' }}>
                   <History size={24} color="#0D0B2E" style={{ marginBottom: 16 }} />
@@ -414,43 +559,66 @@ export default function AdminFinancials({ invoices = [], transactions = [], clie
 
        {/* INVOICE PREVIEW MODAL */}
        {showAdd && (
-         <Modal title={`Precision ${showAdd === 'invoice' ? 'Invoice' : 'Quotation'} Generation`} onClose={() => setShowAdd(null)}>
+         <Modal title={`New ${showAdd === 'invoice' ? 'Invoice / Receipt' : 'Quotation'}`} onClose={() => setShowAdd(null)}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 450px', gap: 40 }}>
                <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-                  <div style={{ display: 'flex', gap: 16 }}>
-                     <button onClick={() => setDraft({...draft, invoiceType: 'project'})} style={{ flex: 1, padding: 16, borderRadius: 12, border: draft.invoiceType === 'project' ? `2px solid ${ac}` : '1px solid #eee', background: draft.invoiceType === 'project' ? `${ac}10` : '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <Briefcase size={16} /> <span style={{ fontSize: 13, fontWeight: 700 }}>Project Phase</span>
-                     </button>
-                     <button onClick={() => setDraft({...draft, invoiceType: 'unit'})} style={{ flex: 1, padding: 16, borderRadius: 12, border: draft.invoiceType === 'unit' ? `2px solid ${ac}` : '1px solid #eee', background: draft.invoiceType === 'unit' ? `${ac}10` : '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <Package size={16} /> <span style={{ fontSize: 13, fontWeight: 700 }}>Unit Items</span>
-                     </button>
+                  {/* Document type tabs */}
+                  <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                     {[
+                       { id: 'project', label: 'Project Phase', icon: <Briefcase size={15} /> },
+                       { id: 'unit', label: 'Ad-hoc / Sales', icon: <Package size={15} /> },
+                       { id: 'receipt', label: 'Sales Receipt', icon: <Receipt size={15} /> },
+                     ].map(t => (
+                       <button key={t.id} onClick={() => setDraft({ ...draft, invoiceType: t.id })}
+                         style={{ flex: 1, minWidth: 120, padding: '12px 16px', borderRadius: 12, border: draft.invoiceType === t.id ? `2px solid ${ac}` : '1px solid #E8E6F5', background: draft.invoiceType === t.id ? `${ac}10` : '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 700 }}>
+                         {t.icon} {t.label}
+                       </button>
+                     ))}
                   </div>
 
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
                       {draft.invoiceType === 'project' ? (
-                        <PFormField label="Select Project Hub">
+                        <PFormField label="Select Project">
                            <select className="p-inp" value={draft.projectId} onChange={e => {
                               const p = clients.find(x => x.id === e.target.value);
-                              setDraft({...draft, projectId: e.target.value, clientName: p?.name || '', clientEmail: p?.email || '', clientPhone: p?.phone || ''});
+                              setDraft({...draft, projectId: e.target.value, clientId: p?.clientId || p?.id || '', clientName: p?.name || p?.title || '', clientEmail: p?.email || '', clientPhone: p?.phone || ''});
                            }}>
-                              <option value="">Select an active project...</option>
+                              <option value="">Select a project...</option>
                               {clients.map(p => <option key={p.id} value={p.id}>{p.project || p.title}</option>)}
                            </select>
                         </PFormField>
                       ) : (
-                        <PFormField label="Client Entity Name"><input className="p-inp" placeholder="e.g. AFCFTA Secretariat" value={draft.clientName} onChange={e => setDraft({...draft, clientName: e.target.value})} /></PFormField>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                          <PFormField label="Client">
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                              <select className="p-inp" value={draft.clientId} onChange={e => {
+                                const c = dbClients.find(x => x.id === e.target.value);
+                                if (c) setDraft({ ...draft, clientId: c.id, clientName: c.name || c.title || '', clientEmail: c.email || '', clientPhone: c.phone || '' });
+                                else setDraft({ ...draft, clientId: '' });
+                              }}>
+                                <option value="">Walk-in / New client</option>
+                                {(dbClients || []).map(c => <option key={c.id} value={c.id}>{c.name || c.title}</option>)}
+                              </select>
+                              <input className="p-inp" placeholder="Full name *" value={draft.clientName} onChange={e => setDraft({ ...draft, clientName: e.target.value })} />
+                            </div>
+                          </PFormField>
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                            <input className="p-inp" placeholder="Phone / WhatsApp" value={draft.clientPhone} onChange={e => setDraft({ ...draft, clientPhone: e.target.value })} />
+                            <input className="p-inp" placeholder="Email (optional)" value={draft.clientEmail} onChange={e => setDraft({ ...draft, clientEmail: e.target.value })} />
+                          </div>
+                        </div>
                       )}
                       <PFormField label="Currency Selection">
                          <select className="p-inp" value={draft.currency} onChange={e => setDraft({...draft, currency: e.target.value})}>
-                            <option value="USD">USD ($)</option>
                             <option value="GHS">GHS (GH₵)</option>
+                            <option value="USD">USD ($)</option>
                          </select>
                       </PFormField>
                    </div>
                   
                   <PFormField label="Document Title"><input className="p-inp" placeholder="e.g. Phase 2: Structural Facade Glazing" value={draft.title} onChange={e => setDraft({...draft, title: e.target.value})} /></PFormField>
                   
-                  <div style={{ border: '1px solid #E8E6F5', borderRadius: 20, padding: 24, background: '#F8F8FD' }}>
+                  <div style={{ border: '1px solid #E8E6F5', borderRadius: 20, padding: 24, background: '#FDFCFB' }}>
                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
                         <h4 className="lxf" style={{ fontSize: 11, textTransform: 'uppercase', color: '#9B99C8', letterSpacing: 1 }}>Line Item Breakdown</h4>
                         <button onClick={() => setDraft({...draft, items: [...draft.items, {id: Date.now(), desc:'', qty:1, rate:0, unit: draft.invoiceType === 'unit' ? 'pcs' : 'job'}]})} style={{ background: ac, border: 'none', color: '#fff', fontSize: 10, fontWeight: 800, cursor: 'pointer', padding: '6px 14px', borderRadius: 20 }}>+ ADD BLANK</button>
@@ -480,7 +648,7 @@ export default function AdminFinancials({ invoices = [], transactions = [], clie
                                    }
                                  }}
                                  style={{ 
-                                   flex: '0 0 120px', height: 140, background: '#F4F4FA', borderRadius: 12, border: 'none', 
+                                   flex: '0 0 120px', height: 140, background: '#F8F8FD', borderRadius: 12, border: 'none', 
                                    display: 'flex', flexDirection: 'column', padding: 10, cursor: 'pointer', transition: 'all 0.3s'
                                  }}
                                  className="hover-lift"
@@ -511,7 +679,7 @@ export default function AdminFinancials({ invoices = [], transactions = [], clie
                </div>
 
                <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-                  <div className="p-card" style={{ padding: 24, background: '#F4F4FA', border: '1px solid #C5C3EC', position: 'sticky', top: 0 }}>
+                  <div className="p-card" style={{ padding: 24, background: '#F8F8FD', border: '1px solid #C5C3EC', position: 'sticky', top: 0 }}>
                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
                         <h4 className="lxf" style={{ fontSize: 11, textTransform: 'uppercase', color: '#9B99C8' }}>Real-time Preview</h4>
                         <div style={{ fontSize: 9, background: '#0D0B2E', color: '#fff', padding: '2px 8px', borderRadius: 4 }}>{finSettings.invoiceTheme.toUpperCase()}</div>
@@ -572,7 +740,9 @@ export default function AdminFinancials({ invoices = [], transactions = [], clie
                          >
                             <Download size={16} /> Premium PDF Export
                          </button>
-                        <button onClick={issueDocument} className="p-btn-dark" style={{ width: '100%', padding: 18, background: '#16A34A', border: 'none', borderRadius: 16, fontSize: 14, fontWeight: 800 }}>Confirm & Issue Official {showAdd}</button>
+                        <button onClick={issueDocument} className="p-btn-dark" style={{ width: '100%', padding: 18, background: '#16A34A', border: 'none', borderRadius: 16, fontSize: 14, fontWeight: 800 }}>
+          Confirm & Issue — {draft.invoiceType === 'receipt' ? 'Sales Receipt' : showAdd === 'quotation' ? 'Quotation' : 'Invoice'}
+        </button>
                       </div>
                   </div>
                </div>

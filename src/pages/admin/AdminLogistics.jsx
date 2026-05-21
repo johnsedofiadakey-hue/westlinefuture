@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { 
-  Plus, Truck, Package, RefreshCw, ChevronDown, ChevronUp, 
-  Wrench, Scan, MapPin, Hammer, Navigation, Box, Anchor, Ship, ShieldAlert,
+  Plus, Truck, Package, ChevronDown, ChevronUp, X,
+  Wrench, Scan, MapPin, Box, Anchor, Ship, ShieldAlert,
   Download, ExternalLink, Share2, FileText, CheckCircle2, Clock
 } from 'lucide-react';
 import { FF as PFormField, PSBadge } from '../../components/Shared';
@@ -15,10 +15,32 @@ const LOGISTICS_MILESTONES = [
   { id: 'Local', label: 'Local Hub', icon: <MapPin size={14} /> }
 ];
 
+const BLANK_CONTAINER = { shipmentRef: '', supplier: '', eta: '', value: '', items: [], notes: '' };
+
 export default function AdminLogistics({ containers = [], workOrders = [], clients = [], brand, ...props }) {
   const ac = brand.color || '#231F78';
-  const [activeTab, setActiveTab] = useState('containers'); // 'containers' | 'procurement'
+  const [activeTab, setActiveTab] = useState('containers');
   const [showAddContainer, setShowAddContainer] = useState(false);
+  const [newContainer, setNewContainer] = useState(BLANK_CONTAINER);
+  const [saving, setSaving] = useState(false);
+
+  const warehouseCount = containers.filter(c => c.status === 'Warehouse').length;
+  const warehouseItems = containers.filter(c => c.status === 'Warehouse').reduce((acc, c) => acc + (c.items?.length || 0), 0);
+
+  const handleCreateContainer = async () => {
+    if (!newContainer.shipmentRef.trim()) { props.notify?.('error', 'Shipment reference required'); return; }
+    setSaving(true);
+    try {
+      await props.addContainer?.({ ...newContainer, status: 'Dispatched', createdAt: new Date().toISOString() });
+      setNewContainer(BLANK_CONTAINER);
+      setShowAddContainer(false);
+      props.notify?.('success', 'Container added');
+    } catch (e) {
+      props.notify?.('error', 'Failed to add container');
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const assets = [
     { id: 'SC-101', name: 'Spider Crane', siteId: '1', status: 'In Use', user: 'KB' },
@@ -27,7 +49,7 @@ export default function AdminLogistics({ containers = [], workOrders = [], clien
   ];
 
   const generateWhatsAppLink = (items) => {
-     const text = `*WESTLINE FUTURE PROCUREMENT LIST*\n\nItems to source:\n${items.map(i => `- ${i.title || i.name}`).join('\n')}\n\nPlease provide Pro-Forma for these items.`;
+     const text = `*GLASSTECH PROCUREMENT LIST*\n\nItems to source:\n${items.map(i => `- ${i.title || i.name}`).join('\n')}\n\nPlease provide Pro-Forma for these items.`;
      return `https://wa.me/${brand.whatsapp?.replace(/\+/g, '')}?text=${encodeURIComponent(text)}`;
   };
 
@@ -138,9 +160,9 @@ export default function AdminLogistics({ containers = [], workOrders = [], clien
                     })}
                  </div>
 
-                 <div style={{ background: '#F4F4FA', padding: 16, borderRadius: 16, marginBottom: 20 }}>
+                 <div style={{ background: '#F8F8FD', padding: 16, borderRadius: 16, marginBottom: 20 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
-                       <div style={{ fontSize: 11, color: '#9B99C8' }}>Linked Work Orders:</div>
+                       <div style={{ fontSize: 11, color: '#625C54' }}>Linked Work Orders:</div>
                        <div style={{ fontSize: 11, fontWeight: 700 }}>{c.items?.length || 0} Items</div>
                     </div>
                     {c.items?.map(woId => {
@@ -266,15 +288,65 @@ export default function AdminLogistics({ containers = [], workOrders = [], clien
             <div className="p-card" style={{ padding: 24, textAlign: 'center', border: `1px dashed ${ac}`, borderRadius: 24 }}>
                <Box size={32} color={ac} style={{ marginBottom: 12, opacity: 0.5 }} />
                <div className="lxfh" style={{ fontSize: 16, marginBottom: 4 }}>Warehouse Pulse</div>
-               <p style={{ fontSize: 12, color: '#9B99C8', lineHeight: 1.6 }}>12 major items currently in central warehouse awaiting site deployment.</p>
+               {warehouseCount > 0 ? (
+                 <p style={{ fontSize: 12, color: '#9B99C8', lineHeight: 1.6 }}>
+                   <strong style={{ color: '#0D0B2E' }}>{warehouseCount}</strong> shipment{warehouseCount !== 1 ? 's' : ''} ({warehouseItems} items) at central warehouse awaiting site deployment.
+                 </p>
+               ) : (
+                 <p style={{ fontSize: 12, color: '#9B99C8', lineHeight: 1.6 }}>No shipments currently at the warehouse.</p>
+               )}
             </div>
          </div>
       </div>
-      {/* SOURCING MODAL placeholder - can be expanded later */}
       {activeTab === 'procurement' && workOrders.length === 0 && (
-        <div style={{ textAlign: 'center', padding: 80, color: '#9B99C8' }}>
-           <RefreshCw size={48} className="spin" style={{ marginBottom: 16, opacity: 0.2 }} />
-           <p>Initializing Sourcing Engine...</p>
+        <EmptyState
+          icon={<Package size={28} />}
+          title="No work orders yet"
+          description="Work orders are created from client project hubs when sourcing is required."
+        />
+      )}
+
+      {/* NEW CONTAINER MODAL */}
+      {showAddContainer && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 3000, background: 'rgba(13,11,46,0.6)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }} onClick={() => setShowAddContainer(false)}>
+          <div style={{ background: '#fff', borderRadius: 28, padding: 40, width: '100%', maxWidth: 560, boxShadow: '0 40px 80px rgba(0,0,0,0.2)' }} onClick={e => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 32 }}>
+              <div>
+                <h2 className="lxfh" style={{ fontSize: 22, margin: 0 }}>New Shipment</h2>
+                <p className="lxf" style={{ fontSize: 13, color: '#9B99C8', marginTop: 4 }}>Track a new container or sea freight</p>
+              </div>
+              <button onClick={() => setShowAddContainer(false)} style={{ background: '#F8F8FD', border: 'none', width: 36, height: 36, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+                <X size={18} />
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+              <PFormField label="Shipment Reference *">
+                <input className="p-inp" placeholder="e.g. GT-CN-2026-001" value={newContainer.shipmentRef} onChange={e => setNewContainer({ ...newContainer, shipmentRef: e.target.value })} />
+              </PFormField>
+              <PFormField label="Supplier / Factory">
+                <input className="p-inp" placeholder="e.g. Shenzhen Glass Co." value={newContainer.supplier} onChange={e => setNewContainer({ ...newContainer, supplier: e.target.value })} />
+              </PFormField>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+                <PFormField label="Expected Arrival (ETA)">
+                  <input className="p-inp" type="date" value={newContainer.eta} onChange={e => setNewContainer({ ...newContainer, eta: e.target.value })} />
+                </PFormField>
+                <PFormField label="Cargo Value (GH₵)">
+                  <input className="p-inp" type="number" placeholder="0.00" value={newContainer.value} onChange={e => setNewContainer({ ...newContainer, value: parseFloat(e.target.value) || '' })} />
+                </PFormField>
+              </div>
+              <PFormField label="Notes / Description">
+                <textarea className="p-inp" placeholder="Glass type, dimensions, special handling..." value={newContainer.notes} onChange={e => setNewContainer({ ...newContainer, notes: e.target.value })} style={{ minHeight: 80, resize: 'vertical' }} />
+              </PFormField>
+            </div>
+
+            <div style={{ display: 'flex', gap: 12, marginTop: 32 }}>
+              <button onClick={() => setShowAddContainer(false)} style={{ flex: 1, padding: 16, borderRadius: 14, background: '#F8F8FD', border: 'none', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Cancel</button>
+              <button onClick={handleCreateContainer} disabled={saving} style={{ flex: 2, padding: 16, borderRadius: 14, background: '#0D0B2E', border: 'none', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', opacity: saving ? 0.7 : 1 }}>
+                {saving ? 'Adding...' : 'Add Shipment'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

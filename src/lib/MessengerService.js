@@ -1,50 +1,45 @@
 /**
  * Unified Messenger Service Hub
- * Routes all messaging through the server-side Cloud Function proxy.
- * API tokens are never exposed in the browser bundle.
+ * Routes all SMS through the sendSMS Cloud Function (onCall, provider=arkesel)
+ * so the API key never touches the browser and CORS is never an issue.
  */
 
-const PROVIDER = import.meta.env.VITE_WHATSAPP_PROVIDER || 'mock';
-const CLOUD_FN_URL = import.meta.env.VITE_WHATSAPP_CLOUD_FN_URL; // e.g. https://us-central1-<project>.cloudfunctions.net/sendWhatsApp
+import { functions } from './firebase';
+import { httpsCallable } from 'firebase/functions';
 
-async function callProxy(phone, message) {
-  if (!CLOUD_FN_URL) throw new Error('VITE_WHATSAPP_CLOUD_FN_URL is not configured');
-  const res = await fetch(CLOUD_FN_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ phone, message, provider: PROVIDER })
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || `HTTP ${res.status}`);
-  }
-  return res.json();
+const PROVIDER = import.meta.env.VITE_SMS_PROVIDER || 'mock';
+
+async function callSendSMS(phone, message) {
+  if (!functions) throw new Error('Firebase Functions not initialized');
+  const fn = httpsCallable(functions, 'sendSMS');
+  return fn({ phone, message });
 }
 
 export const MessengerService = {
   sendOTP: async (phone, code) => {
-    if (import.meta.env.DEV) console.log(`[MessengerService] OTP via provider: ${PROVIDER}`);
+    if (import.meta.env.DEV) console.log(`[MessengerService] OTP via ${PROVIDER} to ${phone}`);
 
-    if (PROVIDER === 'mock') {
-      return new Promise((resolve) => setTimeout(() => {
-        if (import.meta.env.DEV) console.log(`[MOCK OTP] To: ${phone} | Code: ${code}`);
-        resolve({ success: true, sid: crypto.randomUUID() });
-      }, 800));
+    if (PROVIDER === 'arkesel') {
+      const message = `Westline Future\n\nYour login code is: ${code}\n\nExpires in 10 minutes.`;
+      return callSendSMS(phone, message);
     }
 
-    return callProxy(phone, `Your Westline Future Fab verification code is: ${code}`);
+    return new Promise((resolve) => setTimeout(() => {
+      if (import.meta.env.DEV) console.log(`[MOCK OTP] To: ${phone} | Code: ${code}`);
+      resolve({ success: true });
+    }, 800));
   },
 
   sendMessage: async (phone, message) => {
-    if (import.meta.env.DEV) console.log(`[MessengerService] Message via provider: ${PROVIDER}`);
+    if (import.meta.env.DEV) console.log(`[MessengerService] SMS via ${PROVIDER} to ${phone}`);
 
-    if (PROVIDER === 'mock') {
-      return new Promise((resolve) => setTimeout(() => {
-        if (import.meta.env.DEV) console.log(`[MOCK MSG] To: ${phone} | ${message}`);
-        resolve({ success: true, sid: crypto.randomUUID() });
-      }, 600));
+    if (PROVIDER === 'arkesel') {
+      return callSendSMS(phone, message);
     }
 
-    return callProxy(phone, message);
+    return new Promise((resolve) => setTimeout(() => {
+      if (import.meta.env.DEV) console.log(`[MOCK SMS] To: ${phone} | ${message}`);
+      resolve({ success: true });
+    }, 600));
   }
 };

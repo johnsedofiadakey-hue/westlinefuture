@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Search, ArrowLeft, Check, Plus, Camera, FileText, DollarSign, ArrowRight, MessageCircle } from 'lucide-react';
+import { Search, ArrowLeft, Check, Plus, Camera, FileText, DollarSign, ArrowRight, MessageCircle, HardHat, UserCheck, UserX } from 'lucide-react';
 import { PSBadge, SBadge, FF as PFormField } from '../../components/Shared';
 import { PROJECT_STAGES } from '../../data';
 import AdminTasks from './AdminTasks';
@@ -7,7 +7,7 @@ import AdminProcurement from './AdminProcurement';
 import AdminProjectGallery from './AdminProjectGallery';
 import AdminGovernance from './AdminGovernance';
 
-export default function AdminInstallations({ clients = [], updateProject, dbClients, brand, transactions = [], recordOfflinePayment, calculateProjectPulse, ...props }) {
+export default function AdminInstallations({ clients = [], updateProject, dbClients, brand, transactions = [], recordOfflinePayment, calculateProjectPulse, teamMembers = [], assignWorkerToProject, ...props }) {
   const ac = brand.color || '#231F78';
   const [search, setSearch] = useState('');
   const [sel, setSel] = useState(null);
@@ -15,12 +15,18 @@ export default function AdminInstallations({ clients = [], updateProject, dbClie
   const [manData, setManData] = useState({ amount: '', method: 'Bank Transfer', ref: '' });
 
   const [manErr, setManErr] = useState('');
+  const [manSaving, setManSaving] = useState(false);
   const handleManual = async () => {
     if (!manData.amount) { setManErr('Amount is required'); return; }
     setManErr('');
-    await recordOfflinePayment(sel, manData.amount, manData.method, manData.ref);
-    setShowManual(false);
-    setManData({ amount: '', method: 'Bank Transfer', ref: '' });
+    setManSaving(true);
+    try {
+      await recordOfflinePayment(sel, manData.amount, manData.method, manData.ref);
+      setShowManual(false);
+      setManData({ amount: '', method: 'Bank Transfer', ref: '' });
+    } finally {
+      setManSaving(false);
+    }
   };
   const filtered = (clients || []).filter(c => (c.project || '').toLowerCase().includes(search.toLowerCase()));
 
@@ -28,8 +34,8 @@ export default function AdminInstallations({ clients = [], updateProject, dbClie
     const proj = clients.find(x => x.id === sel);
     if (!proj) return <div className="lxf" style={{ padding: 40, textAlign: 'center' }}>Project data missing. <button onClick={() => setSel(null)}>Back</button></div>;
     
-    const paidAmount = (props.invoices || []).filter(i => i.parentId === sel && i.status === 'Paid').reduce((a, b) => a + parseFloat(b.amount?.replace(/[$,]/g, '') || 0), 0);
-    const totalBudget = parseFloat(proj.budget?.replace(/[$,]/g, '') || 0);
+    const paidAmount = (props.invoices || []).filter(i => i.parentId === sel && i.status === 'Paid').reduce((a, b) => a + (parseFloat(String(b.amount || 0).replace(/[$,]/g, '')) || 0), 0);
+    const totalBudget = parseFloat(String(proj.budget || 0).replace(/[$,]/g, '')) || 0;
     
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
@@ -74,12 +80,12 @@ export default function AdminInstallations({ clients = [], updateProject, dbClie
                         style={{ 
                           width: 32, height: 32, borderRadius: '50%', 
                           background: isPast ? s.color : isCurrent ? '#fff' : '#fff',
-                          border: isPast ? `2px solid ${s.color}` : isCurrent ? `2px solid ${s.color}` : '2px solid #E4E3F0',
+                          border: isPast ? `2px solid ${s.color}` : isCurrent ? `2px solid ${s.color}` : '2px solid #DFD9D1',
                           display: 'flex', alignItems: 'center', justifyContent: 'center',
                           zIndex: 2, cursor: 'pointer', transition: 'all .3s'
                         }}
                       >
-                        {isPast ? <Check size={16} color="#fff" strokeWidth={3} /> : <div style={{ width: 8, height: 8, borderRadius: '50%', background: isCurrent ? s.color : '#E4E3F0' }} />}
+                        {isPast ? <Check size={16} color="#fff" strokeWidth={3} /> : <div style={{ width: 8, height: 8, borderRadius: '50%', background: isCurrent ? s.color : '#DFD9D1' }} />}
                       </div>
 
                       <div style={{ flex: 1, paddingTop: 4 }}>
@@ -127,7 +133,7 @@ export default function AdminInstallations({ clients = [], updateProject, dbClie
                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                   <div className="lxf" style={{ fontSize: 10, color: '#9B99C8', textTransform: 'uppercase', letterSpacing: '.05em' }}>Transactions</div>
                   {(transactions || []).filter(t => t.parentId === sel).map(t => (
-                    <div key={t.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', background: '#F4F4FA', borderRadius: 8, borderLeft: `3px solid ${ac}` }}>
+                    <div key={t.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', background: '#F8F8FD', borderRadius: 8, borderLeft: `3px solid ${ac}` }}>
                        <div>
                           <div className="lxf" style={{ fontSize: 12, fontWeight: 700 }}>${parseFloat(t.amount).toLocaleString()}</div>
                           <div className="lxf" style={{ fontSize: 10, color: '#9B99C8' }}>{t.date} via {t.method}</div>
@@ -149,6 +155,52 @@ export default function AdminInstallations({ clients = [], updateProject, dbClie
                   </div>
                </div>
             </div>
+
+            {/* FIELD CREW ASSIGNMENT */}
+            {(() => {
+              const fieldWorkers = (teamMembers || []).filter(m => m.role === 'worker' || m.jobRole === 'Field Worker');
+              const assignedWorkers = proj.assignedWorkers || [];
+              if (fieldWorkers.length === 0) return null;
+              return (
+                <div className="p-card" style={{ padding: 24 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+                    <HardHat size={16} color={ac} />
+                    <h3 className="lxfh" style={{ fontSize: 16 }}>Field Crew</h3>
+                    <span style={{ marginLeft: 'auto', fontSize: 11, color: '#9B99C8' }}>{assignedWorkers.length} assigned</span>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {fieldWorkers.map(w => {
+                      const isAssigned = assignedWorkers.includes(w.id) || assignedWorkers.includes(w.uid);
+                      const wId = w.uid || w.id;
+                      return (
+                        <button
+                          key={w.id}
+                          onClick={() => assignWorkerToProject && assignWorkerToProject(sel, wId)}
+                          style={{
+                            display: 'flex', alignItems: 'center', gap: 10,
+                            padding: '10px 12px', borderRadius: 10,
+                            background: isAssigned ? '#F0FDF4' : '#F8F8FD',
+                            border: `1.5px solid ${isAssigned ? '#BBF7D0' : '#E8E6F5'}`,
+                            cursor: 'pointer', width: '100%', textAlign: 'left'
+                          }}
+                        >
+                          <div style={{ width: 32, height: 32, borderRadius: 10, background: isAssigned ? '#16A34A' : '#E5E0D8', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                            {isAssigned ? <UserCheck size={14} color="#fff" /> : <UserX size={14} color="#9A948E" />}
+                          </div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: 13, fontWeight: 700, color: isAssigned ? '#15803D' : '#0D0B2E', marginBottom: 1 }}>{w.name}</div>
+                            <div style={{ fontSize: 10, color: '#9B99C8' }}>{w.jobRole || 'Field Worker'}</div>
+                          </div>
+                          <div style={{ fontSize: 10, fontWeight: 800, color: isAssigned ? '#16A34A' : '#9B99C8', textTransform: 'uppercase' }}>
+                            {isAssigned ? 'On crew' : 'Add'}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* QUICK ACTIONS */}
             <div className="p-card" style={{ padding: 24, background: ac, color: '#fff' }}>
@@ -181,7 +233,7 @@ export default function AdminInstallations({ clients = [], updateProject, dbClie
                       </select>
                    </PFormField>
                    <PFormField label="Reference / Note"><input className="p-inp" value={manData.ref} onChange={e => setManData({...manData, ref: e.target.value})} placeholder="e.g. TR-9921 / Site Cash" /></PFormField>
-                   <button onClick={handleManual} className="p-btn-dark" style={{ padding: 14, marginTop: 10 }}>Confirm & Log Transaction</button>
+                   <button onClick={handleManual} disabled={manSaving} className="p-btn-dark" style={{ padding: 14, marginTop: 10, opacity: manSaving ? 0.6 : 1, cursor: manSaving ? 'wait' : 'pointer' }}>{manSaving ? 'Saving…' : 'Confirm & Log Transaction'}</button>
                 </div>
              </div>
           </div>
@@ -215,7 +267,7 @@ export default function AdminInstallations({ clients = [], updateProject, dbClie
                      <div className="lxfh" style={{ fontSize: 18, fontWeight: 700 }}>{c.project}</div>
                      <div className="lxf" style={{ fontSize: 12, color: '#9B99C8', marginTop: 3 }}>{c.name}</div>
                   </div>
-                  <div style={{ width: 44, height: 44, borderRadius: 12, background: '#F4F4FA', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <div style={{ width: 44, height: 44, borderRadius: 12, background: '#F8F8FD', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                      <PSBadge s={currentStageObj?.name || 'Order Confirmed'} />
                   </div>
                </div>
@@ -230,7 +282,7 @@ export default function AdminInstallations({ clients = [], updateProject, dbClie
                   </div>
                </div>
 
-               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 16, borderTop: '1px solid #F4F4FA' }}>
+               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 16, borderTop: '1px solid #F8F8FD' }}>
                   <div style={{ display: 'flex', gap: 8 }}>
                      <button 
                         onClick={() => props.sendWhatsAppUpdate(c.id, c.id, currentStageObj?.name || 'New Stage')}

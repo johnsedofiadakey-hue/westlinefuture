@@ -1,14 +1,22 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  X, ChevronRight, Info, Search, 
-  Download, Filter, ArrowRight, ShoppingCart, Zap
+import {
+  X, ChevronRight, Info, Search,
+  Download, Filter, ArrowRight, ShoppingCart, Zap, MessageCircle,
+  Layers, AppWindow, ShowerHead, ChefHat, Shirt, LayoutGrid,
+  DoorOpen, Droplets, Armchair
 } from 'lucide-react';
 import { PubNav, Footer } from './PublicSite';
+
+const WA_ICON = () => (
+  <svg viewBox="0 0 24 24" width={14} height={14} fill="currentColor" style={{ flexShrink: 0 }}>
+    <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
+  </svg>
+);
 // Removed static import of huge data file
 
-const LIGHT_BG = '#F8F8FD';
+const LIGHT_BG = '#FDFCFB';
 const DARK_TEXT = '#0D0B2E';
 const AC = '#231F78';
 
@@ -26,58 +34,66 @@ const isMob = (w) => w <= 900;
 
 // --- COMPONENTS ---
 
-const ProductCard = ({ product, onClick, ac, mob, onCompare, isComparing }) => {
+const ProductCard = ({ product, onClick, ac, mob, onCompare, isComparing, waNumber }) => {
   const pCats = Array.isArray(product.cat) ? product.cat : [product.cat];
   const catLabel = pCats[0];
   const descText = product.description || product.desc || "";
+  const waMsg = encodeURIComponent(`Hi Westline Future, I'm interested in: ${product.name}. Please send me a quote.`);
 
   return (
-    <motion.div 
+    <motion.div
       layout
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      whileHover={mob ? {} : { y: -8 }}
+      whileHover={mob ? {} : { y: -6 }}
       onClick={onClick}
-      style={{ 
-        background: '#fff', borderRadius: 16, overflow: 'hidden', 
-        border: isComparing ? `2px solid ${ac}` : '1px solid rgba(0,0,0,0.05)', 
+      style={{
+        background: '#fff', borderRadius: 20, overflow: 'hidden',
+        border: isComparing ? `2px solid ${ac}` : '1px solid rgba(0,0,0,0.05)',
         cursor: 'pointer',
-        boxShadow: isComparing ? `0 20px 40px ${ac}15` : '0 10px 30px rgba(0,0,0,0.02)',
+        boxShadow: isComparing ? `0 20px 40px ${ac}15` : '0 8px 24px rgba(0,0,0,0.04)',
         display: 'flex', flexDirection: 'column',
-        position: 'relative'
+        position: 'relative', transition: 'box-shadow 0.25s',
       }}
     >
-      <div style={{ height: mob ? 240 : 280, background: '#F4F4FA', position: 'relative', overflow: 'hidden' }}>
-        <img 
-        src={product.img} 
-        alt={product.name} 
-        onError={(e) => { e.target.src = '/kitchen/default.png'; }}
-        style={{ width: '100%', height: '100%', objectFit: 'contain', padding: mob ? 10 : 20 }} 
-      />
+      <div style={{ height: mob ? 220 : 260, background: '#F8F8FD', position: 'relative', overflow: 'hidden' }}>
+        <img
+          src={product.img}
+          alt={product.name}
+          onError={(e) => { e.target.src = '/kitchen/default.png'; }}
+          style={{ width: '100%', height: '100%', objectFit: 'contain', padding: mob ? 10 : 20 }}
+        />
         <div style={{ position: 'absolute', top: 12, right: 12, display: 'flex', gap: 6 }}>
-           <button 
-             onClick={(e) => { e.stopPropagation(); onCompare(product.id); }}
-             style={{ 
-               padding: '6px 12px', background: isComparing ? ac : 'rgba(255,255,255,0.9)', 
-               color: isComparing ? '#fff' : DARK_TEXT, border: 'none', borderRadius: 100, 
-               fontSize: 9, fontWeight: 900, cursor: 'pointer', backdropFilter: 'blur(10px)' 
-             }}
-           >
-              {isComparing ? 'SELECTED' : '+ COMPARE'}
-           </button>
-           <div style={{ padding: '4px 12px', background: 'rgba(255,255,255,0.9)', borderRadius: 100, fontSize: 10, fontWeight: 800, color: ac }}>
-             {catLabel.toUpperCase()}
-           </div>
+          <button
+            onClick={(e) => { e.stopPropagation(); onCompare(product.id); }}
+            style={{
+              padding: '5px 10px', background: isComparing ? ac : 'rgba(255,255,255,0.92)',
+              color: isComparing ? '#fff' : DARK_TEXT, border: 'none', borderRadius: 100,
+              fontSize: 9, fontWeight: 900, cursor: 'pointer', backdropFilter: 'blur(10px)'
+            }}
+          >
+            {isComparing ? 'SELECTED' : '+ COMPARE'}
+          </button>
+          <div style={{ padding: '4px 10px', background: 'rgba(255,255,255,0.92)', borderRadius: 100, fontSize: 10, fontWeight: 800, color: ac, backdropFilter: 'blur(10px)' }}>
+            {catLabel.toUpperCase()}
+          </div>
         </div>
       </div>
-      <div style={{ padding: mob ? 20 : 24, flex: 1, display: 'flex', flexDirection: 'column' }}>
-        <h3 style={{ fontSize: mob ? 16 : 18, fontWeight: 800, margin: '0 0 8px', color: DARK_TEXT }}>{product.name}</h3>
-        <p style={{ fontSize: mob ? 12 : 13, color: 'rgba(13,11,46,0.5)', lineHeight: 1.5, margin: '0 0 20px', flex: 1 }}>
+      <div style={{ padding: mob ? 16 : 20, flex: 1, display: 'flex', flexDirection: 'column' }}>
+        <h3 style={{ fontSize: mob ? 15 : 17, fontWeight: 800, margin: '0 0 6px', color: DARK_TEXT }}>{product.name}</h3>
+        <p style={{ fontSize: mob ? 11 : 12, color: 'rgba(13,11,46,0.5)', lineHeight: 1.5, margin: '0 0 16px', flex: 1 }}>
           {product.tagline || (descText.length > 80 ? descText.substring(0, 80) + '...' : descText)}
         </p>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid #f5f5f5', paddingTop: 16 }}>
-          <span style={{ fontSize: 11, fontWeight: 800, color: ac, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Quote on Request</span>
-          <div style={{ color: DARK_TEXT, display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, fontWeight: 800, textTransform: 'uppercase' }}>
+        <div style={{ display: 'flex', gap: 8, borderTop: '1px solid #f5f5f5', paddingTop: 14 }}>
+          <a
+            href={`https://wa.me/${waNumber || '233598455012'}?text=${waMsg}`}
+            target="_blank" rel="noopener noreferrer"
+            onClick={e => e.stopPropagation()}
+            style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '10px 0', background: '#25D366', color: '#fff', borderRadius: 10, fontSize: 11, fontWeight: 800, textDecoration: 'none' }}
+          >
+            <WA_ICON /> WhatsApp Quote
+          </a>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4, color: DARK_TEXT, fontSize: 11, fontWeight: 800, textTransform: 'uppercase', padding: '10px 12px', background: '#F8F8FD', borderRadius: 10 }}>
             Details <ArrowRight size={14} />
           </div>
         </div>
@@ -115,7 +131,7 @@ const DetailModal = ({ product, onClose, ac, navigate, mob }) => {
       >
         <div style={{ display: 'flex', flexWrap: 'wrap', height: '100%', overflowY: 'auto' }}>
           {/* Left: Image & Dynamic Finish Switcher */}
-          <div style={{ flex: '1 1 500px', background: '#F4F4FA', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: mob ? 20 : 40, minHeight: mob ? 300 : 400 }}>
+          <div style={{ flex: '1 1 500px', background: '#F8F8FD', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: mob ? 20 : 40, minHeight: mob ? 300 : 400 }}>
             <motion.img 
               key={selectedColor}
               initial={{ opacity: 0.8, scale: 0.98 }}
@@ -249,15 +265,32 @@ export default function ProductsHub({ brand, user, onPortal, setPage, content })
     }).catch(() => setLoading(false));
   }, []);
 
-  const products = useMemo(() => content?.products || catalogData.products || [], [content?.products, catalogData.products]);
-  const categories = useMemo(() => content?.categories || catalogData.categories || [], [content?.categories, catalogData.categories]);
+  // CMS products from Firestore are merged ON TOP of the static catalog so both sources are always visible
+  const products = useMemo(() => {
+    const base = catalogData.products || [];
+    const cms = Array.isArray(content?.products) ? content.products : [];
+    const cmsIds = new Set(cms.map(p => p.id));
+    return [...base.filter(p => !cmsIds.has(p.id)), ...cms];
+  }, [content?.products, catalogData.products]);
+  const categories = useMemo(() => {
+    const base = catalogData.categories || [];
+    const cms = Array.isArray(content?.categories) ? content.categories : [];
+    const cmsIds = new Set(cms.map(c => c.id));
+    return [...base.filter(c => !cmsIds.has(c.id)), ...cms];
+  }, [content?.categories, catalogData.categories]);
 
   const GROUPS = [
-    { id: 'aluminum', label: 'Aluminum Systems' },
-    { id: 'interior', label: 'Interior Systems' },
-    { id: 'washroom', label: 'Washroom Systems' },
-    { id: 'finishing', label: 'Luxury Finishing' }
+    { id: 'aluminum',   Icon: AppWindow,  label: 'Aluminium & Glass' },
+    { id: 'washroom',   Icon: ShowerHead, label: 'Bathrooms' },
+    { id: 'kitchen',    Icon: ChefHat,    label: 'Kitchens' },
+    { id: 'wardrobe',   Icon: Shirt,      label: 'Wardrobes' },
+    { id: 'tiles',      Icon: LayoutGrid, label: 'Tiles & Flooring' },
+    { id: 'doors',      Icon: DoorOpen,   label: 'Doors' },
+    { id: 'interior',   Icon: Armchair,   label: 'Interior' },
+    { id: 'electrical', Icon: Zap,        label: 'Electrical' },
+    { id: 'plumbing',   Icon: Droplets,   label: 'Plumbing' },
   ];
+  const waNumber = brand?.whatsapp || '233598455012';
 
   const groupCategories = useMemo(() => {
     return categories.filter(c => c.groupId === activeGroup);
@@ -301,9 +334,29 @@ export default function ProductsHub({ brand, user, onPortal, setPage, content })
       <PubNav brand={brand} setPage={setPage} activePage="products" onPortal={onPortal} user={user} menuOpen={menuOpen} setMenuOpen={setMenuOpen} navigate={navigate} />
 
       <main style={{ padding: mob ? '100px 20px 100px' : '160px 5vw 100px', maxWidth: 1400, margin: '0 auto' }}>
-        <div style={{ marginBottom: mob ? 40 : 60 }}>
-          <h1 style={{ fontSize: mob ? 32 : 56, fontWeight: 800, letterSpacing: '-0.04em', margin: '0 0 16px' }}>Architectural <span style={{ color: ac }}>Catalog.</span></h1>
-          <p style={{ color: 'rgba(13,11,46,0.5)', fontSize: mob ? 14 : 18, maxWidth: 600 }}>Explore our curated collection of precision-engineered structural glass and interior finishing systems.</p>
+        <div style={{ marginBottom: mob ? 32 : 48 }}>
+          <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.3em', textTransform: 'uppercase', color: ac }}>SUPPLY & INSTALLATION</span>
+          <h1 style={{ fontSize: mob ? 32 : 56, fontWeight: 800, letterSpacing: '-0.04em', margin: '12px 0 16px', lineHeight: 1.05 }}>
+            Products & <span style={{ color: ac }}>Materials.</span>
+          </h1>
+          <p style={{ color: 'rgba(13,11,46,0.5)', fontSize: mob ? 14 : 17, maxWidth: 700, lineHeight: 1.7 }}>
+            Glass, tiles, bathrooms, kitchens, wardrobes, doors, electrical and plumbing materials — all sourced directly and available for supply or full installation worldwide.
+          </p>
+        </div>
+
+        {/* Top CTA strip */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, padding: '16px 24px', background: '#0D0B2E', borderRadius: 16, marginBottom: 40 }}>
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 800, color: '#fff' }}>Don't see what you need?</div>
+            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', marginTop: 2 }}>We source any material from China — just tell us what you need.</div>
+          </div>
+          <a
+            href={`https://wa.me/${waNumber}?text=${encodeURIComponent('Hi Westline Future, I need a custom material sourced. Can you help?')}`}
+            target="_blank" rel="noopener noreferrer"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '12px 24px', background: '#25D366', color: '#fff', borderRadius: 12, fontWeight: 800, fontSize: 13, textDecoration: 'none', whiteSpace: 'nowrap' }}
+          >
+            <WA_ICON /> Custom Order via WhatsApp
+          </a>
         </div>
 
         {loading && (
@@ -325,14 +378,16 @@ export default function ProductsHub({ brand, user, onPortal, setPage, content })
               key={g.id}
               onClick={() => { setActiveGroup(g.id); setFilter('All'); }}
               style={{
-                background: 'none', border: 'none', padding: '8px 16px', cursor: 'pointer',
-                fontSize: 13, fontWeight: 800, color: activeGroup === g.id ? ac : 'rgba(0,0,0,0.3)',
-                position: 'relative', transition: 'all 0.3s', whiteSpace: 'nowrap'
+                background: 'none', border: 'none', padding: '8px 14px', cursor: 'pointer',
+                fontSize: 12, fontWeight: 700, color: activeGroup === g.id ? ac : 'rgba(0,0,0,0.38)',
+                position: 'relative', transition: 'all 0.3s', whiteSpace: 'nowrap',
+                display: 'inline-flex', alignItems: 'center', gap: 6,
               }}
             >
+              <g.Icon size={14} strokeWidth={activeGroup === g.id ? 2.25 : 1.75} />
               {g.label}
               {activeGroup === g.id && (
-                <motion.div layoutId="g-line" style={{ position: 'absolute', bottom: -12, left: 0, right: 0, height: 2, background: ac }} />
+                <motion.div layoutId="g-line" style={{ position: 'absolute', bottom: -12, left: 0, right: 0, height: 2, background: ac, borderRadius: 2 }} />
               )}
             </button>
           ))}
@@ -372,15 +427,30 @@ export default function ProductsHub({ brand, user, onPortal, setPage, content })
           gridTemplateColumns: mob ? '1fr' : 'repeat(auto-fill, minmax(320px, 1fr))', 
           gap: mob ? 24 : 32 
         }}>
+          {(filtered || []).length === 0 && (
+            <div style={{ gridColumn: '1 / -1', padding: '80px 0', textAlign: 'center' }}>
+              <div style={{ fontSize: 48, marginBottom: 16 }}>🔍</div>
+              <div style={{ fontSize: 18, fontWeight: 800, color: DARK_TEXT, marginBottom: 8 }}>No products in this category yet</div>
+              <div style={{ fontSize: 14, color: '#9B99C8', marginBottom: 24 }}>We can source any material from China — contact us for a custom order.</div>
+              <a
+                href={`https://wa.me/${waNumber}?text=${encodeURIComponent('Hi Westline Future, I\'m looking for a product you may not have listed. Can you help source it?')}`}
+                target="_blank" rel="noopener noreferrer"
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '14px 28px', background: '#25D366', color: '#fff', borderRadius: 14, fontWeight: 800, fontSize: 14, textDecoration: 'none' }}
+              >
+                <WA_ICON /> Request Custom Order
+              </a>
+            </div>
+          )}
           {(filtered || []).map(p => (
-            <ProductCard 
-              key={p.id} 
-              product={p} 
-              onClick={() => setSelectedProduct(p)} 
-              ac={ac} 
-              mob={mob} 
+            <ProductCard
+              key={p.id}
+              product={p}
+              onClick={() => setSelectedProduct(p)}
+              ac={ac}
+              mob={mob}
               onCompare={toggleCompare}
               isComparing={comparing.includes(p.id)}
+              waNumber={waNumber}
             />
           ))}
         </div>
@@ -445,7 +515,7 @@ export default function ProductsHub({ brand, user, onPortal, setPage, content })
                 <div style={{ display: 'grid', gridTemplateColumns: `repeat(${comparing.length}, 1fr)`, gap: 32 }}>
                    {compareProducts.map(p => (
                      <div key={p.id}>
-                        <img src={p.img} style={{ width: '100%', height: 200, objectFit: 'contain', background: '#F4F4FA', borderRadius: 16, marginBottom: 24 }} />
+                        <img src={p.img} style={{ width: '100%', height: 200, objectFit: 'contain', background: '#F8F8FD', borderRadius: 16, marginBottom: 24 }} />
                         <h3 style={{ fontSize: 18, fontWeight: 800, marginBottom: 12 }}>{p.name}</h3>
                         
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>

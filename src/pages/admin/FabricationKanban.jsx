@@ -129,7 +129,7 @@ export default function FabricationKanban({ jobs = [], clients = [], dbClients =
                       <div className="lxf" style={{ fontSize: 13, color: '#4B5563', marginBottom: 16, fontWeight: 500 }}>{j.item}</div>
                       
                       {/* PANEL SPECS */}
-                      <div style={{ background: '#F4F4FA', borderRadius: 12, padding: 12, marginBottom: 20 }}>
+                      <div style={{ background: '#F8F8FD', borderRadius: 12, padding: 12, marginBottom: 20 }}>
                          {j.panels?.map(p => (
                            <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginBottom: 4 }}>
                               <span style={{ color: '#5B5894' }}>{p.w}x{p.h}mm • {p.t}</span>
@@ -183,7 +183,7 @@ export default function FabricationKanban({ jobs = [], clients = [], dbClients =
           <div className="p-card" style={{ width: '100%', maxWidth: 480, padding: 32, borderRadius: 24 }} onClick={e => e.stopPropagation()}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
               <h3 className="lxfh" style={{ fontSize: 20 }}>New Fabrication Job</h3>
-              <button onClick={() => setShowNewJob(false)} style={{ background: '#F4F4FA', border: 'none', width: 32, height: 32, borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>×</button>
+              <button onClick={() => setShowNewJob(false)} style={{ background: '#F8F8FD', border: 'none', width: 32, height: 32, borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>×</button>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
               <div>

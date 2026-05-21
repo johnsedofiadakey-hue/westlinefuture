@@ -2,20 +2,27 @@ import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
+import { getFunctions } from "firebase/functions";
 
 const env = import.meta.env;
-const hasKeys = !!env.VITE_FIREBASE_API_KEY && env.VITE_FIREBASE_API_KEY !== 'undefined';
+const hasKeys = !!(
+  env.VITE_FIREBASE_API_KEY &&
+  env.VITE_FIREBASE_API_KEY !== 'undefined' &&
+  env.VITE_FIREBASE_AUTH_DOMAIN &&
+  env.VITE_FIREBASE_PROJECT_ID &&
+  env.VITE_FIREBASE_APP_ID
+);
 
 const firebaseConfig = {
   apiKey: env.VITE_FIREBASE_API_KEY || "mock-key",
   authDomain: env.VITE_FIREBASE_AUTH_DOMAIN,
-  projectId: env.VITE_FIREBASE_PROJECT_ID || "westlinefuture-mock",
+  projectId: env.VITE_FIREBASE_PROJECT_ID || "glasstech-mock",
   storageBucket: env.VITE_FIREBASE_STORAGE_BUCKET,
   messagingSenderId: env.VITE_FIREBASE_MESSAGING_SENDER_ID,
   appId: env.VITE_FIREBASE_APP_ID
 };
 
-let app, auth, db, storage, isFirebaseEnabled = false;
+let app, auth, db, storage, functions, isFirebaseEnabled = false;
 
 try {
   if (hasKeys) {
@@ -23,17 +30,18 @@ try {
     auth = getAuth(app);
     db = getFirestore(app);
     storage = getStorage(app);
+    functions = getFunctions(app);
     isFirebaseEnabled = true;
   } else {
     // Return null so consumers can guard explicitly
-    app = null; auth = null; db = null; storage = null;
+    app = null; auth = null; db = null; storage = null; functions = null;
   }
 } catch (e) {
   console.warn("Firebase initialization failed:", e);
-  app = null; auth = null; db = null; storage = null;
+  app = null; auth = null; db = null; storage = null; functions = null;
 }
 
-export { auth, db, storage, isFirebaseEnabled };
+export { auth, db, storage, functions, isFirebaseEnabled };
 
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 

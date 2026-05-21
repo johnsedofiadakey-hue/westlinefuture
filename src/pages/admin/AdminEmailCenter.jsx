@@ -72,7 +72,7 @@ export default function AdminEmailCenter({ emails = [], projects = [], brand, ..
         <PModal open={!!convertTarget} title="Industrial Lead Provisioning" onClose={() => setConvertTarget(null)} w={1000}>
            <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 40 }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-                 <div style={{ background: '#F4F4FA', padding: 24, borderRadius: 20, border: '1px solid #C5C3EC' }}>
+                 <div style={{ background: '#F8F8FD', padding: 24, borderRadius: 20, border: '1px solid #C5C3EC' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
                        <div style={{ width: 40, height: 40, borderRadius: 12, background: '#0D0B2E', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                           <User color="#231F78" size={20} />
@@ -95,7 +95,7 @@ export default function AdminEmailCenter({ emails = [], projects = [], brand, ..
                     <PFormField label="Site Address / Location">
                        <div style={{ position: 'relative' }}>
                           <MapPin size={16} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', opacity: 0.4 }} />
-                          <input className="p-inp" style={{ paddingLeft: 40 }} placeholder="e.g. Project site address" value={conversionData.site} onChange={v => setConversionData({...conversionData, site: v.target.value})} />
+                          <input className="p-inp" style={{ paddingLeft: 40 }} placeholder="e.g. Spintex Road, Accra" value={conversionData.site} onChange={v => setConversionData({...conversionData, site: v.target.value})} />
                        </div>
                     </PFormField>
                  </div>

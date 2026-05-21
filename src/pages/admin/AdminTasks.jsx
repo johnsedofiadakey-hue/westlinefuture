@@ -3,7 +3,7 @@ import { CheckCircle, Trash2 } from 'lucide-react';
 import { FF as PFormField } from '../../components/Shared';
 import { PROJECT_STAGES } from '../../data';
 
-export default function AdminTasks({ projectId, projectTitle, tasks, createTask, deleteTask, updateTask, teamMembers, brand }) {
+export default function AdminTasks({ projectId, projectTitle, tasks, createTask, deleteTask, updateTask, teamMembers, brand, notify }) {
   const ac = brand.color || '#231F78';
   const [showAdd, setShowAdd] = useState(false);
   const [nt, setNt] = useState({ title: '', desc: '', assignedTo: '', stage: 1, dueDate: '' });
@@ -21,7 +21,7 @@ export default function AdminTasks({ projectId, projectTitle, tasks, createTask,
   });
 
   const handleAdd = async () => {
-    if (!nt.title || !nt.assignedTo) return alert('Title and Assignee required');
+    if (!nt.title || !nt.assignedTo) { notify?.('error', 'Title and Assignee are required.'); return; };
     await createTask({
       project_id: projectId,
       project_title: projectTitle,
@@ -44,7 +44,7 @@ export default function AdminTasks({ projectId, projectTitle, tasks, createTask,
       </div>
 
       {showAdd && (
-        <div style={{ background: '#F4F4FA', padding: 16, borderRadius: 8, marginBottom: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div style={{ background: '#F8F8FD', padding: 16, borderRadius: 8, marginBottom: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
             <PFormField label="Task Title"><input className="p-inp" value={nt.title} onChange={e => setNt({...nt, title: e.target.value})} /></PFormField>
             <PFormField label="Assign To">
               <select className="p-inp" value={nt.assignedTo} onChange={e => setNt({...nt, assignedTo: e.target.value})}>
@@ -77,8 +77,8 @@ export default function AdminTasks({ projectId, projectTitle, tasks, createTask,
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {projectTasks.length === 0 && <div className="lxf" style={{ color: '#9B99C8', fontSize: 12, textAlign: 'center', padding: '10px 0' }}>No tasks found</div>}
         {projectTasks.map(t => (
-          <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px', background: '#F4F4FA', borderRadius: 8 }}>
-             <button onClick={() => updateTask(t.id, { status: t.status === 'completed' ? 'pending' : 'completed' }, projectId)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: t.status === 'completed' ? '#16A34A' : '#E4E3F0' }}>
+          <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px', background: '#F8F8FD', borderRadius: 8 }}>
+             <button onClick={() => updateTask(t.id, { status: t.status === 'completed' ? 'pending' : 'completed' }, projectId)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: t.status === 'completed' ? '#16A34A' : '#DFD9D1' }}>
                 <CheckCircle size={18} />
              </button>
              <div style={{ flex: 1 }}>

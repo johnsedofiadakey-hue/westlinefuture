@@ -1,9 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import AdminLayout from './admin/AdminLayout';
 import AdminDashboard from './admin/AdminDashboard';
 import AdminClients from './admin/AdminClients';
-import AdminInstallations from './admin/AdminInstallations';
 import AdminLogistics from './admin/AdminLogistics';
 import AdminCMS from './admin/AdminCMS';
 import AdminPortfolio from './admin/AdminPortfolio';
@@ -19,8 +18,9 @@ import AdminShowcase from './admin/AdminShowcase';
 import AdminFinancials from './admin/AdminFinancials';
 import AdminAnalytics from './admin/AdminAnalytics';
 import ProjectKanban from './admin/ProjectKanban';
+import AdminInstallations from './admin/AdminInstallations';
 
-export default function AdminPortal({ user, onLogout, onPreview, content, setContent, ...props }) {
+export default function AdminPortal({ user, onLogout, onPreview, content, setContent, staffMode = false, ...props }) {
   const location = useLocation();
   const navigate = useNavigate();
   const [view, setView] = useState('dash');
@@ -40,8 +40,11 @@ export default function AdminPortal({ user, onLogout, onPreview, content, setCon
   };
   const [showAI, setShowAI] = useState(false);
   const [selectedClientId, setSelectedClientId] = useState(null);
-  const [mod, setMod] = useState(null); // 'AddClient', 'AddProject', etc.
+  const [mod, setMod] = useState(null);
   const [aiContext, setAiContext] = useState({});
+  const [searchQuery, setSearchQuery] = useState('');
+  const [msgDraft, setMsgDraft] = useState('');
+  const msgInputRef = useRef(null);
   const { brand } = props;
 
   const handleSelectClient = (id) => {
@@ -50,9 +53,40 @@ export default function AdminPortal({ user, onLogout, onPreview, content, setCon
   };
 
   const renderView = () => {
-    const common = { 
-      user, brand, content, setContent, 
-      setAI: (ctx = {}) => { setAiContext(ctx); setShowAI(true); }, 
+    const STAFF_ALLOWED_VIEWS = ['dash', 'client-hub', 'operations', 'messages', 'projects'];
+    if (staffMode && !STAFF_ALLOWED_VIEWS.includes(view)) {
+      setTimeout(() => handleSetView('dash'), 0);
+      return null;
+    }
+
+    const allClients = props.clients || [];
+
+    // Staff only see projects where they are assigned (assignedWorkers or assignedStaff arrays)
+    const staffUid = user?.uid || user?.id;
+    const staffFilteredClients = staffMode
+      ? allClients.filter(c => {
+          const workers = c.assignedWorkers || [];
+          const staff = c.assignedStaff || [];
+          return (
+            c.assignedTo === staffUid ||
+            workers.includes(staffUid) ||
+            staff.includes(staffUid)
+          );
+        })
+      : allClients;
+
+    const filteredClients = searchQuery.trim()
+      ? staffFilteredClients.filter(c => {
+          const q = searchQuery.toLowerCase();
+          return (c.name || c.title || c.project || '').toLowerCase().includes(q)
+            || (c.phone || '').includes(q)
+            || (c.email || '').toLowerCase().includes(q);
+        })
+      : staffFilteredClients;
+
+    const common = {
+      user, brand, content, setContent,
+      setAI: (ctx = {}) => { setAiContext(ctx); setShowAI(true); },
       setMod,
       onSelectClient: handleSelectClient,
       PROJECT_STAGES,
@@ -60,19 +94,20 @@ export default function AdminPortal({ user, onLogout, onPreview, content, setCon
       createJob: props.createJob,
       updateJob: props.updateJob,
       sendWhatsAppUpdate: props.sendWhatsAppUpdate,
-      ...props 
+      ...props,
+      clients: filteredClients,
     };
     switch (view) {
       case 'dash': return <AdminDashboard {...common} />;
       case 'operations': return <AdminClients {...common} deleteSelectedClients={props.deleteSelectedClients} deleteAllClients={props.deleteAllClients} currency={props.currency} setCurrency={props.setCurrency} />;
-      case 'client-hub': return <ClientHub clientId={selectedClientId} onBack={() => setView('operations')} {...common} />;
+      case 'client-hub': return <ClientHub clientId={selectedClientId} onBack={() => setView(staffMode ? 'projects' : 'operations')} {...common} />;
       case 'logistics': return <AdminLogistics {...common} />;
       case 'installations': return <AdminInstallations {...common} />;
-      case 'projects': return <ProjectKanban {...common} clients={props.clients} updateProject={props.syncProjects} />;
+      case 'projects': return <ProjectKanban {...common} clients={staffMode ? staffFilteredClients : props.clients} updateProject={props.syncProjects} staffMode={staffMode} />;
       case 'cms': return <AdminCMS {...common} onPreview={onPreview} />;
       case 'portfolio': return <AdminPortfolio {...common} />;
       case 'showcase': return <AdminShowcase {...common} />;
-      case 'staff': return <AdminStaff {...common} />;
+      case 'staff': return <AdminStaff {...common} team={props.teamMembers || []} />;
       case 'financials': return <AdminFinancials {...common} />;
       case 'system': return <AdminSystem onReset={props.migrateToFirebase} syncCatalog={props.syncCatalog} {...common} />;
       case 'email': return <AdminEmailCenter {...common} convertInquiry={props.convertInquiryToProject} updateEmailStatus={props.updateEmailStatus} />;
@@ -82,15 +117,17 @@ export default function AdminPortal({ user, onLogout, onPreview, content, setCon
   };
 
   return (
-    <AdminLayout 
-      user={user} 
-      onLogout={onLogout} 
-      onPreview={onPreview} 
-      brand={brand} 
-      view={view} 
+    <AdminLayout
+      user={user}
+      onLogout={onLogout}
+      onPreview={onPreview}
+      brand={brand}
+      view={view}
       setView={handleSetView}
       userNotifications={props.userNotifications || props.notifications}
       markNotificationRead={props.markNotificationRead}
+      onSearchChange={setSearchQuery}
+      staffMode={staffMode}
       {...props}
     >
       {renderView()}
@@ -158,23 +195,24 @@ function AdminChat({ messages, sendMessage, clients, brand }) {
             ))}
           </div>
           <div style={{ padding: 24, borderTop: '1px solid var(--border)', display: 'flex', gap: 12 }}>
-            <input 
-              id="adminMsgInp"
-              className="p-inp" 
-              placeholder="Type response..." 
-              style={{ flex: 1 }} 
+            <input
+              ref={msgInputRef}
+              className="p-inp"
+              placeholder="Type response..."
+              style={{ flex: 1 }}
+              value={msgDraft}
+              onChange={e => setMsgDraft(e.target.value)}
               onKeyDown={e => {
-                if (e.key === 'Enter' && e.target.value) {
-                  sendMessage(e.target.value, 'admin', activeClient.id);
-                  e.target.value = '';
+                if (e.key === 'Enter' && msgDraft.trim()) {
+                  sendMessage(msgDraft, 'admin', activeClient.id);
+                  setMsgDraft('');
                 }
               }}
             />
             <button onClick={() => {
-              const inp = document.getElementById('adminMsgInp');
-              if (inp.value) {
-                sendMessage(inp.value, 'admin', activeClient.id);
-                inp.value = '';
+              if (msgDraft.trim()) {
+                sendMessage(msgDraft, 'admin', activeClient.id);
+                setMsgDraft('');
               }
             }} className="p-btn-gold" style={{ padding: '0 24px' }}>Reply</button>
           </div>

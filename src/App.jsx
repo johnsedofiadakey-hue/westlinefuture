@@ -1,4 +1,5 @@
 import React, { useState, useEffect, Suspense, lazy, useRef } from 'react';
+const _BUILD_ID = '20260519';
 const PublicSite = lazy(() => import('./pages/PublicSite'));
 const LoginPage = lazy(() => import('./pages/LoginPage'));
 const AdminPortal = lazy(() => import('./pages/AdminPortal'));
@@ -8,24 +9,32 @@ const ProductsHub = lazy(() => import('./pages/ProductsHub'));
 const Portfolio = lazy(() => import('./pages/Portfolio'));
 const Showcase = lazy(() => import('./pages/Showcase'));
 const FieldUpload = lazy(() => import('./pages/admin/FieldUpload'));
+const WorkerView = lazy(() => import('./pages/WorkerView'));
 import ProtectedRoute from './components/ProtectedRoute';
 import { sanitizeText } from './lib/sanitize';
+import { mapFirebaseError } from './lib/firebaseErrors';
+const _dev = import.meta.env.DEV;
+const devLog = (...a) => { if (_dev) console.log(...a); };
+const devWarn = (...a) => { if (_dev) console.warn(...a); };
+const devErr = (...a) => { if (_dev) console.error(...a); };
 import { useContext, useCallback } from 'react';
 import { AppContext } from './context/AppContext';
 import { useFileUpload } from './hooks/useFileUpload';
 import { useMessaging } from './hooks/useMessaging';
 import { 
-  CLIENTS_DATA, PROPOSALS_DATA, INVOICES_DATA, 
+  CLIENTS_DATA, PROPOSALS_DATA, INVOICES_DATA,
   BOOKINGS_DATA, EMAIL_QUEUE, HERO_SLIDES,
   SERVICES_DATA, ABOUT_DATA, PROCESS_STEPS, ROOM_GALLERY,
-  PORTFOLIO_DATA, TEAM_MEMBERS, PROJECT_STAGES, WHY_US, 
+  PORTFOLIO_DATA, TEAM_MEMBERS, PROJECT_STAGES, WHY_US,
   PRODUCTS_DATA, GLASS_CATALOG_DATA, GLASS_CATALOG_CATEGORIES,
-  BRAND0, DEFAULT_SCENES, INITIAL_CONTENT
+  BRAND0, DEFAULT_SCENES, INITIAL_CONTENT,
+  CLIENT_PROJECT_STAGES
 } from './data.jsx';
 
 
-import { auth, db, storage, isFirebaseEnabled } from './lib/firebase';
-import { onAuthStateChanged, signInWithEmailAndPassword, signOut, createUserWithEmailAndPassword } from 'firebase/auth';
+import { auth, db, storage, functions, isFirebaseEnabled } from './lib/firebase';
+import { onAuthStateChanged, signInWithEmailAndPassword, signOut, createUserWithEmailAndPassword, RecaptchaVerifier, signInWithPhoneNumber } from 'firebase/auth';
+import { httpsCallable } from 'firebase/functions';
 import { 
   collection, query, onSnapshot, getDocs, getDoc, doc, 
   updateDoc, addDoc, setDoc, deleteDoc, orderBy, collectionGroup, limit, where, serverTimestamp, or
@@ -54,6 +63,7 @@ export default function App() {
   const [magicCode, setMagicCode] = useState(null);
   const [otp, setOtp] = useState('');
   const loginAttempts = useRef({});
+  const confirmationResultRef = useRef(null);
 
   const checkRateLimit = (identifier) => {
     const now = Date.now();
@@ -72,7 +82,7 @@ export default function App() {
   const clearRateLimit = (id) => { delete loginAttempts.current[id]; };
 
   const {
-    user, clients, proposals, invoices, bookings, emails, setEmails, dbClients, teamMembers, logs, shipments, messages, testimonials, tasks, transactions, changeRequests, userNotifications, procurements, jobs, notes, media, approvals, materials, assets, workOrders, containers,
+    user, setUser, clients, proposals, invoices, bookings, emails, setEmails, dbClients, teamMembers, logs, shipments, messages, testimonials, tasks, transactions, changeRequests, userNotifications, procurements, jobs, notes, media, approvals, materials, assets, workOrders, containers,
     brand, content, currency, lang,
     setCurrency, setLang, setBrand, setContent,
     loadMoreMessages, hasMoreMessages,
@@ -99,7 +109,8 @@ export default function App() {
     if (brand.color || brand.accent) root.style.setProperty('--ac', brand.accent || brand.color);
     if (brand.fontFamily) root.style.setProperty('--font-primary', brand.fontFamily);
   }, [brand]);
-  const rates = { USD: 1, GHS: 15.2, EUR: 0.93 };
+  const fxRate = content?.finSettings?.exchangeRate || brand?.finSettings?.exchangeRate || 15.5;
+  const rates = { USD: 1, GHS: fxRate, EUR: 0.93 };
 
 
 
@@ -157,7 +168,7 @@ export default function App() {
         createdAt: serverTimestamp()
       });
     } catch (err) {
-      console.warn("Failed to create system notification:", err);
+      devWarn("Failed to create system notification:", err);
     }
   };
 
@@ -172,7 +183,7 @@ export default function App() {
         setUser(updatedUser);
         const cacheData = { ...updatedUser };
         delete cacheData.password;
-        localStorage.setItem('westlinefuture_user_cache', JSON.stringify(cacheData));
+        localStorage.setItem('glasstech_user_cache', JSON.stringify(cacheData));
       }
     } catch (e) {
       notify('error', 'Failed to update profile');
@@ -189,16 +200,16 @@ export default function App() {
       notify('pending', 'Initializing Westline Future CMS...');
       setLoading(true);
 
-      const _seedPw = import.meta.env.VITE_SEED_CLIENT_PASSWORD || 'Westline Future2026';
-      const _adminUid1 = import.meta.env.VITE_ADMIN_UID_1 || 'qRcOaTkJ6rYmjha9jNAadrYW6pK2';
-      const _adminUid2 = import.meta.env.VITE_ADMIN_UID_2 || 'pBkrb38P9NaXXjIILQXlqxxC33p2';
-      const _clientUid1 = import.meta.env.VITE_CLIENT_UID_1 || 'GQL4qVw3NIe9XVq8gZFkuU4Q9dD3';
+      const _adminUid1 = import.meta.env.VITE_ADMIN_UID_1;
+      const _adminUid2 = import.meta.env.VITE_ADMIN_UID_2;
+      const _clientUid1 = import.meta.env.VITE_CLIENT_UID_1;
+      if (!_adminUid1 || !_adminUid2) {
+        throw new Error('VITE_ADMIN_UID_1 and VITE_ADMIN_UID_2 must be set in .env before seeding.');
+      }
       const DEMO_ACCOUNTS = [
         { email: 'admin@stormglide.com', role: 'admin', name: 'Super Admin', uid: _adminUid1 },
         { email: 'admin@westlinefuture.com', role: 'admin', name: 'Factory Admin', uid: _adminUid2 },
-        { email: 'client@westlinefuture.com', role: 'client', name: 'Elite Client', username: 'elite_finish', password: _seedPw, uid: _clientUid1 },
-        { email: 'client@demo.com', role: 'client', name: 'Demo Client', username: 'demo_user', password: _seedPw },
-        { phone: '233547748678', role: 'client', name: 'Authorized Tester', username: 'tester_01', password: _seedPw }
+        ...(_clientUid1 ? [{ email: 'client@westlinefuture.com', role: 'client', name: 'Elite Client', username: 'elite_finish', uid: _clientUid1 }] : []),
       ];
 
       const seedUsers = async () => {
@@ -246,8 +257,8 @@ export default function App() {
             cat: 'Structural Glazing & Interior',
             milestones: [
               { id: 'm1', name: 'Deposit (Initial)', amount: '$100,000', stageId: 1, status: 'Paid', paidAt: new Date().toISOString() },
-              { id: 'm2', name: 'Production Phase', amount: '$100,000', stageId: 5, status: 'Pending' },
-              { id: 'm3', name: 'Final Handover', amount: '$50,000', stageId: 12, status: 'Pending' }
+              { id: 'm2', name: 'Production Phase', amount: '$100,000', stageId: 3, status: 'Pending' },
+              { id: 'm3', name: 'Final Handover', amount: '$50,000', stageId: 7, status: 'Pending' }
             ]
           },
           {
@@ -257,7 +268,7 @@ export default function App() {
             milestones: [
               { id: 'm1', name: 'Down Payment', amount: '$34,000', stageId: 1, status: 'Paid', paidAt: new Date().toISOString() },
               { id: 'm2', name: 'Material Procurement', amount: '$34,000', stageId: 3, status: 'Pending' },
-              { id: 'm3', name: 'On-site Installation', amount: '$17,000', stageId: 10, status: 'Pending' }
+              { id: 'm3', name: 'On-site Installation', amount: '$17,000', stageId: 5, status: 'Pending' }
             ]
           },
           ...CLIENTS_DATA.filter(c => c.email !== 'client@westlinefuture.com')
@@ -280,8 +291,8 @@ export default function App() {
           const projectBudget = parseFloat(item.budget?.replace(/[$,]/g, '') || 0);
           const defaultMilestones = [
             { id: 'm1', name: 'Deposit (40%)', amount: '$' + (projectBudget * 0.4).toLocaleString(), stageId: 1, status: 'Paid' },
-            { id: 'm2', name: 'Production (40%)', amount: '$' + (projectBudget * 0.4).toLocaleString(), stageId: 4, status: 'Pending' },
-            { id: 'm3', name: 'Final (20%)', amount: '$' + (projectBudget * 0.2).toLocaleString(), stageId: 11, status: 'Pending' }
+            { id: 'm2', name: 'Production (40%)', amount: '$' + (projectBudget * 0.4).toLocaleString(), stageId: 3, status: 'Pending' },
+            { id: 'm3', name: 'Final (20%)', amount: '$' + (projectBudget * 0.2).toLocaleString(), stageId: 7, status: 'Pending' }
           ];
 
           await setDoc(doc(db, 'projects', pid), {
@@ -423,9 +434,9 @@ export default function App() {
       await seedBookings();
       await seedEmailQueue();
 
-      notify('success', 'Westline Future Production Ecosystem Deployed');
+      notify('success', 'Westline Future Platform Deployed');
     } catch (err) {
-      console.error("[MIGRATION ERROR]:", err);
+      devErr("[MIGRATION ERROR]:", err);
       notify('error', 'Seeding failed. Check console for details.');
     } finally {
       setLoading(false);
@@ -459,22 +470,22 @@ export default function App() {
     try {
       if (pid) await addDoc(collection(db, 'projects', pid, 'activity_logs'), log);
       else await addDoc(collection(db, 'activity_logs'), log);
-    } catch (error) { console.error("Logging failed:", error.message); }
+    } catch (error) { devErr("Logging failed:", error.message); }
   }, [user]);
 
   const notifyUser = async (userId, message, type, link = '') => {
     if (!userId || !db) return;
     try { await addDoc(collection(db, 'notifications'), { userId, message: sanitizeText(message), type, link, read: false, createdAt: new Date().toISOString() }); }
-    catch (e) { console.error("Notification failed", e); }
+    catch (e) { devErr("Notification failed", e); }
   };
 
   const markNotificationRead = async (id) => {
     try { await updateDoc(doc(db, 'notifications', id), { read: true }); }
-    catch (e) { console.error(e); }
+    catch (e) { devErr(e); }
   };
 
   const checkManualSession = async () => {
-    const savedSession = localStorage.getItem('westlinefuture_session');
+    const savedSession = localStorage.getItem('glasstech_session');
     if (savedSession) {
       try {
         const sessionData = JSON.parse(savedSession);
@@ -489,13 +500,13 @@ export default function App() {
           if (userSnap.exists()) {
             const u = { id: sessionData.id, ...userSnap.data() };
             setUser(u);
-            console.log("[AUTH] Restored Client Session:", u.id);
+            if (import.meta.env.DEV) devLog("[AUTH] Restored Client Session:", u.id);
             if (location.pathname === '/login') navigate('/portal');
             return true;
           }
         }
       } catch (e) {
-        console.error("Session restoration failed:", e);
+        devErr("Session restoration failed:", e);
       }
     }
     return false;
@@ -504,17 +515,7 @@ export default function App() {
   const loginWithCredentials = async (username, password) => {
     checkRateLimit(username || 'unknown-client');
     if (!db || !isFirebaseEnabled) {
-      const _demoPw = import.meta.env.VITE_SEED_CLIENT_PASSWORD || 'Westline Future2026';
-      if ((username === 'elite_finish' || username === 'demo_user' || username === 'client@demo.com' || username === 'client@westlinefuture.com') && password === _demoPw) {
-        const uMatch = CLIENTS_DATA.find(c => c.email === username) || CLIENTS_DATA[0] || { id: 1, name: 'Demo Client', email: username };
-        const fullUser = { ...uMatch, role: 'client' };
-        setUser(fullUser);
-        localStorage.setItem('westlinefuture_session', JSON.stringify({ id: fullUser.id, expiry: Date.now() + 86400000 }));
-        navigate('/portal');
-        notify('success', `Welcome back, ${fullUser.name}`);
-        return;
-      }
-      throw new Error("Invalid mock credentials.");
+      throw new Error("Database offline. Please check your internet connection.");
     }
     try {
       setAuthLoading(true);
@@ -550,10 +551,11 @@ export default function App() {
 
       const uData = uDoc.data();
       
-      const fullUser = { ...uData, id: normalizePhone(uData.phone || uDoc.id), uid: sessionUser.uid };
+      // Email-based users (admin/staff) have no phone — use Firebase UID as their id
+      const fullUser = { ...uData, id: isEmail ? sessionUser.uid : normalizePhone(uData.phone || uDoc.id), uid: sessionUser.uid };
       delete fullUser.password;
       
-      localStorage.setItem('westlinefuture_user_cache', JSON.stringify(fullUser));
+      localStorage.setItem('glasstech_user_cache', JSON.stringify(fullUser));
       setUser(fullUser);
       clearRateLimit(username || 'unknown-client');
       setAuthLoading(false);
@@ -563,11 +565,15 @@ export default function App() {
         await updateDoc(doc(db, 'users', uDoc.id), { onboarded: true });
       }
 
-      navigate(fullUser.role === 'admin' ? '/admin' : '/portal');
+      navigate(
+        fullUser.role === 'admin' || fullUser.role === 'staff' ? '/admin' :
+        fullUser.role === 'worker' ? '/work' :
+        '/portal'
+      );
       notify('success', `Welcome back, ${uData.name}`);
       return fullUser;
     } catch (e) {
-      console.error("[LOGIN ERROR]:", e);
+      devErr("[LOGIN ERROR]:", e);
       setAuthLoading(false);
       setNotification(null);
       notify('error', e.message);
@@ -583,7 +589,7 @@ export default function App() {
       try {
         await updateDoc(doc(db, 'emails', id), { status: newStatus });
         notify('success', `Status updated to ${newStatus}`);
-      } catch (e) { console.error(e); }
+      } catch (e) { devErr(e); }
     }
   };
 
@@ -683,7 +689,7 @@ export default function App() {
       notify('success', `Ecosystem Deployed: Project ${projectId} is now live.`);
       logAction(projectId, 'Provisioning', `Administrator converted inquiry ${inquiry.id} into active project.`, projectTitle);
     } catch (err) {
-      console.error("Provisioning failed:", err);
+      devErr("Provisioning failed:", err);
       notify('error', 'Project provisioning failed: ' + err.message);
     }
   };
@@ -699,7 +705,11 @@ export default function App() {
   useEffect(() => {
     if (user) {
       if (location.pathname === '/login') {
-        navigate(user.role === 'admin' ? '/admin' : '/portal');
+        navigate(
+          user.role === 'admin' || user.role === 'staff' ? '/admin' :
+          user.role === 'worker' ? '/work' :
+          '/portal'
+        );
       }
     }
   }, [user, location.pathname, navigate]);
@@ -733,12 +743,12 @@ export default function App() {
             }
          }
          
-         // AUTOMATED MILESTONE INVOICING
+         // AUTOMATED MILESTONE INVOICING (7-stage pipeline)
          const invoiceTriggers = {
            1: { title: 'Initial Consultation & Design Deposit', percent: 10 },
-           4: { title: 'Fabrication Commencement Payment', percent: 40 },
-           8: { title: 'Pre-Installation Logistics Settlement', percent: 40 },
-           12: { title: 'Final Handover & Quality Settlement', percent: 10 }
+           2: { title: 'Fabrication Commencement Payment', percent: 40 },
+           4: { title: 'Pre-Installation Logistics Settlement', percent: 40 },
+           7: { title: 'Final Handover & Quality Settlement', percent: 10 }
          };
 
          if (invoiceTriggers[stageId] && project) {
@@ -749,7 +759,7 @@ export default function App() {
             if (amount > 0) {
               const existing = invoices.find(i => i.parentId === projectId && i.title === title);
               if (!existing) {
-                console.log(`[AUTO-INVOICE] Generating ${title} for Project ${projectId}`);
+                if (import.meta.env.DEV) devLog(`[AUTO-INVOICE] Generating ${title} for Project ${projectId}`);
                 await createInvoice({
                   parentId: projectId,
                   clientId: project.clientId,
@@ -766,15 +776,16 @@ export default function App() {
             }
          }
 
-         // FEEDBACK LOOP: If stage is 12 (Handover), request feedback
-         if (stageId === 12 && project) {
+         // FEEDBACK LOOP: If stage is 7 (Handover), request feedback
+         if (stageId === 7 && project) {
            createNotification(project.clientId, "Project Complete! We'd love to hear your feedback on your Westline Future experience.", "success", "/portal?action=feedback");
          }
       }
       
-      await updateDoc(doc(db, 'projects', projectId), { stage: stageId, progress: Math.round((stageId / 12) * 100) });
+      const stageObjForPct = CLIENT_PROJECT_STAGES.find(s => s.id === stageId);
+      await updateDoc(doc(db, 'projects', projectId), { stageId, progress: stageObjForPct?.pct ?? Math.round((stageId / 7) * 100) });
       logAction(projectId, 'Stage', `Moved to Stage ${stageId}`);
-    } catch (e) { console.error(e); }
+    } catch (e) { devErr(e); }
   };
 
   const createProposal = async (data) => {
@@ -788,7 +799,7 @@ export default function App() {
       notify('success', 'Document Generated & Saved');
       return docRef.id;
     } catch (err) {
-      console.error(err);
+      devErr(err);
       notify('error', 'Generation failed');
     }
   };
@@ -804,8 +815,28 @@ export default function App() {
       notify('success', 'Official Invoice Issued');
       return docRef.id;
     } catch (err) {
-      console.error(err);
+      devErr(err);
       notify('error', 'Issuance failed');
+    }
+  };
+
+  const deleteInvoice = async (id) => {
+    if (!db || !id) return;
+    try {
+      await deleteDoc(doc(db, 'invoices', id));
+      notify('success', 'Invoice deleted');
+    } catch (err) {
+      notify('error', 'Failed to delete invoice');
+    }
+  };
+
+  const deleteProposal = async (id) => {
+    if (!db || !id) return;
+    try {
+      await deleteDoc(doc(db, 'proposals', id));
+      notify('success', 'Quotation deleted');
+    } catch (err) {
+      notify('error', 'Failed to delete quotation');
     }
   };
 
@@ -814,7 +845,7 @@ export default function App() {
     try {
       await addDoc(collection(db, 'projects', projectId, 'approvals'), { ...data, status: 'pending', createdAt: new Date().toISOString() });
       notifyUser(dbClients.find(c => c.id === clients.find(p => p.id === projectId)?.clientId)?.id, "New technical item requires your approval", "approval");
-    } catch (e) { console.error(e); }
+    } catch (e) { devErr(e); }
   };
 
   const updateApproval = async (id, data, projectId) => {
@@ -822,7 +853,7 @@ export default function App() {
     try {
       await updateDoc(doc(db, 'projects', projectId, 'approvals', id), data);
       logAction(projectId, 'Approval', `Item ${id} marked as ${data.status}`);
-    } catch (e) { console.error(e); }
+    } catch (e) { devErr(e); }
   };
 
   const createChangeRequest = async (projectId, data) => {
@@ -833,7 +864,7 @@ export default function App() {
       teamMembers.filter(m => m.role === 'admin').forEach(admin => {
         notifyUser(admin.id, "New change request submitted by client", "change_request");
       });
-    } catch (e) { console.error(e); }
+    } catch (e) { devErr(e); }
   };
 
   const updateChangeRequest = async (id, data, projectId) => {
@@ -841,7 +872,7 @@ export default function App() {
     try {
       await updateDoc(doc(db, 'projects', projectId, 'change_requests', id), data);
       logAction(projectId, 'ChangeRequest', `Request ${id} updated to ${data.status}`);
-    } catch (e) { console.error(e); }
+    } catch (e) { devErr(e); }
   };
 
   const payInvoice = async (id, projectId, method = 'Paystack') => {
@@ -862,7 +893,7 @@ export default function App() {
       
       await setDoc(doc(db, 'projects', projectId, 'transactions', txId), newTx);
       notify('success', `Payment of ${inv?.amount || ''} confirmed via ${method}`);
-    } catch (e) { console.error(e); }
+    } catch (e) { devErr(e); }
   };
 
   const recordOfflinePayment = async (pid, amount, method, ref) => {
@@ -906,7 +937,7 @@ export default function App() {
     if (!proj) return 0;
     
     // 1. Stage Progress (40%)
-    const stagePct = ((proj.stage || 1) / 12) * 100;
+    const stagePct = ((proj.stageId || 1) / 7) * 100;
     
     // 2. Procurement Progress (40%)
     const myProcs = procurements.filter(p => p.parentId === pid);
@@ -939,13 +970,13 @@ export default function App() {
   const updateMaterial = async (projectId, id, data) => {
     if (!db) return;
     try { await updateDoc(doc(db, 'projects', projectId, 'materials', id), data); }
-    catch(e) { console.error(e); }
+    catch(e) { devErr(e); }
   };
 
   const updateAsset = async (id, data) => {
     if (!db) return;
     try { await updateDoc(doc(db, 'assets', id), data); }
-    catch(e) { console.error(e); }
+    catch(e) { devErr(e); }
   };
 
   const createShipment = async (data) => {
@@ -971,31 +1002,48 @@ export default function App() {
   const createNote = async (projectId, data) => {
     if (!db) return;
     try { await addDoc(collection(db, 'projects', projectId, 'notes'), { ...data, createdAt: new Date().toISOString() }); }
-    catch(e) { console.error(e); }
+    catch(e) { devErr(e); }
   };
   const deleteNote = async (projectId, id) => {
     if (!db) return;
     try { await deleteDoc(doc(db, 'projects', projectId, 'notes', id)); }
-    catch(e) { console.error(e); }
+    catch(e) { devErr(e); }
+  };
+
+  const deleteProject = async (projectId) => {
+    if (!db) return;
+    try {
+      // Delete subcollections first (messages, documents, notes)
+      const subcols = ['messages', 'documents', 'notes', 'procurements'];
+      await Promise.all(subcols.map(async sub => {
+        const snap = await getDocs(collection(db, 'projects', projectId, sub));
+        return Promise.all(snap.docs.map(d => deleteDoc(d.ref)));
+      }));
+      await deleteDoc(doc(db, 'projects', projectId));
+      notify('success', 'Project deleted');
+    } catch (e) {
+      devErr(e);
+      notify('error', 'Failed to delete project');
+    }
   };
   // uploadMedia moved to useFileUpload hook
 
   const deleteMedia = async (id) => {
     if (!db) return;
     try { await deleteDoc(doc(db, 'media', id)); notify('success', 'Media removed'); }
-    catch(e) { console.error(e); }
+    catch(e) { devErr(e); }
   };
 
   const createJob = async (data) => {
     if (!db) return;
     try { await addDoc(collection(db, 'jobs'), { ...data, createdAt: new Date().toISOString() }); notify('success', 'Job deployed to factory'); }
-    catch(e) { console.error(e); }
+    catch(e) { devErr(e); }
   };
 
   const updateJob = async (id, data) => {
     if (!db) return;
     try { await updateDoc(doc(db, 'jobs', id), data); }
-    catch(e) { console.error(e); }
+    catch(e) { devErr(e); }
   };
 
   const sendWhatsAppUpdate = async (clientId, projectId, stageName) => {
@@ -1003,14 +1051,14 @@ export default function App() {
     const p = clients.find(x => x.id === projectId) || { project: 'General Works' };
     
     try {
-      notify('pending', `Dispatching WhatsApp to ${c.name}...`);
-      const message = stageName.includes(' ') ? stageName : `High-End Update: Hello ${c.name}, your project "${p.project || p.title}" has moved to the ${stageName} phase at Westline Future Fab.`;
-      
+      notify('pending', `Sending SMS to ${c.name}...`);
+      const message = stageName.includes(' ') ? stageName : `Hello ${c.name}, your project "${p.project || p.title}" has moved to the ${stageName} phase. - Westline Future`;
+
       await MessengerService.sendMessage(c.phone || clientId, message);
-      notify('success', 'WhatsApp update dispatched');
-      if (projectId) logAction(projectId, 'Notification', `WhatsApp update sent: ${stageName}`);
+      notify('success', 'SMS sent successfully');
+      if (projectId) logAction(projectId, 'Notification', `SMS update sent: ${stageName}`);
     } catch (err) {
-      notify('error', 'WhatsApp dispatch failed');
+      notify('error', 'SMS dispatch failed');
     }
   };
 
@@ -1025,7 +1073,7 @@ export default function App() {
         await setDoc(doc(db, 'cms_content', key), { content: value });
         notify('success', 'Changes saved successfully');
       } catch (e) {
-        console.warn("Firebase CMS sync failed (likely mock demo mode). Local state updated.", e);
+        devWarn("Firebase CMS sync failed (likely mock demo mode). Local state updated.", e);
         notify('success', 'Demo Mode: Changes saved locally');
       }
     } else {
@@ -1048,7 +1096,7 @@ export default function App() {
       try {
         await setDoc(doc(db, 'emails', payload.id), payload);
       } catch (e) {
-        console.error("Failed to sync marketplace inquiry:", e);
+        devErr("Failed to sync marketplace inquiry:", e);
       }
     }
   };
@@ -1070,7 +1118,7 @@ export default function App() {
         await setDoc(doc(db, 'emails', payload.id), payload);
         notify('success', 'Inquiry sent successfully to our procurement team.');
       } catch (e) {
-        console.error("Failed to sync contact inquiry:", e);
+        devErr("Failed to sync contact inquiry:", e);
         notify('error', 'Message dispatch failed.');
       }
     }
@@ -1078,82 +1126,43 @@ export default function App() {
   
   const createClient = async (data) => {
     try {
-      if (!db || !auth) {
-         notify('error', 'Authentication service unavailable');
-         return;
+      if (!functions) {
+        notify('error', 'System unavailable');
+        return;
       }
-      
-      const id = normalizePhone(data.phone || data.username);
-      if (!id) throw new Error("A valid phone number is required for client identity.");
+      if (!data.phone) throw new Error('A valid phone number is required.');
 
-      const proxyEmail = `${id}@clients.westlinefuture.com`;
-      const tempPassword = import.meta.env.VITE_TEMP_CLIENT_PASSWORD || `GT@${new Date().getFullYear()}!`;
-      
-      notify('pending', 'Provisioning client environment...');
+      notify('pending', 'Registering client...');
 
-      // 1. DEDUPLICATION CHECK: Check if Firestore already has this user
-      const phoneClean = id;
-      const emailLower = proxyEmail.toLowerCase();
-      
-      const qPhone = query(collection(db, 'users'), where('phone', '==', data.phone || phoneClean), limit(1));
-      const qEmail = query(collection(db, 'users'), where('email', '==', data.email || emailLower), limit(1));
-      
-      const [snapPhone, snapEmail] = await Promise.all([getDocs(qPhone), getDocs(qEmail)]);
-      const existingDoc = !snapPhone.empty ? snapPhone.docs[0] : (!snapEmail.empty ? snapEmail.docs[0] : null);
+      const fn = httpsCallable(functions, 'createClientRecord');
+      const result = await fn(data);
+      const { id, updated } = result.data;
 
-      if (existingDoc) {
-        console.log("Existing client record found. Updating instead of duplicating...");
-        await updateDoc(existingDoc.ref, { ...data, updatedAt: serverTimestamp() });
-        notify('success', 'Existing record updated.');
+      if (updated) {
+        notify('success', 'Existing client record updated.');
         return;
       }
 
-      // 2. AUTH PROVISIONING
-      try {
-        await createUserWithEmailAndPassword(auth, proxyEmail, tempPassword);
-      } catch (authErr) {
-        if (authErr.code === 'auth/email-already-in-use' || authErr.message?.includes('email-already-in-use')) {
-          console.log("Auth record exists. Proceeding to Firestore setup...");
-        } else {
-          throw authErr;
-        }
-      }
-      
-      const payload = { 
-        ...data, 
-        id, 
-        username: id,
-        email: data.email || proxyEmail,
-        role: 'client', 
-        status: 'Active', 
-        joined: new Date().toISOString(),
-        password: '[SECURED]',
-        onboarded: false,
-        requiresPasswordChange: true
-      };
+      notify('success', `${data.name} registered successfully.`);
 
-      // ACTUALLY SAVE TO FIRESTORE
-      await setDoc(doc(db, 'users', id), payload);
-      
-      notify('success', `Client ${data.name} Registered Successfully`);
-      
-      const message = `Hi ${data.name},\nWelcome to Westline Future. We are thrilled to partner with you!\nYour Project Command Center is ready:\n- URL: westlinefuture.com/login\n- Username: ${id}\n- Password: ${tempPassword}\nPlease change your password after login.`;
-      
+      // Welcome SMS — phone OTP handles login, no credentials needed
+      const smsPhone = `+${id}`;
+      const message = `Hi ${data.name}, welcome to Westline Future!\n\nYour project portal is ready. Log in at:\nwestlinefuture-635c2.web.app/login\n\nEnter your phone number and we'll send you a one-time code.`;
+
       try {
-        await MessengerService.sendMessage(data.phone || id, message);
-        notify('success', 'Client secured. Credentials sent via WhatsApp.');
-      } catch (wsErr) {
-        console.warn("WhatsApp dispatch failed:", wsErr);
-        notify('success', 'Client secured. (WhatsApp dispatch failed, please share credentials manually)');
+        await MessengerService.sendMessage(smsPhone, message);
+        notify('success', 'Welcome SMS sent.');
+      } catch (smsErr) {
+        if (import.meta.env.DEV) devWarn('[SMS]', smsErr.message);
+        notify('success', 'Client registered. SMS failed — notify them manually.');
       }
-      logAction(null, 'CRM', `Onboarded Client: ${id}`);
-      
-      // Send a system notification for the client
-      await createNotification(id, "Welcome to Westline Future! Your Project Command Center is now active.", "success", "/portal");
+
+      logAction(null, 'CRM', `Onboarded Client: ${data.name} (${id})`);
+      await createNotification(id, 'Welcome to Westline Future! Your project portal is now active.', 'success', '/portal');
 
     } catch (e) {
-      console.error("[CRM] Registration Error:", e);
-      notify('error', e.message.includes('email-already-in-use') ? 'Username/Phone already exists.' : 'Failed to register client.');
+      devErr('[CRM] Registration Error:', e);
+      notify('error', e.message || 'Failed to register client.');
     }
   };
 
@@ -1193,6 +1202,211 @@ export default function App() {
     }
   };
 
+  const buildDefaultMilestones = (budget, paymentSchedule = 'standard') => {
+    const num = parseFloat(String(budget).replace(/[^0-9.]/g, '')) || 0;
+    if (!num) return [];
+    const fmt = (v) => `GHS ${v.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+    const ts = Date.now();
+    const SCHEDULES = {
+      standard: [
+        { name: '10% Deposit',        pct: 0.10, stageId: 1 },
+        { name: '40% Pre-production', pct: 0.40, stageId: 3 },
+        { name: '40% Pre-delivery',   pct: 0.40, stageId: 7 },
+        { name: '10% Completion',     pct: 0.10, stageId: 11 },
+      ],
+      '70-30': [
+        { name: '70% Before Delivery', pct: 0.70, stageId: 3 },
+        { name: '30% After Delivery',  pct: 0.30, stageId: 11 },
+      ],
+    };
+    const template = SCHEDULES[paymentSchedule] || SCHEDULES.standard;
+    return template.map((m, i) => ({
+      id: `ms_${ts}_${i}`,
+      name: m.name,
+      pct: m.pct,
+      amount: fmt(num * m.pct),
+      stageId: m.stageId,
+      status: 'Pending',
+    }));
+  };
+
+  const createClientProject = async (data) => {
+    if (!db) return;
+    try {
+      const clientId = typeof data.clientId === 'object' ? data.clientId?.id : data.clientId;
+      if (!clientId) throw new Error('Client ID is required.');
+      const milestones = data.milestones?.length ? data.milestones : buildDefaultMilestones(data.budget, data.paymentSchedule);
+      const effectiveDate = data.projectDate ? new Date(data.projectDate).toISOString() : new Date().toISOString();
+      const docRef = await addDoc(collection(db, 'projects'), {
+        title: sanitizeText(data.title || 'New Project'),
+        clientId,
+        clientIds: [clientId],
+        projectType: data.projectType || 'full-service',
+        stageId: 1,
+        status: 'Active',
+        budget: data.budget || '',
+        breakdown: data.breakdown || null,
+        paymentSchedule: data.paymentSchedule || 'standard',
+        description: sanitizeText(data.description || ''),
+        milestones,
+        assignedWorkers: [],
+        stageHistory: [{ stageId: 1, note: data.projectDate ? `Project created (backdated to ${data.projectDate})` : 'Project created', timestamp: effectiveDate, byRole: 'admin' }],
+        createdAt: data.projectDate ? effectiveDate : serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+      await addDoc(collection(db, 'projects', docRef.id, 'messages'), {
+        text: `Project "${data.title}" has been created. Our team will be in touch shortly.`,
+        senderRole: 'system', senderId: 'system', senderName: 'Westline Future',
+        isInternal: false, createdAt: serverTimestamp(),
+      });
+      await createNotification(clientId, `New project "${data.title}" has been created for you.`, 'info', '/portal');
+      notify('success', `Project "${data.title}" created`);
+      logAction(clientId, 'Projects', `Created project: ${data.title}`);
+      return docRef.id;
+    } catch (e) {
+      notify('error', 'Failed to create project: ' + e.message);
+    }
+  };
+
+  const updateProjectStage = async (projectId, newStageId, note = '', options = {}) => {
+    if (!db) return;
+    try {
+      const snap = await getDoc(doc(db, 'projects', projectId));
+      if (!snap.exists()) throw new Error('Project not found');
+      const data = snap.data();
+      const effectiveTimestamp = options.overrideDate
+        ? new Date(options.overrideDate).toISOString()
+        : new Date().toISOString();
+      const stageHistory = [...(data.stageHistory || []), {
+        stageId: newStageId, note: sanitizeText(note) || 'Stage advanced',
+        timestamp: effectiveTimestamp, byRole: 'admin',
+        ...(options.overrideDate ? { backdated: true } : {}),
+      }];
+      await updateDoc(doc(db, 'projects', projectId), {
+        stageId: newStageId,
+        status: newStageId === 7 ? 'Completed' : 'Active',
+        stageHistory, updatedAt: serverTimestamp(),
+      });
+      const stage = CLIENT_PROJECT_STAGES.find(s => s.id === newStageId);
+      await addDoc(collection(db, 'projects', projectId, 'messages'), {
+        text: `Stage updated to: ${stage?.name || `Stage ${newStageId}`}. ${stage?.clientMsg || ''}`,
+        senderRole: 'system', senderId: 'system', senderName: 'Westline Future',
+        isInternal: true, createdAt: serverTimestamp(),
+      });
+      if (data.clientId) {
+        try { await sendWhatsAppUpdate(data.clientId, projectId, stage?.name || `Stage ${newStageId}`); } catch (_) {}
+        await createNotification(data.clientId, `Your project "${data.title}" has progressed to ${stage?.name}.`, 'info', '/portal');
+      }
+      notify('success', `Project advanced to ${stage?.name}`);
+      logAction(data.clientId, 'Projects', `Stage ${newStageId} — ${projectId}`);
+    } catch (e) {
+      notify('error', 'Failed to update stage');
+      devErr(e);
+    }
+  };
+
+  const addProjectMessage = async (projectId, text, senderRole = 'admin', isInternal = false) => {
+    if (!db || !text?.trim()) return;
+    const senderName = user?.name || user?.displayName || 'Westline Future Team';
+    try {
+      await addDoc(collection(db, 'projects', projectId, 'messages'), {
+        text: sanitizeText(text.trim()),
+        senderRole,
+        senderId: user?.uid || user?.id || 'admin',
+        senderName,
+        isInternal,
+        createdAt: serverTimestamp(),
+      });
+      if (!isInternal) {
+        const project = clients.find(p => p.id === projectId);
+        if (project) {
+          // Notify the client
+          if (project.clientId) {
+            try { await createNotification(project.clientId, `New message from ${senderName} on your project`, 'message', `/portal`); } catch (_) {}
+          }
+          // If a staff/worker sent the message, also notify admin (uid-based lookup)
+          // If admin sent, notify assigned staff members
+          if (senderRole === 'admin') {
+            const assignedWorkers = project.assignedWorkers || [];
+            for (const workerId of assignedWorkers) {
+              try { await createNotification(workerId, `Admin sent a message on ${project.project || project.title}`, 'message', `/admin/client-hub`); } catch (_) {}
+            }
+          }
+        }
+      }
+    } catch (e) {
+      notify('error', 'Message failed');
+    }
+  };
+
+  const assignWorkerToProject = async (projectId, workerId) => {
+    if (!db) return;
+    try {
+      const snap = await getDoc(doc(db, 'projects', projectId));
+      if (!snap.exists()) return;
+      const current = snap.data().assignedWorkers || [];
+      const updated = current.includes(workerId) ? current.filter(id => id !== workerId) : [...current, workerId];
+      await updateDoc(doc(db, 'projects', projectId), { assignedWorkers: updated, updatedAt: serverTimestamp() });
+      notify('success', current.includes(workerId) ? 'Worker unassigned' : 'Worker assigned to project');
+    } catch (e) {
+      notify('error', 'Failed to update worker assignment');
+    }
+  };
+
+  const approveQuote = async (projectId) => {
+    if (!db) return;
+    try {
+      const project = clients.find(p => p.id === projectId);
+      await updateDoc(doc(db, 'projects', projectId), {
+        quoteApproved: true,
+        quoteApprovedAt: serverTimestamp(),
+      });
+      if (project?.stageId === 2) {
+        await updateProjectStage(projectId, 3, 'Quotation approved by client');
+      }
+      notify('success', 'Quote approved — advancing to deposit stage');
+    } catch (e) { notify('error', 'Failed to approve quote'); }
+  };
+
+  const updateShippingDetails = async (projectId, details) => {
+    if (!db) return;
+    try {
+      await updateDoc(doc(db, 'projects', projectId), {
+        shippingDetails: { ...details, updatedAt: new Date().toISOString() },
+      });
+      logAction(projectId, 'Shipping', `Shipping details updated: vessel ${details.vesselName || '—'}`);
+      notify('success', 'Shipping details saved');
+    } catch (e) { notify('error', 'Failed to save shipping details'); }
+  };
+
+  const addProjectDocument = async (projectId, file, meta = {}) => {
+    if (!db || !file) return null;
+    try {
+      notify('pending', 'Uploading document...');
+      const url = await uploadFile(`projects/${projectId}/docs`, `${Date.now()}_${file.name}`, file);
+      const docData = {
+        name: meta.name || file.name,
+        url,
+        fileType: file.type || 'application/octet-stream',
+        size: file.size,
+        stageId: meta.stageId || null,
+        uploadedBy: meta.uploadedBy || 'admin',
+        createdAt: serverTimestamp(),
+      };
+      await addDoc(collection(db, 'projects', projectId, 'documents'), docData);
+      logAction(projectId, 'Document', `Uploaded: ${file.name}`);
+      notify('success', 'Document uploaded');
+      const docProject = clients.find(p => p.id === projectId);
+      if (docProject?.clientId) {
+        try { await createNotification(docProject.clientId, `New document available: ${file.name}`, 'document', `/portal`); } catch (_) {}
+      }
+      return url;
+    } catch (e) {
+      notify('error', 'Upload failed: ' + e.message);
+      return null;
+    }
+  };
+
   const addSourcingItem = async (data) => {
     if (!db) return;
     try {
@@ -1227,7 +1441,7 @@ export default function App() {
       await updateEmailStatus(emailData.id, 'In Production');
       notify('success', 'Marketplace order linked to project procurement.');
     } catch(e) {
-      console.error(e);
+      devErr(e);
       notify('error', 'Failed to link order to project.');
     }
   };
@@ -1246,7 +1460,7 @@ export default function App() {
       logAction(data.clientId, 'Operations', `Deployed Project: ${data.title}`);
       return docRef.id;
     } catch (e) {
-      console.error(e);
+      devErr(e);
       notify('error', 'Deployment failed');
       throw e;
     }
@@ -1269,14 +1483,14 @@ export default function App() {
           const snap = await getDocs(q);
           await Promise.all(snap.docs.map(d => deleteDoc(d.ref)));
         } catch (err) {
-          console.warn(`Failed to cleanup ${coll}:`, err);
+          devWarn(`Failed to cleanup ${coll}:`, err);
         }
       }
       
       notify('success', 'Client and associated records removed');
       logAction(null, 'CRM', `Deleted Client and records: ${id}`);
     } catch (e) {
-      console.error(e);
+      devErr(e);
       notify('error', 'Deletion failed');
     }
   };
@@ -1291,7 +1505,7 @@ export default function App() {
       notify('success', `Cleaned ${snap.size} client accounts.`);
       logAction(null, 'CRM', 'Mass deletion of client accounts performed.');
     } catch (e) {
-      console.error(e);
+      devErr(e);
       notify('error', 'Mass deletion failed.');
     }
   };
@@ -1304,7 +1518,7 @@ export default function App() {
       notify('success', `Deleted ${ids.length} accounts.`);
       logAction(null, 'CRM', `Bulk deletion of ${ids.length} clients.`);
     } catch (e) {
-      console.error(e);
+      devErr(e);
       notify('error', 'Bulk deletion failed');
     }
   };
@@ -1336,81 +1550,124 @@ export default function App() {
 
   const sendOTP = async (phone) => {
     try {
-      if (!db) throw new Error("Database offline.");
-      
-      let clean = normalizePhone(phone);
-      
-      // Look for user by normalized ID (phone) or by scanning the users collection
-      const userRef = doc(db, 'users', clean);
-      const userSnap = await getDoc(userRef);
-      let userMatch = null;
-      
-      if (userSnap.exists()) {
-        userMatch = { id: userSnap.id, ...userSnap.data() };
-      } else {
-        // Fallback: Query all users to find one where phone field matches normalized
-        const q = query(collection(db, 'users'), where('role', '==', 'client'));
-        const snap = await getDocs(q);
-        userMatch = snap.docs.find(d => normalizePhone(d.data().phone) === clean)?.data();
+      if (!auth) throw new Error("Service unavailable. Please try again.");
+
+      notify('pending', 'Sending verification code...');
+
+      // Clear any previous reCAPTCHA render before creating a new one
+      if (window._gtRecaptcha) {
+        try { window._gtRecaptcha.clear(); } catch (_) {}
+        window._gtRecaptcha = null;
       }
-      
-      if (!userMatch) throw new Error("Phone number not registered with Westline Future.");
-      
-      // Generate code
-      const code = Math.floor(100000 + Math.random() * 900000).toString();
-      setMagicCode(code);
-      setActiveMagicCode(code); // Capturing for the UI
-      
-      // TRIGGER WHATSAPP (Routed via Messenger Hub: Meta, Twilio, or Mock)
-      try {
-        await MessengerService.sendOTP(phone, code);
-        notify('success', `Access code sent to ${phone}`);
-        return true;
-      } catch (error) {
-        console.warn(`[MESSENGER FAILBACK] Code: ${code} - Error: ${error.message}`);
-        // Fallback: If live messaging fails, we still allow the session but warn the UI
-        setNotification({ msg: `[MESSENGER ALERT] ${error.message}`, type: 'success' });
-        return true;
-      }
+      const container = document.getElementById('recaptcha-container');
+      if (container) container.innerHTML = '';
+
+      window._gtRecaptcha = new RecaptchaVerifier(auth, 'recaptcha-container', {
+        size: 'invisible',
+        callback: () => {},
+        'expired-callback': () => { window._gtRecaptcha = null; }
+      });
+
+      const result = await signInWithPhoneNumber(auth, phone, window._gtRecaptcha);
+      confirmationResultRef.current = result;
+
+      notify('success', `Code sent to ${phone}`);
+      return true;
     } catch (err) {
+      if (window._gtRecaptcha) {
+        try { window._gtRecaptcha.clear(); } catch (_) {}
+        window._gtRecaptcha = null;
+      }
+      const container = document.getElementById('recaptcha-container');
+      if (container) container.innerHTML = '';
       setNotification({ msg: err.message, type: 'error' });
       throw err;
     }
   };
 
   const verifyOTP = async (phone, code) => {
-    if (code === magicCode && code) {
-      let clean = normalizePhone(phone);
-      
-      const q = query(collection(db, 'users'), where('role', '==', 'client'));
-      const snap = await getDocs(q);
-      const userMatch = snap.docs.map(d => ({ id: d.id, ...d.data() })).find(u => normalizePhone(u.phone) === clean);
+    try {
+      if (!confirmationResultRef.current) throw new Error("Session expired. Please request a new code.");
 
-      if (userMatch) {
-         const hardenedUser = { ...userMatch, id: clean };
-         setUser(hardenedUser);
-         localStorage.setItem('westlinefuture_session', JSON.stringify({
-           id: clean,
-           phone: phone,
-           expiry: Date.now() + (24 * 60 * 60 * 1000)
-         }));
-         navigate('/portal');
-         setMagicCode(null);
-         return true;
+      const result = await confirmationResultRef.current.confirm(code);
+      const firebaseUser = result.user;
+
+      // Force token refresh so Firestore SDK has the phone_number claim immediately
+      await firebaseUser.getIdToken(true);
+
+      const clean = normalizePhone(phone);
+
+      // Try direct doc lookup by normalized phone ID — no list queries (clients can't list users)
+      let userDoc = null;
+      const directSnap = await getDoc(doc(db, 'users', clean));
+      if (directSnap.exists()) {
+        userDoc = { id: directSnap.id, ...directSnap.data() };
+      } else {
+        // Try the raw digits without country-code normalization (covers non-Ghana numbers)
+        const rawDigits = phone.replace(/\D/g, '');
+        if (rawDigits !== clean) {
+          const rawSnap = await getDoc(doc(db, 'users', rawDigits));
+          if (rawSnap.exists()) userDoc = { id: rawSnap.id, ...rawSnap.data() };
+        }
       }
+
+      if (!userDoc) {
+        throw new Error("This number isn't registered. Contact Westline Future to set up your account.");
+      }
+
+      // Link Firebase Auth UID to user doc (silently — don't block login if this fails)
+      if (userDoc.uid !== firebaseUser.uid) {
+        updateDoc(doc(db, 'users', userDoc.id), { uid: firebaseUser.uid }).catch(() => {});
+      }
+
+      const fullUser = { ...userDoc, id: userDoc.id, uid: firebaseUser.uid };
+      delete fullUser.password;
+      setUser(fullUser);
+      localStorage.setItem('glasstech_session', JSON.stringify({ id: userDoc.id, phone, expiry: Date.now() + 86400000 }));
+      confirmationResultRef.current = null;
+      navigate('/portal');
+      return true;
+    } catch (err) {
+      if (err.code === 'auth/invalid-verification-code') throw new Error('Incorrect code. Please try again.');
+      throw err;
     }
-    throw new Error("Invalid verification code.");
   };
 
   const handleLogout = async () => {
     try {
       if (auth) await signOut(auth);
-      localStorage.removeItem('westlinefuture_session');
+      localStorage.removeItem('glasstech_session');
       setUser(null);
+      setLoginType('client'); // always reset to client/OTP mode on logout
       navigate('/login');
     } catch (e) {
-      console.error("Logout failed:", e);
+      devErr("Logout failed:", e);
       notify('error', 'Logout failed');
+    }
+  };
+
+  const createStaffAccount = async ({ name, email, role, password }) => {
+    if (!functions) throw new Error('System not connected');
+    if (!email?.trim()) throw new Error('Email is required');
+    try {
+      const fn = httpsCallable(functions, 'createStaffAccount');
+      await fn({ name: name.trim(), email: email.trim(), password, jobRole: role });
+      notify('success', `Account created for ${name}`);
+      logAction(null, 'Staff', `Created ${role === 'Field Worker' ? 'worker' : 'staff'} account for ${name} (${role})`);
+    } catch (err) {
+      throw new Error(err.message);
+    }
+  };
+
+  const deleteMember = async (uid) => {
+    if (!functions) throw new Error('System not connected');
+    try {
+      const fn = httpsCallable(functions, 'deleteStaffAccount');
+      await fn({ uid, deleteAuth: true });
+      notify('success', 'Staff account removed.');
+      logAction(null, 'Staff', `Deleted staff account uid: ${uid}`);
+    } catch (err) {
+      notify('error', err.message || 'Failed to delete staff account');
     }
   };
 
@@ -1449,6 +1706,8 @@ export default function App() {
     invoices,
     payInvoice,
     createInvoice,
+    deleteInvoice,
+    deleteProposal,
     uploadMedia,
     createProposal,
     transactions, recordOfflinePayment,
@@ -1478,6 +1737,8 @@ export default function App() {
     lang, setLang, t, messages, sendMessage, testimonials, submitTestimonial, showVisualizer, setShowVisualizer,
     sendWhatsAppUpdate,
     jobs, createJob, updateJob,
+    createClientProject, updateProjectStage, addProjectMessage, assignWorkerToProject, deleteProject,
+    approveQuote, updateShippingDetails, addProjectDocument, createStaffAccount, deleteMember,
     workOrders, containers,
     updateWorkOrder: (id, d) => db && updateDoc(doc(db, 'work_orders', id), { ...d, updatedAt: serverTimestamp() }),
     createWorkOrder,
@@ -1503,7 +1764,7 @@ export default function App() {
 
   const loginHandler = async (e, p, mode = 'admin') => {
     try {
-      notify('pending', `Authenticating with Westline Future...`);
+      notify('pending', `Authenticating with Westline Future Hub...`);
 
       const isAdminEmail = (e === 'admin@stormglide.com' || e === 'admin@westlinefuture.com');
       const isActualAdminMode = mode === 'admin' || isAdminEmail;
@@ -1511,15 +1772,7 @@ export default function App() {
       if (isActualAdminMode) {
         checkRateLimit(e || 'admin-unknown');
         if (!isFirebaseEnabled || !auth) {
-          const _offlinePw = import.meta.env.VITE_ADMIN_OFFLINE_PASSWORD || 'Westline Future2026';
-          if (isAdminEmail && p === _offlinePw) {
-            const mockUser = { email: e, role: 'admin', uid: 'mock-admin' };
-            setUser(mockUser);
-            clearRateLimit(e);
-            navigate('/admin');
-            return { user: mockUser };
-          }
-          throw new Error("Database offline. Please check your connection.");
+          throw new Error("Database offline. Please check your internet connection.");
         }
         try {
           const res = await signInWithEmailAndPassword(auth, e, p);
@@ -1552,13 +1805,7 @@ export default function App() {
       }
     }
     catch (err) {
-      if (err.code === 'auth/user-not-found' || err.code === 'auth/invalid-credential') {
-        throw new Error("Invalid access identifier or password.");
-      } else if (err.code === 'auth/wrong-password') {
-        throw new Error("Password mismatch. Please check your credentials.");
-      } else {
-        throw new Error(err.message);
-      }
+      throw new Error(mapFirebaseError(err));
     }
   };
 
@@ -1595,9 +1842,10 @@ export default function App() {
 
 
           <Route path="/login" element={
-            <LoginPage 
-              brand={brand} 
-              type={loginType} 
+            <LoginPage
+              key={loginType}
+              brand={brand}
+              type={loginType}
               onBack={() => navigate('/')}
               onLogin={loginHandler}
               {...commonProps}
@@ -1606,18 +1854,19 @@ export default function App() {
 
           <Route path="/admin/*" element={
             <ProtectedRoute>
-              {user?.role === 'admin' ? (
-                <AdminPortal 
-                  user={user} 
-                  onLogout={handleLogout} 
-                  onPreview={() => { setUser(null); if (auth) signOut(auth); navigate('/'); }} 
+              {user?.role === 'admin' || user?.role === 'staff' ? (
+                <AdminPortal
+                  user={user}
+                  onLogout={handleLogout}
+                  onPreview={() => { setUser(null); if (auth) signOut(auth); navigate('/'); }}
                   onLogoUpload={logoUpload}
                   onThemeChange={async (t) => {
                     setBrand(prev => ({ ...prev, theme: t }));
                     if (db) await updateDoc(doc(db, 'settings', 'branding'), { theme: t });
                   }}
                   syncCatalog={syncCatalogOnly}
-                  {...commonProps} 
+                  staffMode={user?.role === 'staff'}
+                  {...commonProps}
                 />
               ) : <Navigate to="/login" />}
             </ProtectedRoute>
@@ -1626,18 +1875,25 @@ export default function App() {
           <Route path="/portal/*" element={
             <ProtectedRoute>
               {user?.role === 'client' ? (
-                <ClientPortal 
-                  client={clients.find(c => c.email === user.email) || user} 
-                  onLogout={handleLogout} 
-                  onPreview={() => { setUser(null); if (auth) signOut(auth); navigate('/'); }} 
+                <ClientPortal
+                  client={clients.find(c => c.email === user.email) || user}
+                  onLogout={handleLogout}
+                  onPreview={() => { setUser(null); if (auth) signOut(auth); navigate('/'); }}
                   updateClientProfile={updateClientProfile}
-                  {...commonProps} 
+                  {...commonProps}
                 />
+              ) : (user?.role === 'admin' || user?.role === 'staff') ? (
+                <Navigate to="/admin" />
               ) : <Navigate to="/login" />}
             </ProtectedRoute>
           } />
           <Route path="/field-upload" element={<FieldUpload {...commonProps} />} />
           <Route path="/field-upload/:projectId" element={<FieldUpload {...commonProps} />} />
+          <Route path="/work" element={
+            <ProtectedRoute>
+              <WorkerView user={user} onLogout={handleLogout} {...commonProps} />
+            </ProtectedRoute>
+          } />
         </Routes>
       </Suspense>
 

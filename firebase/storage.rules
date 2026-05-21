@@ -1,8 +1,53 @@
 rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && (
+        request.auth.token.email.matches(".*@glasstechfab\\.com") ||
+        request.auth.token.email.matches(".*@stormglide\\.com") ||
+        request.auth.token.email == "contact@glasstech.com.gh"
+      );
+    }
+
+    // User profile files
     match /users/{userId}/{allPaths=**} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Project media and documents — any authenticated user can upload (admin, staff, workers)
+    match /projects/{projectId}/{allPaths=**} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated();
+    }
+
+    // Branding assets — admin only
+    match /branding/{allPaths=**} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Field uploads — any authenticated user can upload (workers)
+    match /field/{allPaths=**} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated();
+    }
+
+    // CMS / showcase media
+    match /cms/{allPaths=**} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Portfolio images
+    match /portfolio/{allPaths=**} {
+      allow read: if true;
+      allow write: if isAdmin();
     }
   }
 }

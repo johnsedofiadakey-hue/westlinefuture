@@ -107,7 +107,7 @@ export default function AdminClients({ dbClients, createClient, updateClient, de
             <Search style={{ position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)', color: '#9B99C8' }} size={18} />
             <input 
                className="p-inp" 
-               style={{ paddingLeft: 48, height: 56, borderRadius: 16, background: '#F4F4FA', border: '1px solid #E8E6F5' }} 
+               style={{ paddingLeft: 48, height: 56, borderRadius: 16, background: '#F8F8FD', border: '1px solid #E8E6F5' }} 
                placeholder="Find client..." 
                value={search}
                onChange={e => setSearch(e.target.value)}
@@ -125,7 +125,7 @@ export default function AdminClients({ dbClients, createClient, updateClient, de
 
       <div className="p-card" style={{ padding: 0, overflow: 'hidden', border: '1px solid #E8E6F5' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-          <thead style={{ background: '#F4F4FA', borderBottom: '1px solid #E8E6F5' }}>
+          <thead style={{ background: '#F8F8FD', borderBottom: '1px solid #E8E6F5' }}>
             <tr>
               <th style={{ padding: '16px 24px', width: 40 }}>
                 <button onClick={toggleAll} style={{ background: 'none', border: 'none', cursor: 'pointer', color: selectedIds.length === filtered.length ? ac : '#9B99C8' }}>
@@ -154,7 +154,7 @@ export default function AdminClients({ dbClients, createClient, updateClient, de
               const latestProject = myProjects[myProjects.length - 1];
               const isSelected = selectedIds.includes(client.id);
               return (
-                <tr key={client.id} style={{ borderBottom: '1px solid #F4F4FA', background: isSelected ? `${ac}08` : 'transparent' }} className="table-row-hover">
+                <tr key={client.id} style={{ borderBottom: '1px solid #F8F8FD', background: isSelected ? `${ac}08` : 'transparent' }} className="table-row-hover">
                   <td style={{ padding: '20px 24px' }}>
                     <button onClick={() => toggleSelect(client.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: isSelected ? ac : '#9B99C8' }}>
                        {isSelected ? <CheckSquare size={20} /> : <Square size={20} />}
@@ -186,7 +186,7 @@ export default function AdminClients({ dbClients, createClient, updateClient, de
                   <td style={{ padding: '20px 24px', textAlign: 'right' }}>
                     <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
                       <button onClick={() => props.onSelectClient?.(client.id)} className="p-btn-dark" style={{ height: 36, padding: '0 16px', fontSize: 11 }}>Hub</button>
-                      <button onClick={() => startEdit(client)} style={{ background: '#F4F4FA', border: 'none', padding: 10, borderRadius: 8, color: '#0D0B2E', cursor: 'pointer' }}><Edit2 size={16} /></button>
+                      <button onClick={() => startEdit(client)} style={{ background: '#F8F8FD', border: 'none', padding: 10, borderRadius: 8, color: '#0D0B2E', cursor: 'pointer' }}><Edit2 size={16} /></button>
                       <button onClick={() => setConfirmDelete({ type: 'single', id: client.id })} style={{ background: '#FFF1F1', border: 'none', padding: 10, borderRadius: 8, color: '#EF4444', cursor: 'pointer' }}><Trash2 size={16} /></button>
                     </div>
                   </td>

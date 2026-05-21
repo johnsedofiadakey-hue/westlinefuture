@@ -119,7 +119,7 @@ export default function AdminShowcase({ brand, notify }) {
           ))}
         </div>
       ) : (
-        <div style={{ textAlign: 'center', padding: '80px 20px', background: '#F4F4FA', borderRadius: 24, border: '1px dashed #DCD7D1' }}>
+        <div style={{ textAlign: 'center', padding: '80px 20px', background: '#F8F8FD', borderRadius: 24, border: '1px dashed #DCD7D1' }}>
           <ImageIcon size={48} style={{ color: '#ccc', marginBottom: 16 }} />
           <h3 className="lxfh" style={{ fontSize: 20, marginBottom: 8 }}>No Showroom Scenes Yet</h3>
           <p style={{ color: '#888', marginBottom: 24, maxWidth: 400, margin: '0 auto 24px' }}>Add your first immersive cinematic scene to showcase your technical excellence to clients.</p>
@@ -143,7 +143,7 @@ export default function AdminShowcase({ brand, notify }) {
                    <h2 style={{ fontSize: 20, fontWeight: 900, margin: 0 }}>Immersive Scene Creator</h2>
                    <div style={{ fontSize: 11, color: '#9B99C8', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1 }}>{newScene.hotspots.length} active detail hotspots</div>
                 </div>
-                <button onClick={() => setShowAdd(false)} style={{ background: '#F4F4FA', border: 'none', width: 44, height: 44, borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><X size={20} /></button>
+                <button onClick={() => setShowAdd(false)} style={{ background: '#F8F8FD', border: 'none', width: 44, height: 44, borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><X size={20} /></button>
               </div>
               
               {/* SCROLLABLE CONTENT */}
@@ -165,7 +165,7 @@ export default function AdminShowcase({ brand, notify }) {
                             </div>
                          )}
                          {newScene.hotspots.map((h, i) => (
-                           <div key={i} style={{ padding: 16, background: '#F4F4FA', borderRadius: 16, border: '1px solid #E8E6F5' }}>
+                           <div key={i} style={{ padding: 16, background: '#F8F8FD', borderRadius: 16, border: '1px solid #E8E6F5' }}>
                               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                                  <div style={{ fontSize: 10, fontWeight: 900, color: ac }}>HOTSPOT #{i+1}</div>
                                  <button onClick={() => {
@@ -183,7 +183,7 @@ export default function AdminShowcase({ brand, notify }) {
                                 const updated = [...newScene.hotspots];
                                 updated[i].desc = e.target.value;
                                 setNewScene({...newScene, hotspots: updated});
-                              }} style={{ width: '100%', background: 'none', border: 'none', fontSize: 12, color: '#9B99C8', padding: 0, resize: 'none' }} placeholder="Technical detail..." />
+                              }} style={{ width: '100%', background: 'none', border: 'none', fontSize: 12, color: '#625C54', padding: 0, resize: 'none' }} placeholder="Technical detail..." />
                            </div>
                          ))}
                       </div>
@@ -195,7 +195,7 @@ export default function AdminShowcase({ brand, notify }) {
                    <div 
                      onClick={newScene.img ? addHotspot : () => document.getElementById('scene-up').click()}
                      style={{ 
-                       width: '100%', height: 450, background: '#F4F4FA', borderRadius: 24, 
+                       width: '100%', height: 450, background: '#F8F8FD', borderRadius: 24, 
                        border: '2px dashed #DCD7D1', position: 'relative', overflow: 'hidden',
                        cursor: newScene.img ? 'crosshair' : 'pointer'
                      }}

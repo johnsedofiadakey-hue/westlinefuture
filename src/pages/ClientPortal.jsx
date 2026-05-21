@@ -34,7 +34,7 @@ function MilestoneCard({ stage, isCurrent, isPast, isFuture, completedTasks = []
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
         <div style={{
           width: 36, height: 36, borderRadius: 12,
-          background: isPast ? stage.color : isCurrent ? `${stage.color}15` : '#F0EBE5',
+          background: isPast ? stage.color : isCurrent ? `${stage.color}15` : '#E8E6F5',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           border: isCurrent ? `2px solid ${stage.color}` : 'none',
         }}>
@@ -65,7 +65,7 @@ function MilestoneCard({ stage, isCurrent, isPast, isFuture, completedTasks = []
             <span>Progress</span>
             <span style={{ color: isPast ? '#16A34A' : stage.color }}>{pct}%</span>
           </div>
-          <div style={{ height: 5, background: '#F0EBE5', borderRadius: 3, overflow: 'hidden' }}>
+          <div style={{ height: 5, background: '#E8E6F5', borderRadius: 3, overflow: 'hidden' }}>
             <div style={{ width: `${pct}%`, height: '100%', background: isPast ? '#16A34A' : stage.color, borderRadius: 3, transition: 'width 0.8s ease' }} />
           </div>
         </div>
@@ -165,7 +165,7 @@ export default function ClientPortal({ user, dbClients = [], clients = [], ...pr
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
-          <select value={props.currency} onChange={e => props.setCurrency(e.target.value)} style={{ height: mob ? 40 : 48, padding: '0 12px', borderRadius: 12, border: '1px solid #F0EBE5', background: '#fff', fontSize: 11, fontWeight: 700 }}>
+          <select value={props.currency} onChange={e => props.setCurrency(e.target.value)} style={{ height: mob ? 40 : 48, padding: '0 12px', borderRadius: 12, border: '1px solid #E8E6F5', background: '#fff', fontSize: 11, fontWeight: 700 }}>
             <option value="GHS">{mob ? 'GHS' : 'GHS (₵)'}</option>
             <option value="USD">{mob ? 'USD' : 'USD ($)'}</option>
           </select>
@@ -250,8 +250,8 @@ export default function ClientPortal({ user, dbClients = [], clients = [], ...pr
               </div>
 
               {myProjects.length === 0 ? (
-                <div style={{ padding: mob ? 60 : 100, textAlign: 'center', background: '#fff', borderRadius: mob ? 24 : 40, border: '1px dashed #F0EBE5' }}>
-                  <Briefcase size={mob ? 48 : 64} color="#F0EBE5" style={{ marginBottom: 24 }} />
+                <div style={{ padding: mob ? 60 : 100, textAlign: 'center', background: '#fff', borderRadius: mob ? 24 : 40, border: '1px dashed #E8E6F5' }}>
+                  <Briefcase size={mob ? 48 : 64} color="#E8E6F5" style={{ marginBottom: 24 }} />
                   <h3 className="lxfh" style={{ fontSize: mob ? 20 : 24 }}>Your project dashboard is ready</h3>
                   <p className="lxf" style={{ color: '#9B99C8', maxWidth: 400, margin: '16px auto', fontSize: 13 }}>We'll populate your project data as soon as engineering confirms the site survey.</p>
                 </div>
@@ -339,12 +339,12 @@ export default function ClientPortal({ user, dbClients = [], clients = [], ...pr
                         </div>
 
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                          <div className="p-card" style={{ padding: mob ? 20 : 24, border: '1px solid #F0EBE5' }}>
+                          <div className="p-card" style={{ padding: mob ? 20 : 24, border: '1px solid #E8E6F5' }}>
                             <Activity size={20} color={ac} style={{ marginBottom: 10 }} />
                             <div className="lxfh" style={{ fontSize: 15 }}>{s.name}</div>
                             <div className="lxf" style={{ fontSize: 11, color: '#9B99C8', marginTop: 4, lineHeight: 1.5 }}>{s.description}</div>
                           </div>
-                          <div className="p-card" style={{ padding: mob ? 20 : 24, border: '1px solid #F0EBE5' }}>
+                          <div className="p-card" style={{ padding: mob ? 20 : 24, border: '1px solid #E8E6F5' }}>
                             <Clock size={20} color={ac} style={{ marginBottom: 10 }} />
                             <div className="lxfh" style={{ fontSize: 15 }}>~{s.days} days remaining</div>
                             <div className="lxf" style={{ fontSize: 11, color: '#9B99C8', marginTop: 4 }}>Typical duration for this phase</div>
@@ -362,11 +362,11 @@ export default function ClientPortal({ user, dbClients = [], clients = [], ...pr
           {tab === 'sourcing' && (
             <div className="fade-in">
               <h2 className="lxfh" style={{ fontSize: mob ? 24 : 32, marginBottom: mob ? 24 : 40 }}>Material Sourcing</h2>
-              <div className="p-card" style={{ padding: mob ? 24 : 40, border: '1px solid #F0EBE5' }}>
+              <div className="p-card" style={{ padding: mob ? 24 : 40, border: '1px solid #E8E6F5' }}>
                 <p className="lxf" style={{ color: '#9B99C8', marginBottom: 32 }}>Review the high-precision materials sourced for your project from our global factory partners.</p>
                 <div style={{ display: 'grid', gridTemplateColumns: mob ? '1fr' : '1fr 1fr', gap: 24 }}>
                   {(props.procurements || []).filter(p => p.clientId === uId).map(p => (
-                    <div key={p.id} style={{ border: '1px solid #F0EBE5', borderRadius: 20, overflow: 'hidden' }}>
+                    <div key={p.id} style={{ border: '1px solid #E8E6F5', borderRadius: 20, overflow: 'hidden' }}>
                       <img src={p.img || 'https://images.unsplash.com/photo-1581094794329-c8112a89af12?w=800'} alt={p.name} style={{ width: '100%', height: 200, objectFit: 'cover' }} />
                       <div style={{ padding: 20 }}>
                         <h4 className="lxfh" style={{ fontSize: 16, marginBottom: 4 }}>{p.name}</h4>
@@ -380,7 +380,7 @@ export default function ClientPortal({ user, dbClients = [], clients = [], ...pr
                   ))}
                   {(props.procurements || []).filter(p => p.clientId === uId).length === 0 && (
                     <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: 60, background: '#F4F4FA', borderRadius: 20 }}>
-                      <Package size={48} color="#F0EBE5" style={{ marginBottom: 16 }} />
+                      <Package size={48} color="#E8E6F5" style={{ marginBottom: 16 }} />
                       <p style={{ color: '#9B99C8', fontSize: 13 }}>Sourcing documents are being prepared by the procurement team.</p>
                     </div>
                   )}
@@ -394,7 +394,7 @@ export default function ClientPortal({ user, dbClients = [], clients = [], ...pr
             <div className="fade-in">
               <h2 className="lxfh" style={{ fontSize: mob ? 24 : 32, marginBottom: mob ? 24 : 40 }}>Logistics Tracker</h2>
               {activeProject ? (
-                <div className="p-card" style={{ padding: mob ? 24 : 40, border: '1px solid #F0EBE5' }}>
+                <div className="p-card" style={{ padding: mob ? 24 : 40, border: '1px solid #E8E6F5' }}>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 32 }}>
                     {[
                       { id: 4, name: 'China Production', desc: 'Items being built at the factory.' },
@@ -430,7 +430,7 @@ export default function ClientPortal({ user, dbClients = [], clients = [], ...pr
             <div className="fade-in">
               <h2 className="lxfh" style={{ fontSize: mob ? 24 : 32, marginBottom: mob ? 24 : 40 }}>Technical Vault</h2>
               <div style={{ display: 'grid', gridTemplateColumns: mob ? '1fr' : '1fr 1fr', gap: mob ? 16 : 32 }}>
-                <div className="p-card" style={{ padding: mob ? 24 : 40, border: '1px solid #F0EBE5' }}>
+                <div className="p-card" style={{ padding: mob ? 24 : 40, border: '1px solid #E8E6F5' }}>
                   <ShieldCheck size={mob ? 24 : 32} color={ac} style={{ marginBottom: 16 }} />
                   <h3 className="lxfh" style={{ fontSize: 18, marginBottom: 8 }}>Material Grades</h3>
                   <p className="lxf" style={{ color: '#9B99C8', fontSize: 13, marginBottom: 24 }}>Official technical specifications for your site materials.</p>
@@ -443,7 +443,7 @@ export default function ClientPortal({ user, dbClients = [], clients = [], ...pr
                     ))}
                   </div>
                 </div>
-                <div className="p-card" style={{ padding: mob ? 24 : 40, border: '1px solid #F0EBE5' }}>
+                <div className="p-card" style={{ padding: mob ? 24 : 40, border: '1px solid #E8E6F5' }}>
                   <Download size={mob ? 24 : 32} color={ac} style={{ marginBottom: 16 }} />
                   <h3 className="lxfh" style={{ fontSize: 18, marginBottom: 8 }}>Care Protocol</h3>
                   <p className="lxf" style={{ color: '#9B99C8', fontSize: 13, marginBottom: 24 }}>Maintenance guidelines for longevity.</p>
@@ -459,9 +459,9 @@ export default function ClientPortal({ user, dbClients = [], clients = [], ...pr
           {tab === 'finance' && (
             <div className="fade-in">
               <h2 className="lxfh" style={{ fontSize: mob ? 24 : 32, marginBottom: mob ? 24 : 40 }}>Financial Ledger</h2>
-              <div className="p-card" style={{ padding: 0, border: '1px solid #F0EBE5', overflowX: mob ? 'auto' : 'hidden' }}>
+              <div className="p-card" style={{ padding: 0, border: '1px solid #E8E6F5', overflowX: mob ? 'auto' : 'hidden' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: mob ? 500 : 'auto' }}>
-                  <thead style={{ background: '#F4F4FA', borderBottom: '1px solid #F0EBE5' }}>
+                  <thead style={{ background: '#F4F4FA', borderBottom: '1px solid #E8E6F5' }}>
                     <tr>
                       {['Invoice', 'Description', 'Status', 'Amount', 'Action'].map(h => (
                         <th key={h} style={{ padding: mob ? '16px 16px' : '20px 28px', textAlign: h === 'Amount' ? 'right' : h === 'Action' ? 'center' : 'left', fontSize: 9, color: '#9B99C8', textTransform: 'uppercase', fontWeight: 800 }}>{h}</th>
@@ -500,8 +500,8 @@ export default function ClientPortal({ user, dbClients = [], clients = [], ...pr
           {tab === 'support' && (
             <div className="fade-in">
               <h2 className="lxfh" style={{ fontSize: mob ? 24 : 32, marginBottom: mob ? 24 : 32 }}>Project Concierge</h2>
-              <div className="p-card" style={{ height: mob ? 'calc(100vh - 280px)' : 600, display: 'flex', flexDirection: 'column', border: '1px solid #F0EBE5', overflow: 'hidden' }}>
-                <div style={{ padding: mob ? '16px 20px' : '20px 28px', borderBottom: '1px solid #F0EBE5', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div className="p-card" style={{ height: mob ? 'calc(100vh - 280px)' : 600, display: 'flex', flexDirection: 'column', border: '1px solid #E8E6F5', overflow: 'hidden' }}>
+                <div style={{ padding: mob ? '16px 20px' : '20px 28px', borderBottom: '1px solid #E8E6F5', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div>
                     <h4 className="lxfh" style={{ fontSize: mob ? 14 : 18, margin: 0 }}>Direct Support</h4>
                     <p className="lxf" style={{ fontSize: 9, color: isAgentOnline ? '#16A34A' : '#9B99C8', fontWeight: 800, margin: 0 }}>{isAgentOnline ? 'AGENT ONLINE' : 'OFFICE HOURS: 8AM–6PM'}</p>
@@ -512,7 +512,7 @@ export default function ClientPortal({ user, dbClients = [], clients = [], ...pr
                   {myMessages.length > 0 ? myMessages.map((m, i) => {
                     const isMe = m.senderId === uId;
                     return (
-                      <div key={i} style={{ alignSelf: isMe ? 'flex-end' : 'flex-start', background: isMe ? '#0D0B2E' : '#fff', color: isMe ? '#fff' : '#0D0B2E', padding: mob ? '12px 16px' : '14px 18px', borderRadius: 16, maxWidth: '85%', fontSize: 13, boxShadow: '0 4px 12px rgba(0,0,0,0.03)', border: isMe ? 'none' : '1px solid #F0EBE5' }}>
+                      <div key={i} style={{ alignSelf: isMe ? 'flex-end' : 'flex-start', background: isMe ? '#0D0B2E' : '#fff', color: isMe ? '#fff' : '#0D0B2E', padding: mob ? '12px 16px' : '14px 18px', borderRadius: 16, maxWidth: '85%', fontSize: 13, boxShadow: '0 4px 12px rgba(0,0,0,0.03)', border: isMe ? 'none' : '1px solid #E8E6F5' }}>
                         {m.text}
                       </div>
                     );
@@ -520,7 +520,7 @@ export default function ClientPortal({ user, dbClients = [], clients = [], ...pr
                     <div style={{ textAlign: 'center', padding: 60, color: '#9B99C8', fontSize: 13 }} className="lxf">Awaiting your first inquiry.</div>
                   )}
                 </div>
-                <div style={{ padding: mob ? 16 : 20, borderTop: '1px solid #F0EBE5', display: 'flex', gap: 8 }}>
+                <div style={{ padding: mob ? 16 : 20, borderTop: '1px solid #E8E6F5', display: 'flex', gap: 8 }}>
                   <input
                     ref={msgRef}
                     className="p-inp"
@@ -540,7 +540,7 @@ export default function ClientPortal({ user, dbClients = [], clients = [], ...pr
 
       {/* Mobile bottom nav */}
       {mob && (
-        <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, background: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(20px)', borderTop: '1px solid #F0EBE5', display: 'flex', justifyContent: 'space-around', padding: '10px 10px 28px', zIndex: 1000 }}>
+        <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, background: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(20px)', borderTop: '1px solid #E8E6F5', display: 'flex', justifyContent: 'space-around', padding: '10px 10px 28px', zIndex: 1000 }}>
           {navItems.map(item => (
             <button key={item.id} onClick={() => setTab(item.id)} style={{ background: 'none', border: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, color: tab === item.id ? '#0D0B2E' : '#9B99C8', cursor: 'pointer', transition: 'color 0.2s' }}>
               <div style={{ width: 38, height: 38, borderRadius: 12, background: tab === item.id ? '#0D0B2E' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', color: tab === item.id ? ac : 'inherit' }}>{item.icon}</div>
@@ -577,7 +577,7 @@ export default function ClientPortal({ user, dbClients = [], clients = [], ...pr
               </div>
               <button onClick={() => setActiveInvoice(null)} style={{ background: '#F4F4FA', border: 'none', color: '#0D0B2E', width: 36, height: 36, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><X size={18} /></button>
             </div>
-            <div style={{ borderTop: '1px solid #F0EBE5', borderBottom: '1px solid #F0EBE5', padding: '20px 0', marginBottom: 28 }}>
+            <div style={{ borderTop: '1px solid #E8E6F5', borderBottom: '1px solid #E8E6F5', padding: '20px 0', marginBottom: 28 }}>
               {[{ l: 'Description', v: activeInvoice.title || 'Installation Service' }, { l: 'Date', v: activeInvoice.date }, { l: 'Status', v: activeInvoice.status }].map(r => (
                 <div key={r.l} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
                   <span style={{ fontSize: 12, color: '#9B99C8' }}>{r.l}:</span>

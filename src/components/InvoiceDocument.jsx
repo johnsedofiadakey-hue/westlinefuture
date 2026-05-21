@@ -107,10 +107,10 @@ export default function InvoiceDocument({ inv, isQuote = false, finSettings, ac,
         </thead>
         <tbody>
           {(inv.items || []).map((it) => (
-            <tr key={it.id} style={{ borderBottom: '1px solid #F0EBE5' }}>
+            <tr key={it.id} style={{ borderBottom: '1px solid #E8E6F5' }}>
               <td style={{ padding: '18px 20px' }}>
                 <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
-                  {it.img && <img src={it.img} style={{ width: 44, height: 44, borderRadius: 8, objectFit: 'contain', background: '#f9f7f4' }} alt="it" />}
+                  {it.img && <img src={it.img} style={{ width: 44, height: 44, borderRadius: 8, objectFit: 'contain', background: '#F8F8FD' }} alt="it" />}
                   <div>
                     <div style={{ fontSize: 14, fontWeight: 700 }}>{it.desc || 'Standard Glazing Work'}</div>
                     <div style={{ fontSize: 11, opacity: 0.5, marginTop: 4 }}>Precision manufacturing & site installation</div>
@@ -128,7 +128,7 @@ export default function InvoiceDocument({ inv, isQuote = false, finSettings, ac,
       {/* TOTALS & CONVERSION */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 60 }}>
         <div style={{ flex: 1, paddingRight: 40 }}>
-          <div style={{ padding: 20, border: '1px dashed #E0DDD8', borderRadius: 12 }}>
+          <div style={{ padding: 20, border: '1px dashed #C5C3EC', borderRadius: 12 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
               <Globe size={14} color={ac} />
               <span style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', color: ac }}>Multi-Currency Settlement</span>
@@ -142,7 +142,7 @@ export default function InvoiceDocument({ inv, isQuote = false, finSettings, ac,
           </div>
         </div>
         <div style={{ width: 320 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 0', borderBottom: '1px solid #F0EBE5' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 0', borderBottom: '1px solid #E8E6F5' }}>
             <span style={{ fontSize: 14, opacity: 0.6 }}>Subtotal</span>
             <span style={{ fontSize: 14, fontWeight: 600 }}>{formatMoney(total, inv.currency)}</span>
           </div>
@@ -154,13 +154,13 @@ export default function InvoiceDocument({ inv, isQuote = false, finSettings, ac,
       </div>
 
       {/* BANKING & SIGNATURE */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: 60, borderTop: '1px solid #F0EBE5', paddingTop: 40 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: 60, borderTop: '1px solid #E8E6F5', paddingTop: 40 }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
             <Landmark size={16} color={ac} />
             <span style={{ fontSize: 10, textTransform: 'uppercase', color: ac, fontWeight: 900, letterSpacing: 1 }}>Electronic Fund Transfer</span>
           </div>
-          <div style={{ padding: 24, background: '#F4F4FA', borderRadius: 16, border: '1px solid #F0EBE5' }}>
+          <div style={{ padding: 24, background: '#F4F4FA', borderRadius: 16, border: '1px solid #E8E6F5' }}>
             <p style={{ fontSize: 13, fontWeight: 800, lineHeight: 1.8, whiteSpace: 'pre-line' }}>{inv.bankDetails || finSettings.bankDetails}</p>
           </div>
           <div style={{ marginTop: 32 }}>

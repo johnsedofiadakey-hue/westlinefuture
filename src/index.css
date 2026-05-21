@@ -288,7 +288,7 @@ body {
 /* SCROLLBAR LUXE */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #E0DDD8; border-radius: 10px; border: 2px solid var(--bg); }
+::-webkit-scrollbar-thumb { background: #C5C3EC; border-radius: 10px; border: 2px solid var(--bg); }
 ::-webkit-scrollbar-thumb:hover { background: var(--muted); }
 
 /* FADE IN STAGGERED */
@@ -714,7 +714,7 @@ body {
 /* Custom Form Styles */
 .pub-inp {
   background: #fff;
-  border: 1px solid #F0EBE5;
+  border: 1px solid #E8E6F5;
   outline: none;
   transition: border-color 0.3s;
 }

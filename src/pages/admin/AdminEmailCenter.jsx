@@ -72,7 +72,7 @@ export default function AdminEmailCenter({ emails = [], projects = [], brand, ..
         <PModal open={!!convertTarget} title="Industrial Lead Provisioning" onClose={() => setConvertTarget(null)} w={1000}>
            <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 40 }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-                 <div style={{ background: '#F4F4FA', padding: 24, borderRadius: 20, border: '1px solid #E0DDD8' }}>
+                 <div style={{ background: '#F4F4FA', padding: 24, borderRadius: 20, border: '1px solid #C5C3EC' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
                        <div style={{ width: 40, height: 40, borderRadius: 12, background: '#0D0B2E', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                           <User color="#231F78" size={20} />

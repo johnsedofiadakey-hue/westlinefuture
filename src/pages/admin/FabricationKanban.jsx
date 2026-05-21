@@ -84,7 +84,7 @@ export default function FabricationKanban({ jobs = [], clients = [], dbClients =
           </div>
           <div style={{ display: 'flex', gap: 12, width: isMobile ? '100%' : 'auto' }}>
              <button onClick={() => setShowNewJob(true)} className="p-btn-dark lxf" style={{ padding: '10px 20px', flex: isMobile ? 1 : 'none', display: 'flex', alignItems: 'center', gap: 8 }}><Plus size={16} /> New Job</button>
-             <div className="glass-panel" style={{ padding: '8px 16px', display: 'flex', alignItems: 'center', gap: 10, background: '#fff', border: '1px solid #F0EBE5' }}>
+             <div className="glass-panel" style={{ padding: '8px 16px', display: 'flex', alignItems: 'center', gap: 10, background: '#fff', border: '1px solid #E8E6F5' }}>
                 <Activity size={16} color={ac} />
                 <span className="lxf" style={{ fontSize: 12, fontWeight: 700 }}>{jobs.filter(j => j.stage !== 'ready').length} Active</span>
              </div>
@@ -103,7 +103,7 @@ export default function FabricationKanban({ jobs = [], clients = [], dbClients =
                     <span style={{ fontSize: 9, color: '#9B99C8', fontWeight: 700 }}>{s.desc}</span>
                   </div>
                </div>
-               <span style={{ fontSize: 11, background: '#fff', border: '1px solid #F0EBE5', padding: '2px 8px', borderRadius: 10, color: '#0D0B2E', fontWeight: 800 }}>{jobs.filter(j => j.stage === s.id).length}</span>
+               <span style={{ fontSize: 11, background: '#fff', border: '1px solid #E8E6F5', padding: '2px 8px', borderRadius: 10, color: '#0D0B2E', fontWeight: 800 }}>{jobs.filter(j => j.stage === s.id).length}</span>
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: '4px' }}>
@@ -169,7 +169,7 @@ export default function FabricationKanban({ jobs = [], clients = [], dbClients =
                  ))}
                </AnimatePresence>
                {jobs.filter(j => j.stage === s.id).length === 0 && (
-                 <div style={{ padding: 32, border: '1px dashed #F0EBE5', borderRadius: 20, textAlign: 'center', color: '#9B99C8', fontSize: 12 }}>
+                 <div style={{ padding: 32, border: '1px dashed #E8E6F5', borderRadius: 20, textAlign: 'center', color: '#9B99C8', fontSize: 12 }}>
                     No jobs in {s.label}
                  </div>
                )}

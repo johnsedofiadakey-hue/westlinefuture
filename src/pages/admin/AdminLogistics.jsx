@@ -117,7 +117,7 @@ export default function AdminLogistics({ containers = [], workOrders = [], clien
 
                  {/* MILESTONE TOGGLE */}
                  <div style={{ display: 'flex', justifyContent: 'space-between', position: 'relative', marginBottom: 32, padding: '0 10px' }}>
-                    <div style={{ position: 'absolute', top: 12, left: 20, right: 20, height: 2, background: '#F0EBE5', zIndex: 0 }} />
+                    <div style={{ position: 'absolute', top: 12, left: 20, right: 20, height: 2, background: '#E8E6F5', zIndex: 0 }} />
                     {LOGISTICS_MILESTONES.map((m, idx) => {
                        const isPast = LOGISTICS_MILESTONES.findIndex(x => x.id === c.status) >= idx;
                        const isCurrent = c.status === m.id;
@@ -126,7 +126,7 @@ export default function AdminLogistics({ containers = [], workOrders = [], clien
                            key={m.id}
                            onClick={() => handleUpdateContainerStatus(c.id, m.id)}
                            style={{ 
-                             zIndex: 1, background: isPast ? ac : '#fff', border: `2px solid ${isPast ? ac : '#F0EBE5'}`, 
+                             zIndex: 1, background: isPast ? ac : '#fff', border: `2px solid ${isPast ? ac : '#E8E6F5'}`, 
                              width: 26, height: 26, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
                              color: isPast ? '#fff' : '#9B99C8', cursor: 'pointer', transition: 'all 0.3s'
                            }}
@@ -192,7 +192,7 @@ export default function AdminLogistics({ containers = [], workOrders = [], clien
 
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                <thead>
-                  <tr style={{ borderBottom: '2px solid #F0EBE5', textAlign: 'left' }}>
+                  <tr style={{ borderBottom: '2px solid #E8E6F5', textAlign: 'left' }}>
                      <th style={{ padding: 16, fontSize: 11, fontWeight: 800, color: '#9B99C8', textTransform: 'uppercase' }}>Work Order</th>
                      <th style={{ padding: 16, fontSize: 11, fontWeight: 800, color: '#9B99C8', textTransform: 'uppercase' }}>Client</th>
                      <th style={{ padding: 16, fontSize: 11, fontWeight: 800, color: '#9B99C8', textTransform: 'uppercase' }}>Budget</th>
@@ -202,7 +202,7 @@ export default function AdminLogistics({ containers = [], workOrders = [], clien
                </thead>
                <tbody>
                   {workOrders.map(wo => (
-                     <tr key={wo.id} style={{ borderBottom: '1px solid #F0EBE5' }}>
+                     <tr key={wo.id} style={{ borderBottom: '1px solid #E8E6F5' }}>
                         <td style={{ padding: 16 }}>
                            <div style={{ fontSize: 14, fontWeight: 700 }}>{wo.title}</div>
                            <div style={{ fontSize: 11, color: '#9B99C8' }}>ID: {wo.id}</div>

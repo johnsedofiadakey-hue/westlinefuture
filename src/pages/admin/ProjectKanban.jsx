@@ -32,7 +32,7 @@ function ProjectCard({ project, ac, onOpen, onDragStart }) {
       onClick={() => onOpen(project)}
       style={{
         background: '#fff',
-        border: `1px solid ${isAtRisk ? 'rgba(239,68,68,0.2)' : '#F0EBE5'}`,
+        border: `1px solid ${isAtRisk ? 'rgba(239,68,68,0.2)' : '#E8E6F5'}`,
         borderRadius: 16,
         padding: '16px 18px',
         cursor: 'grab',
@@ -71,7 +71,7 @@ function ProjectCard({ project, ac, onOpen, onDragStart }) {
       </div>
 
       <div style={{ marginTop: 12 }}>
-        <div style={{ height: 4, background: '#F0EBE5', borderRadius: 2, overflow: 'hidden' }}>
+        <div style={{ height: 4, background: '#E8E6F5', borderRadius: 2, overflow: 'hidden' }}>
           <div style={{ width: `${project.progress || 0}%`, height: '100%', background: ac, transition: 'width 0.6s ease', borderRadius: 2 }} />
         </div>
         <div style={{ fontSize: 9, color: '#9B99C8', marginTop: 4, textAlign: 'right', fontWeight: 700 }}>{project.progress || 0}%</div>
@@ -105,7 +105,7 @@ function KanbanColumn({ col, projects, ac, onOpen, onDragStart, onDrop, onDragOv
             <div style={{ width: 10, height: 10, borderRadius: '50%', background: col.color, boxShadow: `0 0 8px ${col.color}66` }} />
             <span style={{ fontSize: 12, fontWeight: 800, color: '#0D0B2E', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{col.label}</span>
           </div>
-          <span style={{ fontSize: 11, fontWeight: 700, color: '#9B99C8', background: '#F0EBE5', padding: '2px 8px', borderRadius: 20 }}>
+          <span style={{ fontSize: 11, fontWeight: 700, color: '#9B99C8', background: '#E8E6F5', padding: '2px 8px', borderRadius: 20 }}>
             {projects.length}
           </span>
         </div>
@@ -134,7 +134,7 @@ function MilestoneChecklist({ tasks, projectTasks = [] }) {
       {tasks.map((task, i) => {
         const done = projectTasks.includes(task);
         return (
-          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: done ? 'rgba(22,163,74,0.06)' : '#F8F8FD', borderRadius: 10, border: `1px solid ${done ? 'rgba(22,163,74,0.15)' : '#F0EBE5'}` }}>
+          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: done ? 'rgba(22,163,74,0.06)' : '#F8F8FD', borderRadius: 10, border: `1px solid ${done ? 'rgba(22,163,74,0.15)' : '#E8E6F5'}` }}>
             <div style={{ width: 20, height: 20, borderRadius: 6, background: done ? '#16A34A' : 'transparent', border: done ? 'none' : '1.5px solid #DDD', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
               {done && <Check size={12} color="#fff" strokeWidth={3} />}
             </div>
@@ -284,19 +284,19 @@ function ProjectDrawer({ project, ac, onClose, updateStage, updateProject, creat
                   )}
                   <button
                     onClick={() => sendWhatsAppUpdate && sendWhatsAppUpdate(project.clientId, project.id, stage.name)}
-                    style={{ padding: '12px 16px', background: '#F4F4FA', color: '#0D0B2E', border: '1px solid #F0EBE5', borderRadius: 12, fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
+                    style={{ padding: '12px 16px', background: '#F4F4FA', color: '#0D0B2E', border: '1px solid #E8E6F5', borderRadius: 12, fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
                   >
                     <MessageCircle size={14} /> Notify Client
                   </button>
                   <button
                     onClick={() => createInvoice && createInvoice({ parentId: project.id, clientId: project.clientId, title: `${stage.name} Payment`, amount: '', status: 'Pending' })}
-                    style={{ padding: '12px 16px', background: '#F4F4FA', color: '#0D0B2E', border: '1px solid #F0EBE5', borderRadius: 12, fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
+                    style={{ padding: '12px 16px', background: '#F4F4FA', color: '#0D0B2E', border: '1px solid #E8E6F5', borderRadius: 12, fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
                   >
                     <FileText size={14} /> New Invoice
                   </button>
                   <button
                     onClick={() => {}}
-                    style={{ padding: '12px 16px', background: '#F4F4FA', color: '#0D0B2E', border: '1px solid #F0EBE5', borderRadius: 12, fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
+                    style={{ padding: '12px 16px', background: '#F4F4FA', color: '#0D0B2E', border: '1px solid #E8E6F5', borderRadius: 12, fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
                   >
                     <Camera size={14} /> Upload Photo
                   </button>
@@ -312,7 +312,7 @@ function ProjectDrawer({ project, ac, onClose, updateStage, updateProject, creat
                     const isCurrent = (project.stage || 1) === s.id;
                     return (
                       <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderRadius: 10, background: isCurrent ? `${s.color}12` : 'transparent', border: isCurrent ? `1px solid ${s.color}30` : '1px solid transparent' }}>
-                        <div style={{ width: 24, height: 24, borderRadius: '50%', background: isPast ? s.color : isCurrent ? '#fff' : '#F0EBE5', border: isCurrent ? `2px solid ${s.color}` : 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                        <div style={{ width: 24, height: 24, borderRadius: '50%', background: isPast ? s.color : isCurrent ? '#fff' : '#E8E6F5', border: isCurrent ? `2px solid ${s.color}` : 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                           {isPast ? <Check size={12} color="#fff" strokeWidth={3} /> : <div style={{ width: 6, height: 6, borderRadius: '50%', background: isCurrent ? s.color : '#DDD' }} />}
                         </div>
                         <span style={{ fontSize: 12, fontWeight: isCurrent ? 700 : 400, color: isCurrent ? '#0D0B2E' : isPast ? '#5B5894' : '#9B99C8' }}>{s.name}</span>
@@ -335,7 +335,7 @@ function ProjectDrawer({ project, ac, onClose, updateStage, updateProject, creat
                 return (
                   <div key={s.id} style={{ opacity: isFuture ? 0.45 : 1 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-                      <div style={{ width: 28, height: 28, borderRadius: '50%', background: isPast ? s.color : isCurrent ? '#fff' : '#F0EBE5', border: isCurrent ? `2px solid ${s.color}` : 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      <div style={{ width: 28, height: 28, borderRadius: '50%', background: isPast ? s.color : isCurrent ? '#fff' : '#E8E6F5', border: isCurrent ? `2px solid ${s.color}` : 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                         {isPast ? <Check size={14} color="#fff" strokeWidth={3} /> : <span style={{ fontSize: 11, fontWeight: 800, color: isCurrent ? s.color : '#9B99C8' }}>{s.id}</span>}
                       </div>
                       <div style={{ flex: 1 }}>
@@ -354,7 +354,7 @@ function ProjectDrawer({ project, ac, onClose, updateStage, updateProject, creat
                               <button
                                 key={ti}
                                 onClick={() => toggleTask(task)}
-                                style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px', background: completedTasks.includes(task) ? 'rgba(22,163,74,0.08)' : '#F4F4FA', border: `1px solid ${completedTasks.includes(task) ? 'rgba(22,163,74,0.2)' : '#F0EBE5'}`, borderRadius: 10, cursor: 'pointer', fontSize: 12, color: completedTasks.includes(task) ? '#16A34A' : '#0D0B2E', fontWeight: 600 }}
+                                style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px', background: completedTasks.includes(task) ? 'rgba(22,163,74,0.08)' : '#F4F4FA', border: `1px solid ${completedTasks.includes(task) ? 'rgba(22,163,74,0.2)' : '#E8E6F5'}`, borderRadius: 10, cursor: 'pointer', fontSize: 12, color: completedTasks.includes(task) ? '#16A34A' : '#0D0B2E', fontWeight: 600 }}
                               >
                                 {completedTasks.includes(task) ? <CheckCircle2 size={13} color="#16A34A" /> : <div style={{ width: 13, height: 13, borderRadius: 4, border: '1.5px solid #DDD' }} />}
                                 {task}
@@ -496,7 +496,7 @@ export default function ProjectKanban({ clients = [], brand, updateStage, update
           { label: 'Completed', value: completedProjects, color: '#16A34A' },
           { label: 'At Risk', value: atRiskProjects, color: '#EF4444' },
         ].map(stat => (
-          <div key={stat.label} style={{ padding: '12px 20px', background: '#fff', border: '1px solid #F0EBE5', borderRadius: 14, display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div key={stat.label} style={{ padding: '12px 20px', background: '#fff', border: '1px solid #E8E6F5', borderRadius: 14, display: 'flex', alignItems: 'center', gap: 12 }}>
             <div style={{ width: 8, height: 8, borderRadius: '50%', background: stat.color }} />
             <span style={{ fontSize: 11, fontWeight: 800, color: '#9B99C8', textTransform: 'uppercase' }}>{stat.label}</span>
             <span style={{ fontSize: 20, fontWeight: 800, color: stat.color }}>{stat.value}</span>

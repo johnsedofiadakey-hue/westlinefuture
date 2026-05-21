@@ -329,7 +329,7 @@ export default function AdminFinancials({ invoices = [], transactions = [], clie
                       const a = document.createElement('a'); a.href = url; a.download = `${tab}_export.csv`; a.click();
                       URL.revokeObjectURL(url);
                     }}
-                    style={{ height: 40, padding: '0 16px', fontSize: 12, display: 'flex', alignItems: 'center', gap: 6, background: '#fff', border: '1px solid #F0EBE5', borderRadius: 10, cursor: 'pointer', fontWeight: 700 }}
+                    style={{ height: 40, padding: '0 16px', fontSize: 12, display: 'flex', alignItems: 'center', gap: 6, background: '#fff', border: '1px solid #E8E6F5', borderRadius: 10, cursor: 'pointer', fontWeight: 700 }}
                   >
                     <Download size={14} /> CSV
                   </button>
@@ -450,7 +450,7 @@ export default function AdminFinancials({ invoices = [], transactions = [], clie
                   
                   <PFormField label="Document Title"><input className="p-inp" placeholder="e.g. Phase 2: Structural Facade Glazing" value={draft.title} onChange={e => setDraft({...draft, title: e.target.value})} /></PFormField>
                   
-                  <div style={{ border: '1px solid #F0EBE5', borderRadius: 20, padding: 24, background: '#F8F8FD' }}>
+                  <div style={{ border: '1px solid #E8E6F5', borderRadius: 20, padding: 24, background: '#F8F8FD' }}>
                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
                         <h4 className="lxf" style={{ fontSize: 11, textTransform: 'uppercase', color: '#9B99C8', letterSpacing: 1 }}>Line Item Breakdown</h4>
                         <button onClick={() => setDraft({...draft, items: [...draft.items, {id: Date.now(), desc:'', qty:1, rate:0, unit: draft.invoiceType === 'unit' ? 'pcs' : 'job'}]})} style={{ background: ac, border: 'none', color: '#fff', fontSize: 10, fontWeight: 800, cursor: 'pointer', padding: '6px 14px', borderRadius: 20 }}>+ ADD BLANK</button>
@@ -503,7 +503,7 @@ export default function AdminFinancials({ invoices = [], transactions = [], clie
                           <button onClick={() => setDraft({...draft, items: draft.items.filter(x => x.id !== it.id)})} style={{ background: 'none', border: 'none', color: '#ff4444', cursor: 'pointer', opacity: draft.items.length > 1 ? 1 : 0.2 }} disabled={draft.items.length <= 1}><Trash2 size={16}/></button>
                        </div>
                      ))}
-                     <div style={{ marginTop: 20, paddingTop: 20, borderTop: '2px solid #F0EBE5', textAlign: 'right' }}>
+                     <div style={{ marginTop: 20, paddingTop: 20, borderTop: '2px solid #E8E6F5', textAlign: 'right' }}>
                         <span style={{ fontSize: 12, color: '#9B99C8', marginRight: 12 }}>Total billable ({draft.currency}):</span>
                         <span style={{ fontSize: 24, fontWeight: 900, color: '#0D0B2E' }}>{formatMoney(calculateTotal(draft.items), draft.currency)}</span>
                      </div>
@@ -511,7 +511,7 @@ export default function AdminFinancials({ invoices = [], transactions = [], clie
                </div>
 
                <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-                  <div className="p-card" style={{ padding: 24, background: '#F4F4FA', border: '1px solid #E0DDD8', position: 'sticky', top: 0 }}>
+                  <div className="p-card" style={{ padding: 24, background: '#F4F4FA', border: '1px solid #C5C3EC', position: 'sticky', top: 0 }}>
                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
                         <h4 className="lxf" style={{ fontSize: 11, textTransform: 'uppercase', color: '#9B99C8' }}>Real-time Preview</h4>
                         <div style={{ fontSize: 9, background: '#0D0B2E', color: '#fff', padding: '2px 8px', borderRadius: 4 }}>{finSettings.invoiceTheme.toUpperCase()}</div>

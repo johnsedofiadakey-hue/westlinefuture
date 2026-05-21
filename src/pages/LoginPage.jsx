@@ -166,7 +166,7 @@ export default function LoginPage({ onLogin, onBack, brand, type = 'client', ...
             <input 
               placeholder={isAdminLogin ? "Staff ID (Email)" : "Username"} 
               aria-label={isAdminLogin ? "Staff ID (Email)" : "Username"}
-              style={{ width: '100%', height: 56, paddingLeft: 48, background: isAdminLogin ? 'rgba(255,255,255,0.03)' : '#F4F4FA', border: isAdminLogin ? '1px solid rgba(255,255,255,0.1)' : '1px solid #F0EBE5', color: isAdminLogin ? '#fff' : '#121212', borderRadius: 12, outline: 'none' }}
+              style={{ width: '100%', height: 56, paddingLeft: 48, background: isAdminLogin ? 'rgba(255,255,255,0.03)' : '#F4F4FA', border: isAdminLogin ? '1px solid rgba(255,255,255,0.1)' : '1px solid #E8E6F5', color: isAdminLogin ? '#fff' : '#121212', borderRadius: 12, outline: 'none' }}
               value={isAdminLogin ? email : username} 
               onChange={e => isAdminLogin ? setEmail(e.target.value) : setUsername(e.target.value)} 
             />
@@ -177,7 +177,7 @@ export default function LoginPage({ onLogin, onBack, brand, type = 'client', ...
               type={showPassword ? 'text' : 'password'}
               placeholder="Access Password"
               aria-label="Access Password"
-              style={{ width: '100%', height: 56, paddingLeft: 48, paddingRight: 48, background: isAdminLogin ? 'rgba(255,255,255,0.03)' : '#F4F4FA', border: isAdminLogin ? '1px solid rgba(255,255,255,0.1)' : '1px solid #F0EBE5', color: isAdminLogin ? '#fff' : '#121212', borderRadius: 12, outline: 'none' }}
+              style={{ width: '100%', height: 56, paddingLeft: 48, paddingRight: 48, background: isAdminLogin ? 'rgba(255,255,255,0.03)' : '#F4F4FA', border: isAdminLogin ? '1px solid rgba(255,255,255,0.1)' : '1px solid #E8E6F5', color: isAdminLogin ? '#fff' : '#121212', borderRadius: 12, outline: 'none' }}
               value={isAdminLogin ? pw : password}
               onChange={e => isAdminLogin ? setPw(e.target.value) : setPassword(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && handleLoginSubmit()}
@@ -197,7 +197,7 @@ export default function LoginPage({ onLogin, onBack, brand, type = 'client', ...
         </div>
 
         {/* SECURITY INFO FOOTER */}
-        <div style={{ marginTop: 48, borderTop: `1px solid ${isAdminLogin ? 'rgba(255,255,255,0.05)' : '#F0EBE5'}`, paddingTop: 32, textAlign: 'center' }}>
+        <div style={{ marginTop: 48, borderTop: `1px solid ${isAdminLogin ? 'rgba(255,255,255,0.05)' : '#E8E6F5'}`, paddingTop: 32, textAlign: 'center' }}>
           <div style={{ display: 'flex', justifyContent: 'center', gap: 24, marginBottom: 16 }}>
              <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#9B99C8', fontSize: 11 }}>
                 <Shield size={14} /> End-to-End Encrypted

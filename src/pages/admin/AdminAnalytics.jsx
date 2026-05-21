@@ -74,7 +74,7 @@ export default function AdminAnalytics({ invoices = [], clients = [], brand }) {
           <p className="lxf" style={{ color: '#9B99C8', fontSize: 13, marginTop: 4 }}>Revenue trends, project pipeline, and operational metrics.</p>
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
-          <button onClick={handleExportRevenue} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 16px', background: '#fff', border: '1px solid #F0EBE5', borderRadius: 10, fontSize: 12, fontWeight: 700, cursor: 'pointer', color: '#0D0B2E' }}>
+          <button onClick={handleExportRevenue} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 16px', background: '#fff', border: '1px solid #E8E6F5', borderRadius: 10, fontSize: 12, fontWeight: 700, cursor: 'pointer', color: '#0D0B2E' }}>
             <Download size={14} /> Revenue CSV
           </button>
           <button onClick={handleExportInvoices} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 16px', background: '#0D0B2E', border: 'none', borderRadius: 10, fontSize: 12, fontWeight: 700, cursor: 'pointer', color: '#fff' }}>
@@ -91,7 +91,7 @@ export default function AdminAnalytics({ invoices = [], clients = [], brand }) {
           { label: 'Active Clients', value: clients.length, icon: <Users size={20} /> },
           { label: 'Total Invoices', value: invoices.length, icon: <Activity size={20} /> },
         ].map(card => (
-          <div key={card.label} className="p-card" style={{ padding: 20, border: '1px solid #F0EBE5', background: card.dark ? '#0D0B2E' : '#fff', color: card.dark ? '#fff' : '#0D0B2E' }}>
+          <div key={card.label} className="p-card" style={{ padding: 20, border: '1px solid #E8E6F5', background: card.dark ? '#0D0B2E' : '#fff', color: card.dark ? '#fff' : '#0D0B2E' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
               <div style={{ fontSize: 11, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.1em', opacity: card.dark ? 0.5 : 0.6 }}>{card.label}</div>
               <div style={{ color: ac }}>{card.icon}</div>
@@ -103,7 +103,7 @@ export default function AdminAnalytics({ invoices = [], clients = [], brand }) {
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 32, marginBottom: 32 }}>
         {/* REVENUE CHART */}
-        <div className="p-card" style={{ padding: 24, border: '1px solid #F0EBE5', background: '#fff' }}>
+        <div className="p-card" style={{ padding: 24, border: '1px solid #E8E6F5', background: '#fff' }}>
           <h3 className="lxfh" style={{ fontSize: 16, marginBottom: 20 }}>Revenue by Month</h3>
           <div style={{ width: '100%', height: 280 }}>
             <ResponsiveContainer>
@@ -114,7 +114,7 @@ export default function AdminAnalytics({ invoices = [], clients = [], brand }) {
                     <stop offset="95%" stopColor={ac} stopOpacity={0}/>
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#F0EBE5" />
+                <CartesianGrid strokeDasharray="3 3" stroke="#E8E6F5" />
                 <XAxis dataKey="month" stroke="#9B99C8" fontSize={11} />
                 <YAxis stroke="#9B99C8" fontSize={11} tickFormatter={v => `$${(v/1000).toFixed(0)}k`} />
                 <Tooltip formatter={(v) => [`$${v.toLocaleString()}`, 'Revenue']} />
@@ -130,7 +130,7 @@ export default function AdminAnalytics({ invoices = [], clients = [], brand }) {
         </div>
 
         {/* PROJECTS BY STAGE */}
-        <div className="p-card" style={{ padding: 24, border: '1px solid #F0EBE5', background: '#fff' }}>
+        <div className="p-card" style={{ padding: 24, border: '1px solid #E8E6F5', background: '#fff' }}>
           <h3 className="lxfh" style={{ fontSize: 16, marginBottom: 20 }}>Projects by Stage</h3>
           {stageData.length > 0 ? (
             <div style={{ width: '100%', height: 280 }}>
@@ -153,10 +153,10 @@ export default function AdminAnalytics({ invoices = [], clients = [], brand }) {
       </div>
 
       {/* INVOICE TABLE */}
-      <div className="p-card" style={{ border: '1px solid #F0EBE5', overflow: 'hidden' }}>
-        <div style={{ padding: '20px 24px', borderBottom: '1px solid #F0EBE5', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div className="p-card" style={{ border: '1px solid #E8E6F5', overflow: 'hidden' }}>
+        <div style={{ padding: '20px 24px', borderBottom: '1px solid #E8E6F5', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <h3 className="lxfh" style={{ fontSize: 16, margin: 0 }}>Invoice Ledger</h3>
-          <button onClick={handleExportInvoices} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: '#F4F4FA', border: '1px solid #F0EBE5', borderRadius: 8, fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
+          <button onClick={handleExportInvoices} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: '#F4F4FA', border: '1px solid #E8E6F5', borderRadius: 8, fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
             <Download size={13} /> Export CSV
           </button>
         </div>

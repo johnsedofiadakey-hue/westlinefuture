@@ -46,7 +46,7 @@ export default function AdminInstallations({ clients = [], updateProject, dbClie
               <div className="lxf" style={{ fontSize: 10, color: '#9B99C8', textTransform: 'uppercase', letterSpacing: '.15em' }}>Fabrication Progress</div>
               <div className="lxfh" style={{ fontSize: 18, color: '#5B5894', textAlign: 'right' }}>{proj.progress || 0}%</div>
             </div>
-            <div style={{ paddingLeft: 24, borderLeft: '1px solid #F0EBE5' }}>
+            <div style={{ paddingLeft: 24, borderLeft: '1px solid #E8E6F5' }}>
               <div className="lxf" style={{ fontSize: 10, color: ac, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.15em' }}>Overall Project Pulse</div>
               <div className="lxfh" style={{ fontSize: 24, color: ac, textAlign: 'right' }}>{calculateProjectPulse(proj.id)}%</div>
             </div>
@@ -60,7 +60,7 @@ export default function AdminInstallations({ clients = [], updateProject, dbClie
             <div className="p-card" style={{ padding: 24 }}>
               <h3 className="lxfh" style={{ fontSize: 18, marginBottom: 24 }}>Project Journey</h3>
               <div style={{ display: 'flex', flexDirection: 'column', position: 'relative' }}>
-                <div style={{ position: 'absolute', left: 15, top: 0, bottom: 0, width: 2, background: '#F0EBE5' }} />
+                <div style={{ position: 'absolute', left: 15, top: 0, bottom: 0, width: 2, background: '#E8E6F5' }} />
                 
                 {PROJECT_STAGES.map((s, idx) => {
                   const isCurrent = (proj.stage || 1) === s.id;
@@ -225,7 +225,7 @@ export default function AdminInstallations({ clients = [], updateProject, dbClie
                      <span style={{ color: '#5B5894' }}>PROGRESS</span>
                      <span>{c.progress || 0}%</span>
                   </div>
-                  <div className="prog" style={{ height: 6, width: '100%', background: '#F0EBE5' }}>
+                  <div className="prog" style={{ height: 6, width: '100%', background: '#E8E6F5' }}>
                      <div className="prog-f" style={{ width: `${c.progress || 0}%`, background: ac }} />
                   </div>
                </div>

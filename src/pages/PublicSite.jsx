@@ -133,7 +133,7 @@ export function PubNav({ brand, setPage, activePage, onPortal, user, menuOpen, s
                   )}
                 </button>
                 {showNotifDropdown && (
-                  <div style={{ position: 'absolute', top: 40, right: 0, width: 300, background: '#fff', border: '1px solid #F0EBE5', borderRadius: 12, boxShadow: '0 10px 30px rgba(0,0,0,0.1)', zIndex: 1002, padding: '16px' }}>
+                  <div style={{ position: 'absolute', top: 40, right: 0, width: 300, background: '#fff', border: '1px solid #E8E6F5', borderRadius: 12, boxShadow: '0 10px 30px rgba(0,0,0,0.1)', zIndex: 1002, padding: '16px' }}>
                     <div style={{ fontSize: 12, fontWeight: 800, marginBottom: 12, textTransform: 'uppercase', color: DARK_TEXT }}>Notifications</div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 12, maxHeight: 300, overflowY: 'auto' }}>
                       {userNotifications.length > 0 ? userNotifications.map(n => (
@@ -222,7 +222,7 @@ export function PubNav({ brand, setPage, activePage, onPortal, user, menuOpen, s
           ))}
           
           {user && userNotifications.length > 0 && (
-            <div style={{ marginTop: 'auto', paddingTop: 20, borderTop: '1px solid #F0EBE5' }}>
+            <div style={{ marginTop: 'auto', paddingTop: 20, borderTop: '1px solid #E8E6F5' }}>
               <div style={{ fontSize: 12, fontWeight: 800, marginBottom: 12, textTransform: 'uppercase', color: ac }}>Notifications</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12, maxHeight: 200, overflowY: 'auto' }}>
                 {userNotifications.map(n => (

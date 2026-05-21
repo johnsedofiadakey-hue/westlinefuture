@@ -107,7 +107,7 @@ export default function AdminClients({ dbClients, createClient, updateClient, de
             <Search style={{ position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)', color: '#9B99C8' }} size={18} />
             <input 
                className="p-inp" 
-               style={{ paddingLeft: 48, height: 56, borderRadius: 16, background: '#F4F4FA', border: '1px solid #F0EBE5' }} 
+               style={{ paddingLeft: 48, height: 56, borderRadius: 16, background: '#F4F4FA', border: '1px solid #E8E6F5' }} 
                placeholder="Find client..." 
                value={search}
                onChange={e => setSearch(e.target.value)}
@@ -116,16 +116,16 @@ export default function AdminClients({ dbClients, createClient, updateClient, de
          <select 
            value={props.currency} 
            onChange={e => props.setCurrency(e.target.value)}
-           style={{ height: 56, padding: '0 20px', borderRadius: 16, border: '1px solid #F0EBE5', background: '#fff', fontSize: 14, fontWeight: 700 }}
+           style={{ height: 56, padding: '0 20px', borderRadius: 16, border: '1px solid #E8E6F5', background: '#fff', fontSize: 14, fontWeight: 700 }}
          >
            <option value="GHS">GHS (₵)</option>
            <option value="USD">USD ($)</option>
          </select>
       </div>
 
-      <div className="p-card" style={{ padding: 0, overflow: 'hidden', border: '1px solid #F0EBE5' }}>
+      <div className="p-card" style={{ padding: 0, overflow: 'hidden', border: '1px solid #E8E6F5' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-          <thead style={{ background: '#F4F4FA', borderBottom: '1px solid #F0EBE5' }}>
+          <thead style={{ background: '#F4F4FA', borderBottom: '1px solid #E8E6F5' }}>
             <tr>
               <th style={{ padding: '16px 24px', width: 40 }}>
                 <button onClick={toggleAll} style={{ background: 'none', border: 'none', cursor: 'pointer', color: selectedIds.length === filtered.length ? ac : '#9B99C8' }}>
@@ -211,7 +211,7 @@ export default function AdminClients({ dbClients, createClient, updateClient, de
                   'Are you sure you want to remove this client? This action is permanent.'}
               </p>
               <div style={{ display: 'flex', gap: 12 }}>
-                 <button onClick={() => setConfirmDelete(null)} style={{ flex: 1, height: 50, borderRadius: 12, border: '1px solid #F0EBE5', background: 'none', fontWeight: 700, cursor: 'pointer' }}>Cancel</button>
+                 <button onClick={() => setConfirmDelete(null)} style={{ flex: 1, height: 50, borderRadius: 12, border: '1px solid #E8E6F5', background: 'none', fontWeight: 700, cursor: 'pointer' }}>Cancel</button>
                  <button onClick={handleConfirmedDelete} style={{ flex: 1, height: 50, borderRadius: 12, border: 'none', background: '#EF4444', color: '#fff', fontWeight: 700, cursor: 'pointer' }}>Delete</button>
               </div>
            </div>

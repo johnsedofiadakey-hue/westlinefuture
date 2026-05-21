@@ -95,7 +95,7 @@ export default function AIProposalGenerator({ open, onClose, onSubmit, brand, in
         {/* PROGRESS MINI */}
         <div style={{ display: 'flex', gap: 6, marginBottom: 32 }}>
           {[1,2,3].map(s => (
-            <div key={s} style={{ flex: 1, height: 3, borderRadius: 2, background: step >= s ? ac : '#F0EBE5', transition: 'all .3s' }} />
+            <div key={s} style={{ flex: 1, height: 3, borderRadius: 2, background: step >= s ? ac : '#E8E6F5', transition: 'all .3s' }} />
           ))}
         </div>
 

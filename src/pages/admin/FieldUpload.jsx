@@ -59,7 +59,7 @@ export default function FieldUpload({ dbClients, clients, handleMediaUpload, ...
                 <select 
                   value={selectedProjectId} 
                   onChange={e => setSelectedProjectId(e.target.value)}
-                  style={{ width: '100%', height: 56, borderRadius: 16, border: '1px solid #F0EBE5', background: '#F4F4FA', padding: '0 16px', fontSize: 16, fontWeight: 600 }}
+                  style={{ width: '100%', height: 56, borderRadius: 16, border: '1px solid #E8E6F5', background: '#F4F4FA', padding: '0 16px', fontSize: 16, fontWeight: 600 }}
                 >
                    <option value="">Choose Project...</option>
                    {clients.map(p => (
@@ -70,7 +70,7 @@ export default function FieldUpload({ dbClients, clients, handleMediaUpload, ...
 
              <div style={{ marginBottom: 24 }}>
                 <label style={{ fontSize: 10, fontWeight: 900, textTransform: 'uppercase', color: '#9B99C8', display: 'block', marginBottom: 8 }}>Snap or Select Photo</label>
-                <div style={{ position: 'relative', width: '100%', height: 200, background: '#F4F4FA', border: '2px dashed #F0EBE5', borderRadius: 24, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+                <div style={{ position: 'relative', width: '100%', height: 200, background: '#F4F4FA', border: '2px dashed #E8E6F5', borderRadius: 24, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
                    {file ? (
                      <img src={URL.createObjectURL(file)} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                    ) : (
@@ -89,7 +89,7 @@ export default function FieldUpload({ dbClients, clients, handleMediaUpload, ...
                   value={caption} 
                   onChange={e => setCaption(e.target.value)}
                   placeholder="e.g. 'Installation of 12mm Tempered Glass Partition complete.'"
-                  style={{ width: '100%', height: 120, borderRadius: 16, border: '1px solid #F0EBE5', background: '#F4F4FA', padding: 16, fontSize: 14, resize: 'none' }}
+                  style={{ width: '100%', height: 120, borderRadius: 16, border: '1px solid #E8E6F5', background: '#F4F4FA', padding: 16, fontSize: 14, resize: 'none' }}
                 />
              </div>
 

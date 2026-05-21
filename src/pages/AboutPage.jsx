@@ -22,7 +22,7 @@ export default function AboutPage({ brand, content }) {
                 <h2 style={{ fontSize: 40, fontWeight: 800, marginBottom: 8, color: DARK_TEXT }}>{data.founder || 'Managing Director'}</h2>
                 <div style={{ color: ac, fontSize: 12, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.2em', marginBottom: 32 }}>{data.role || 'Managing Director'}</div>
                 <p style={{ color: 'rgba(13,11,46,0.6)', lineHeight: 1.8, fontSize: 16, marginBottom: 24 }}>{data.bio || 'From structural glass to full interior finishing, our evolution has been driven by a commitment to technical mastery and aesthetic perfection.'}</p>
-                <div style={{ padding: 32, background: '#F4F4FA', borderRadius: 24, border: '1px solid #F0EBE5' }}>
+                <div style={{ padding: 32, background: '#F4F4FA', borderRadius: 24, border: '1px solid #E8E6F5' }}>
                    <h4 style={{ fontSize: 20, fontWeight: 800, marginBottom: 8, color: DARK_TEXT }}>Headquarters</h4>
                    <p style={{ color: 'rgba(13,11,46,0.5)', margin: 0 }}>{brand.location || 'Westline Future — Global Trading Co, Ltd'}</p>
                 </div>

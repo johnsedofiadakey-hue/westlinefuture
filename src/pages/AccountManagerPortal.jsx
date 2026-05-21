@@ -87,7 +87,7 @@ export default function AccountManagerPortal({ user, brand, onLogout, ...props }
           {/* STATS STRIP */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 24, marginBottom: 48 }}>
              {stats.map(s => (
-               <div key={s.label} className="p-card" style={{ padding: 24, background: '#fff', border: '1px solid #F0EBE5' }}>
+               <div key={s.label} className="p-card" style={{ padding: 24, background: '#fff', border: '1px solid #E8E6F5' }}>
                   <div style={{ color: ac, marginBottom: 12 }}>{s.icon}</div>
                   <div style={{ fontSize: 24, fontWeight: 900 }}>{s.value}</div>
                   <div style={{ fontSize: 12, color: '#9B99C8', fontWeight: 700, textTransform: 'uppercase' }}>{s.label}</div>
@@ -140,7 +140,7 @@ export default function AccountManagerPortal({ user, brand, onLogout, ...props }
                    {/* Simplified task list matching the new ERP style */}
                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 16 }}>
                       {(tasks || []).filter(t => t.assignedTo === user.id).map(t => (
-                        <div key={t.id} style={{ padding: 20, background: '#F4F4FA', borderRadius: 20, border: '1px solid #F0EBE5' }}>
+                        <div key={t.id} style={{ padding: 20, background: '#F4F4FA', borderRadius: 20, border: '1px solid #E8E6F5' }}>
                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
                               <div style={{ fontSize: 10, fontWeight: 900, color: ac }}>{t.project_title}</div>
                               <PSBadge s={t.status} />

@@ -230,7 +230,7 @@ export default function AdminDashboard({ clients, invoices, proposals, brand, ge
                 <h3 className="lxfh" style={{ fontSize: 28, letterSpacing: '-0.02em' }}>Financial Velocity</h3>
                 <p className="lxf" style={{ fontSize: 14, color: '#5B5894' }}>Trailing revenue against production targets.</p>
               </div>
-              {!isMobile && <button className="p-btn-light lxf" style={{ padding: '12px 24px', fontSize: 11, borderRadius: 14, border: '1px solid #F0EBE5', fontWeight: 800 }}>AUDIT STATEMENTS</button>}
+              {!isMobile && <button className="p-btn-light lxf" style={{ padding: '12px 24px', fontSize: 11, borderRadius: 14, border: '1px solid #E8E6F5', fontWeight: 800 }}>AUDIT STATEMENTS</button>}
            </div>
            
             <div style={{ height: 320, width: '100%', minHeight: 320, background: 'var(--bg-alt)', borderRadius: 16, overflow: 'hidden', position: 'relative' }}>
@@ -294,7 +294,7 @@ export default function AdminDashboard({ clients, invoices, proposals, brand, ge
              
               <button 
                 onClick={() => typeof props.setMod === 'function' && props.setMod('AuditLog')}
-                style={{ width: '100%', marginTop: 24, padding: 14, borderRadius: 12, background: '#F4F4FA', border: '1px solid #F0EBE5', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}
+                style={{ width: '100%', marginTop: 24, padding: 14, borderRadius: 12, background: '#F4F4FA', border: '1px solid #E8E6F5', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}
               >
                 Full Operations Audit
               </button>
@@ -320,7 +320,7 @@ export default function AdminDashboard({ clients, invoices, proposals, brand, ge
                   </div>
                 ))}
                 {(props.content?.products || []).filter(p => p.stock <= p.threshold).length === 0 && (
-                  <div style={{ textAlign: 'center', padding: 40, border: '1px dashed #F0EBE5', borderRadius: 20, color: '#16A34A', fontSize: 13, background: 'rgba(22, 163, 74, 0.03)' }}>
+                  <div style={{ textAlign: 'center', padding: 40, border: '1px dashed #E8E6F5', borderRadius: 20, color: '#16A34A', fontSize: 13, background: 'rgba(22, 163, 74, 0.03)' }}>
                      <CheckCircle size={24} style={{ marginBottom: 8 }} />
                      <div>All inventory levels are within nominal parameters.</div>
                   </div>

@@ -138,7 +138,7 @@ export default function AdminShowcase({ brand, notify }) {
               style={{ background: '#fff', width: '100%', maxWidth: 800, maxHeight: '90vh', borderRadius: 32, overflow: 'hidden', display: 'flex', flexDirection: 'column', boxShadow: '0 40px 100px rgba(0,0,0,0.4)' }}
             >
               {/* FIXED HEADER */}
-              <div style={{ padding: '24px 32px', borderBottom: '1px solid #F0EBE5', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#fff' }}>
+              <div style={{ padding: '24px 32px', borderBottom: '1px solid #E8E6F5', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#fff' }}>
                 <div>
                    <h2 style={{ fontSize: 20, fontWeight: 900, margin: 0 }}>Immersive Scene Creator</h2>
                    <div style={{ fontSize: 11, color: '#9B99C8', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1 }}>{newScene.hotspots.length} active detail hotspots</div>
@@ -160,12 +160,12 @@ export default function AdminShowcase({ brand, notify }) {
                       <label style={{ display: 'block', fontSize: 10, fontWeight: 900, textTransform: 'uppercase', color: ac, marginBottom: 12 }}>2. Hotspot Registry</label>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                          {newScene.hotspots.length === 0 && (
-                            <div style={{ padding: 20, border: '1px dashed #F0EBE5', borderRadius: 16, textAlign: 'center', color: '#9B99C8', fontSize: 12 }}>
+                            <div style={{ padding: 20, border: '1px dashed #E8E6F5', borderRadius: 16, textAlign: 'center', color: '#9B99C8', fontSize: 12 }}>
                                Click on the image to place your first technical hotspot.
                             </div>
                          )}
                          {newScene.hotspots.map((h, i) => (
-                           <div key={i} style={{ padding: 16, background: '#F4F4FA', borderRadius: 16, border: '1px solid #F0EBE5' }}>
+                           <div key={i} style={{ padding: 16, background: '#F4F4FA', borderRadius: 16, border: '1px solid #E8E6F5' }}>
                               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                                  <div style={{ fontSize: 10, fontWeight: 900, color: ac }}>HOTSPOT #{i+1}</div>
                                  <button onClick={() => {
@@ -233,7 +233,7 @@ export default function AdminShowcase({ brand, notify }) {
               </div>
 
               {/* FIXED FOOTER */}
-              <div style={{ padding: '24px 32px', borderTop: '1px solid #F0EBE5', display: 'flex', gap: 12, background: '#fff' }}>
+              <div style={{ padding: '24px 32px', borderTop: '1px solid #E8E6F5', display: 'flex', gap: 12, background: '#fff' }}>
                 <button onClick={() => setShowAdd(false)} className="p-btn-light" style={{ flex: 1, height: 56 }}>Discard Draft</button>
                 <button onClick={saveScene} className="p-btn-gold" style={{ flex: 2, height: 56, fontSize: 16 }}>Publish Immersive Scene</button>
               </div>

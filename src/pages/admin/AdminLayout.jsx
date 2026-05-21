@@ -201,7 +201,7 @@ export default function AdminLayout({ user, onLogout, onPreview, brand, view, se
                         value={props.lang}
                         onChange={e => props.setLang(e.target.value)}
                         aria-label="Language"
-                        style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid #F0EBE5', background: '#fff', fontSize: 10, fontWeight: 800, cursor: 'pointer' }}
+                        style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid #E8E6F5', background: '#fff', fontSize: 10, fontWeight: 800, cursor: 'pointer' }}
                       >
                         <option value="en">EN</option>
                         <option value="fr">FR</option>
@@ -210,7 +210,7 @@ export default function AdminLayout({ user, onLogout, onPreview, brand, view, se
                    
                    <NotificationBell notifications={userNotifications} onMarkRead={markNotificationRead} />
                    
-                   <button onClick={onPreview} className="p-btn-light" style={{ padding: '8px 12px', fontSize: 11, borderRadius: 10, display: 'flex', alignItems: 'center', gap: 6, background: '#fff', border: '1px solid #F0EBE5' }}>
+                   <button onClick={onPreview} className="p-btn-light" style={{ padding: '8px 12px', fontSize: 11, borderRadius: 10, display: 'flex', alignItems: 'center', gap: 6, background: '#fff', border: '1px solid #E8E6F5' }}>
                      <Eye size={14} /> <span className="dt-only">Site Preview</span>
                    </button>
                    
@@ -229,7 +229,7 @@ export default function AdminLayout({ user, onLogout, onPreview, brand, view, se
 
           <div className="fade-in admin-content-wrap" style={{ padding: isMobile ? '20px 20px 120px' : '40px 60px' }}>
             {view === 'dash' && (
-              <div style={{ padding: 32, background: '#F8F8FD', border: '1px solid #F0EBE5', borderRadius: 32, marginBottom: 40 }}>
+              <div style={{ padding: 32, background: '#F8F8FD', border: '1px solid #E8E6F5', borderRadius: 32, marginBottom: 40 }}>
                  <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 24 }}>
                     <div style={{ width: 48, height: 48, background: '#0D0B2E', borderRadius: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', color: ac }}>
                        <Briefcase size={24} />

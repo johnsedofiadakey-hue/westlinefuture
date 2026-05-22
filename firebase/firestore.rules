@@ -14,56 +14,133 @@ service cloud.firestore {
 
     function isAdmin() {
       return isAuthenticated() && (
-        request.auth.token.email.matches(".*@westlinefuture.com") ||
-        request.auth.token.email == "admin@westlinefuture.com"
+        request.auth.token.role == "admin" ||
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "admin" ||
+        authEmail().matches(".*@westlinefuture.com") ||
+        authEmail() == "admin@westlinefuture.com"
       );
     }
 
+    function isStaff() {
+      return isAuthenticated() && (
+        request.auth.token.role == "staff" ||
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "staff"
+      );
+    }
+
+    function isWorker() {
+      return isAuthenticated() && (
+        request.auth.token.role == "worker" ||
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "worker"
+      );
+    }
+
+    function isAdminOrStaff() {
+      return isAdmin() || isStaff();
+    }
+
+    function authPhoneId() {
+      return isAuthenticated() && request.auth.token.phone_number != null
+        ? request.auth.token.phone_number.replace("+", "")
+        : "";
+    }
+
+    function authEmail() {
+      return isAuthenticated() && request.auth.token.email != null ? request.auth.token.email : "";
+    }
+
     function isClient(clientId) {
-      return isAuthenticated() && (request.auth.uid == clientId || request.auth.token.email.replace("@clients.westlinefuture.com", "") == clientId);
+      return isAuthenticated() && (
+        request.auth.uid == clientId ||
+        authPhoneId() == clientId ||
+        authEmail().replace("@clients.westlinefuture.com", "") == clientId
+      );
+    }
+
+    function isAssignedClient(data) {
+      return isAuthenticated() && (
+        isClient(data.clientId) ||
+        isClient(data.primaryClientId) ||
+        (data.clientIds is list && data.clientIds.hasAny([authPhoneId(), request.auth.uid]))
+      );
+    }
+
+    function isAssignedWorker(data) {
+      return isWorker() && data.assignedWorkers is list && data.assignedWorkers.hasAny([request.auth.uid]);
+    }
+
+    function isAssignedStaff(data) {
+      return isStaff() && (
+        (data.assignedStaff is list && data.assignedStaff.hasAny([request.auth.uid])) ||
+        (data.assignedWorkers is list && data.assignedWorkers.hasAny([request.auth.uid])) ||
+        data.assignedTo == request.auth.uid ||
+        data.managerId == request.auth.uid
+      );
+    }
+
+    function canReadProject(data) {
+      return isAdmin() || isAssignedStaff(data) || isAssignedWorker(data) || isAssignedClient(data);
+    }
+
+    function canWriteProject(data) {
+      return isAdmin() || isAssignedStaff(data);
+    }
+
+    function canReadClientRecord(data) {
+      return isAdminOrStaff() || isAssignedClient(data) || (isAuthenticated() && data.clientEmail == authEmail());
     }
 
     // --- USER PROFILES ---
     match /users/{userId} {
-      allow get: if isAdmin() || (isAuthenticated() && (request.auth.uid == userId || isClient(userId)));
-      allow list: if isAdmin();
-      allow write: if isAdmin() || (isAuthenticated() && request.auth.uid == userId);
+      allow get: if isAdminOrStaff() || isWorker() || (isAuthenticated() && (request.auth.uid == userId || isClient(userId)));
+      allow list: if isAdminOrStaff();
+      allow create: if isAdminOrStaff();
+      allow update: if isAdminOrStaff() || (isAuthenticated() && (request.auth.uid == userId || isClient(userId)));
+      allow delete: if isAdmin();
     }
 
     // --- OPERATIONS: JOBS & ASSETS ---
     match /jobs/{jobId} {
-      allow read: if isAuthenticated();
-      allow write: if isAdmin();
+      allow read: if isAdminOrStaff();
+      allow write: if isAdminOrStaff();
     }
     match /assets/{assetId} {
-      allow read: if isAuthenticated();
-      allow write: if isAdmin();
+      allow read: if isAdminOrStaff();
+      allow write: if isAdminOrStaff();
     }
 
     // --- PROJECTS & CLIENT DATA ---
     match /projects/{projectId} {
-      allow get: if isAdmin() || isClient(resource.data.clientId) || (isAuthenticated() && request.auth.token.email == resource.data.email);
-      allow list: if isAdmin() || (isAuthenticated() && (request.query.limit <= 100));
-      allow write: if isAdmin();
+      allow get, list: if canReadProject(resource.data);
+      allow create: if isAdminOrStaff();
+      allow update, delete: if canWriteProject(resource.data);
 
       match /{subcollection}/{docId} {
-        allow get, list: if isAdmin() || isClient(get(/databases/$(database)/documents/projects/$(projectId)).data.clientId);
-        allow write: if isAdmin();
+        allow get, list: if canReadProject(get(/databases/$(database)/documents/projects/$(projectId)).data);
+        allow create: if isAdminOrStaff() || (
+          isAssignedWorker(get(/databases/$(database)/documents/projects/$(projectId)).data) &&
+          subcollection in ["messages", "documents", "media", "notes"]
+        ) || (
+          isAssignedClient(get(/databases/$(database)/documents/projects/$(projectId)).data) &&
+          subcollection in ["messages", "change_requests", "approvals"]
+        );
+        allow update: if isAdminOrStaff();
+        allow delete: if isAdmin();
       }
     }
 
-    match /bookings/{bookingId} { allow read: if isAdmin(); allow create: if isAuthenticated(); }
-    match /proposals/{proposalId} { 
-      allow read: if isAdmin() || isClient(resource.data.clientId); 
-      allow write: if isAdmin(); 
-    }    
+    match /bookings/{bookingId} { allow read: if isAdminOrStaff(); allow create: if isAuthenticated(); }
+    match /proposals/{proposalId} {
+      allow read: if isAdminOrStaff() || isClient(resource.data.clientId);
+      allow write: if isAdminOrStaff();
+    }
     match /cms_content/{docId} { allow read: if true; allow write: if isAdmin(); }
     match /settings/{docId} { allow read: if true; allow write: if isAdmin(); }
     
     match /notifications/{notifId} {
-      allow read: if isAdmin() || (isAuthenticated() && (request.auth.uid == resource.data.userId || isClient(resource.data.userId)));
-      allow create: if isAuthenticated(); 
-      allow update, delete: if isAdmin() || (isAuthenticated() && (request.auth.uid == resource.data.userId || isClient(resource.data.userId)));
+      allow read: if isAdminOrStaff() || (isAuthenticated() && (request.auth.uid == resource.data.userId || isClient(resource.data.userId)));
+      allow create: if isAdminOrStaff() || (isAuthenticated() && request.resource.data.userId == request.auth.uid);
+      allow update, delete: if isAdminOrStaff() || (isAuthenticated() && (request.auth.uid == resource.data.userId || isClient(resource.data.userId)));
     }
 
     match /portfolio/{projId} { allow read: if true; allow write: if isAdmin(); }
@@ -71,29 +148,29 @@ service cloud.firestore {
     match /testimonials/{testId} { allow read: if true; allow create: if isAuthenticated(); allow update, delete: if isAdmin(); }
 
     match /messages/{msgId} {
-      allow read: if isAdmin() || (isAuthenticated() && (request.auth.uid == resource.data.senderId || request.auth.uid == resource.data.receiverId || isClient(resource.data.senderId) || isClient(resource.data.receiverId)));
-      allow create: if isAuthenticated();
+      allow read: if isAdminOrStaff() || (isAuthenticated() && (request.auth.uid == resource.data.senderId || request.auth.uid == resource.data.receiverId || isClient(resource.data.senderId) || isClient(resource.data.receiverId)));
+      allow create: if isAdminOrStaff() || (isAuthenticated() && request.resource.data.senderId == request.auth.uid);
       allow delete: if isAdmin();
     }
 
     match /showcase/{sceneId} { allow read: if true; allow write: if isAdmin(); }
     match /emails/{emailId} {
-      allow read: if isAdmin() || (isAuthenticated() && request.auth.token.email == resource.data.to);
-      allow write: if isAdmin();
+      allow read: if isAdminOrStaff() || (isAuthenticated() && authEmail() == resource.data.to);
+      allow write: if isAdminOrStaff();
       allow create: if isAuthenticated(); 
     }
 
-    match /work_orders/{id} { allow read: if isAdmin() || isClient(resource.data.clientId) || (isAuthenticated() && resource.data.clientEmail == request.auth.token.email); allow write: if isAdmin(); }
-    match /containers/{id} { allow read: if isAdmin() || isClient(resource.data.clientId) || (isAuthenticated() && resource.data.clientEmail == request.auth.token.email); allow write: if isAdmin(); }
-    match /transactions/{id} { allow read: if isAdmin() || isClient(resource.data.clientId) || (isAuthenticated() && resource.data.clientEmail == request.auth.token.email); allow write: if isAdmin(); }
-    match /invoices/{id} { allow read: if isAdmin() || isClient(resource.data.clientId) || (isAuthenticated() && resource.data.clientEmail == request.auth.token.email); allow write: if isAdmin(); }
-    match /tasks/{id} { allow read: if isAdmin() || isClient(resource.data.clientId) || (isAuthenticated() && resource.data.clientEmail == request.auth.token.email); allow write: if isAdmin(); }
-    match /procurements/{id} { allow read: if isAdmin() || isClient(resource.data.clientId) || (isAuthenticated() && resource.data.clientEmail == request.auth.token.email); allow write: if isAdmin(); }
+    match /work_orders/{id} { allow read: if canReadClientRecord(resource.data); allow write: if isAdminOrStaff(); }
+    match /containers/{id} { allow read: if canReadClientRecord(resource.data); allow write: if isAdminOrStaff(); }
+    match /transactions/{id} { allow read: if canReadClientRecord(resource.data); allow write: if isAdminOrStaff(); }
+    match /invoices/{id} { allow read: if canReadClientRecord(resource.data); allow write: if isAdminOrStaff(); }
+    match /tasks/{id} { allow read: if canReadClientRecord(resource.data); allow write: if isAdminOrStaff(); }
+    match /procurements/{id} { allow read: if canReadClientRecord(resource.data); allow write: if isAdminOrStaff(); }
     match /activity_logs/{id} { allow read: if isAdmin(); allow write: if isAdmin(); }
-    match /approvals/{id} { allow read: if isAdmin() || isClient(resource.data.clientId) || (isAuthenticated() && resource.data.clientEmail == request.auth.token.email); allow write: if isAdmin(); }
-    match /change_requests/{id} { allow read: if isAdmin() || isClient(resource.data.clientId) || (isAuthenticated() && resource.data.clientEmail == request.auth.token.email); allow write: if isAdmin(); }
-    match /notes/{id} { allow read: if isAdmin() || isClient(resource.data.clientId) || (isAuthenticated() && resource.data.clientEmail == request.auth.token.email); allow write: if isAdmin(); }
-    match /media/{id} { allow read: if isAdmin() || isClient(resource.data.clientId) || (isAuthenticated() && resource.data.clientEmail == request.auth.token.email); allow write: if isAdmin(); }
-    match /shipments/{id} { allow read: if isAdmin() || isClient(resource.data.clientId) || (isAuthenticated() && resource.data.clientEmail == request.auth.token.email); allow write: if isAdmin(); }
+    match /approvals/{id} { allow read: if canReadClientRecord(resource.data); allow write: if isAdminOrStaff(); }
+    match /change_requests/{id} { allow read: if canReadClientRecord(resource.data); allow write: if isAdminOrStaff(); }
+    match /notes/{id} { allow read: if canReadClientRecord(resource.data); allow write: if isAdminOrStaff(); }
+    match /media/{id} { allow read: if canReadClientRecord(resource.data); allow write: if isAdminOrStaff(); }
+    match /shipments/{id} { allow read: if canReadClientRecord(resource.data); allow write: if isAdminOrStaff(); }
   }
 }

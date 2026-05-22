@@ -2,9 +2,9 @@ import React, { useState } from 'react';
 import { LogOut, Package, Truck, Wrench, CheckCircle, ChevronDown, ChevronUp, Camera, MessageSquare, AlertCircle } from 'lucide-react';
 import { CLIENT_PROJECT_STAGES } from '../data';
 
-const DELIVERY_STAGE = 9;
-const INSTALLATION_STAGE = 10;
-const COMPLETE_STAGE = 11;
+const DELIVERY_STAGE = 4;
+const INSTALLATION_STAGE = 5;
+const COMPLETE_STAGE = 6;
 
 function getStageName(stageId) {
   const s = CLIENT_PROJECT_STAGES.find(s => s.id === stageId);
@@ -29,7 +29,7 @@ function ProjectCard({ project, updateProjectStage, addProjectMessage, addProjec
     setStageLoading(true);
     try {
       const label = isDelivery ? 'Delivered by field team' : 'Installation complete';
-      await updateProjectStage(project.id, COMPLETE_STAGE, label);
+      await updateProjectStage(project.id, isDelivery ? INSTALLATION_STAGE : COMPLETE_STAGE, label);
       setStageDone(true);
     } catch (e) {
       console.error(e);

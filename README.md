@@ -1,48 +1,47 @@
-# LuxeSpace Platform — Modular Edition
+# Westline Future Platform
 
-A production-ready, white-label interior design studio platform built for scale. Refactored from the ground up for performance, maintainability, and visual excellence.
+A production-oriented ERP, CRM, client portal, and public website for Westline Future's glass, aluminum, interior finishing, procurement, and installation operations.
 
-## 🚀 Overview
-LuxeSpace is a comprehensive ERP/CRM and client portal solution specifically designed for high-end interior design firms. It manages everything from public-facing portfolio sites to background administrative workflows, proposals, invoicing, and real-time client communication.
+## Overview
 
-## 🏗️ Architecture
-The platform has been refactored from a monolithic codebase into a modular React/Vite architecture:
+Westline Future brings public marketing, project intake, client communication, payments, procurement tracking, staff operations, and admin reporting into one Firebase-backed React application.
 
-- **src/components/**: Shared UI elements (glassmorphic modals, spinners, sliders, etc.).
-- **src/pages/**: High-level page modules (Public Site, Admin Portal, Client Portal, Account Manager Portal).
-- **src/data.js**: Centralised source of truth for mock data, pricing, and services.
-- **src/index.css**: Premium design system and print-safe global styles.
+## Architecture
 
-## ✨ Key Features
-- **Public Site**: Elegant Home, Portfolio, and Contact pages with glassmorphic design.
-- **Admin Command Centre**: Full studio management (CRM, Analytics, Proposals, Invoices).
-- **Client Portal**: Dedicated secure area for project tracking, approvals, and payments.
-- **Design Team Portal**: Task and schedule management for account managers.
-- **Stripe-Style Payments**: Secure, multi-step payment flow simulation.
-- **AI Proposal Generator**: (Logic ready for integration) Drafts high-end proposals automatically.
+- `src/pages/`: Public site, login, client portal, worker view, and admin modules.
+- `src/components/`: Shared UI, payment, document, upload, and proposal components.
+- `src/context/`: Auth and application data pipelines.
+- `src/lib/`: Firebase, messaging, sanitization, error mapping, and utility services.
+- `functions/`: Firebase Cloud Functions for privileged account, payment, SMS, WhatsApp, and automation workflows.
+- `firebase/`: Firestore and Storage security rules.
+- `public/`: Static public assets, manifest, sitemap, and robots file.
 
-## 🛠️ Getting Started
+## Getting Started
 
-### Prerequisites
-- Node.js (v18+)
-- npm or yarn
+```bash
+npm install
+npm run dev
+```
 
-### Installation
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/johnsedofiadakey-hue/glasstechfab.git
-   ```
-2. Install dependencies:
-   ```bash
-   npm install
-   ```
-3. Start the development server:
-   ```bash
-   npm run dev
-   ```
+## Verification
 
-## 📦 Deployment
-The project is configured for seamless deployment to Vercel, Netlify, or AWS Amplify. Simply connect your GitHub repository and build using `npm run build`.
+```bash
+npm run lint
+npm run build
+npm audit --audit-level=moderate
+```
 
-## 📄 License
-Commercial Use Only — LuxeSpace™
+## Deployment
+
+The app is configured for Firebase Hosting with SPA rewrites to `index.html`.
+
+```bash
+npm run build
+firebase deploy
+```
+
+Cloud Function secrets should be configured with `firebase functions:secrets:set`, not exposed through `VITE_*` browser environment variables.
+
+## License
+
+Commercial use only. Westline Future.

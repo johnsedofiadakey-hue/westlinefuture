@@ -225,10 +225,10 @@ export default function AboutPage({ brand, content, navigate }) {
                     </div>
                   </div>
                   <div style={{
-                    flex: 1, padding: mob ? '0 0 0 0' : 28,
+                    flex: 1,
                     background: '#F8F8FD', borderRadius: 20,
                     border: '1px solid #E8E6F5',
-                    padding: '20px 24px',
+                    padding: mob ? '20px 24px' : 28,
                   }}>
                     <div style={{ fontSize: mob ? 12 : 13, fontWeight: 900, color: ac, marginBottom: 6 }}>{item.year}</div>
                     <div style={{ fontSize: mob ? 13 : 15, color: DARK_TEXT, lineHeight: 1.6 }}>{item.event}</div>

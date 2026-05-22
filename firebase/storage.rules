@@ -6,12 +6,33 @@ service firebase.storage {
       return request.auth != null;
     }
 
+    function authEmail() {
+      return isAuthenticated() && request.auth.token.email != null ? request.auth.token.email : "";
+    }
+
     function isAdmin() {
       return isAuthenticated() && (
-        request.auth.token.email.matches(".*@glasstechfab\\.com") ||
-        request.auth.token.email.matches(".*@stormglide\\.com") ||
-        request.auth.token.email == "contact@glasstech.com.gh"
+        request.auth.token.role == "admin" ||
+        authEmail().matches(".*@westlinefuture\\.com") ||
+        authEmail() == "admin@westlinefuture.com"
       );
+    }
+
+    function isStaff() {
+      return isAuthenticated() && request.auth.token.role == "staff";
+    }
+
+    function isWorker() {
+      return isAuthenticated() && request.auth.token.role == "worker";
+    }
+
+    function isAdminOrStaff() {
+      return isAdmin() || isStaff();
+    }
+
+    function isSafeUpload() {
+      return request.resource.size < 20 * 1024 * 1024 &&
+        request.resource.contentType.matches("image/.*|application/pdf|text/plain|application/vnd.openxmlformats-officedocument.*");
     }
 
     // User profile files
@@ -23,7 +44,7 @@ service firebase.storage {
     // Project media and documents — any authenticated user can upload (admin, staff, workers)
     match /projects/{projectId}/{allPaths=**} {
       allow read: if isAuthenticated();
-      allow write: if isAuthenticated();
+      allow write: if (isAdminOrStaff() || isWorker()) && isSafeUpload();
     }
 
     // Branding assets — admin only
@@ -34,8 +55,8 @@ service firebase.storage {
 
     // Field uploads — any authenticated user can upload (workers)
     match /field/{allPaths=**} {
-      allow read: if isAuthenticated();
-      allow write: if isAuthenticated();
+      allow read: if isAdminOrStaff();
+      allow write: if isAuthenticated() && isSafeUpload();
     }
 
     // CMS / showcase media

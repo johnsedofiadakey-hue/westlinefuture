@@ -43,8 +43,6 @@ export default function AdminPortal({ user, onLogout, onPreview, content, setCon
   const [mod, setMod] = useState(null);
   const [aiContext, setAiContext] = useState({});
   const [searchQuery, setSearchQuery] = useState('');
-  const [msgDraft, setMsgDraft] = useState('');
-  const msgInputRef = useRef(null);
   const { brand } = props;
 
   const handleSelectClient = (id) => {
@@ -160,6 +158,8 @@ export default function AdminPortal({ user, onLogout, onPreview, content, setCon
 }
 function AdminChat({ messages, sendMessage, clients, brand }) {
   const [activeClient, setActiveClient] = useState(null);
+  const [msgDraft, setMsgDraft] = useState('');
+  const msgInputRef = useRef(null);
   const ac = brand.color || '#231F78';
   
   return (

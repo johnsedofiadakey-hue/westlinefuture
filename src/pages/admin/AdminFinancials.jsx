@@ -729,7 +729,7 @@ export default function AdminFinancials({ invoices = [], transactions = [], clie
                                      </head>
                                      <body>
                                         <div style="width: 210mm; margin: 0 auto;">${safeBody}</div>
-                                        <script>window.onload = () => { setTimeout(() => { window.print(); window.close(); }, 500); };<\/script>
+                                        <script>window.onload = () => { setTimeout(() => { window.print(); window.close(); }, 500); };</script>
                                      </body>
                                   </html>
                                `);

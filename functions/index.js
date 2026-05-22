@@ -1,5 +1,5 @@
 /**
- * GLASSTECH ERP - CLOUD FUNCTIONS (GEN 2)
+ * WESTLINE FUTURE ERP - CLOUD FUNCTIONS (GEN 2)
  */
 
 const { onDocumentUpdated } = require("firebase-functions/v2/firestore");
@@ -68,6 +68,8 @@ exports.verifyPaystackPayment = onCall(
     const amountGHS = tx.amount / 100; // Paystack amounts are in pesewas for GHS
     const txId = `TX-${reference}`;
 
+    await assertProjectAccess(request.auth, projectId);
+
     // ── AMOUNT VALIDATION ────────────────────────────────────────────────────
     // If the client told us the expected amount, verify Paystack paid at least that.
     if (expectedAmountGHS && typeof expectedAmountGHS === "number") {
@@ -85,7 +87,7 @@ exports.verifyPaystackPayment = onCall(
           const invoiceSnap = await db.collection("invoices").doc(invoiceId).get();
           if (invoiceSnap.exists) {
             const invoice = invoiceSnap.data();
-            const invoiceAmt = Number(invoice.amount || invoice.total || 0);
+            const invoiceAmt = Number(invoice.total || String(invoice.amount || 0).replace(/[^0-9.]/g, ""));
             if (invoiceAmt > 0) {
               const tolerance = invoiceAmt * 0.02;
               if (amountGHS < invoiceAmt - tolerance) {
@@ -104,30 +106,58 @@ exports.verifyPaystackPayment = onCall(
     }
     // ─────────────────────────────────────────────────────────────────────────
 
-    // Write verified transaction into the project's transactions sub-collection
-    await db
-      .collection("projects").doc(projectId)
-      .collection("transactions").doc(txId)
-      .set({
-        id: txId,
-        invoiceId: invoiceId || reference,
-        reference,
-        amount: amountGHS,
-        currency: tx.currency,
-        method: "Paystack",
-        channel: tx.channel,
-        gateway_response: tx.gateway_response,
-        paidAt: tx.paid_at,
-        type,
-        status: "verified",
-        verifiedAt: FieldValue.serverTimestamp(),
-        verifiedBy: uid,
+    const projectRef = db.collection("projects").doc(projectId);
+    const txRef = projectRef.collection("transactions").doc(txId);
+    const batch = db.batch();
+
+    batch.set(txRef, {
+      id: txId,
+      invoiceId: invoiceId || reference,
+      reference,
+      amount: amountGHS,
+      currency: tx.currency,
+      method: "Paystack",
+      channel: tx.channel,
+      gateway_response: tx.gateway_response,
+      paidAt: tx.paid_at,
+      type,
+      status: "verified",
+      verifiedAt: FieldValue.serverTimestamp(),
+      verifiedBy: uid,
+    }, { merge: true });
+
+    if (invoiceId) {
+      batch.set(db.collection("invoices").doc(invoiceId), {
+        status: "Paid",
+        paidAt: FieldValue.serverTimestamp(),
+        paymentReference: reference,
+        paymentMethod: "Paystack",
+        updatedAt: FieldValue.serverTimestamp(),
       }, { merge: true });
 
-    // Audit log
-    await db.collection("activity_logs").add({
+      batch.set(projectRef.collection("payments").doc(invoiceId), {
+        status: "Paid",
+        paidAt: FieldValue.serverTimestamp(),
+        reference,
+        method: "Paystack",
+        updatedAt: FieldValue.serverTimestamp(),
+      }, { merge: true });
+    }
+
+    batch.set(projectRef, {
+      paymentSummary: {
+        lastPaymentAt: FieldValue.serverTimestamp(),
+        lastPaymentReference: reference,
+        lastPaymentAmount: amountGHS,
+        lastPaymentMethod: "Paystack",
+      },
+      updatedAt: FieldValue.serverTimestamp(),
+    }, { merge: true });
+
+    batch.set(db.collection("activity_logs").doc(), {
       action: "payment_verified",
       projectId,
+      invoiceId: invoiceId || null,
       reference,
       amountGHS,
       channel: tx.channel,
@@ -135,6 +165,8 @@ exports.verifyPaystackPayment = onCall(
       verifiedAt: FieldValue.serverTimestamp(),
       verifiedBy: uid,
     });
+
+    await batch.commit();
 
     logger.info(`verifyPaystackPayment: GHS ${amountGHS} verified for project ${projectId} ref ${reference}`);
 
@@ -158,6 +190,7 @@ exports.verifyPaystackPayment = onCall(
  */
 exports.createStaffAccount = onCall(async (request) => {
   if (!request.auth) throw new Error("Authentication required");
+  await assertAdmin(request.auth);
 
   const { name, email, password, jobRole } = request.data || {};
   if (!name || !email || !password) throw new Error("name, email, and password are required");
@@ -196,6 +229,7 @@ exports.createStaffAccount = onCall(async (request) => {
   await db.collection("users").doc(uid).set(staffDoc);
   // Write to team collection with UID as doc ID so lookups by ID are consistent
   await db.collection("team").doc(uid).set({ ...staffDoc, uid });
+  await adminAuth.setCustomUserClaims(uid, { role });
 
   logger.info(`createStaffAccount: created ${role} account for ${email} (uid: ${uid})`);
   return { uid, role, success: true };
@@ -212,6 +246,7 @@ exports.createStaffAccount = onCall(async (request) => {
  */
 exports.createClientRecord = onCall(async (request) => {
   if (!request.auth) throw new Error("Authentication required");
+  await assertAdminOrStaff(request.auth);
 
   const data = request.data || {};
   const { phone } = data;
@@ -227,7 +262,7 @@ exports.createClientRecord = onCall(async (request) => {
   const existing = await db.collection("users").doc(id).get();
   if (existing.exists) {
     await db.collection("users").doc(id).set(
-      { ...data, phone: id, updatedAt: FieldValue.serverTimestamp() },
+      { ...data, phone: id, phoneE164: `+${id}`, updatedAt: FieldValue.serverTimestamp() },
       { merge: true }
     );
     return { id, updated: true };
@@ -237,6 +272,7 @@ exports.createClientRecord = onCall(async (request) => {
     ...data,
     id,
     phone: id,
+    phoneE164: `+${id}`,
     role: "client",
     status: "Active",
     joined: new Date().toISOString(),
@@ -268,6 +304,7 @@ exports.createClientRecord = onCall(async (request) => {
  */
 exports.deleteStaffAccount = onCall(async (request) => {
   if (!request.auth) throw new Error("Authentication required");
+  await assertAdmin(request.auth);
 
   const { uid, deleteAuth = true } = request.data || {};
   if (!uid) throw new Error("uid is required");
@@ -310,6 +347,7 @@ exports.resetStaffPasswordBySMS = onCall(
   { secrets: [ARKESEL_API_KEY] },
   async (request) => {
     if (!request.auth) throw new Error("Authentication required");
+    await assertAdmin(request.auth);
 
     const { email, phone } = request.data || {};
     if (!email) throw new Error("email is required");
@@ -327,12 +365,12 @@ exports.resetStaffPasswordBySMS = onCall(
 
     const key = ARKESEL_API_KEY.value();
     const recipient = normalizePhone(phone);
-    const message = `Glasstech ERP\n\nPassword reset requested for ${email}.\n\nReset link (expires in 1 hour):\n${resetLink}\n\nIgnore if you did not request this.`;
+    const message = `Westline Future ERP\n\nPassword reset requested for ${email}.\n\nReset link (expires in 1 hour):\n${resetLink}\n\nIgnore if you did not request this.`;
 
     try {
       await axios.post(
         "https://sms.arkesel.com/api/v2/sms/send",
-        { sender: "Glasstech", message, recipients: [recipient] },
+        { sender: "Westline", message, recipients: [recipient] },
         { headers: { "api-key": key } }
       );
     } catch (err) {
@@ -355,6 +393,7 @@ exports.sendSMS = onCall(
   { secrets: [ARKESEL_API_KEY] },
   async (request) => {
     if (!request.auth) throw new Error("Authentication required");
+    await assertAdminOrStaff(request.auth);
 
     const { phone, message } = request.data || {};
     if (!phone || !message) throw new Error("phone and message are required");
@@ -369,7 +408,7 @@ exports.sendSMS = onCall(
     try {
       resp = await axios.post(
         "https://sms.arkesel.com/api/v2/sms/send",
-        { sender: "Glasstech", message, recipients: [recipient] },
+        { sender: "Westline", message, recipients: [recipient] },
         { headers: { "api-key": key } }
       );
     } catch (err) {
@@ -394,6 +433,7 @@ exports.sendSMS = onCall(
 
 exports.repairStaffAccount = onCall(async (request) => {
   if (!request.auth) throw new Error("Authentication required");
+  await assertAdmin(request.auth);
 
   const { email, name, jobRole } = request.data || {};
   if (!email) throw new Error("email is required");
@@ -425,6 +465,7 @@ exports.repairStaffAccount = onCall(async (request) => {
   // Merge so any existing data isn't overwritten
   await db.collection("users").doc(uid).set(staffDoc, { merge: true });
   await db.collection("team").doc(uid).set({ ...staffDoc, uid }, { merge: true });
+  await adminAuth.setCustomUserClaims(uid, { role });
 
   logger.info(`repairStaffAccount: synced Firestore doc for ${email} (uid: ${uid})`);
   return { uid, role, success: true, name: staffDoc.name };
@@ -436,10 +477,10 @@ exports.repairStaffAccount = onCall(async (request) => {
  * All API tokens live here; the client never sees them.
  */
 const ALLOWED_ORIGINS = [
-  "https://glasstechfab-635c2.web.app",
-  "https://glasstechfab-635c2.firebaseapp.com",
-  "https://glasstech.com.gh",
-  "https://www.glasstech.com.gh",
+  "https://westlinefuture.com",
+  "https://www.westlinefuture.com",
+  "https://westlinefuture-635c2.web.app",
+  "https://westlinefuture-635c2.firebaseapp.com",
 ];
 
 exports.sendWhatsApp = onRequest(
@@ -460,6 +501,16 @@ exports.sendWhatsApp = onRequest(
     const authHeader = req.headers.authorization || "";
     if (!authHeader.startsWith("Bearer ")) {
       return res.status(401).json({ error: "Authorization required" });
+    }
+
+    let callerAuth;
+    try {
+      const idToken = authHeader.slice("Bearer ".length);
+      callerAuth = await getAdminAuth().verifyIdToken(idToken);
+      await assertAdminOrStaff(callerAuth);
+    } catch (err) {
+      logger.warn("sendWhatsApp authorization failed", err.message);
+      return res.status(403).json({ error: "Forbidden" });
     }
 
     if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
@@ -508,7 +559,7 @@ exports.sendWhatsApp = onRequest(
           const key = ARKESEL_API_KEY.value();
           const resp = await axios.post(
             "https://sms.arkesel.com/api/v2/sms/send",
-            { sender: "Glasstech", message, recipients: [cleanPhone] },
+            { sender: "Westline", message, recipients: [cleanPhone] },
             { headers: { "api-key": key } }
           );
           result = { success: true, data: resp.data };
@@ -556,8 +607,8 @@ exports.onLogisticsUpdate = onDocumentUpdated("containers/{containerId}", async 
  */
 exports.validateEscrowRelease = onDocumentUpdated("projects/{projectId}", async (event) => {
   const project = event.data.after.data();
-  if (project.stage === 11) {
-    logger.info(`Project ${event.params.projectId} reached balance-lock stage`);
+  if (project.stageId === 7) {
+    logger.info(`Project ${event.params.projectId} reached handover/final-settlement stage`);
   }
 });
 
@@ -599,6 +650,79 @@ async function enforceRateLimit(key, limit, windowSec) {
 }
 
 // ---------------------------------------------------------------------------
+// Authorization helpers
+// Prefer custom claims, fall back to trusted Firestore role records so existing
+// deployments continue to work while custom claims are rolled out.
+// ---------------------------------------------------------------------------
+function hasWestlineAdminEmail(auth) {
+  const email = String(auth?.token?.email || auth?.email || "").toLowerCase();
+  return email.endsWith("@westlinefuture.com") || email === "admin@westlinefuture.com";
+}
+
+async function getCallerRole(auth) {
+  if (!auth?.uid) return null;
+
+  const claimRole = auth.token?.role || auth.role;
+  if (claimRole) return claimRole;
+  if (hasWestlineAdminEmail(auth)) return "admin";
+
+  const db = getFirestore();
+  const snap = await db.collection("users").doc(auth.uid).get();
+  if (!snap.exists) return null;
+
+  return snap.data()?.role || null;
+}
+
+async function assertAdmin(auth) {
+  const role = await getCallerRole(auth);
+  if (role !== "admin") {
+    throw new Error("Admin privileges required");
+  }
+  return role;
+}
+
+async function assertAdminOrStaff(auth) {
+  const role = await getCallerRole(auth);
+  if (role !== "admin" && role !== "staff") {
+    throw new Error("Admin or staff privileges required");
+  }
+  return role;
+}
+
+async function assertProjectAccess(auth, projectId) {
+  if (!projectId) throw new Error("projectId is required");
+
+  const role = await getCallerRole(auth);
+  if (role === "admin" || role === "staff") return role;
+
+  const db = getFirestore();
+  const snap = await db.collection("projects").doc(projectId).get();
+  if (!snap.exists) throw new Error("Project not found");
+
+  const project = snap.data() || {};
+  const email = String(auth.token?.email || auth.email || "").toLowerCase();
+  const clientFromProxyEmail = email.endsWith("@clients.westlinefuture.com")
+    ? email.replace("@clients.westlinefuture.com", "")
+    : null;
+
+  const allowedClientIds = new Set([
+    project.clientId,
+    ...(Array.isArray(project.clientIds) ? project.clientIds : []),
+  ].filter(Boolean).map(String));
+
+  if (
+    allowedClientIds.has(String(auth.uid)) ||
+    (clientFromProxyEmail && allowedClientIds.has(clientFromProxyEmail)) ||
+    (project.clientEmail && email === String(project.clientEmail).toLowerCase()) ||
+    (project.email && email === String(project.email).toLowerCase())
+  ) {
+    return "client";
+  }
+
+  throw new Error("Project access denied");
+}
+
+// ---------------------------------------------------------------------------
 // Helper: normalize a phone string to a bare numeric format (e.g. 233241234567)
 // ---------------------------------------------------------------------------
 function normalizePhone(raw) {
@@ -623,7 +747,7 @@ async function sendWA(phone, message) {
   const resp = await axios.post(
     "https://sms.arkesel.com/api/v2/sms/send",
     {
-      sender: "Glasstech",
+      sender: "Westline",
       message,
       recipients: [recipient],
     },
@@ -723,11 +847,11 @@ exports.receiveWhatsApp = onRequest(
         const clientName = userData.name || userData.displayName || normalizedPhone;
 
         // ── 2. Find their most recent active project ──────────────────────
-        // Active = stageId < 12, ordered by most recent first
+        // Active = stageId <= 7, ordered by most recent first
         const projectsSnap = await db
           .collection("projects")
           .where("clientId", "==", normalizedPhone)
-          .where("stageId", "<", 12)
+          .where("stageId", "<=", 7)
           .orderBy("stageId", "desc")
           .orderBy("createdAt", "desc")
           .limit(1)
@@ -799,23 +923,17 @@ exports.receiveWhatsApp = onRequest(
 // ---------------------------------------------------------------------------
 
 // Stages where the client is the responsible party
-const CLIENT_ACTION_STAGES = new Set([2, 3, 4, 11]);
+const CLIENT_ACTION_STAGES = new Set([2, 6, 7]);
 
-// Human-readable stage names — mirrors frontend PROJECT_STAGES
+// Human-readable stage names — mirrors the canonical 7-stage project pipeline
 const STAGE_NAMES = {
-  0:  "Inquiry",
-  1:  "Quotation",
-  2:  "Quote Approval",
-  3:  "Deposit Payment",
-  4:  "Design Approval",
-  5:  "Production",
-  6:  "Quality Check",
-  7:  "Delivery Scheduling",
-  8:  "Installation",
-  9:  "Snagging",
-  10: "Final Payment",
-  11: "Balance Payment",
-  12: "Completed",
+  1: "Intake",
+  2: "Quote Approval And Deposit",
+  3: "Procurement And Production",
+  4: "Shipping And Delivery",
+  5: "Installation",
+  6: "Inspection And Sign-Off",
+  7: "Handover And Final Settlement",
 };
 
 exports.sendOverdueReminders = onSchedule(
@@ -830,12 +948,12 @@ exports.sendOverdueReminders = onSchedule(
 
     logger.info("sendOverdueReminders: starting scan");
 
-    // Fetch all active projects (stageId < 12)
+    // Fetch all active projects in the canonical 7-stage pipeline
     let projectsSnap;
     try {
       projectsSnap = await db
         .collection("projects")
-        .where("stageId", "<", 12)
+        .where("stageId", "<=", 7)
         .get();
     } catch (err) {
       logger.error("sendOverdueReminders: failed to fetch projects", err);
@@ -904,7 +1022,7 @@ exports.sendOverdueReminders = onSchedule(
 
           if (clientPhone) {
             const waMessage =
-              `Hi ${clientName}, this is a reminder from Glasstech Fabrications. ` +
+              `Hi ${clientName}, this is a reminder from Westline Future. ` +
               `Your project "${projectTitle}" is waiting for your action at the ` +
               `${stageName} stage. Please log in to your portal or contact us to ` +
               `proceed. Thank you.`;

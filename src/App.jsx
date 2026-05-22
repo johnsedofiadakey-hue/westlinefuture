@@ -33,11 +33,11 @@ import {
 
 
 import { auth, db, storage, functions, isFirebaseEnabled } from './lib/firebase';
-import { onAuthStateChanged, signInWithEmailAndPassword, signOut, createUserWithEmailAndPassword, RecaptchaVerifier, signInWithPhoneNumber } from 'firebase/auth';
+import { onAuthStateChanged, signInWithEmailAndPassword, signOut, RecaptchaVerifier, signInWithPhoneNumber } from 'firebase/auth';
 import { httpsCallable } from 'firebase/functions';
 import { 
   collection, query, onSnapshot, getDocs, getDoc, doc, 
-  updateDoc, addDoc, setDoc, deleteDoc, orderBy, collectionGroup, limit, where, serverTimestamp, or
+  updateDoc, addDoc, setDoc, deleteDoc, orderBy, limit, where, serverTimestamp,
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { uploadFile } from './lib/firebase';
@@ -141,6 +141,11 @@ export default function App() {
     return clean;
   };
 
+  const normalizeClientId = (value) => {
+    const raw = typeof value === 'object' ? (value?.id || value?.phone || value?.value) : value;
+    return normalizePhone(String(raw || ''));
+  };
+
   // sendMessage moved to useMessaging hook
 
   const submitTestimonial = async (data) => {
@@ -183,7 +188,7 @@ export default function App() {
         setUser(updatedUser);
         const cacheData = { ...updatedUser };
         delete cacheData.password;
-        localStorage.setItem('glasstech_user_cache', JSON.stringify(cacheData));
+        localStorage.setItem('westlinefuture_user_cache', JSON.stringify(cacheData));
       }
     } catch (e) {
       notify('error', 'Failed to update profile');
@@ -207,8 +212,8 @@ export default function App() {
         throw new Error('VITE_ADMIN_UID_1 and VITE_ADMIN_UID_2 must be set in .env before seeding.');
       }
       const DEMO_ACCOUNTS = [
-        { email: 'admin@stormglide.com', role: 'admin', name: 'Super Admin', uid: _adminUid1 },
-        { email: 'admin@westlinefuture.com', role: 'admin', name: 'Factory Admin', uid: _adminUid2 },
+        { email: 'admin@westlinefuture.com', role: 'admin', name: 'Super Admin', uid: _adminUid1 },
+        { email: 'operations@westlinefuture.com', role: 'admin', name: 'Factory Admin', uid: _adminUid2 },
         ...(_clientUid1 ? [{ email: 'client@westlinefuture.com', role: 'client', name: 'Elite Client', username: 'elite_finish', uid: _clientUid1 }] : []),
       ];
 
@@ -276,7 +281,7 @@ export default function App() {
 
         for (const item of ALL_PROJECT_DATA) {
           const pid = item.id.toString();
-          const cid = item.email ? (userMap[item.email] || item.email.replace(/[.@]/g, '_')) : `CL_${pid}`;
+          const cid = item.phone ? normalizeClientId(item.phone) : (item.email ? (userMap[item.email] || item.email.replace(/[.@]/g, '_')) : `CL_${pid}`);
 
           if (!userMap[item.email]) {
             await setDoc(doc(db, 'users', cid), {
@@ -297,7 +302,7 @@ export default function App() {
 
           await setDoc(doc(db, 'projects', pid), {
             ...item, id: pid, title: item.project || item.title,
-            clientId: cid, clientIds: [cid],
+            clientId: cid, primaryClientId: cid, clientIds: [cid],
             milestones: item.milestones || defaultMilestones,
             managerId: 'EMP001', createdAt: new Date().toISOString()
           }, { merge: true });
@@ -389,7 +394,7 @@ export default function App() {
         const woId = `WO-${pid}-KITCHEN`;
         await setDoc(doc(db, 'work_orders', woId), {
           id: woId, projectId: pid,
-          clientId: item.email === 'client@westlinefuture.com' ? 'ELITE-CLIENT' : (item.clientId || 'DEMO-CLIENT'),
+            clientId: item.email === 'client@westlinefuture.com' ? 'ELITE-CLIENT' : (item.clientId || 'DEMO-CLIENT'),
           title: 'Modern Kitchen Fit-out', stage: item.stage,
           status: 'In Progress', atRisk: false, createdAt: new Date().toISOString()
         });
@@ -485,7 +490,7 @@ export default function App() {
   };
 
   const checkManualSession = async () => {
-    const savedSession = localStorage.getItem('glasstech_session');
+    const savedSession = localStorage.getItem('westlinefuture_session') || localStorage.getItem('glasstech_session');
     if (savedSession) {
       try {
         const sessionData = JSON.parse(savedSession);
@@ -555,7 +560,7 @@ export default function App() {
       const fullUser = { ...uData, id: isEmail ? sessionUser.uid : normalizePhone(uData.phone || uDoc.id), uid: sessionUser.uid };
       delete fullUser.password;
       
-      localStorage.setItem('glasstech_user_cache', JSON.stringify(fullUser));
+      localStorage.setItem('westlinefuture_user_cache', JSON.stringify(fullUser));
       setUser(fullUser);
       clearRateLimit(username || 'unknown-client');
       setAuthLoading(false);
@@ -653,6 +658,7 @@ export default function App() {
         title: projectTitle,
         project: projectTitle,
         clientId: userId,
+        primaryClientId: userId,
         clientIds: [userId],
         stage: 1, // Phase 1: Initialization
         progress: 5,
@@ -809,6 +815,9 @@ export default function App() {
     try {
       const docRef = await addDoc(collection(db, 'invoices'), {
         ...data,
+        clientIds: data.clientIds || (data.clientId ? [data.clientId] : []),
+        primaryClientId: data.primaryClientId || data.clientId || null,
+        projectId: data.projectId || data.parentId || null,
         createdAt: new Date().toISOString(),
         status: data.status || 'Pending'
       });
@@ -840,10 +849,15 @@ export default function App() {
     }
   };
 
+  const getProjectClientId = (projectId) => {
+    return clients.find(p => p.id === projectId)?.clientId || null;
+  };
+
   const createApproval = async (projectId, data) => {
     if (!db) return;
     try {
-      await addDoc(collection(db, 'projects', projectId, 'approvals'), { ...data, status: 'pending', createdAt: new Date().toISOString() });
+      const clientId = data.clientId || getProjectClientId(projectId);
+      await addDoc(collection(db, 'projects', projectId, 'approvals'), { ...data, clientId, projectId, status: 'pending', createdAt: new Date().toISOString() });
       notifyUser(dbClients.find(c => c.id === clients.find(p => p.id === projectId)?.clientId)?.id, "New technical item requires your approval", "approval");
     } catch (e) { devErr(e); }
   };
@@ -859,7 +873,8 @@ export default function App() {
   const createChangeRequest = async (projectId, data) => {
     if (!db) return;
     try {
-      await addDoc(collection(db, 'projects', projectId, 'change_requests'), { ...data, status: 'pending', createdAt: new Date().toISOString() });
+      const clientId = data.clientId || getProjectClientId(projectId);
+      await addDoc(collection(db, 'projects', projectId, 'change_requests'), { ...data, clientId, projectId, status: 'pending', createdAt: new Date().toISOString() });
       // Notify Admin
       teamMembers.filter(m => m.role === 'admin').forEach(admin => {
         notifyUser(admin.id, "New change request submitted by client", "change_request");
@@ -879,11 +894,16 @@ export default function App() {
     if (!db) return;
     try {
       await updateDoc(doc(db, 'projects', projectId, 'payments', id), { status: 'Paid', paidAt: new Date().toISOString(), method });
+      try {
+        await updateDoc(doc(db, 'invoices', id), { status: 'Paid', paidAt: new Date().toISOString(), method });
+      } catch (_) {}
       
       const inv = invoices.find(i => i.id === id);
       const txId = `TX-${Date.now()}`;
       const newTx = {
         id: txId,
+        projectId,
+        clientId: getProjectClientId(projectId),
         invoiceId: id,
         amount: inv?.amount?.toString().replace(/[$,]/g, '') || 0,
         date: new Date().toISOString().split('T')[0],
@@ -901,6 +921,8 @@ export default function App() {
     try {
       const newTx = {
         parentId: pid,
+        projectId: pid,
+        clientId: getProjectClientId(pid),
         invoiceId: ref || 'Manual Entry',
         amount: String(amount),
         date: new Date().toISOString().split('T')[0],
@@ -953,7 +975,7 @@ export default function App() {
 
   const createProcurement = async (projectId, data) => {
     if (!db) return;
-    try { await addDoc(collection(db, 'projects', projectId, 'procurements'), { ...data, createdAt: new Date().toISOString() }); notify('success', 'Tracker Updated'); } 
+    try { await addDoc(collection(db, 'projects', projectId, 'procurements'), { ...data, projectId, clientId: data.clientId || getProjectClientId(projectId), createdAt: new Date().toISOString() }); notify('success', 'Tracker Updated'); }
     catch(e) { notify('error', 'Failed to update procurement'); }
   };
   const updateProcurement = async (projectId, id, data) => {
@@ -985,7 +1007,7 @@ export default function App() {
       // Shipments are linked to a project, default to first active if not specified
       const pid = data.projectId || (clients.length > 0 ? clients[0].id : null);
       if (!pid) return notify('error', 'No project selected for shipment');
-      await addDoc(collection(db, 'projects', pid, 'procurements'), { ...data, isShipment: true, createdAt: new Date().toISOString() }); 
+      await addDoc(collection(db, 'projects', pid, 'procurements'), { ...data, projectId: pid, clientId: data.clientId || getProjectClientId(pid), isShipment: true, createdAt: new Date().toISOString() });
       notify('success', 'Shipment Tracked'); 
     } catch(e) { notify('error', 'Failed to create shipment'); }
   };
@@ -1001,7 +1023,7 @@ export default function App() {
 
   const createNote = async (projectId, data) => {
     if (!db) return;
-    try { await addDoc(collection(db, 'projects', projectId, 'notes'), { ...data, createdAt: new Date().toISOString() }); }
+    try { await addDoc(collection(db, 'projects', projectId, 'notes'), { ...data, projectId, clientId: data.clientId || getProjectClientId(projectId), createdAt: new Date().toISOString() }); }
     catch(e) { devErr(e); }
   };
   const deleteNote = async (projectId, id) => {
@@ -1182,13 +1204,13 @@ export default function App() {
   const createProject = async (data) => {
     if (!db) return;
     try {
-      const rawId = typeof data.clientId === 'object' ? data.clientId?.id : data.clientId;
-      const id = normalizePhone(rawId);
+      const id = normalizeClientId(data.clientId);
       if (!id) throw new Error("Identifier Validation Failed: Client ID is required.");
 
       const docRef = await addDoc(collection(db, 'projects'), {
         ...data,
         clientId: id,
+        primaryClientId: id,
         clientIds: [id],
         status: 'Initialized',
         progress: 0,
@@ -1209,14 +1231,12 @@ export default function App() {
     const ts = Date.now();
     const SCHEDULES = {
       standard: [
-        { name: '10% Deposit',        pct: 0.10, stageId: 1 },
-        { name: '40% Pre-production', pct: 0.40, stageId: 3 },
-        { name: '40% Pre-delivery',   pct: 0.40, stageId: 7 },
-        { name: '10% Completion',     pct: 0.10, stageId: 11 },
+        { name: '50% Deposit', pct: 0.50, stageId: 2 },
+        { name: '50% Final Settlement', pct: 0.50, stageId: 7 },
       ],
       '70-30': [
-        { name: '70% Before Delivery', pct: 0.70, stageId: 3 },
-        { name: '30% After Delivery',  pct: 0.30, stageId: 11 },
+        { name: '70% Before Procurement', pct: 0.70, stageId: 2 },
+        { name: '30% Final Settlement',  pct: 0.30, stageId: 7 },
       ],
     };
     const template = SCHEDULES[paymentSchedule] || SCHEDULES.standard;
@@ -1233,13 +1253,14 @@ export default function App() {
   const createClientProject = async (data) => {
     if (!db) return;
     try {
-      const clientId = typeof data.clientId === 'object' ? data.clientId?.id : data.clientId;
+      const clientId = normalizeClientId(data.clientId);
       if (!clientId) throw new Error('Client ID is required.');
       const milestones = data.milestones?.length ? data.milestones : buildDefaultMilestones(data.budget, data.paymentSchedule);
       const effectiveDate = data.projectDate ? new Date(data.projectDate).toISOString() : new Date().toISOString();
       const docRef = await addDoc(collection(db, 'projects'), {
         title: sanitizeText(data.title || 'New Project'),
         clientId,
+        primaryClientId: clientId,
         clientIds: [clientId],
         projectType: data.projectType || 'full-service',
         stageId: 1,
@@ -1250,6 +1271,7 @@ export default function App() {
         description: sanitizeText(data.description || ''),
         milestones,
         assignedWorkers: [],
+        assignedStaff: user?.uid || user?.id ? [user.uid || user.id] : [],
         stageHistory: [{ stageId: 1, note: data.projectDate ? `Project created (backdated to ${data.projectDate})` : 'Project created', timestamp: effectiveDate, byRole: 'admin' }],
         createdAt: data.projectDate ? effectiveDate : serverTimestamp(),
         updatedAt: serverTimestamp(),
@@ -1284,7 +1306,7 @@ export default function App() {
       }];
       await updateDoc(doc(db, 'projects', projectId), {
         stageId: newStageId,
-        status: newStageId === 7 ? 'Completed' : 'Active',
+        status: newStageId === 7 && /final payment|settlement|complete/i.test(note) ? 'Completed' : 'Active',
         stageHistory, updatedAt: serverTimestamp(),
       });
       const stage = CLIENT_PROJECT_STAGES.find(s => s.id === newStageId);
@@ -1361,10 +1383,7 @@ export default function App() {
         quoteApproved: true,
         quoteApprovedAt: serverTimestamp(),
       });
-      if (project?.stageId === 2) {
-        await updateProjectStage(projectId, 3, 'Quotation approved by client');
-      }
-      notify('success', 'Quote approved — advancing to deposit stage');
+      notify('success', 'Quote approved. Deposit payment is now available.');
     } catch (e) { notify('error', 'Failed to approve quote'); }
   };
 
@@ -1390,6 +1409,8 @@ export default function App() {
         fileType: file.type || 'application/octet-stream',
         size: file.size,
         stageId: meta.stageId || null,
+        projectId,
+        clientId: meta.clientId || getProjectClientId(projectId),
         uploadedBy: meta.uploadedBy || 'admin',
         createdAt: serverTimestamp(),
       };
@@ -1429,6 +1450,8 @@ export default function App() {
       const details = emailData.details || {};
       const payload = {
          itemName: `${details.productName || 'Marketplace Item'} (x${details.quantity || 1})`,
+         projectId,
+         clientId: getProjectClientId(projectId),
          source: 'Westline Future Marketplace',
          estimatedCost: details.price || 0,
          actualCost: details.price || 0,
@@ -1462,6 +1485,22 @@ export default function App() {
     } catch (e) {
       devErr(e);
       notify('error', 'Deployment failed');
+      throw e;
+    }
+  };
+
+  const addContainer = async (data) => {
+    if (!db) return;
+    try {
+      const docRef = await addDoc(collection(db, 'containers'), {
+        ...data,
+        createdAt: data.createdAt || serverTimestamp(),
+        updatedAt: serverTimestamp()
+      });
+      notify('success', 'Shipment added');
+      return docRef.id;
+    } catch (e) {
+      notify('error', 'Failed to add shipment: ' + e.message);
       throw e;
     }
   };
@@ -1623,7 +1662,7 @@ export default function App() {
       const fullUser = { ...userDoc, id: userDoc.id, uid: firebaseUser.uid };
       delete fullUser.password;
       setUser(fullUser);
-      localStorage.setItem('glasstech_session', JSON.stringify({ id: userDoc.id, phone, expiry: Date.now() + 86400000 }));
+      localStorage.setItem('westlinefuture_session', JSON.stringify({ id: userDoc.id, phone, user: fullUser, expiry: Date.now() + 86400000 }));
       confirmationResultRef.current = null;
       navigate('/portal');
       return true;
@@ -1636,6 +1675,7 @@ export default function App() {
   const handleLogout = async () => {
     try {
       if (auth) await signOut(auth);
+      localStorage.removeItem('westlinefuture_session');
       localStorage.removeItem('glasstech_session');
       setUser(null);
       setLoginType('client'); // always reset to client/OTP mode on logout
@@ -1709,7 +1749,12 @@ export default function App() {
     deleteInvoice,
     deleteProposal,
     uploadMedia,
+    handleMediaUpload: ({ file, parentId, stageId = 1 }) => uploadMedia(parentId, file, stageId),
+    deleteMedia,
     createProposal,
+    createProcurement, updateProcurement, deleteProcurement,
+    createShipment, updateShipment,
+    createNote, deleteNote,
     transactions, recordOfflinePayment,
     materials, updateMaterial,
     assets, updateAsset,
@@ -1718,7 +1763,7 @@ export default function App() {
     submitMarketplace: submitMarketplaceInquiry,
     sendOTP, verifyOTP, findUserByPhone,
     loginWithCredentials, resetUserPassword, changeClientPassword,
-    deleteClient, 
+    deleteClient, deleteAllClients, deleteSelectedClients,
     activeMagicCode, 
     userNotifications, markNotificationRead,
     submitMarketplaceInquiry,
@@ -1742,6 +1787,7 @@ export default function App() {
     workOrders, containers,
     updateWorkOrder: (id, d) => db && updateDoc(doc(db, 'work_orders', id), { ...d, updatedAt: serverTimestamp() }),
     createWorkOrder,
+    addContainer,
     updateContainer: (id, d) => db && updateDoc(doc(db, 'containers', id), d),
     isPortalLocked: () => {
        if (user?.role === 'admin') return false;
@@ -1766,7 +1812,7 @@ export default function App() {
     try {
       notify('pending', `Authenticating with Westline Future Hub...`);
 
-      const isAdminEmail = (e === 'admin@stormglide.com' || e === 'admin@westlinefuture.com');
+      const isAdminEmail = e?.endsWith('@westlinefuture.com');
       const isActualAdminMode = mode === 'admin' || isAdminEmail;
 
       if (isActualAdminMode) {
@@ -1785,18 +1831,7 @@ export default function App() {
           return res;
         } catch (signInErr) {
           if ((signInErr.code === 'auth/user-not-found' || signInErr.code === 'auth/invalid-credential') && isAdminEmail) {
-            notify('pending', 'Securing account access...');
-            try {
-              const res = await createUserWithEmailAndPassword(auth, e, p);
-              await setDoc(doc(db, 'users', res.user.uid), { email: e, role: 'admin', createdAt: new Date().toISOString() });
-              clearRateLimit(e);
-              return res;
-            } catch (createErr) {
-              if (createErr.code === 'auth/email-already-in-use') {
-                throw new Error("Account exists but password is incorrect. Please reset via Firebase Console.");
-              }
-              throw createErr;
-            }
+            throw new Error("Admin account is not provisioned or the password is incorrect. Provision admin users server-side before login.");
           }
           throw signInErr;
         }
@@ -1905,4 +1940,3 @@ export default function App() {
     </div>
   );
 }
-

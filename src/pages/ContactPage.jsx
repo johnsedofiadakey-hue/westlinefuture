@@ -5,7 +5,7 @@ import { sanitizeText } from '../lib/sanitize';
 import { AlertCircle, CheckCircle, MapPin, Clock, Phone, Mail, ArrowRight } from 'lucide-react';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
-const PHONE_RE = /^[\+\d][\d\s\-\(\)]{6,20}$/;
+const PHONE_RE = /^[+\d][\d\s\-()]{6,20}$/;
 
 const SERVICES = [
   'Glass Facades & Windows',

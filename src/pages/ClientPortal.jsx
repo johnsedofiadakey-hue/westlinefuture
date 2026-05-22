@@ -15,7 +15,7 @@ import { httpsCallable } from 'firebase/functions';
 import {
   collection, onSnapshot, query, where, orderBy, limit, addDoc, serverTimestamp
 } from 'firebase/firestore';
-import { usePaystackPayment } from 'react-paystack';
+import { createPaystackPayment } from '../lib/paystack';
 
 const AC = '#231F78';
 
@@ -369,7 +369,7 @@ function PaymentButton({ label, amountGHS, email, projectId, invoiceId, paymentT
     currency: 'GHS',
   };
 
-  const initializePayment = usePaystackPayment(config);
+  const initializePayment = createPaystackPayment(config);
 
   const handlePay = () => {
     if (disabled || processing) return;
@@ -382,10 +382,12 @@ function PaymentButton({ label, amountGHS, email, projectId, invoiceId, paymentT
         if (functions && projectId) {
           try {
             const verify = httpsCallable(functions, 'verifyPaystackPayment');
-            await verify({ reference, projectId, invoiceId, type: paymentType || 'payment' });
+            await verify({ reference, projectId, invoiceId, expectedAmountGHS: amountGHS, type: paymentType || 'payment' });
           } catch (err) {
             if (import.meta.env.DEV) console.error('[Paystack] Verify failed:', err.message);
             setVerifyError('Payment received but server verification failed. Contact support with ref: ' + reference);
+            setProcessing(false);
+            return;
           }
         }
         setProcessing(false);
@@ -395,6 +397,9 @@ function PaymentButton({ label, amountGHS, email, projectId, invoiceId, paymentT
         setProcessing(false);
         if (onClose) onClose();
       },
+    }).catch((err) => {
+      setProcessing(false);
+      setVerifyError(err.message || 'Unable to open Paystack checkout.');
     });
   };
 
@@ -438,29 +443,42 @@ function StageActionCard({ project, user, approveQuote, payInvoice, updateProjec
   const [acting, setActing] = useState(false);
   const [done, setDone] = useState(false);
 
-  if (!currentStage || currentStage.whoActs !== 'client') return null;
+  if (!currentStage || !['client', 'both'].includes(currentStage.whoActs)) return null;
 
   const email = user?.proxyEmail || (user?.phone ? user.phone + '@clients.westlinefuture.com' : 'client@clients.westlinefuture.com');
-  const budget = project.budget || 0;
+  const budget = Number(String(project.budget || 0).replace(/[^0-9.]/g, '')) || 0;
   const halfBudget = budget * 0.5;
 
   if (currentStage.id === 2) {
     if (project.quoteApproved) {
       return (
         <div style={{
-          padding: '20px 24px', borderRadius: 20,
+          padding: '24px 28px', borderRadius: 20,
           background: 'linear-gradient(135deg, #F0FDF4, #DCFCE7)',
-          border: '1.5px solid #16A34A40', display: 'flex', alignItems: 'center', gap: 16, marginBottom: 4,
+          border: '1.5px solid #16A34A40', marginBottom: 4,
         }}>
-          <div style={{ width: 48, height: 48, borderRadius: 14, background: '#16A34A20', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-            <CheckCircle2 size={24} color="#16A34A" />
-          </div>
-          <div>
-            <div style={{ fontSize: 13, fontWeight: 800, color: '#16A34A', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 4 }}>Quote Approved ✓</div>
-            <div style={{ fontSize: 14, color: '#4B7A62', lineHeight: 1.5 }}>
-              You approved this quotation{project.quoteApprovedAt ? ` on ${fmtShort(project.quoteApprovedAt)}` : ''}. Our team is now preparing your deposit invoice.
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 18 }}>
+            <div style={{ width: 48, height: 48, borderRadius: 14, background: '#16A34A20', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <CheckCircle2 size={24} color="#16A34A" />
+            </div>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 800, color: '#16A34A', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 4 }}>Quote Approved</div>
+              <div style={{ fontSize: 14, color: '#4B7A62', lineHeight: 1.5 }}>
+                You approved this quotation{project.quoteApprovedAt ? ` on ${fmtShort(project.quoteApprovedAt)}` : ''}. Pay the deposit to begin procurement and production.
+              </div>
             </div>
           </div>
+          <PaymentButton
+            label={`Pay Deposit - GHS ${Number(halfBudget).toLocaleString(undefined, { minimumFractionDigits: 2 })}`}
+            amountGHS={halfBudget}
+            email={email}
+            projectId={project.id}
+            paymentType="deposit"
+            onSuccess={async (ref) => {
+              await payInvoice(ref?.reference || ref?.trans || 'deposit', project.id);
+              await updateProjectStage(project.id, 3, 'Deposit paid by client via Paystack');
+            }}
+          />
         </div>
       );
     }
@@ -505,42 +523,7 @@ function StageActionCard({ project, user, approveQuote, payInvoice, updateProjec
     );
   }
 
-  if (currentStage.id === 3) {
-    return (
-      <div style={{
-        padding: '24px 28px', borderRadius: 20,
-        background: 'linear-gradient(135deg, #F0FDF4, #DCFCE7)',
-        border: '1.5px solid #16A34A30', marginBottom: 4,
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-          <AlertCircle size={18} color="#16A34A" />
-          <span style={{ fontSize: 12, fontWeight: 800, color: '#16A34A', textTransform: 'uppercase', letterSpacing: '.06em' }}>Payment Required</span>
-        </div>
-        <div style={{ fontSize: 20, fontWeight: 900, color: '#0D0B2E', marginBottom: 4 }}>Your 50% deposit is due</div>
-        {budget > 0 && (
-          <div style={{ fontSize: 15, fontWeight: 700, color: '#16A34A', marginBottom: 6 }}>
-            Amount: GHS {Number(halfBudget).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-          </div>
-        )}
-        <div style={{ fontSize: 14, color: '#374151', lineHeight: 1.6, marginBottom: 20 }}>
-          A 50% deposit is required to initiate production and material procurement. Payments are processed securely via Paystack.
-        </div>
-        <PaymentButton
-          label={`Pay Deposit — GHS ${Number(halfBudget).toLocaleString(undefined, { minimumFractionDigits: 2 })}`}
-          amountGHS={halfBudget}
-          email={email}
-          projectId={project.id}
-          paymentType="deposit"
-          onSuccess={async (ref) => {
-            await payInvoice(ref?.reference || ref?.trans || 'deposit', project.id);
-            await updateProjectStage(project.id, 4, 'Deposit paid by client via Paystack');
-          }}
-        />
-      </div>
-    );
-  }
-
-  if (currentStage.id === 4) {
+  if (currentStage.id === 6) {
     if (done) {
       return (
         <div style={{
@@ -549,7 +532,7 @@ function StageActionCard({ project, user, approveQuote, payInvoice, updateProjec
           border: '1.5px solid #7C3AED40', display: 'flex', alignItems: 'center', gap: 16, marginBottom: 4,
         }}>
           <CheckCircle2 size={24} color="#7C3AED" />
-          <div style={{ fontSize: 14, fontWeight: 700, color: '#4C1D95' }}>Design approval submitted. Our team will proceed to sourcing.</div>
+        <div style={{ fontSize: 14, fontWeight: 700, color: '#4C1D95' }}>Inspection sign-off submitted. Our team will prepare handover.</div>
         </div>
       );
     }
@@ -563,15 +546,15 @@ function StageActionCard({ project, user, approveQuote, payInvoice, updateProjec
           <AlertCircle size={18} color="#7C3AED" />
           <span style={{ fontSize: 12, fontWeight: 800, color: '#7C3AED', textTransform: 'uppercase', letterSpacing: '.06em' }}>Design Review</span>
         </div>
-        <div style={{ fontSize: 20, fontWeight: 900, color: '#0D0B2E', marginBottom: 6 }}>Please review and approve the design selections</div>
+        <div style={{ fontSize: 20, fontWeight: 900, color: '#0D0B2E', marginBottom: 6 }}>Please review and sign off the inspection</div>
         <div style={{ fontSize: 14, color: '#374151', lineHeight: 1.6, marginBottom: 20 }}>
-          Our design team has prepared material selections and technical drawings for your project. Review them in the Documents tab, then confirm your approval below.
+          Our team has completed quality checks and any open snag items. Review the latest documents and photos, then confirm your sign-off below.
         </div>
         <button
           onClick={async () => {
             if (acting) return;
             setActing(true);
-            await updateProjectStage(project.id, 5, 'Design approved by client');
+            await updateProjectStage(project.id, 7, 'Inspection signed off by client');
             setActing(false);
             setDone(true);
           }}
@@ -588,14 +571,14 @@ function StageActionCard({ project, user, approveQuote, payInvoice, updateProjec
         >
           {acting
             ? <><Loader2 size={18} style={{ animation: 'spin 1s linear infinite' }} /> Submitting...</>
-            : <>Confirm Design Approval <ArrowRight size={18} /></>
+            : <>Confirm Inspection Sign-Off <ArrowRight size={18} /></>
           }
         </button>
       </div>
     );
   }
 
-  if (currentStage.id === 11) {
+  if (currentStage.id === 7) {
     return (
       <div style={{
         padding: '24px 28px', borderRadius: 20,
@@ -623,7 +606,7 @@ function StageActionCard({ project, user, approveQuote, payInvoice, updateProjec
           paymentType="final_balance"
           onSuccess={async (ref) => {
             await payInvoice(ref?.reference || ref?.trans || 'final', project.id);
-            await updateProjectStage(project.id, 12, 'Final payment received via Paystack');
+            await updateProjectStage(project.id, 7, 'Final payment received via Paystack');
           }}
         />
       </div>

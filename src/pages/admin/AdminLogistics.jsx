@@ -49,7 +49,7 @@ export default function AdminLogistics({ containers = [], workOrders = [], clien
   ];
 
   const generateWhatsAppLink = (items) => {
-     const text = `*GLASSTECH PROCUREMENT LIST*\n\nItems to source:\n${items.map(i => `- ${i.title || i.name}`).join('\n')}\n\nPlease provide Pro-Forma for these items.`;
+     const text = `*WESTLINE FUTURE PROCUREMENT LIST*\n\nItems to source:\n${items.map(i => `- ${i.title || i.name}`).join('\n')}\n\nPlease provide Pro-Forma for these items.`;
      return `https://wa.me/${brand.whatsapp?.replace(/\+/g, '')}?text=${encodeURIComponent(text)}`;
   };
 

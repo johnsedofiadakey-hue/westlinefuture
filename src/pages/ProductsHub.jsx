@@ -196,7 +196,7 @@ const DetailModal = ({ product, onClose, ac, navigate, mob }) => {
                            key={o} 
                            onClick={() => setSelectedGlass(o)}
                            style={{ 
-                             padding: '10px 16px', borderRadius: 12, fontSize: 11, fontWeight: 700, border: 'none', cursor: 'pointer',
+                             padding: '10px 16px', borderRadius: 12, fontSize: 11, fontWeight: 700, cursor: 'pointer',
                              background: selectedGlass === o ? `${ac}15` : '#F9F9F9',
                              color: selectedGlass === o ? ac : 'rgba(0,0,0,0.5)',
                              border: selectedGlass === o ? `1px solid ${ac}` : '1px solid transparent'
@@ -560,4 +560,3 @@ export default function ProductsHub({ brand, user, onPortal, setPage, content })
     </div>
   );
 }
-

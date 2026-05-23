@@ -5,7 +5,7 @@ import { uploadFile } from '../../lib/firebase';
 import { compressImage } from '../../lib/image-utils';
 
 export default function AdminPortfolio({ content, syncCMS, brand, notify }) {
-  const ac = brand?.color || '#231F78';
+  const ac = brand?.color || `var(--accent-secondary)`;
   const portfolio = content?.portfolio || [];
   
   const onSave = (newList) => {
@@ -62,7 +62,7 @@ export default function AdminPortfolio({ content, syncCMS, brand, notify }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <h2 className="lxfh" style={{ fontSize: 32, fontWeight: 400, color: '#0D0B2E' }}>Portfolio Manager</h2>
+        <h2 className="lxfh" style={{ fontSize: 32, fontWeight: 400, color: `var(--accent-secondary)` }}>Portfolio Manager</h2>
         <button onClick={addProject} className="p-btn-dark lxf" style={{ padding: '10px 20px', fontSize: 13, gap: 8, display: 'flex', alignItems: 'center' }}><Plus size={16} /> Add New Project</button>
       </div>
 
@@ -71,12 +71,12 @@ export default function AdminPortfolio({ content, syncCMS, brand, notify }) {
           <div key={p.id} className="p-card" style={{ padding: 24 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 20 }}>
               <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
-                <div style={{ width: 100, height: 60, borderRadius: 6, overflow: 'hidden', background: '#F8F8FD' }}>
+                <div style={{ width: 100, height: 60, borderRadius: 6, overflow: 'hidden', background: `var(--bg-secondary)` }}>
                   <img src={p.after} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                 </div>
                 <div>
                   <div className="lxfh" style={{ fontSize: 18 }}>{p.title}</div>
-                  <div className="lxf" style={{ fontSize: 12, color: '#9B99C8' }}>{p.cat} • {p.year}</div>
+                  <div className="lxf" style={{ fontSize: 12, color: `var(--text-secondary)` }}>{p.cat} • {p.year}</div>
                 </div>
               </div>
               <button onClick={() => deleteProj(i)} style={{ background: 'none', border: 'none', color: '#ff4444', cursor: 'pointer', padding: 8 }}><Trash2 size={18} /></button>

@@ -53,24 +53,28 @@ export default function AdminPortal({ user, onLogout, onPreview, content, setCon
   };
 
   const renderView = () => {
-    const STAFF_ALLOWED_VIEWS = ['dash', 'client-hub', 'operations', 'messages', 'projects'];
+    const STAFF_ALLOWED_VIEWS = ['client-hub', 'operations'];
     if (staffMode && !STAFF_ALLOWED_VIEWS.includes(view)) {
-      setTimeout(() => handleSetView('dash'), 0);
+      setTimeout(() => handleSetView('operations'), 0);
       return null;
     }
 
     const allClients = props.clients || [];
 
-    // Staff only see projects where they are assigned (assignedWorkers or assignedStaff arrays)
-    const staffUid = user?.uid || user?.id;
+    // Staff only see projects they are explicitly assigned to
+    const staffUid  = user?.uid  || user?.id;
+    const staffPhone = user?.phone;
+    const staffEmail = user?.email;
     const staffFilteredClients = staffMode
       ? allClients.filter(c => {
           const workers = c.assignedWorkers || [];
-          const staff = c.assignedStaff || [];
+          const staff   = c.assignedStaff   || [];
+          const combined = [...workers, ...staff];
           return (
             c.assignedTo === staffUid ||
-            workers.includes(staffUid) ||
-            staff.includes(staffUid)
+            combined.includes(staffUid) ||
+            (staffPhone && combined.includes(staffPhone)) ||
+            (staffEmail && combined.includes(staffEmail))
           );
         })
       : allClients;
@@ -88,7 +92,14 @@ export default function AdminPortal({ user, onLogout, onPreview, content, setCon
       user, brand, content, setContent,
       setAI: (ctx = {}) => { setAiContext(ctx); setShowAI(true); },
       setMod,
-      onSelectClient: handleSelectClient,
+      onSelectClient: (id) => {
+        // Staff can only open clients they are assigned to
+        if (staffMode) {
+          const allowed = staffFilteredClients.some(c => c.clientId === id || c.id === id);
+          if (!allowed) return;
+        }
+        handleSelectClient(id);
+      },
       PROJECT_STAGES,
       jobs: props.jobs,
       createJob: props.createJob,
@@ -98,9 +109,9 @@ export default function AdminPortal({ user, onLogout, onPreview, content, setCon
       clients: filteredClients,
     };
     switch (view) {
-      case 'dash': return <AdminDashboard {...common} />;
+      case 'dash': return <AdminDashboard {...common} clients={staffMode ? staffFilteredClients : props.clients} />;
       case 'operations': return <AdminClients {...common} deleteSelectedClients={props.deleteSelectedClients} deleteAllClients={props.deleteAllClients} currency={props.currency} setCurrency={props.setCurrency} />;
-      case 'client-hub': return <ClientHub clientId={selectedClientId} onBack={() => setView(staffMode ? 'projects' : 'operations')} {...common} />;
+      case 'client-hub': return <ClientHub clientId={selectedClientId} onBack={() => setView(staffMode ? 'projects' : 'operations')} {...common} clients={staffMode ? staffFilteredClients : props.clients} />;
       case 'logistics': return <AdminLogistics {...common} />;
       case 'installations': return <AdminInstallations {...common} />;
       case 'projects': return <ProjectKanban {...common} clients={staffMode ? staffFilteredClients : props.clients} updateProject={props.syncProjects} staffMode={staffMode} />;
@@ -160,14 +171,14 @@ export default function AdminPortal({ user, onLogout, onPreview, content, setCon
 }
 function AdminChat({ messages, sendMessage, clients, brand }) {
   const [activeClient, setActiveClient] = useState(null);
-  const ac = brand.color || '#231F78';
+  const ac = brand.color || `var(--accent-secondary)`;
   
   return (
     <div className="p-card" style={{ height: 'calc(100vh - 120px)', display: 'grid', gridTemplateColumns: '300px 1fr' }}>
       <div style={{ borderRight: '1px solid var(--border)', overflowY: 'auto' }}>
         <div style={{ padding: 24, borderBottom: '1px solid var(--border)', fontWeight: 800 }}>Client Discussions</div>
         {clients.map(c => (
-          <button key={c.id} onClick={() => setActiveClient(c)} style={{ width: '100%', padding: 16, textAlign: 'left', background: activeClient?.id === c.id ? 'rgba(35, 31, 120, 0.05)' : 'none', border: 'none', borderBottom: '1px solid var(--border)', cursor: 'pointer', display: 'flex', gap: 12, alignItems: 'center' }}>
+          <button key={c.id} onClick={() => setActiveClient(c)} style={{ width: '100%', padding: 16, textAlign: 'left', background: activeClient?.id === c.id ? 'rgba(92, 58, 33, 0.05)' : 'none', border: 'none', borderBottom: '1px solid var(--border)', cursor: 'pointer', display: 'flex', gap: 12, alignItems: 'center' }}>
             <div style={{ width: 40, height: 40, borderRadius: '50%', background: ac, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800 }}>{c.name?.[0]}</div>
             <div>
                <div style={{ fontSize: 13, fontWeight: 700 }}>{c.name}</div>
@@ -225,7 +236,7 @@ function AdminChat({ messages, sendMessage, clients, brand }) {
 }
 
 function AdminTestimonials({ testimonials, brand }) {
-  const ac = brand.color || '#231F78';
+  const ac = brand.color || `var(--accent-secondary)`;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 32 }}>
        <div className="p-card" style={{ padding: 32 }}>

@@ -74,10 +74,10 @@ function ProjectCard({ project, updateProjectStage, addProjectMessage, addProjec
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 16, fontWeight: 700, color: '#0D0B2E', marginBottom: 4, lineHeight: 1.3 }}>
+          <div style={{ fontSize: 16, fontWeight: 700, color: `var(--accent-secondary)`, marginBottom: 4, lineHeight: 1.3 }}>
             {project.title || project.name || 'Untitled Project'}
           </div>
-          <div style={{ fontSize: 12, color: '#5B5894' }}>{project.clientName || 'Client'}</div>
+          <div style={{ fontSize: 12, color: `var(--text-secondary)` }}>{project.clientName || 'Client'}</div>
         </div>
         <div style={{
           padding: '4px 10px', borderRadius: 100,
@@ -90,7 +90,7 @@ function ProjectCard({ project, updateProjectStage, addProjectMessage, addProjec
       </div>
 
       {/* Stage badge */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: '#F8F8FD', borderRadius: 10, marginBottom: 20 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: `var(--bg-secondary)`, borderRadius: 10, marginBottom: 20 }}>
         {isDelivery && <Truck size={14} color="#1D4ED8" />}
         {isInstall && <Wrench size={14} color="#D97706" />}
         {isComplete && <CheckCircle size={14} color="#16A34A" />}
@@ -104,7 +104,7 @@ function ProjectCard({ project, updateProjectStage, addProjectMessage, addProjec
           disabled={stageLoading}
           style={{
             width: '100%', padding: '14px', borderRadius: 14, marginBottom: 16,
-            background: '#0D0B2E', color: '#fff', border: 'none',
+            background: `var(--accent-secondary)`, color: '#fff', border: 'none',
             fontSize: 14, fontWeight: 700, cursor: stageLoading ? 'default' : 'pointer',
             opacity: stageLoading ? 0.7 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8
           }}
@@ -122,7 +122,7 @@ function ProjectCard({ project, updateProjectStage, addProjectMessage, addProjec
 
       {/* Notes */}
       <div style={{ marginBottom: 16 }}>
-        <label style={{ fontSize: 11, fontWeight: 800, color: '#5B5894', textTransform: 'uppercase', letterSpacing: '0.08em', display: 'block', marginBottom: 8 }}>
+        <label style={{ fontSize: 11, fontWeight: 800, color: `var(--text-secondary)`, textTransform: 'uppercase', letterSpacing: '0.08em', display: 'block', marginBottom: 8 }}>
           Add a note
         </label>
         <textarea
@@ -132,8 +132,8 @@ function ProjectCard({ project, updateProjectStage, addProjectMessage, addProjec
           rows={3}
           style={{
             width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #E5E0D8',
-            fontSize: 13, fontFamily: 'inherit', resize: 'vertical', color: '#0D0B2E',
-            background: '#F8F8FD', boxSizing: 'border-box', outline: 'none'
+            fontSize: 13, fontFamily: 'inherit', resize: 'vertical', color: `var(--accent-secondary)`,
+            background: `var(--bg-secondary)`, boxSizing: 'border-box', outline: 'none'
           }}
         />
         <button
@@ -141,7 +141,7 @@ function ProjectCard({ project, updateProjectStage, addProjectMessage, addProjec
           disabled={noteLoading || !note.trim()}
           style={{
             marginTop: 8, padding: '10px 16px', borderRadius: 10,
-            background: note.trim() ? '#0D0B2E' : '#E5E0D8',
+            background: note.trim() ? `var(--accent-secondary)` : '#E5E0D8',
             color: note.trim() ? '#fff' : '#9A948E',
             border: 'none', fontSize: 12, fontWeight: 700,
             cursor: note.trim() && !noteLoading ? 'pointer' : 'default',
@@ -155,14 +155,14 @@ function ProjectCard({ project, updateProjectStage, addProjectMessage, addProjec
 
       {/* Photo upload */}
       <div>
-        <label style={{ fontSize: 11, fontWeight: 800, color: '#5B5894', textTransform: 'uppercase', letterSpacing: '0.08em', display: 'block', marginBottom: 8 }}>
+        <label style={{ fontSize: 11, fontWeight: 800, color: `var(--text-secondary)`, textTransform: 'uppercase', letterSpacing: '0.08em', display: 'block', marginBottom: 8 }}>
           Site photo
         </label>
         <label style={{
           display: 'inline-flex', alignItems: 'center', gap: 8,
           padding: '10px 16px', borderRadius: 10,
-          background: photoSent ? '#F0FDF4' : '#F8F8FD',
-          color: photoSent ? '#16A34A' : '#0D0B2E',
+          background: photoSent ? '#F0FDF4' : `var(--bg-secondary)`,
+          color: photoSent ? '#16A34A' : `var(--accent-secondary)`,
           border: `1px solid ${photoSent ? '#BBF7D0' : '#E5E0D8'}`,
           fontSize: 12, fontWeight: 700, cursor: photoLoading ? 'default' : 'pointer'
         }}>
@@ -192,18 +192,18 @@ function AllProjectsAccordion({ projects, user }) {
         onClick={() => setOpen(o => !o)}
         style={{
           width: '100%', padding: '18px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-          background: 'transparent', border: 'none', cursor: 'pointer', borderBottom: open ? '1px solid #E8E6F5' : 'none'
+          background: 'transparent', border: 'none', cursor: 'pointer', borderBottom: open ? '1px solid var(--border-color)' : 'none'
         }}
       >
-        <span style={{ fontSize: 15, fontWeight: 700, color: '#0D0B2E' }}>All Assigned Projects ({projects.length})</span>
-        {open ? <ChevronUp size={18} color="#5B5894" /> : <ChevronDown size={18} color="#5B5894" />}
+        <span style={{ fontSize: 15, fontWeight: 700, color: `var(--accent-secondary)` }}>All Assigned Projects ({projects.length})</span>
+        {open ? <ChevronUp size={18} color="var(--text-secondary)" /> : <ChevronDown size={18} color="var(--text-secondary)" />}
       </button>
       {open && (
         <div style={{ padding: '16px 24px', display: 'flex', flexDirection: 'column', gap: 12 }}>
           {projects.map(p => (
-            <div key={p.id} style={{ padding: '12px 16px', background: '#F8F8FD', borderRadius: 12 }}>
-              <div style={{ fontSize: 14, fontWeight: 700, color: '#0D0B2E' }}>{p.title || p.name || 'Untitled'}</div>
-              <div style={{ fontSize: 11, color: '#5B5894', marginTop: 4 }}>
+            <div key={p.id} style={{ padding: '12px 16px', background: `var(--bg-secondary)`, borderRadius: 12 }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: `var(--accent-secondary)` }}>{p.title || p.name || 'Untitled'}</div>
+              <div style={{ fontSize: 11, color: `var(--text-secondary)`, marginTop: 4 }}>
                 {p.clientName || ''} · {getStageName(p.stageId)}
               </div>
             </div>
@@ -215,7 +215,7 @@ function AllProjectsAccordion({ projects, user }) {
 }
 
 export default function WorkerView({ user, onLogout, clients, updateProjectStage, addProjectMessage, addProjectDocument, brand }) {
-  const ac = brand?.color || '#231F78';
+  const ac = brand?.color || `var(--accent-secondary)`;
 
   // Determine worker identifier — could be uid or email
   const workerId = user?.uid || user?.id;
@@ -238,7 +238,7 @@ export default function WorkerView({ user, onLogout, clients, updateProjectStage
     <div style={{ minHeight: '100vh', background: '#F8F6F3', fontFamily: "'Inter', 'Satoshi', sans-serif" }}>
       {/* Top bar */}
       <div style={{
-        background: '#0D0B2E', color: '#fff',
+        background: `var(--accent-secondary)`, color: '#fff',
         padding: '0 20px',
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         position: 'sticky', top: 0, zIndex: 100,
@@ -246,7 +246,7 @@ export default function WorkerView({ user, onLogout, clients, updateProjectStage
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <div style={{ width: 32, height: 32, borderRadius: 10, background: ac, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <Wrench size={16} color="#0D0B2E" />
+            <Wrench size={16} color="var(--accent-secondary)" />
           </div>
           <div>
             <div style={{ fontSize: 14, fontWeight: 700, lineHeight: 1 }}>Field View</div>
@@ -271,11 +271,11 @@ export default function WorkerView({ user, onLogout, clients, updateProjectStage
         {/* Today's jobs */}
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
-            <div style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.12em', color: '#5B5894' }}>
+            <div style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.12em', color: `var(--text-secondary)` }}>
               Today's Jobs
             </div>
             {todayProjects.length > 0 && (
-              <div style={{ background: '#0D0B2E', color: '#fff', padding: '2px 8px', borderRadius: 100, fontSize: 10, fontWeight: 800 }}>
+              <div style={{ background: `var(--accent-secondary)`, color: '#fff', padding: '2px 8px', borderRadius: 100, fontSize: 10, fontWeight: 800 }}>
                 {todayProjects.length}
               </div>
             )}
@@ -287,10 +287,10 @@ export default function WorkerView({ user, onLogout, clients, updateProjectStage
               boxShadow: '0 2px 12px rgba(0,0,0,0.05)'
             }}>
               <AlertCircle size={36} color="#D97706" style={{ marginBottom: 12 }} />
-              <div style={{ fontSize: 15, fontWeight: 700, color: '#0D0B2E', marginBottom: 8 }}>
+              <div style={{ fontSize: 15, fontWeight: 700, color: `var(--accent-secondary)`, marginBottom: 8 }}>
                 No jobs assigned for today.
               </div>
-              <div style={{ fontSize: 13, color: '#5B5894' }}>Contact your supervisor for your assignment.</div>
+              <div style={{ fontSize: 13, color: `var(--text-secondary)` }}>Contact your supervisor for your assignment.</div>
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -311,7 +311,7 @@ export default function WorkerView({ user, onLogout, clients, updateProjectStage
         {/* All assigned projects accordion */}
         {allAssigned.length > 0 && (
           <div>
-            <div style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.12em', color: '#5B5894', marginBottom: 16 }}>
+            <div style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.12em', color: `var(--text-secondary)`, marginBottom: 16 }}>
               All Assignments
             </div>
             <AllProjectsAccordion projects={allAssigned} user={user} />
@@ -319,7 +319,7 @@ export default function WorkerView({ user, onLogout, clients, updateProjectStage
         )}
 
         {/* Footer */}
-        <div style={{ textAlign: 'center', padding: '16px 0', fontSize: 11, color: '#9B99C8' }}>
+        <div style={{ textAlign: 'center', padding: '16px 0', fontSize: 11, color: `var(--text-secondary)` }}>
           {brand?.name || 'WestlineFuture'} Field App
         </div>
       </div>

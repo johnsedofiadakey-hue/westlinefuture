@@ -73,7 +73,7 @@ export const AppProvider = ({ children }) => {
     if (userProfile && JSON.stringify(userProfile) !== JSON.stringify(user)) {
       setUser(userProfile);
     } else if (!currentUser && user !== null) {
-      const savedSession = localStorage.getItem('glasstech_session');
+      const savedSession = localStorage.getItem('westline_session');
       if (savedSession) {
         try {
           const sessionData = JSON.parse(savedSession);
@@ -106,10 +106,15 @@ export const AppProvider = ({ children }) => {
     devLog("[FETCH] Initializing Data Pipeline for user:", user.id);
 
     const isAdminOrStaff = user.role === 'admin' || user.role === 'staff';
+    const isWorker = user.role === 'worker';
+    const staffUid = user.uid || user.id;
 
-    const projectQuery = isAdminOrStaff
+    // Admin → all projects. Staff/Worker → only their assigned projects. Client → their own projects.
+    const projectQuery = user.role === 'admin'
       ? collection(db, 'projects')
-      : query(collection(db, 'projects'), where('clientId', '==', user.id), limit(100));
+      : (user.role === 'staff' || user.role === 'worker')
+        ? query(collection(db, 'projects'), where('assignedWorkers', 'array-contains', staffUid))
+        : query(collection(db, 'projects'), where('clientId', '==', user.id), limit(100));
 
     const unsubProject = onSnapshot(projectQuery, (snap) => {
       setClients(snap.docs.map(d => {
@@ -121,7 +126,7 @@ export const AppProvider = ({ children }) => {
     }, (err) => devWarn("Project Sync Error:", err));
 
     let unsubUser = () => {};
-    if (isAdminOrStaff) {
+    if (user.role === 'admin' || user.role === 'staff') {
       unsubUser = onSnapshot(collection(db, 'users'), (snap) => {
         const { team, clientList } = snap.docs.reduce((acc, d) => {
           const u = { id: d.id, ...d.data() };
@@ -210,7 +215,11 @@ export const AppProvider = ({ children }) => {
       setTransactions(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     }, (err) => devWarn("Transactions listener failed:", err));
 
-    const unsubNotif = onSnapshot(query(collection(db, 'notifications'), where('userId', '==', user.id), limit(50)), (snap) => {
+    const notifQuery = user.role === 'admin' || user.role === 'staff'
+      ? query(collection(db, 'notifications'), where('userId', 'in', [user.id, 'admin']), limit(50))
+      : query(collection(db, 'notifications'), where('userId', '==', user.id), limit(50));
+
+    const unsubNotif = onSnapshot(notifQuery, (snap) => {
       const sorted = snap.docs.map(d => ({ id: d.id, ...d.data() }))
         .sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt));
       setUserNotifications(sorted.slice(0, 20));

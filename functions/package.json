@@ -1,6 +1,6 @@
 {
-  "name": "glasstechfab-functions",
-  "description": "Glasstech ERP Cloud Functions",
+  "name": "westlinefuture-functions",
+  "description": "Westline Future ERP Cloud Functions",
   "scripts": {
     "serve": "firebase emulators:start --only functions",
     "shell": "firebase functions:shell",

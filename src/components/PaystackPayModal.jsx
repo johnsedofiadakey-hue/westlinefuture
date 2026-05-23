@@ -12,7 +12,7 @@ export default function PaystackPayModal({ invoice, brand, onClose, onSuccess })
   const [error, setError] = useState(null);
   const [verifyRef, setVerifyRef] = useState(null);
 
-  const ac = brand.color || '#231F78';
+  const ac = brand.color || `var(--accent-secondary)`;
   
   // Paystack expects amount in Kobo (lowest currency unit)
   const rawAmount = parseFloat(String(invoice.amount || 0).replace(/[$,]/g, '')) || 0;
@@ -57,13 +57,13 @@ export default function PaystackPayModal({ invoice, brand, onClose, onSuccess })
 
   if (status === 'error') {
     return (
-      <div style={{ position: 'fixed', inset: 0, background: 'rgba(13,11,46,.9)', backdropFilter: 'blur(12px)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+      <div style={{ position: 'fixed', inset: 0, background: 'rgba(92, 58, 33,.9)', backdropFilter: 'blur(12px)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
         <div className="p-card fade-in" style={{ width: '100%', maxWidth: 440, padding: 48, textAlign: 'center', background: '#fff', borderRadius: 32 }}>
           <div style={{ width: 80, height: 80, borderRadius: 40, background: '#FEF2F2', color: '#DC2626', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 24px' }}>
             <AlertCircle size={40} />
           </div>
-          <h2 className="lxfh" style={{ fontSize: 24, color: '#0D0B2E', marginBottom: 12 }}>Verification Failed</h2>
-          <p className="lxf" style={{ color: '#5B5894', marginBottom: 32, lineHeight: 1.6, fontSize: 14 }}>{error}</p>
+          <h2 className="lxfh" style={{ fontSize: 24, color: `var(--accent-secondary)`, marginBottom: 12 }}>Verification Failed</h2>
+          <p className="lxf" style={{ color: `var(--text-secondary)`, marginBottom: 32, lineHeight: 1.6, fontSize: 14 }}>{error}</p>
           <button onClick={onClose} className="p-btn-dark lxf" style={{ width: '100%', height: 56, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
             Close
           </button>
@@ -74,12 +74,12 @@ export default function PaystackPayModal({ invoice, brand, onClose, onSuccess })
 
   if (status === 'verifying') {
     return (
-      <div style={{ position: 'fixed', inset: 0, background: 'rgba(13,11,46,.9)', backdropFilter: 'blur(12px)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+      <div style={{ position: 'fixed', inset: 0, background: 'rgba(92, 58, 33,.9)', backdropFilter: 'blur(12px)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
         <div className="p-card fade-in" style={{ width: '100%', maxWidth: 440, padding: 48, textAlign: 'center', background: '#fff', borderRadius: 32 }}>
           <Spinner />
-          <h2 className="lxfh" style={{ fontSize: 22, color: '#0D0B2E', marginTop: 24, marginBottom: 12 }}>Verifying with Paystack...</h2>
-          <p className="lxf" style={{ color: '#5B5894', fontSize: 14 }}>Please wait while we confirm your payment on our servers.</p>
-          {verifyRef && <p style={{ fontSize: 11, color: '#9B99C8', marginTop: 12 }}>Ref: {verifyRef}</p>}
+          <h2 className="lxfh" style={{ fontSize: 22, color: `var(--accent-secondary)`, marginTop: 24, marginBottom: 12 }}>Verifying with Paystack...</h2>
+          <p className="lxf" style={{ color: `var(--text-secondary)`, fontSize: 14 }}>Please wait while we confirm your payment on our servers.</p>
+          {verifyRef && <p style={{ fontSize: 11, color: `var(--text-secondary)`, marginTop: 12 }}>Ref: {verifyRef}</p>}
         </div>
       </div>
     );
@@ -87,13 +87,13 @@ export default function PaystackPayModal({ invoice, brand, onClose, onSuccess })
 
   if (status === 'success') {
     return (
-      <div style={{ position: 'fixed', inset: 0, background: 'rgba(13,11,46,.9)', backdropFilter: 'blur(12px)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+      <div style={{ position: 'fixed', inset: 0, background: 'rgba(92, 58, 33,.9)', backdropFilter: 'blur(12px)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
         <div className="p-card fade-in" style={{ width: '100%', maxWidth: 440, padding: 48, textAlign: 'center', background: '#fff', borderRadius: 32 }}>
           <div style={{ width: 80, height: 80, borderRadius: 40, background: '#16A34A15', color: '#16A34A', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 24px' }}>
              <CheckCircle size={40} />
           </div>
-          <h2 className="lxfh" style={{ fontSize: 28, color: '#0D0B2E', marginBottom: 12 }}>Payment Secured</h2>
-          <p className="lxf" style={{ color: '#5B5894', marginBottom: 32, lineHeight: 1.6 }}>Transaction successfully authorized. Your invoice <b>{invoice.id}</b> is now cleared in the Westline Future ledger.</p>
+          <h2 className="lxfh" style={{ fontSize: 28, color: `var(--accent-secondary)`, marginBottom: 12 }}>Payment Secured</h2>
+          <p className="lxf" style={{ color: `var(--text-secondary)`, marginBottom: 32, lineHeight: 1.6 }}>Transaction successfully authorized. Your invoice <b>{invoice.id}</b> is now cleared in the Westline Future ledger.</p>
           <button onClick={onClose} className="p-btn-dark lxf" style={{ width: '100%', height: 56, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
             Return to Portal <ArrowRight size={18} />
           </button>
@@ -103,24 +103,24 @@ export default function PaystackPayModal({ invoice, brand, onClose, onSuccess })
   }
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(13,11,46,.7)', backdropFilter: 'blur(8px)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(92, 58, 33,.7)', backdropFilter: 'blur(8px)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
       <div className="p-card slide-up" style={{ width: '100%', maxWidth: 480, background: '#fff', borderRadius: 28, overflow: 'hidden', boxShadow: '0 32px 64px -16px rgba(0,0,0,.25)' }}>
         
         <div style={{ padding: '32px 32px 24px', position: 'relative' }}>
-           <button onClick={onClose} style={{ position: 'absolute', top: 24, right: 24, background: '#F8F8FD', border: 'none', width: 32, height: 32, borderRadius: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#9B99C8' }}><X size={18} /></button>
+           <button onClick={onClose} style={{ position: 'absolute', top: 24, right: 24, background: `var(--bg-secondary)`, border: 'none', width: 32, height: 32, borderRadius: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: `var(--text-secondary)` }}><X size={18} /></button>
            <div className="eyebrow" style={{ color: ac, marginBottom: 8 }}>Secure Checkout</div>
-           <h2 className="lxfh" style={{ fontSize: 24, color: '#0D0B2E' }}>Paystack Gateway</h2>
+           <h2 className="lxfh" style={{ fontSize: 24, color: `var(--accent-secondary)` }}>Paystack Gateway</h2>
         </div>
 
         <div style={{ padding: '0 32px 32px' }}>
            
            {/* INVOICE MINI */}
-           <div style={{ padding: 20, background: '#F8F8FD', borderRadius: 16, marginBottom: 24 }}>
+           <div style={{ padding: 20, background: `var(--bg-secondary)`, borderRadius: 16, marginBottom: 24 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                 <div className="lxf" style={{ fontSize: 13, color: '#5B5894' }}>{invoice.title}</div>
-                 <div className="lxf" style={{ fontSize: 13, fontWeight: 700, color: '#0D0B2E' }}>{invoice.amount}</div>
+                 <div className="lxf" style={{ fontSize: 13, color: `var(--text-secondary)` }}>{invoice.title}</div>
+                 <div className="lxf" style={{ fontSize: 13, fontWeight: 700, color: `var(--accent-secondary)` }}>{invoice.amount}</div>
               </div>
-              <div className="lxf" style={{ fontSize: 11, color: '#9B99C8' }}>Invoice ID: {invoice.id}</div>
+              <div className="lxf" style={{ fontSize: 11, color: `var(--text-secondary)` }}>Invoice ID: {invoice.id}</div>
            </div>
 
            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -131,7 +131,7 @@ export default function PaystackPayModal({ invoice, brand, onClose, onSuccess })
                 }}
                 disabled={status !== 'idle'}
                 className="p-btn-dark lxf"
-                style={{ width: '100%', height: 60, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, borderRadius: 16, background: status !== 'idle' ? '#E8E6F5' : '#231F78', color: status !== 'idle' ? '#9B99C8' : '#fff', border: 'none', cursor: status !== 'idle' ? 'default' : 'pointer' }}
+                style={{ width: '100%', height: 60, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, borderRadius: 16, background: status !== 'idle' ? `var(--border-color)` : `var(--accent-secondary)`, color: status !== 'idle' ? `var(--text-secondary)` : '#fff', border: 'none', cursor: status !== 'idle' ? 'default' : 'pointer' }}
               >
                 <Lock size={18} /> Authorize Secure Payment
               </button>
@@ -146,10 +146,10 @@ export default function PaystackPayModal({ invoice, brand, onClose, onSuccess })
            )}
 
            <div style={{ display: 'flex', justifyContent: 'center', gap: 24, marginTop: 24, opacity: 0.5 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10, color: '#0D0B2E', fontWeight: 600 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10, color: `var(--accent-secondary)`, fontWeight: 600 }}>
                  <Lock size={12} /> SSL SECURED
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10, color: '#0D0B2E', fontWeight: 600 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10, color: `var(--accent-secondary)`, fontWeight: 600 }}>
                  <ShieldCheck size={12} /> VERIFIED IDENTITY
               </div>
            </div>

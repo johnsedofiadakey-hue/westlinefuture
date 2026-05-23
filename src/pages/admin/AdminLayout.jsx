@@ -2,20 +2,53 @@ import React, { useState, useEffect } from 'react';
 import {
   LayoutDashboard, Users, Settings, LogOut, Folder, FileCode,
   Eye, Calendar, Activity, Globe, Truck, Package, Mail, MessageSquare, Sparkles,
-  ChevronRight, ChevronDown, FolderOpen, FileText, Briefcase, TrendingUp, Kanban, HardHat
+  ChevronRight, ChevronDown, FolderOpen, FileText, Briefcase, TrendingUp, Kanban, HardHat, KeyRound, X, Check, Loader2
 } from 'lucide-react';
 import { NotificationBell } from '../../components/Shared';
+import { getAuth, updatePassword } from 'firebase/auth';
 
 export default function AdminLayout({ user, onLogout, onPreview, brand, view, setView, userNotifications, markNotificationRead, onSearchChange, children, staffMode = false, ...props }) {
-  const ac = brand.color || '#231F78';
+  const ac = brand.color || `var(--accent-secondary)`;
   const [expandedFolders, setExpandedFolders] = useState({});
   const [searchValue, setSearchValue] = useState('');
+  
+  const [showPwModal, setShowPwModal] = useState(false);
+  const [newPw, setNewPw] = useState('');
+  const [pwLoading, setPwLoading] = useState(false);
+  const [pwMsg, setPwMsg] = useState(null);
+
+  const handleUpdatePassword = async () => {
+    if (newPw.length < 6) {
+      setPwMsg({ type: 'error', text: 'Password must be at least 6 characters.' });
+      return;
+    }
+    setPwLoading(true);
+    setPwMsg(null);
+    try {
+      const auth = getAuth();
+      if (auth.currentUser) {
+        await updatePassword(auth.currentUser, newPw);
+        setPwMsg({ type: 'success', text: 'Password updated successfully!' });
+        setNewPw('');
+        setTimeout(() => setShowPwModal(false), 2000);
+      } else {
+        setPwMsg({ type: 'error', text: 'Not authenticated. Please log out and back in.' });
+      }
+    } catch (e) {
+      if (e.code === 'auth/requires-recent-login') {
+        setPwMsg({ type: 'error', text: 'For security, please log out and log back in before changing your password.' });
+      } else {
+        setPwMsg({ type: 'error', text: e.message || 'Failed to update password.' });
+      }
+    }
+    setPwLoading(false);
+  };
 
   const toggleFolder = (id) => {
     setExpandedFolders(prev => ({ ...prev, [id]: !prev[id] }));
   };
 
-  const STAFF_ALLOWED_IDS = ['dash', 'projects', 'operations', 'client-hub', 'messages'];
+  const STAFF_ALLOWED_IDS = ['operations', 'client-hub'];
 
   const allMenuGroups = [
     {
@@ -85,14 +118,14 @@ export default function AdminLayout({ user, onLogout, onPreview, brand, view, se
       {!isMobile && (
         <aside className="p-sidebar-narrow" style={{ 
           width: 280, 
-          background: '#0D0B2E', 
+          background: `var(--accent-secondary)`, 
           borderRight: '1px solid rgba(255, 255, 255, 0.05)',
           display: 'flex',
           flexDirection: 'column'
         }}>
           <div style={{ padding: '28px 24px 20px', borderBottom: '1px solid rgba(255,255,255,0.06)', marginBottom: 8 }}>
             {brand.logo ? (
-              <img src={brand.logo} alt={brand.name} style={{ height: 40, width: 'auto', objectFit: 'contain', display: 'block' }} />
+              <img src={brand.logo} alt={brand.name} style={{ height: 56, width: 'auto', objectFit: 'contain', display: 'block', filter: 'brightness(0) invert(1)' }} />
             ) : (
               <div>
                 <div className="lxfh" style={{ fontSize: 15, fontWeight: 900, color: '#fff', letterSpacing: '0.04em' }}>WESTLINE</div>
@@ -124,7 +157,7 @@ export default function AdminLayout({ user, onLogout, onPreview, brand, view, se
                         background: view === m.id ? 'rgba(255,255,255,0.05)' : 'none', 
                         border: 'none', 
                         borderRadius: 12, 
-                        color: view === m.id ? ac : '#9B99C8', 
+                        color: view === m.id ? ac : `var(--text-secondary)`, 
                         cursor: 'pointer', 
                         transition: 'all 0.2s',
                         position: 'relative'
@@ -144,6 +177,9 @@ export default function AdminLayout({ user, onLogout, onPreview, brand, view, se
             <a href="/work" target="_blank" rel="noreferrer" style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, color: 'rgba(249,247,244,.6)', cursor: 'pointer', textDecoration: 'none', fontSize: 13, fontWeight: 600 }}>
               <HardHat size={16} /> Field Worker View
             </a>
+            <button onClick={() => { setShowPwModal(true); setPwMsg(null); setNewPw(''); }} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', background: 'none', border: 'none', color: 'rgba(249,247,244,.4)', cursor: 'pointer' }}>
+              <KeyRound size={16} /> <span style={{ fontSize: 13 }}>Change Password</span>
+            </button>
             <button onClick={onLogout} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', background: 'none', border: 'none', color: 'rgba(249,247,244,.4)', cursor: 'pointer' }}>
               <LogOut size={16} /> <span style={{ fontSize: 13 }}>Logout</span>
             </button>
@@ -215,7 +251,7 @@ export default function AdminLayout({ user, onLogout, onPreview, brand, view, se
                           paddingRight: searchValue ? 36 : 80,
                           fontSize: 12,
                           fontWeight: 500,
-                          color: '#0D0B2E',
+                          color: `var(--accent-secondary)`,
                           outline: 'none',
                           transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
                         }}
@@ -223,7 +259,7 @@ export default function AdminLayout({ user, onLogout, onPreview, brand, view, se
                         onBlur={(e) => { e.target.style.background = 'rgba(255,255,255,0.4)'; e.target.style.boxShadow = 'none'; }}
                       />
                       {searchValue && (
-                        <button onClick={() => { setSearchValue(''); onSearchChange?.(''); }} style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#9B99C8', display: 'flex', alignItems: 'center' }}>✕</button>
+                        <button onClick={() => { setSearchValue(''); onSearchChange?.(''); }} style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: `var(--text-secondary)`, display: 'flex', alignItems: 'center' }}>✕</button>
                       )}
                    </div>
                  )}
@@ -233,7 +269,7 @@ export default function AdminLayout({ user, onLogout, onPreview, brand, view, se
                         value={props.lang}
                         onChange={e => props.setLang(e.target.value)}
                         aria-label="Language"
-                        style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid #E8E6F5', background: '#fff', fontSize: 10, fontWeight: 800, cursor: 'pointer' }}
+                        style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid var(--border-color)', background: '#fff', fontSize: 10, fontWeight: 800, cursor: 'pointer' }}
                       >
                         <option value="en">EN</option>
                         <option value="fr">FR</option>
@@ -242,7 +278,7 @@ export default function AdminLayout({ user, onLogout, onPreview, brand, view, se
                    
                    <NotificationBell notifications={userNotifications} onMarkRead={markNotificationRead} />
                    
-                   <button onClick={onPreview} className="p-btn-light" style={{ padding: '8px 12px', fontSize: 11, borderRadius: 10, display: 'flex', alignItems: 'center', gap: 6, background: '#fff', border: '1px solid #E8E6F5' }}>
+                   <button onClick={onPreview} className="p-btn-light" style={{ padding: '8px 12px', fontSize: 11, borderRadius: 10, display: 'flex', alignItems: 'center', gap: 6, background: '#fff', border: '1px solid var(--border-color)' }}>
                      <Eye size={14} /> <span className="dt-only">Site Preview</span>
                    </button>
                    
@@ -251,7 +287,7 @@ export default function AdminLayout({ user, onLogout, onPreview, brand, view, se
                    </div>
                    
                    {!isMobile && (
-                     <button onClick={onLogout} style={{ background: 'none', border: 'none', color: '#9B99C8', padding: 8, cursor: 'pointer' }}><LogOut size={18} /></button>
+                     <button onClick={onLogout} style={{ background: 'none', border: 'none', color: `var(--text-secondary)`, padding: 8, cursor: 'pointer' }}><LogOut size={18} /></button>
                    )}
                  </div>
                </div>
@@ -261,14 +297,14 @@ export default function AdminLayout({ user, onLogout, onPreview, brand, view, se
 
           <div className="fade-in admin-content-wrap" style={{ padding: isMobile ? '20px 20px 120px' : '40px 60px' }}>
             {view === 'dash' && (
-              <div style={{ padding: 32, background: '#FDFCFB', border: '1px solid #E8E6F5', borderRadius: 32, marginBottom: 40 }}>
+              <div style={{ padding: 32, background: `var(--bg-primary)`, border: '1px solid var(--border-color)', borderRadius: 32, marginBottom: 40 }}>
                  <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 24 }}>
-                    <div style={{ width: 48, height: 48, background: '#0D0B2E', borderRadius: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', color: ac }}>
+                    <div style={{ width: 48, height: 48, background: `var(--accent-secondary)`, borderRadius: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', color: ac }}>
                        <Briefcase size={24} />
                     </div>
                     <div>
                        <h3 className="lxfh" style={{ fontSize: 22, margin: 0 }}>Operational Guide</h3>
-                       <p className="lxf" style={{ color: '#9B99C8', fontSize: 13 }}>Follow these steps to run your business</p>
+                       <p className="lxf" style={{ color: `var(--text-secondary)`, fontSize: 13 }}>Follow these steps to run your business</p>
                     </div>
                  </div>
                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 24 }}>
@@ -278,10 +314,10 @@ export default function AdminLayout({ user, onLogout, onPreview, brand, view, se
                       { t: '3. Add Sourcing', d: 'Add items in Sourcing Hub for client approval.', i: <Package size={18} /> },
                       { t: '4. Get Paid', d: 'Trigger an Invoice and share the portal link.', i: <FileText size={18} /> }
                     ].map(step => (
-                       <div key={step.t} style={{ padding: 20, background: '#fff', borderRadius: 20, border: '1px solid #F8F8FD' }}>
+                       <div key={step.t} style={{ padding: 20, background: '#fff', borderRadius: 20, border: '1px solid var(--bg-secondary)' }}>
                           <div style={{ color: ac, marginBottom: 12 }}>{step.i}</div>
                           <h4 className="lxfh" style={{ fontSize: 14, marginBottom: 6 }}>{step.t}</h4>
-                          <p className="lxf" style={{ fontSize: 11, color: '#9B99C8', lineHeight: 1.5 }}>{step.d}</p>
+                          <p className="lxf" style={{ fontSize: 11, color: `var(--text-secondary)`, lineHeight: 1.5 }}>{step.d}</p>
                        </div>
                     ))}
                  </div>
@@ -292,11 +328,52 @@ export default function AdminLayout({ user, onLogout, onPreview, brand, view, se
         </div>
       </main>
 
+      {/* CHANGE PASSWORD MODAL */}
+      {showPwModal && (
+        <div className="overlay-modal" onClick={() => !pwLoading && setShowPwModal(false)}>
+          <div className="modal-box lxf" style={{ maxWidth: 400 }} onClick={e => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+              <h3 className="lxfh" style={{ fontSize: 20, color: `var(--accent-secondary)` }}>Change Password</h3>
+              <button onClick={() => setShowPwModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: `var(--text-secondary)` }}><X size={20} /></button>
+            </div>
+            
+            {pwMsg && (
+              <div style={{ padding: '10px 14px', borderRadius: 8, background: pwMsg.type === 'error' ? '#FEF2F2' : '#F0FDF4', color: pwMsg.type === 'error' ? '#DC2626' : '#16A34A', fontSize: 13, marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+                {pwMsg.type === 'success' && <Check size={16} />}
+                {pwMsg.text}
+              </div>
+            )}
+            
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div>
+                <label className="lxf" style={{ fontSize: 11, fontWeight: 800, color: `var(--text-secondary)`, textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>New Password</label>
+                <input 
+                  className="p-inp" 
+                  type="password" 
+                  value={newPw} 
+                  onChange={e => setNewPw(e.target.value)} 
+                  placeholder="At least 6 characters" 
+                  style={{ width: '100%', boxSizing: 'border-box' }} 
+                />
+              </div>
+              <button
+                onClick={handleUpdatePassword}
+                disabled={pwLoading || newPw.length < 6}
+                className="p-btn-dark lxf"
+                style={{ width: '100%', padding: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: (pwLoading || newPw.length < 6) ? 0.6 : 1 }}
+              >
+                {pwLoading ? <><Loader2 size={16} className="lp-spin" /> Updating...</> : 'Update Password'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* MOBILE BOTTOM NAVIGATION (Premium Glass Dock) */}
       {isMobile && (
         <div className="glass-dock" style={{ 
           position: 'fixed', bottom: 20, left: 20, right: 20, height: 72, 
-          background: 'rgba(13, 11, 46, 0.95)', backdropFilter: 'blur(20px)', 
+          background: 'rgba(92, 58, 33, 0.95)', backdropFilter: 'blur(20px)', 
           borderRadius: 24, border: '1px solid rgba(255,255,255,0.1)', 
           display: 'flex', justifyContent: 'space-around', alignItems: 'center', 
           padding: '0 10px', zIndex: 1000, boxShadow: '0 20px 50px rgba(0,0,0,0.3)'
@@ -306,7 +383,7 @@ export default function AdminLayout({ user, onLogout, onPreview, brand, view, se
               key={m.id} 
               onClick={() => setView(m.id)} 
               style={{ 
-                background: 'none', border: 'none', color: view === m.id ? ac : '#9B99C8', 
+                background: 'none', border: 'none', color: view === m.id ? ac : `var(--text-secondary)`, 
                 display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, cursor: 'pointer' 
               }}
             >

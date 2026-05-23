@@ -1,9 +1,9 @@
 /**
- * GLASSTECH ERP - CLOUD FUNCTIONS (GEN 2)
+ * WESTLINE FUTURE ERP - CLOUD FUNCTIONS (GEN 2)
  */
 
 const { onDocumentUpdated } = require("firebase-functions/v2/firestore");
-const { onRequest, onCall } = require("firebase-functions/v2/https");
+const { onRequest, onCall, HttpsError } = require("firebase-functions/v2/https");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { defineSecret } = require("firebase-functions/params");
 const { logger } = require("firebase-functions");
@@ -15,14 +15,14 @@ const axios = require("axios");
 initializeApp();
 
 // Secrets — set with: firebase functions:secrets:set SECRET_NAME
-const META_WA_TOKEN      = defineSecret("META_WA_TOKEN");
-const META_WA_PHONE_ID   = defineSecret("META_WA_PHONE_ID");
-const TWILIO_SID         = defineSecret("TWILIO_SID");
-const TWILIO_AUTH_TOKEN  = defineSecret("TWILIO_AUTH_TOKEN");
-const TWILIO_FROM_NUMBER = defineSecret("TWILIO_FROM_NUMBER");
-const ARKESEL_API_KEY    = defineSecret("ARKESEL_API_KEY");
-const WA_VERIFY_TOKEN    = defineSecret("WA_VERIFY_TOKEN");
-const PAYSTACK_SECRET_KEY = defineSecret("PAYSTACK_SECRET_KEY");
+const META_WA_TOKEN = { value: () => process.env.META_WA_TOKEN };
+const META_WA_PHONE_ID = { value: () => process.env.META_WA_PHONE_ID };
+const TWILIO_SID = { value: () => process.env.TWILIO_SID };
+const TWILIO_AUTH_TOKEN = { value: () => process.env.TWILIO_AUTH_TOKEN };
+const TWILIO_FROM_NUMBER = { value: () => process.env.TWILIO_FROM_NUMBER };
+const ARKESEL_API_KEY = { value: () => process.env.ARKESEL_API_KEY };
+const WA_VERIFY_TOKEN = { value: () => process.env.WA_VERIFY_TOKEN };
+const PAYSTACK_SECRET_KEY = { value: () => process.env.PAYSTACK_SECRET_KEY };
 
 /**
  * PAYSTACK PAYMENT VERIFICATION (SERVER-SIDE)
@@ -34,7 +34,7 @@ const PAYSTACK_SECRET_KEY = defineSecret("PAYSTACK_SECRET_KEY");
  * Body: { reference, projectId, invoiceId?, type? }
  */
 exports.verifyPaystackPayment = onCall(
-  { secrets: [PAYSTACK_SECRET_KEY] },
+  { cors: true },
   async (request) => {
     if (!request.auth) throw new Error("Authentication required");
 
@@ -124,6 +124,21 @@ exports.verifyPaystackPayment = onCall(
         verifiedBy: uid,
       }, { merge: true });
 
+    // Update the invoice and project payment statuses server-side
+    if (invoiceId) {
+      await db.collection("invoices").doc(invoiceId).update({
+        status: "Paid",
+        paidAt: new Date().toISOString(),
+        method: "Paystack"
+      }).catch(e => logger.warn("verifyPaystackPayment: could not update top-level invoice", e));
+
+      await db.collection("projects").doc(projectId).collection("payments").doc(invoiceId).set({
+        status: "Paid",
+        paidAt: new Date().toISOString(),
+        method: "Paystack"
+      }, { merge: true }).catch(e => logger.warn("verifyPaystackPayment: could not update project payment", e));
+    }
+
     // Audit log
     await db.collection("activity_logs").add({
       action: "payment_verified",
@@ -135,6 +150,19 @@ exports.verifyPaystackPayment = onCall(
       verifiedAt: FieldValue.serverTimestamp(),
       verifiedBy: uid,
     });
+
+    // Automatically update project stage based on payment type
+    let stageUpdate = null;
+    if (type === "deposit") {
+      stageUpdate = { stageId: 3, updatedAt: FieldValue.serverTimestamp() };
+    } else if (type === "final") {
+      stageUpdate = { stageId: 7, updatedAt: FieldValue.serverTimestamp() };
+    }
+    
+    if (stageUpdate) {
+      await db.collection("projects").doc(projectId).update(stageUpdate)
+        .catch(e => logger.warn("verifyPaystackPayment: could not auto-update project stage", e));
+    }
 
     logger.info(`verifyPaystackPayment: GHS ${amountGHS} verified for project ${projectId} ref ${reference}`);
 
@@ -267,10 +295,10 @@ exports.createClientRecord = onCall(async (request) => {
  * Body: { uid, deleteAuth? }
  */
 exports.deleteStaffAccount = onCall(async (request) => {
-  if (!request.auth) throw new Error("Authentication required");
+  if (!request.auth) throw new HttpsError("unauthenticated", "Authentication required");
 
   const { uid, deleteAuth = true } = request.data || {};
-  if (!uid) throw new Error("uid is required");
+  if (!uid) throw new HttpsError("invalid-argument", "uid is required");
 
   const adminAuth = getAdminAuth();
   const db = getFirestore();
@@ -307,7 +335,7 @@ exports.deleteStaffAccount = onCall(async (request) => {
  * Body: { email, phone }   — phone is the staff member's phone number
  */
 exports.resetStaffPasswordBySMS = onCall(
-  { secrets: [ARKESEL_API_KEY] },
+  { cors: true },
   async (request) => {
     if (!request.auth) throw new Error("Authentication required");
 
@@ -327,12 +355,12 @@ exports.resetStaffPasswordBySMS = onCall(
 
     const key = ARKESEL_API_KEY.value();
     const recipient = normalizePhone(phone);
-    const message = `Glasstech ERP\n\nPassword reset requested for ${email}.\n\nReset link (expires in 1 hour):\n${resetLink}\n\nIgnore if you did not request this.`;
+    const message = `Westline Future ERP\n\nPassword reset requested for ${email}.\n\nReset link (expires in 1 hour):\n${resetLink}\n\nIgnore if you did not request this.`;
 
     try {
       await axios.post(
         "https://sms.arkesel.com/api/v2/sms/send",
-        { sender: "Glasstech", message, recipients: [recipient] },
+        { sender: "WestlineFtr", message, recipients: [recipient] },
         { headers: { "api-key": key } }
       );
     } catch (err) {
@@ -346,13 +374,58 @@ exports.resetStaffPasswordBySMS = onCall(
 );
 
 /**
+ * ADMIN SET STAFF PASSWORD
+ * Lets an authenticated admin forcefully set a new password for any staff/worker.
+ * Uses the Admin SDK so this is done server-side with full privilege.
+ * Also stores the new password in Firestore so admin can view it later.
+ *
+ * Callable: httpsCallable(functions, 'setStaffPassword')
+ * Body: { uid, newPassword }
+ */
+exports.setStaffPassword = onCall(async (request) => {
+  if (!request.auth) throw new Error("Authentication required");
+
+  const { uid, newPassword } = request.data || {};
+  if (!uid) throw new Error("uid is required");
+  if (!newPassword || newPassword.length < 6) throw new Error("Password must be at least 6 characters");
+
+  const adminAuth = getAdminAuth();
+  const db = getFirestore();
+
+  try {
+    await adminAuth.updateUser(uid, { password: newPassword });
+  } catch (err) {
+    logger.error("setStaffPassword: updateUser failed", err.message);
+    throw new Error("Could not update password: " + err.message);
+  }
+
+  // Store the new password in the user's Firestore doc so admin can view it
+  try {
+    await db.collection("users").doc(uid).update({
+      tempPassword: newPassword,
+      passwordUpdatedAt: FieldValue.serverTimestamp(),
+    });
+    await db.collection("team").doc(uid).update({
+      tempPassword: newPassword,
+      passwordUpdatedAt: FieldValue.serverTimestamp(),
+    }).catch(() => {}); // team doc may not exist, ignore
+  } catch (err) {
+    logger.warn("setStaffPassword: could not save password to Firestore", err.message);
+    // Not fatal — Auth password was updated successfully
+  }
+
+  logger.info(`setStaffPassword: password updated for uid ${uid} by admin ${request.auth.uid}`);
+  return { success: true };
+});
+
+/**
  * SEND SMS (onCall wrapper around Arkesel)
  * Client calls: httpsCallable(functions, 'sendSMS')
  * Body: { phone, message }
  * Auth required so arbitrary callers can't abuse it.
  */
 exports.sendSMS = onCall(
-  { secrets: [ARKESEL_API_KEY] },
+  { cors: true },
   async (request) => {
     if (!request.auth) throw new Error("Authentication required");
 
@@ -369,7 +442,7 @@ exports.sendSMS = onCall(
     try {
       resp = await axios.post(
         "https://sms.arkesel.com/api/v2/sms/send",
-        { sender: "Glasstech", message, recipients: [recipient] },
+        { sender: "WestlineFtr", message, recipients: [recipient] },
         { headers: { "api-key": key } }
       );
     } catch (err) {
@@ -436,14 +509,13 @@ exports.repairStaffAccount = onCall(async (request) => {
  * All API tokens live here; the client never sees them.
  */
 const ALLOWED_ORIGINS = [
-  "https://glasstechfab-635c2.web.app",
-  "https://glasstechfab-635c2.firebaseapp.com",
-  "https://glasstech.com.gh",
-  "https://www.glasstech.com.gh",
+  "https://westlinefuture.web.app",
+  "https://westlinefuture.firebaseapp.com",
+  "https://www.westlinefuture.com",
+  "https://westlinefuture.com",
 ];
 
 exports.sendWhatsApp = onRequest(
-  { secrets: [META_WA_TOKEN, META_WA_PHONE_ID, TWILIO_SID, TWILIO_AUTH_TOKEN, TWILIO_FROM_NUMBER, ARKESEL_API_KEY] },
   async (req, res) => {
     // CORS — only allow known origins
     const origin = req.headers.origin || "";
@@ -508,7 +580,7 @@ exports.sendWhatsApp = onRequest(
           const key = ARKESEL_API_KEY.value();
           const resp = await axios.post(
             "https://sms.arkesel.com/api/v2/sms/send",
-            { sender: "Glasstech", message, recipients: [cleanPhone] },
+            { sender: "WestlineFtr", message, recipients: [cleanPhone] },
             { headers: { "api-key": key } }
           );
           result = { success: true, data: resp.data };
@@ -623,7 +695,7 @@ async function sendWA(phone, message) {
   const resp = await axios.post(
     "https://sms.arkesel.com/api/v2/sms/send",
     {
-      sender: "Glasstech",
+      sender: "WestlineFtr",
       message,
       recipients: [recipient],
     },
@@ -641,7 +713,6 @@ async function sendWA(phone, message) {
 // Register this URL in the Meta Business Platform -> WhatsApp -> Configuration.
 // ---------------------------------------------------------------------------
 exports.receiveWhatsApp = onRequest(
-  { secrets: [WA_VERIFY_TOKEN, ARKESEL_API_KEY] },
   async (req, res) => {
     // ── GET: Meta webhook verification handshake ────────────────────────────
     if (req.method === "GET") {
@@ -726,8 +797,8 @@ exports.receiveWhatsApp = onRequest(
         // Active = stageId < 12, ordered by most recent first
         const projectsSnap = await db
           .collection("projects")
-          .where("clientId", "==", normalizedPhone)
-          .where("stageId", "<", 12)
+          .where("clientIds", "array-contains", normalizedPhone)
+          .where("stageId", "<", 7)
           .orderBy("stageId", "desc")
           .orderBy("createdAt", "desc")
           .limit(1)
@@ -799,30 +870,23 @@ exports.receiveWhatsApp = onRequest(
 // ---------------------------------------------------------------------------
 
 // Stages where the client is the responsible party
-const CLIENT_ACTION_STAGES = new Set([2, 3, 4, 11]);
+const CLIENT_ACTION_STAGES = new Set([2, 7]);
 
-// Human-readable stage names — mirrors frontend PROJECT_STAGES
+// Human-readable stage names — mirrors frontend CLIENT_PROJECT_STAGES (7-stage pipeline)
 const STAGE_NAMES = {
-  0:  "Inquiry",
-  1:  "Quotation",
-  2:  "Quote Approval",
-  3:  "Deposit Payment",
-  4:  "Design Approval",
-  5:  "Production",
-  6:  "Quality Check",
-  7:  "Delivery Scheduling",
-  8:  "Installation",
-  9:  "Snagging",
-  10: "Final Payment",
-  11: "Balance Payment",
-  12: "Completed",
+  1: "Intake",
+  2: "Quote Approval & Deposit",
+  3: "Procurement & Production",
+  4: "Shipping & Delivery",
+  5: "Installation",
+  6: "Inspection & Sign-off",
+  7: "Handover & Final Settlement",
 };
 
 exports.sendOverdueReminders = onSchedule(
   {
     schedule:  "0 9 * * *",
     timeZone:  "Africa/Accra",
-    secrets:   [ARKESEL_API_KEY],
   },
   async (_event) => {
     const db  = getFirestore();
@@ -835,7 +899,7 @@ exports.sendOverdueReminders = onSchedule(
     try {
       projectsSnap = await db
         .collection("projects")
-        .where("stageId", "<", 12)
+        .where("stageId", "<", 7)
         .get();
     } catch (err) {
       logger.error("sendOverdueReminders: failed to fetch projects", err);
@@ -899,12 +963,13 @@ exports.sendOverdueReminders = onSchedule(
 
         // ── Client reminder: >= 3 days on a CLIENT-action stage ──────────
         if (daysStuck >= 3 && CLIENT_ACTION_STAGES.has(stageId)) {
-          const clientPhone = normalizePhone(projectData.clientId || projectData.clientPhone);
+          const possiblePhone = projectData.clientIds && projectData.clientIds.length > 0 ? projectData.clientIds[0] : (projectData.clientId || projectData.clientPhone);
+          const clientPhone = normalizePhone(possiblePhone);
           const clientName  = projectData.clientName || "Valued Client";
 
           if (clientPhone) {
             const waMessage =
-              `Hi ${clientName}, this is a reminder from Glasstech Fabrications. ` +
+              `Hi ${clientName}, this is a reminder from Westline Future. ` +
               `Your project "${projectTitle}" is waiting for your action at the ` +
               `${stageName} stage. Please log in to your portal or contact us to ` +
               `proceed. Thank you.`;

@@ -50,7 +50,7 @@ export default function AIProposalGenerator({ open, onClose, onSubmit, brand, in
   const selectedFinish = FINISHES.find(f => f.id === data.finish);
   
   const estimatedCost = (selectedType?.base || 0) * (data.dims.width * data.dims.height) * (selectedFinish?.multi || 1);
-  const ac = brand.color || '#231F78';
+  const ac = brand.color || `var(--accent-secondary)`;
 
   const handleNext = () => setStep(step + 1);
   const handleBack = () => setStep(step - 1);
@@ -95,7 +95,7 @@ export default function AIProposalGenerator({ open, onClose, onSubmit, brand, in
         {/* PROGRESS MINI */}
         <div style={{ display: 'flex', gap: 6, marginBottom: 32 }}>
           {[1,2,3].map(s => (
-            <div key={s} style={{ flex: 1, height: 3, borderRadius: 2, background: step >= s ? ac : '#E8E6F5', transition: 'all .3s' }} />
+            <div key={s} style={{ flex: 1, height: 3, borderRadius: 2, background: step >= s ? ac : `var(--border-color)`, transition: 'all .3s' }} />
           ))}
         </div>
 
@@ -104,8 +104,8 @@ export default function AIProposalGenerator({ open, onClose, onSubmit, brand, in
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
                <div style={{ width: 40, height: 40, borderRadius: 10, background: `${ac}15`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: ac }}><Layers size={20} /></div>
                <div>
-                  <h4 className="lxfh" style={{ fontSize: 18, color: '#0D0B2E' }}>What are we building today?</h4>
-                  <p className="lxf" style={{ fontSize: 12, color: '#9B99C8' }}>Select a project primary typology</p>
+                  <h4 className="lxfh" style={{ fontSize: 18, color: `var(--accent-secondary)` }}>What are we building today?</h4>
+                  <p className="lxf" style={{ fontSize: 12, color: `var(--text-secondary)` }}>Select a project primary typology</p>
                </div>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
@@ -118,8 +118,8 @@ export default function AIProposalGenerator({ open, onClose, onSubmit, brand, in
                      background: data.type === t.id ? `${ac}08` : '#fff', cursor: 'pointer', transition: 'all .2s'
                    }}
                  >
-                    <div className="lxf" style={{ fontSize: 13, fontWeight: 700, color: '#0D0B2E' }}>{t.name}</div>
-                    <div className="lxf" style={{ fontSize: 11, color: '#9B99C8', marginTop: 4 }}>{t.desc}</div>
+                    <div className="lxf" style={{ fontSize: 13, fontWeight: 700, color: `var(--accent-secondary)` }}>{t.name}</div>
+                    <div className="lxf" style={{ fontSize: 11, color: `var(--text-secondary)`, marginTop: 4 }}>{t.desc}</div>
                  </div>
                ))}
             </div>
@@ -132,15 +132,15 @@ export default function AIProposalGenerator({ open, onClose, onSubmit, brand, in
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
                <div style={{ width: 40, height: 40, borderRadius: 10, background: `${ac}15`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: ac }}><Ruler size={20} /></div>
                <div>
-                  <h4 className="lxfh" style={{ fontSize: 18, color: '#0D0B2E' }}>Technical Specifications</h4>
-                  <p className="lxf" style={{ fontSize: 12, color: '#9B99C8' }}>Dimensions and material finishing</p>
+                  <h4 className="lxfh" style={{ fontSize: 18, color: `var(--accent-secondary)` }}>Technical Specifications</h4>
+                  <p className="lxf" style={{ fontSize: 12, color: `var(--text-secondary)` }}>Dimensions and material finishing</p>
                </div>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
                <PFormField label="Width (meters)"><input className="p-inp" type="number" step="0.1" value={data.dims.width} onChange={e => setData({...data, dims: {...data.dims, width: parseFloat(e.target.value)}})} /></PFormField>
                <PFormField label="Height (meters)"><input className="p-inp" type="number" step="0.1" value={data.dims.height} onChange={e => setData({...data, dims: {...data.dims, height: parseFloat(e.target.value)}})} /></PFormField>
             </div>
-            <div className="lxf" style={{ fontSize: 10, textTransform: 'uppercase', color: '#9B99C8', letterSpacing: '.1em', marginTop: 4 }}>Glass Finishing</div>
+            <div className="lxf" style={{ fontSize: 10, textTransform: 'uppercase', color: `var(--text-secondary)`, letterSpacing: '.1em', marginTop: 4 }}>Glass Finishing</div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 8 }}>
                {FINISHES.map(f => (
                  <button 
@@ -151,7 +151,7 @@ export default function AIProposalGenerator({ open, onClose, onSubmit, brand, in
                     padding: '8px 12px', borderRadius: 8, fontSize: 11, 
                     border: `1px solid ${data.finish === f.id ? ac : '#E5E0DA'}`,
                     background: data.finish === f.id ? ac : '#fff',
-                    color: data.finish === f.id ? '#fff' : '#0D0B2E',
+                    color: data.finish === f.id ? '#fff' : `var(--accent-secondary)`,
                     cursor: 'pointer'
                   }}
                  >{f.name}</button>
@@ -169,11 +169,11 @@ export default function AIProposalGenerator({ open, onClose, onSubmit, brand, in
              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
                <div style={{ width: 40, height: 40, borderRadius: 10, background: '#16A34A15', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#16A34A' }}><Sparkles size={20} /></div>
                <div>
-                  <h4 className="lxfh" style={{ fontSize: 18, color: '#0D0B2E' }}>Genesis Complete</h4>
-                  <p className="lxf" style={{ fontSize: 12, color: '#9B99C8' }}>Ready to generate professional documentation</p>
+                  <h4 className="lxfh" style={{ fontSize: 18, color: `var(--accent-secondary)` }}>Genesis Complete</h4>
+                  <p className="lxf" style={{ fontSize: 12, color: `var(--text-secondary)` }}>Ready to generate professional documentation</p>
                </div>
             </div>
-            <div className="p-card" style={{ padding: 20, background: '#0D0B2E', color: '#fff' }}>
+            <div className="p-card" style={{ padding: 20, background: `var(--accent-secondary)`, color: '#fff' }}>
                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12, alignItems: 'center' }}>
                   <div className="lxf" style={{ fontSize: 11, color: ac, fontWeight: 700, letterSpacing: '.1em' }}>SMART ESTIMATION</div>
                   <div className="lxf" style={{ fontSize: 24, fontWeight: 700 }}>${estimatedCost.toLocaleString(undefined, {minimumFractionDigits: 2})}</div>

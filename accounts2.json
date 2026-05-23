@@ -1,0 +1,39 @@
+{"users": [
+{
+  "localId": "0be2VN8tpxWG5iSoQW5nYeWTR3K2",
+  "lastSignedInAt": "1779473015983",
+  "createdAt": "1779466001703",
+  "phoneNumber": "+233547738678",
+  "providerUserInfo": []
+},
+{
+  "localId": "9xgfjt0iuaO5DJXSfPXehsB5iY43",
+  "email": "johnsedofiadakey@gmail.com",
+  "emailVerified": false,
+  "passwordHash": "jkr4DojA5MyppQJ1A3gntX3ZyBl8Hnr6c3/j1QBJqU9LlDijrkYCtPYQC/D0DuCPBH+UlXHNqAtkr+umWGbVkQ==",
+  "salt": "rAGYekgr1QQzVg==",
+  "lastSignedInAt": "1779474956054",
+  "createdAt": "1779474956054",
+  "providerUserInfo": []
+},
+{
+  "localId": "Wpza6w2zLVMr2mkop7xp1HVPMGp1",
+  "email": "+233598455012@westlinefuture.com",
+  "emailVerified": false,
+  "passwordHash": "RIfCilvonNr7ZNOBQN3MKh9KTRSUlhvXiv0+k2XPFbEipr6P5db2BI/h1si4TD5cbnwt8yroOmL0jqrS5pHO5A==",
+  "salt": "ncnfn8OtMXzigQ==",
+  "lastSignedInAt": "1779476753465",
+  "createdAt": "1779476753465",
+  "providerUserInfo": []
+},
+{
+  "localId": "rfrMAIFIUObzOYnvGnmkISyDZlY2",
+  "email": "admin@westlinefuture.com",
+  "emailVerified": false,
+  "passwordHash": "Ii/yMUDldOQiaHmy2eL2SRpqXMljFcf9DnaN8WO9OUP33wtnAHITrHyq+B9ChDFffByticgncV7dmjE+w8okQw==",
+  "salt": "8aRlGqKE4LVr8A==",
+  "lastSignedInAt": "1779475654771",
+  "createdAt": "1779393589418",
+  "disabled": false,
+  "providerUserInfo": []
+}]}

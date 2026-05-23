@@ -4,7 +4,7 @@ import { PSBadge } from '../../components/Shared';
 
 export default function AdminGovernance({ approvals = [], projects = [], brand, ...props }) {
   const [filter, setFilter] = useState('pending');
-  const ac = brand?.color || '#231F78';
+  const ac = brand?.color || `var(--accent-secondary)`;
 
   const filtered = (approvals || []).filter(a => filter === 'all' || a.status?.toLowerCase() === filter);
 
@@ -12,7 +12,7 @@ export default function AdminGovernance({ approvals = [], projects = [], brand, 
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
         <div>
-          <h2 className="lxfh" style={{ fontSize: 32, fontWeight: 400, color: '#0D0B2E', marginBottom: 4 }}>Governance & Approvals</h2>
+          <h2 className="lxfh" style={{ fontSize: 32, fontWeight: 400, color: `var(--accent-secondary)`, marginBottom: 4 }}>Governance & Approvals</h2>
           <p style={{ fontSize: 13, color: '#666' }}>Critical path sign-offs and change request management</p>
         </div>
         <div style={{ display: 'flex', background: '#eee', padding: 4, borderRadius: 10, gap: 4 }}>
@@ -23,7 +23,7 @@ export default function AdminGovernance({ approvals = [], projects = [], brand, 
               style={{ 
                 padding: '8px 16px', borderRadius: 8, fontSize: 11, fontWeight: 600, textTransform: 'uppercase',
                 background: filter === s ? '#fff' : 'none',
-                color: filter === s ? '#0D0B2E' : '#888',
+                color: filter === s ? `var(--accent-secondary)` : '#888',
                 boxShadow: filter === s ? '0 2px 8px rgba(0,0,0,.05)' : 'none',
                 border: 'none', cursor: 'pointer'
               }}

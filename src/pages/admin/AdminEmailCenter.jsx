@@ -5,13 +5,13 @@ import { PSBadge, PModal, FF as PFormField } from '../../components/Shared';
 export default function AdminEmailCenter({ emails = [], projects = [], brand, ...props }) {
   const [convertTarget, setConvertTarget] = useState(null);
   const [conversionData, setConversionData] = useState({ title: '', site: '', budget: '', type: 'Commercial' });
-  const ac = brand?.color || '#231F78';
+  const ac = brand?.color || `var(--accent-secondary)`;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
         <div>
-          <h2 className="lxfh" style={{ fontSize: 32, fontWeight: 400, color: '#0D0B2E', marginBottom: 4 }}>Inquiry Pipeline</h2>
+          <h2 className="lxfh" style={{ fontSize: 32, fontWeight: 400, color: `var(--accent-secondary)`, marginBottom: 4 }}>Inquiry Pipeline</h2>
           <p style={{ fontSize: 13, color: '#666' }}>Lead-to-Project provisioning dashboard</p>
         </div>
       </div>
@@ -31,7 +31,7 @@ export default function AdminEmailCenter({ emails = [], projects = [], brand, ..
                 <td style={{ padding: '16px 20px', fontSize: 11, color: '#999', fontFamily: 'monospace' }}>{e.id?.slice(-6).toUpperCase()}</td>
                 <td style={{ padding: '16px 20px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    {e.type === 'Marketplace Order' ? <Package size={14} color="#16A34A" /> : <Mail size={14} color="#231F78" />}
+                    {e.type === 'Marketplace Order' ? <Package size={14} color="#16A34A" /> : <Mail size={14} color="var(--accent-secondary)" />}
                     <span style={{ fontSize: 12, fontWeight: 500 }}>{e.type || 'Inquiry'}</span>
                   </div>
                 </td>
@@ -72,10 +72,10 @@ export default function AdminEmailCenter({ emails = [], projects = [], brand, ..
         <PModal open={!!convertTarget} title="Industrial Lead Provisioning" onClose={() => setConvertTarget(null)} w={1000}>
            <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 40 }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-                 <div style={{ background: '#F8F8FD', padding: 24, borderRadius: 20, border: '1px solid #C5C3EC' }}>
+                 <div style={{ background: `var(--bg-secondary)`, padding: 24, borderRadius: 20, border: '1px solid #C5C3EC' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
-                       <div style={{ width: 40, height: 40, borderRadius: 12, background: '#0D0B2E', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                          <User color="#231F78" size={20} />
+                       <div style={{ width: 40, height: 40, borderRadius: 12, background: `var(--accent-secondary)`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          <User color="var(--accent-secondary)" size={20} />
                        </div>
                        <div>
                           <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '.1em', color: '#888' }}>Lead Identity</div>
@@ -109,7 +109,7 @@ export default function AdminEmailCenter({ emails = [], projects = [], brand, ..
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-                 <div className="p-card" style={{ padding: 24, background: '#0D0B2E', color: '#fff', borderRadius: 24 }}>
+                 <div className="p-card" style={{ padding: 24, background: `var(--accent-secondary)`, color: '#fff', borderRadius: 24 }}>
                     <h4 style={{ fontSize: 14, fontWeight: 800, marginBottom: 16, color: ac }}>AUTOMATION TRIGGER</h4>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
                        {[

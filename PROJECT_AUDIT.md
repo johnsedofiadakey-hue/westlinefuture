@@ -17,12 +17,13 @@ This document presents a comprehensive technical audit of the **Westline Future*
 
 ### 🌿 Git & Repository State
 - **Active Branch**: `main`
-- **Synchronization Status**: Ahead of `glasstechfab/main` by 4 commits.
+- **Synchronization Status**: Up to date with `origin/main` (`westlinefuture` repository). Diverged from legacy `glasstechfab/main`.
+- **Latest Commit Hash**: `758b1d1` (and `cf0b04d` before it).
 - **Recent Commit Breakdown**:
-  1. `cf0b04d` — Sync full platform features and complete Westline Future rebrand (indigo theme, purge of regional tags).
-  2. `4b80ddb` — Full color purge: replaced gold/sand palette with Westline deep indigo (`#231F78`, `#0D0B2E`, `#4945BE`).
-  3. `d407caf` — Globalized content: neutralized local currency settings, mock contact data, and country selection vectors.
-  4. `3e411dd` — Core rebrand initialization: set up new asset paths, corrected layout variables, updated Firebase rule references.
+  1. `758b1d1` — **Client Portal & Financials Update**: Fixed partial payment tracking on invoices (added "Update Payment" button), enabled dynamic "Amount Paid" and "Balance Due" lines on PDFs, and fixed `<base href>` injections for absolute path logo rendering on print windows.
+  2. `cf0b04d` — Sync full platform features and complete Westline Future rebrand (indigo theme, purge of regional tags).
+  3. `4b80ddb` — Full color purge: replaced gold/sand palette with Westline deep indigo (`#231F78`, `#0D0B2E`, `#4945BE`).
+  4. `d407caf` — Globalized content: neutralized local currency settings, mock contact data, and country selection vectors.
 
 ---
 

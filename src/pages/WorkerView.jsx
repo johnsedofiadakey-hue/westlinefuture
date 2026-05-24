@@ -2,9 +2,9 @@ import React, { useState } from 'react';
 import { LogOut, Package, Truck, Wrench, CheckCircle, ChevronDown, ChevronUp, Camera, MessageSquare, AlertCircle } from 'lucide-react';
 import { CLIENT_PROJECT_STAGES } from '../data';
 
-const DELIVERY_STAGE = 7;
-const INSTALLATION_STAGE = 8;
-const COMPLETE_STAGE = 9;
+const DELIVERY_STAGE = 4;
+const INSTALLATION_STAGE = 5;
+const COMPLETE_STAGE = 6;
 
 function getStageName(stageId) {
   const s = CLIENT_PROJECT_STAGES.find(s => s.id === stageId);

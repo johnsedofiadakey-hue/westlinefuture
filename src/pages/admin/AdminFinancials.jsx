@@ -15,7 +15,7 @@ import InvoiceDocument from '../../components/InvoiceDocument';
 import { GLASS_CATALOG_DATA } from '../../data.jsx';
 
 /**
- * GLASSTECH FINANCIAL ENGINE v3.0 - DUAL CURRENCY & UNIT INVOICING
+ * WESTLINE FUTURE FINANCIAL ENGINE v3.0 - DUAL CURRENCY & UNIT INVOICING
  * The Absolute Gold Standard in Financial Management
  */
 

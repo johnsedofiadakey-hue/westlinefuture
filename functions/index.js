@@ -701,7 +701,7 @@ exports.onLogisticsUpdate = onDocumentUpdated("containers/{containerId}", async 
  */
 exports.validateEscrowRelease = onDocumentUpdated("projects/{projectId}", async (event) => {
   const project = event.data.after.data();
-  if (project.stageId === 10) {
+  if (project.stageId === 7) {
     logger.info(`Project ${event.params.projectId} reached handover/final-settlement stage`);
   }
 });
@@ -943,11 +943,11 @@ exports.receiveWhatsApp = onRequest(
         const clientName = userData.name || userData.displayName || normalizedPhone;
 
         // ── 2. Find their most recent active project ──────────────────────
-        // Active = stageId <= 10, ordered by most recent first
+        // Active = stageId <= 7, ordered by most recent first
         const projectsSnap = await db
           .collection("projects")
-          .where("clientId", "==", normalizedPhone)
-          .where("stageId", "<=", 10)
+          .where("clientIds", "array-contains", normalizedPhone)
+          .where("stageId", "<=", 7)
           .orderBy("stageId", "desc")
           .orderBy("createdAt", "desc")
           .limit(1)
@@ -1019,20 +1019,17 @@ exports.receiveWhatsApp = onRequest(
 // ---------------------------------------------------------------------------
 
 // Stages where the client is the responsible party
-const CLIENT_ACTION_STAGES = new Set([2, 3, 4, 5, 9, 10]);
+const CLIENT_ACTION_STAGES = new Set([2, 6, 7]);
 
-// Human-readable stage names — mirrors the canonical 10-stage project pipeline
+// Human-readable stage names — mirrors the canonical 7-stage project pipeline
 const STAGE_NAMES = {
   1: "Client Intake And Site Brief",
-  2: "Rendering Fee Payment",
-  3: "Rendering Review And Approval",
-  4: "Final Quote And Kickoff Approval",
-  5: "Project Deposit Payment",
-  6: "Procurement And Production",
-  7: "Shipping And Delivery",
-  8: "Installation",
-  9: "Inspection And Sign-Off",
-  10: "Handover And Final Settlement",
+  2: "Quote Approval And Deposit",
+  3: "Procurement And Production",
+  4: "Shipping And Delivery",
+  5: "Installation",
+  6: "Inspection And Sign-Off",
+  7: "Handover And Final Settlement",
 };
 
 exports.sendOverdueReminders = onSchedule(
@@ -1047,12 +1044,12 @@ exports.sendOverdueReminders = onSchedule(
 
     logger.info("sendOverdueReminders: starting scan");
 
-    // Fetch all active projects in the canonical 10-stage pipeline
+    // Fetch all active projects in the canonical 7-stage pipeline
     let projectsSnap;
     try {
       projectsSnap = await db
         .collection("projects")
-        .where("stageId", "<=", 10)
+        .where("stageId", "<=", 7)
         .get();
     } catch (err) {
       logger.error("sendOverdueReminders: failed to fetch projects", err);

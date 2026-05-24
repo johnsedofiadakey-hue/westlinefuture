@@ -262,11 +262,8 @@ const STAGE_ICONS = {
   3: <ScanSearch size={16} />,
   4: <FileText size={16} />,
   5: <CreditCard size={16} />,
-  6: <Factory size={16} />,
-  7: <Truck size={16} />,
-  8: <Wrench size={16} />,
-  9: <ScanSearch size={16} />,
-  10: <Star size={16} />,
+  6: <ScanSearch size={16} />,
+  7: <Star size={16} />,
 };
 
 // ─── Payment Schedule Configs ─────────────────────────────────────────────────
@@ -274,8 +271,8 @@ const SCHEDULE_CONFIGS = {
   standard: {
     label: 'Standard (50/50)',
     milestones: [
-      { key: 'deposit', label: '50% Project Deposit', pct: 0.50, cumPct: 0.50, stageId: 5 },
-      { key: 'final', label: '50% Final Settlement', pct: 0.50, cumPct: 1.00, stageId: 10 },
+      { key: 'deposit', label: '50% Project Deposit', pct: 0.50, cumPct: 0.50, stageId: 2 },
+      { key: 'final', label: '50% Final Settlement', pct: 0.50, cumPct: 1.00, stageId: 7 },
     ],
   },
   '70-30': {
@@ -449,112 +446,17 @@ function StageActionCard({ project, user, approveQuote, payInvoice, updateProjec
   const email = user?.proxyEmail || (user?.phone ? user.phone + '@clients.westlinefuture.com' : 'client@clients.westlinefuture.com');
   const budget = Number(String(project.projectTotal || project.budget || 0).replace(/[^0-9.]/g, '')) || 0;
   const halfBudget = budget * 0.5;
-  const renderingFee = Number(String(project.renderingFee || 0).replace(/[^0-9.]/g, '')) || 0;
 
   if (currentStage.id === 2) {
-    if (project.renderingFeePaid || project.renderingUnlocked) {
-      return (
-        <div style={{
-          padding: '24px 28px', borderRadius: 20,
-          background: 'linear-gradient(135deg, #F0FDF4, #DCFCE7)',
-          border: '1.5px solid #16A34A40', marginBottom: 4,
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 18 }}>
-            <div style={{ width: 48, height: 48, borderRadius: 14, background: '#16A34A20', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-              <CheckCircle2 size={24} color="#16A34A" />
-            </div>
-            <div>
-              <div style={{ fontSize: 13, fontWeight: 800, color: '#16A34A', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 4 }}>Rendering Unlocked</div>
-              <div style={{ fontSize: 14, color: '#4B7A62', lineHeight: 1.5 }}>
-                Your rendering fee has been verified. You can now review the CAD/3D package and approve the final design.
-              </div>
-            </div>
-          </div>
-        </div>
-      );
-    }
-    return (
-      <div style={{
-        padding: '24px 28px', borderRadius: 20,
-        background: 'linear-gradient(135deg, #EFF6FF, #DBEAFE)',
-        border: '1.5px solid #2563EB30', marginBottom: 4,
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-          <AlertCircle size={18} color="#2563EB" />
-          <span style={{ fontSize: 12, fontWeight: 800, color: '#2563EB', textTransform: 'uppercase', letterSpacing: '.06em' }}>Action Required</span>
-        </div>
-        <div style={{ fontSize: 20, fontWeight: 900, color: '#0D0B2E', marginBottom: 6 }}>Your quote is ready for review</div>
-        <div style={{ fontSize: 14, color: '#374151', lineHeight: 1.6, marginBottom: 20 }}>
-          Pay the separate rendering/design fee to unlock your CAD/3D drawing package. This is not part of the final project sum.
-        </div>
-        <PaymentButton
-          label={`Pay Rendering Fee - GHS ${Number(renderingFee).toLocaleString(undefined, { minimumFractionDigits: 2 })}`}
-          amountGHS={renderingFee}
-          email={email}
-          projectId={project.id}
-          invoiceId={project.renderingInvoiceId}
-          paymentType="rendering_fee"
-          disabled={!renderingFee}
-          onSuccess={async (ref) => {
-            await payInvoice(project.renderingInvoiceId || ref?.reference || ref?.trans || 'rendering_fee', project.id, 'Paystack');
-            await updateProjectStage(project.id, 3, 'Rendering fee paid and CAD/3D package unlocked', { adminOverride: true });
-          }}
-        />
-      </div>
-    );
-  }
-
-  if (currentStage.id === 3) {
-    const locked = !project.renderingFeePaid && !project.renderingUnlocked;
-    return (
-      <div style={{
-        padding: '24px 28px', borderRadius: 20,
-        background: locked ? '#F8F8FD' : 'linear-gradient(135deg, #F5F3FF, #EDE9FE)',
-        border: `1.5px solid ${locked ? '#E8E6F5' : '#7C3AED30'}`, marginBottom: 4,
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-          {locked ? <Lock size={18} color="#9B99C8" /> : <ScanSearch size={18} color="#7C3AED" />}
-          <span style={{ fontSize: 12, fontWeight: 800, color: locked ? '#9B99C8' : '#7C3AED', textTransform: 'uppercase', letterSpacing: '.06em' }}>
-            {locked ? 'Rendering Locked' : 'Rendering Review'}
-          </span>
-        </div>
-        <div style={{ fontSize: 20, fontWeight: 900, color: '#0D0B2E', marginBottom: 6 }}>
-          {locked ? 'Pay the rendering fee to view drawings' : 'Review and approve your CAD/3D rendering'}
-        </div>
-        <div style={{ fontSize: 14, color: '#374151', lineHeight: 1.6, marginBottom: 20 }}>
-          {locked
-            ? 'Your rendering package is protected until payment verification is complete.'
-            : 'Open the Documents tab to review the latest rendering package. Request changes through chat, or approve the final design below.'}
-        </div>
-        {!locked && (
-          <button
-            onClick={async () => {
-              if (acting) return;
-              setActing(true);
-              await approveRenderingPackage?.(project.id, project.renderingPackageId);
-              await updateProjectStage(project.id, 4, 'Rendering approved by client');
-              setActing(false);
-            }}
-            disabled={acting}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 10, padding: '14px 32px', borderRadius: 14, border: 'none', background: acting ? '#E8E6F5' : '#7C3AED', color: acting ? '#9B99C8' : '#fff', fontSize: 15, fontWeight: 800, cursor: acting ? 'default' : 'pointer', boxShadow: acting ? 'none' : '0 4px 16px rgba(124,58,237,.35)' }}
-          >
-            {acting ? <><Loader2 size={18} style={{ animation: 'spin 1s linear infinite' }} /> Approving...</> : <>Approve Rendering <ArrowRight size={18} /></>}
-          </button>
-        )}
-      </div>
-    );
-  }
-
-  if (currentStage.id === 4) {
-    if (project.quoteApproved) {
+    if (project.depositPaid) {
       return (
         <div style={{ padding: '24px 28px', borderRadius: 20, background: 'linear-gradient(135deg, #F0FDF4, #DCFCE7)', border: '1.5px solid #16A34A40', marginBottom: 4 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
             <CheckCircle2 size={24} color="#16A34A" />
             <div>
-              <div style={{ fontSize: 13, fontWeight: 800, color: '#16A34A', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 4 }}>Final Quote Approved</div>
+              <div style={{ fontSize: 13, fontWeight: 800, color: '#16A34A', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 4 }}>Quote Approved & Deposit Verified</div>
               <div style={{ fontSize: 14, color: '#4B7A62', lineHeight: 1.5 }}>
-                You approved quote version {project.approvedQuoteVersion || project.activeQuoteVersion || 'latest'}{project.quoteApprovedAt ? ` on ${fmtShort(project.quoteApprovedAt)}` : ''}. Deposit payment is next.
+                Your project deposit has been verified. Procurement and production can proceed.
               </div>
             </div>
           </div>
@@ -565,35 +467,12 @@ function StageActionCard({ project, user, approveQuote, payInvoice, updateProjec
       <div style={{ padding: '24px 28px', borderRadius: 20, background: 'linear-gradient(135deg, #EFF6FF, #DBEAFE)', border: '1.5px solid #2563EB30', marginBottom: 4 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
           <AlertCircle size={18} color="#2563EB" />
-          <span style={{ fontSize: 12, fontWeight: 800, color: '#2563EB', textTransform: 'uppercase', letterSpacing: '.06em' }}>Final Quote Approval</span>
+          <span style={{ fontSize: 12, fontWeight: 800, color: '#2563EB', textTransform: 'uppercase', letterSpacing: '.06em' }}>Quote Approval & Deposit</span>
         </div>
         <div style={{ fontSize: 20, fontWeight: 900, color: '#0D0B2E', marginBottom: 6 }}>Your final project quote is ready</div>
         <div style={{ fontSize: 14, color: '#374151', lineHeight: 1.6, marginBottom: 20 }}>
-          This quote is based on your approved rendering. If anything changes, your account manager will issue a revised version before kickoff.
+          Review the final quote with your account manager, then pay the project deposit so procurement can begin.
         </div>
-        <button
-          onClick={async () => {
-            if (acting) return;
-            setActing(true);
-            await approveQuote(project.id);
-            await updateProjectStage(project.id, 5, 'Final quote approved by client');
-            setActing(false);
-          }}
-          disabled={acting}
-          style={{ display: 'inline-flex', alignItems: 'center', gap: 10, padding: '14px 32px', borderRadius: 14, border: 'none', background: acting ? '#E8E6F5' : '#2563EB', color: acting ? '#9B99C8' : '#fff', fontSize: 15, fontWeight: 800, cursor: acting ? 'default' : 'pointer', boxShadow: acting ? 'none' : '0 4px 16px rgba(37,99,235,.35)' }}
-        >
-          {acting ? <><Loader2 size={18} style={{ animation: 'spin 1s linear infinite' }} /> Approving...</> : <>Approve Final Quote <ArrowRight size={18} /></>}
-        </button>
-      </div>
-    );
-  }
-
-  if (currentStage.id === 5) {
-    return (
-      <div style={{ padding: '24px 28px', borderRadius: 20, background: 'linear-gradient(135deg, #F0FDF4, #DCFCE7)', border: '1.5px solid #16A34A40', marginBottom: 4 }}>
-        <div style={{ fontSize: 13, fontWeight: 800, color: '#16A34A', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 8 }}>Project Deposit</div>
-        <div style={{ fontSize: 20, fontWeight: 900, color: '#0D0B2E', marginBottom: 6 }}>Pay deposit to kick off the main project</div>
-        <div style={{ fontSize: 14, color: '#374151', lineHeight: 1.6, marginBottom: 20 }}>This payment counts toward the approved project sum. It is separate from the rendering fee already paid.</div>
         <PaymentButton
           label={`Pay Deposit - GHS ${Number(halfBudget).toLocaleString(undefined, { minimumFractionDigits: 2 })}`}
           amountGHS={halfBudget}
@@ -602,15 +481,16 @@ function StageActionCard({ project, user, approveQuote, payInvoice, updateProjec
           invoiceId={project.depositInvoiceId}
           paymentType="deposit"
           onSuccess={async (ref) => {
+            await approveQuote?.(project.id);
             await payInvoice(project.depositInvoiceId || ref?.reference || ref?.trans || 'deposit', project.id, 'Paystack');
-            await updateProjectStage(project.id, 6, 'Deposit paid by client via Paystack');
+            await updateProjectStage(project.id, 3, 'Quote approved and deposit paid by client via Paystack');
           }}
         />
       </div>
     );
   }
 
-  if (currentStage.id === 9) {
+  if (currentStage.id === 6) {
     if (done) {
       return (
         <div style={{
@@ -631,7 +511,7 @@ function StageActionCard({ project, user, approveQuote, payInvoice, updateProjec
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
           <AlertCircle size={18} color="#7C3AED" />
-          <span style={{ fontSize: 12, fontWeight: 800, color: '#7C3AED', textTransform: 'uppercase', letterSpacing: '.06em' }}>Design Review</span>
+            <span style={{ fontSize: 12, fontWeight: 800, color: '#7C3AED', textTransform: 'uppercase', letterSpacing: '.06em' }}>Inspection Sign-Off</span>
         </div>
         <div style={{ fontSize: 20, fontWeight: 900, color: '#0D0B2E', marginBottom: 6 }}>Please review and sign off the inspection</div>
         <div style={{ fontSize: 14, color: '#374151', lineHeight: 1.6, marginBottom: 20 }}>
@@ -641,7 +521,7 @@ function StageActionCard({ project, user, approveQuote, payInvoice, updateProjec
           onClick={async () => {
             if (acting) return;
             setActing(true);
-            await updateProjectStage(project.id, 10, 'Inspection signed off by client');
+            await updateProjectStage(project.id, 7, 'Inspection signed off by client');
             setActing(false);
             setDone(true);
           }}
@@ -665,7 +545,7 @@ function StageActionCard({ project, user, approveQuote, payInvoice, updateProjec
     );
   }
 
-  if (currentStage.id === 10) {
+  if (currentStage.id === 7) {
     return (
       <div style={{
         padding: '24px 28px', borderRadius: 20,
@@ -693,7 +573,7 @@ function StageActionCard({ project, user, approveQuote, payInvoice, updateProjec
           paymentType="final_balance"
           onSuccess={async (ref) => {
             await payInvoice(ref?.reference || ref?.trans || 'final', project.id);
-            await updateProjectStage(project.id, 10, 'Final payment received via Paystack');
+            await updateProjectStage(project.id, 7, 'Final payment received via Paystack');
           }}
         />
       </div>
@@ -726,7 +606,7 @@ function InstallationStatusCard({ project }) {
   const [zoom, setZoom] = useState(null);
 
   useEffect(() => {
-    if (!db || project.stageId !== 8) return;
+    if (!db || project.stageId !== 5) return;
     const q = query(
       collection(db, 'projects', project.id, 'documents'),
       where('docType', '==', 'progress_photo'),
@@ -736,9 +616,9 @@ function InstallationStatusCard({ project }) {
     return onSnapshot(q, snap => setRecentPhotos(snap.docs.map(d => ({ id: d.id, ...d.data() }))), () => setRecentPhotos([]));
   }, [project.id, project.stageId]);
 
-  if (project.stageId !== 8) return null;
+  if (project.stageId !== 5) return null;
 
-  const installEntry = (project.stageHistory || []).find(h => h.stageId === 8);
+  const installEntry = (project.stageHistory || []).find(h => h.stageId === 5);
   const startDate = installEntry?.timestamp
     ? (() => {
         const d = installEntry.timestamp?.toDate ? installEntry.timestamp.toDate() : new Date(installEntry.timestamp);
@@ -2594,8 +2474,8 @@ function ProjectHeaderCard({ project, isMobile, ac, brand }) {
 
   // Use paidAmount from project doc if set (logged by admin), else fall back to stage-based estimate
   const paid = budget > 0 ? Math.min(budget, Number(project.paidAmount) || (() => {
-    if (project.stageId >= 10) return budget;
-    if (project.stageId >= 6) return budget * 0.50;
+    if (project.stageId >= 7) return budget;
+    if (project.stageId >= 3) return budget * 0.50;
     return 0;
   })()) : 0;
   const paidPct = budget > 0 ? Math.min(100, (paid / budget) * 100) : 0;
@@ -2778,28 +2658,16 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
 
   // Subscribe to projects for this client.
   // We skip orderBy to avoid needing a composite index (sort in JS instead).
-  // We try multiple possible clientId formats via 'in' to handle any phone format mismatch.
+  // Projects are assigned by clientIds. Portfolio-level inheritance should be materialized onto each project.
   useEffect(() => {
     if (!db || !user) { setLoadingProjects(false); return; }
 
-    // Build a de-duped list of every possible ID this client might be stored under
-    const rawPhone = user.phone || '';
-    const normalised = rawPhone.replace(/\D/g, '');
-    const candidates = [...new Set([
-      user.id,
-      user.uid,
-      user.phone,
-      normalised,
-      normalised.startsWith('0') && normalised.length === 10 ? '233' + normalised.slice(1) : null,
-      normalised.startsWith('233') ? normalised : null,
-      normalised.length === 9 ? '233' + normalised : null,
-    ].filter(Boolean))].slice(0, 10); // Firestore 'in' supports max 10 values
-
-    if (candidates.length === 0) { setLoadingProjects(false); return; }
+    const clientAccessId = user.id || user.uid;
+    if (!clientAccessId) { setLoadingProjects(false); return; }
 
     const q = query(
       collection(db, 'projects'),
-      where('clientId', 'in', candidates),
+      where('clientIds', 'array-contains', clientAccessId),
       limit(50)
     );
     const unsub = onSnapshot(q,
@@ -2833,7 +2701,7 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
   // Auto-show review modal for completed projects
   const showReviewModal =
     selected &&
-    selected.stageId === 10 &&
+    selected.stageId === 7 &&
     !reviewDismissed &&
     !reviewSubmitted;
 

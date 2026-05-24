@@ -7,15 +7,14 @@ import {
 } from 'lucide-react';
 import { CLIENT_PROJECT_STAGES, PROJECT_TYPES } from '../../data';
 
-// ─── Column definitions — 10-stage production pipeline ───────────────────────
+// ─── Column definitions — canonical 7-stage production pipeline ──────────────
 const KANBAN_COLS = [
   { id: 'intake',       label: 'Intake',       stages: [1], color: '#231F78', bg: 'rgba(35,31,120,0.07)' },
-  { id: 'rendering',    label: 'Rendering',    stages: [2, 3], color: '#7C3AED', bg: 'rgba(124,58,237,0.07)' },
-  { id: 'quote',        label: 'Quote',        stages: [4, 5], color: '#0891B2', bg: 'rgba(8,145,178,0.07)' },
-  { id: 'production',   label: 'Production',   stages: [6], color: '#374151', bg: 'rgba(55,65,81,0.06)' },
-  { id: 'delivery',     label: 'Delivery',     stages: [7], color: '#607D8B', bg: 'rgba(96,125,139,0.07)' },
-  { id: 'installation', label: 'Installation', stages: [8], color: '#16A34A', bg: 'rgba(22,163,74,0.07)' },
-  { id: 'closeout',     label: 'Closeout',     stages: [9, 10], color: '#4945BE', bg: 'rgba(73,69,190,0.08)' },
+  { id: 'quote',        label: 'Quote',        stages: [2], color: '#2563EB', bg: 'rgba(37,99,235,0.07)' },
+  { id: 'production',   label: 'Production',   stages: [3], color: '#374151', bg: 'rgba(55,65,81,0.06)' },
+  { id: 'delivery',     label: 'Delivery',     stages: [4], color: '#607D8B', bg: 'rgba(96,125,139,0.07)' },
+  { id: 'installation', label: 'Installation', stages: [5], color: '#16A34A', bg: 'rgba(22,163,74,0.07)' },
+  { id: 'closeout',     label: 'Closeout',     stages: [6, 7], color: '#4945BE', bg: 'rgba(73,69,190,0.08)' },
 ];
 
 const STAGE_MAP = {};
@@ -71,7 +70,7 @@ function moneyLabel(value) {
 }
 
 function isProjectCompleted(project) {
-  return (project.stageId || 1) === 10 || project.status === 'Completed' || project.status === 'completed';
+  return (project.stageId || 1) === 7 || project.status === 'Completed' || project.status === 'completed';
 }
 
 function isWaitingOnPayment(project) {
@@ -94,7 +93,7 @@ function isWaitingOnClient(project) {
 
 function isFieldProject(project) {
   const stageId = project.stageId || 1;
-  return [7, 8, 9].includes(stageId) || (project.assignedWorkers || []).length > 0;
+  return [5, 6].includes(stageId) || (project.assignedWorkers || []).length > 0;
 }
 
 function isBlocked(project) {

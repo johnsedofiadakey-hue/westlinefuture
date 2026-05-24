@@ -1,54 +1,39 @@
 import React from 'react';
-import { DollarSign, Eye, MessageSquare, CheckCircle, Users, Factory, Truck } from 'lucide-react';
+import { DollarSign, MessageSquare, CheckCircle, Users, Factory, Truck } from 'lucide-react';
 
 export const PROJECT_STAGES = [
   {
     id: 1, name: 'Client Intake & Site Brief', statusLabel: 'Brief captured', days: 3, color: '#231F78',
     icon: 'clipboard-list', description: 'Capturing client details, measurements, requirements, budget range, and site notes.',
-    tasks: ['Confirm client profile', 'Capture site measurements', 'Document project requirements', 'Prepare rendering fee invoice']
+    tasks: ['Confirm client profile', 'Capture site measurements', 'Document project requirements', 'Prepare quote and deposit invoice']
   },
   {
-    id: 2, name: 'Rendering Fee Payment', statusLabel: 'Rendering locked', days: 2, color: '#2563EB', requiresPayment: true, paymentType: 'rendering_fee',
-    icon: 'lock', description: 'The CAD/3D rendering package remains locked until the separate rendering fee is paid and verified.',
-    tasks: ['Issue rendering fee invoice', 'Collect Paystack or Hubtel payment', 'Verify transaction', 'Unlock rendering package']
+    id: 2, name: 'Quote Approval & Deposit', statusLabel: 'Quote and deposit', days: 5, color: '#2563EB', requiresPayment: true, requiresApproval: true, paymentPct: 50, paymentType: 'deposit',
+    icon: 'file-check', description: 'Final quote approval and verified deposit before procurement is released.',
+    tasks: ['Prepare final quote', 'Capture client approval', 'Issue deposit invoice', 'Verify payment']
   },
   {
-    id: 3, name: 'Rendering Review & Approval', statusLabel: 'Design review', days: 5, color: '#7C3AED', requiresApproval: true,
-    icon: 'scan-search', description: 'Client reviews the unlocked CAD/3D rendering, requests revisions, and approves the final version.',
-    tasks: ['Upload rendering version', 'Track client comments', 'Manage included revisions', 'Record final rendering approval']
-  },
-  {
-    id: 4, name: 'Final Quote & Kickoff Approval', statusLabel: 'Quote approval', days: 3, color: '#0891B2', requiresApproval: true,
-    icon: 'file-check', description: 'The full project quote is prepared from the approved rendering and approved as a versioned quote.',
-    tasks: ['Prepare quote v1', 'Revise quote if scope changes', 'Capture approved quote version', 'Generate deposit invoice']
-  },
-  {
-    id: 5, name: 'Project Deposit Payment', statusLabel: 'Deposit due', days: 2, color: '#16A34A', requiresPayment: true, paymentPct: 50, paymentType: 'deposit',
-    icon: 'dollar-sign', description: 'The project deposit is paid against the approved quote. This starts the commercial project.',
-    tasks: ['Confirm approved quote', 'Issue deposit invoice', 'Verify payment', 'Release procurement']
-  },
-  {
-    id: 6, name: 'Procurement & Production', statusLabel: 'Sourcing and fabrication', days: 21, color: '#374151',
+    id: 3, name: 'Procurement & Production', statusLabel: 'Sourcing and fabrication', days: 21, color: '#374151',
     icon: 'factory', description: 'Materials are sourced, ordered, fabricated, manufactured, or prepared.',
     tasks: ['Raise purchase orders', 'Track supplier status', 'Monitor production', 'Update procurement timeline']
   },
   {
-    id: 7, name: 'Shipping & Delivery', statusLabel: 'In transit to site', days: 30, color: '#607D8B',
+    id: 4, name: 'Shipping & Delivery', statusLabel: 'In transit to site', days: 30, color: '#607D8B',
     icon: 'truck', description: 'Freight, customs, warehousing, local logistics, and delivery to site.',
     tasks: ['Dispatch from factory', 'Confirm freight details', 'Process customs', 'Deliver to site']
   },
   {
-    id: 8, name: 'Installation', statusLabel: 'Active installation', days: 5, color: '#16A34A',
+    id: 5, name: 'Installation', statusLabel: 'Active installation', days: 5, color: '#16A34A',
     icon: 'wrench', description: 'Field crew executes the installation with checklists, notes, and photo evidence.',
     tasks: ['Prepare site', 'Complete installation checklist', 'Upload site photos', 'Request inspection']
   },
   {
-    id: 9, name: 'Inspection & Sign-Off', statusLabel: 'Quality review', days: 2, color: '#A855F7', requiresApproval: true,
+    id: 6, name: 'Inspection & Sign-Off', statusLabel: 'Quality review', days: 2, color: '#A855F7', requiresApproval: true,
     icon: 'scan-search', description: 'Quality review, snag list, corrections, and formal client/admin sign-off.',
     tasks: ['Complete inspection checklist', 'Resolve snag list', 'Capture client sign-off', 'Prepare handover']
   },
   {
-    id: 10, name: 'Handover & Final Settlement', statusLabel: 'Final settlement', days: 1, color: '#4945BE', requiresPayment: true, paymentPct: 50, paymentType: 'final_balance',
+    id: 7, name: 'Handover & Final Settlement', statusLabel: 'Final settlement', days: 1, color: '#4945BE', requiresPayment: true, paymentPct: 50, paymentType: 'final_balance',
     icon: 'star', description: 'Final payment, warranty, documents, completion report, and closeout.',
     tasks: ['Confirm final payment', 'Issue handover documents', 'Close project', 'Request client feedback']
   }
@@ -56,21 +41,19 @@ export const PROJECT_STAGES = [
 
 export const KANBAN_COLUMNS = [
   { id: 'intake',       label: 'Intake',       stages: [1], color: '#231F78', bg: 'rgba(35,31,120,0.07)' },
-  { id: 'rendering',    label: 'Rendering',    stages: [2,3], color: '#7C3AED', bg: 'rgba(124,58,237,0.07)' },
-  { id: 'quote',        label: 'Quote',        stages: [4,5], color: '#0891B2', bg: 'rgba(8,145,178,0.07)' },
-  { id: 'production',   label: 'Production',   stages: [6], color: '#374151', bg: 'rgba(55,65,81,0.06)' },
-  { id: 'delivery',     label: 'Delivery',     stages: [7], color: '#607D8B', bg: 'rgba(96,125,139,0.07)' },
-  { id: 'installation', label: 'Installation', stages: [8], color: '#16A34A', bg: 'rgba(22,163,74,0.07)' },
-  { id: 'closeout',     label: 'Closeout',     stages: [9,10], color: '#4945BE', bg: 'rgba(73,69,190,0.08)' },
+  { id: 'quote',        label: 'Quote',        stages: [2], color: '#2563EB', bg: 'rgba(37,99,235,0.07)' },
+  { id: 'production',   label: 'Production',   stages: [3], color: '#374151', bg: 'rgba(55,65,81,0.06)' },
+  { id: 'delivery',     label: 'Delivery',     stages: [4], color: '#607D8B', bg: 'rgba(96,125,139,0.07)' },
+  { id: 'installation', label: 'Installation', stages: [5], color: '#16A34A', bg: 'rgba(22,163,74,0.07)' },
+  { id: 'closeout',     label: 'Closeout',     stages: [6,7], color: '#4945BE', bg: 'rgba(73,69,190,0.08)' },
 ];
 
 export const LIFE_RIBBON = [
   { id: 'onboard', label: 'Start', icon: <Users size={24} />, stages: [1], color: '#231F78', text: 'We are setting up your project and checking all the details.' },
-  { id: 'rendering', label: 'Render', icon: <Eye size={24} />, stages: [2,3], color: '#7C3AED', text: 'Your rendering unlocks after the separate design fee is verified.' },
-  { id: 'quote', label: 'Approve', icon: <DollarSign size={24} />, stages: [4,5], color: '#0891B2', text: 'The approved rendering becomes your final project quote and deposit gate.' },
-  { id: 'factory', label: 'Build', icon: <Factory size={24} />, stages: [6], color: '#374151', text: 'Your items are being sourced and prepared for production.' },
-  { id: 'shipping', label: 'Move', icon: <Truck size={24} />, stages: [7], color: '#607D8B', text: 'Your order is packed and moving toward your location.' },
-  { id: 'delivered', label: 'Finish', icon: <CheckCircle size={24} />, stages: [8,9,10], color: '#16A34A', text: 'Everything is installed, inspected, settled, and handed over.' }
+  { id: 'quote', label: 'Approve', icon: <DollarSign size={24} />, stages: [2], color: '#2563EB', text: 'Your final quote and deposit are handled before procurement starts.' },
+  { id: 'factory', label: 'Build', icon: <Factory size={24} />, stages: [3], color: '#374151', text: 'Your items are being sourced and prepared for production.' },
+  { id: 'shipping', label: 'Move', icon: <Truck size={24} />, stages: [4], color: '#607D8B', text: 'Your order is packed and moving toward your location.' },
+  { id: 'delivered', label: 'Finish', icon: <CheckCircle size={24} />, stages: [5,6,7], color: '#16A34A', text: 'Everything is installed, inspected, settled, and handed over.' }
 ];
 
 export const PROCUREMENT_STAGES = [
@@ -171,72 +154,52 @@ export const NOTIFS_DATA = [
   { id: 2, title: 'Payment Verified', body: 'Airport Hills Kitchen deposit confirmed.', time: '5h ago', type: 'payment' }
 ];
 
-export const CLIENT_NAMES = ['LuxeSpace Ghana', 'AFCFTA Secretariat', 'Airport Hills Dev'];
+export const CLIENT_NAMES = ['Westline Future Client', 'AFCFTA Secretariat', 'Airport Hills Dev'];
 
-// ─── 10-Stage Client Project Pipeline ────────────────────────────────────────
+// ─── Canonical 7-Stage Client Project Pipeline ───────────────────────────────
 export const CLIENT_PROJECT_STAGES = [
   {
-    id: 1, name: 'Client Intake & Site Brief', short: 'Intake', emoji: '🔍', color: '#231F78', pct: 8,
+    id: 1, name: 'Client Intake & Site Brief', short: 'Intake', emoji: '🔍', color: '#231F78', pct: 14,
     whoActs: 'admin',
     clientMsg: 'Our team is reviewing your requirements, site notes, and initial brief.',
-    adminPrompt: 'Confirm client details, measurements, site notes, and prepare the rendering fee invoice.',
+    adminPrompt: 'Confirm client details, measurements, site notes, scope, and quote requirements.',
   },
   {
-    id: 2, name: 'Rendering Fee Payment', short: 'Render Fee', emoji: '🔒', color: '#2563EB', pct: 16,
+    id: 2, name: 'Quote Approval & Deposit', short: 'Quote', emoji: '📄', color: '#2563EB', pct: 28,
     whoActs: 'client',
-    clientMsg: 'Please pay the separate rendering fee to unlock your CAD/3D drawing package.',
-    adminPrompt: 'Issue the separate rendering/design fee invoice. Rendering remains locked until payment is verified.',
-    requiresPayment: true, paymentType: 'rendering_fee',
-  },
-  {
-    id: 3, name: 'Rendering Review & Approval', short: 'Render OK', emoji: '🧩', color: '#7C3AED', pct: 25,
-    whoActs: 'client',
-    clientMsg: 'Your rendering is unlocked. Review it, request changes if needed, and approve the final version.',
-    adminPrompt: 'Manage rendering versions, comments, included revisions, and final client approval.',
-    needsClientApproval: true,
-  },
-  {
-    id: 4, name: 'Final Quote & Kickoff Approval', short: 'Quote OK', emoji: '📄', color: '#0891B2', pct: 34,
-    whoActs: 'client',
-    clientMsg: 'Review and approve the final quote version created from your approved rendering.',
-    adminPrompt: 'Create a versioned final quote and capture approval before deposit is requested.',
-    needsClientApproval: true,
-  },
-  {
-    id: 5, name: 'Project Deposit Payment', short: 'Deposit', emoji: '💳', color: '#16A34A', pct: 42,
-    whoActs: 'client',
-    clientMsg: 'Please pay the project deposit based on the approved quote so procurement can begin.',
-    adminPrompt: 'Verify quote approval, issue deposit invoice, and confirm payment before procurement.',
+    clientMsg: 'Please review the final quote and pay the project deposit so procurement can begin.',
+    adminPrompt: 'Capture quote approval, issue the deposit invoice, and verify payment before procurement.',
     requiresPayment: true, paymentPct: 50, paymentType: 'deposit',
+    needsClientApproval: true,
   },
   {
-    id: 6, name: 'Procurement & Production', short: 'Produce', emoji: '🏭', color: '#374151', pct: 56,
+    id: 3, name: 'Procurement & Production', short: 'Produce', emoji: '🏭', color: '#374151', pct: 42,
     whoActs: 'admin',
     clientMsg: 'Your materials and components are being sourced, ordered, fabricated, or prepared.',
     adminPrompt: 'Track purchase orders, supplier status, production, and timeline changes.',
   },
   {
-    id: 7, name: 'Shipping & Delivery', short: 'Delivery', emoji: '🚛', color: '#607D8B', pct: 68,
+    id: 4, name: 'Shipping & Delivery', short: 'Delivery', emoji: '🚛', color: '#607D8B', pct: 56,
     whoActs: 'admin',
     clientMsg: 'Your order is moving through shipping, customs, warehouse, and delivery.',
     adminPrompt: 'Add shipping details, manage customs clearance, and coordinate site delivery.',
   },
   {
-    id: 8, name: 'Installation', short: 'Install', emoji: '🔧', color: '#16A34A', pct: 80,
+    id: 5, name: 'Installation', short: 'Install', emoji: '🔧', color: '#16A34A', pct: 70,
     whoActs: 'worker',
     clientMsg: 'Our technical crew is on-site fitting and finishing all components.',
     adminPrompt: 'Assign field crew, track site progress, checklists, and photo evidence.',
     fullServiceOnly: true,
   },
   {
-    id: 9, name: 'Inspection & Sign-Off', short: 'Sign-off', emoji: '🔎', color: '#A855F7', pct: 92,
+    id: 6, name: 'Inspection & Sign-Off', short: 'Sign-off', emoji: '🔎', color: '#A855F7', pct: 86,
     whoActs: 'both',
     clientMsg: 'Quality check is in progress. Please sign off once you are satisfied with the work.',
     adminPrompt: 'Run QC inspection checklist, resolve snags, and obtain client sign-off before handover.',
     needsClientApproval: true,
   },
   {
-    id: 10, name: 'Handover & Final Settlement', short: 'Handover', emoji: '🌟', color: '#4945BE', pct: 100,
+    id: 7, name: 'Handover & Final Settlement', short: 'Handover', emoji: '🌟', color: '#4945BE', pct: 100,
     whoActs: 'client',
     clientMsg: 'Your project is complete. Please make the final balance payment to receive handover documents.',
     adminPrompt: 'Confirm final payment, issue handover certificate, and mark project complete.',
@@ -244,19 +207,22 @@ export const CLIENT_PROJECT_STAGES = [
   },
 ];
 
-// Maps legacy 7/12-stage IDs to the current 10-stage pipeline.
-// Applied at Firestore read time so old project documents stay compatible.
-const LEGACY_STAGE_MAP = { 1:1, 2:4, 3:6, 4:7, 5:8, 6:9, 7:10, 8:7, 9:7, 10:8, 11:9, 12:10 };
-export function normalizeStageId(id) {
+// Maps legacy expanded-stage IDs into the canonical 7-stage production pipeline.
+// Existing documents with older stageModel values are explicitly remapped.
+const LEGACY_10_STAGE_MAP = { 1:1, 2:2, 3:2, 4:2, 5:2, 6:3, 7:4, 8:5, 9:6, 10:7 };
+const LEGACY_12_STAGE_MAP = { 1:1, 2:1, 3:2, 4:2, 5:2, 6:3, 7:3, 8:4, 9:4, 10:5, 11:6, 12:7 };
+export function normalizeStageId(id, stageModel = '') {
   const n = typeof id === 'number' ? id : parseInt(id, 10);
   if (!n || n < 1) return 1;
-  if (n <= 10) return n;
-  return LEGACY_STAGE_MAP[n] ?? Math.min(10, Math.ceil((n / 12) * 10));
+  if (String(stageModel).includes(['10', 'stage'].join('-'))) return LEGACY_10_STAGE_MAP[n] ?? Math.min(7, Math.ceil((n / 10) * 7));
+  if (String(stageModel).includes(['12', 'stage'].join('-'))) return LEGACY_12_STAGE_MAP[n] ?? Math.min(7, Math.ceil((n / 12) * 7));
+  if (n <= 7) return n;
+  return LEGACY_12_STAGE_MAP[n] ?? LEGACY_10_STAGE_MAP[n] ?? Math.min(7, Math.ceil((n / 12) * 7));
 }
 
 export const PROJECT_TYPES = {
-  'full-service': { label: 'Full Service',  desc: 'We design, quote, source, ship, deliver, install, and hand over.', stages: [1,2,3,4,5,6,7,8,9,10], color: '#231F78' },
-  'buy-only':     { label: 'Buy & Deliver', desc: 'We design, quote, source, ship, clear, and deliver. No installation.', stages: [1,2,3,4,5,6,7,9,10], color: '#2563EB' },
+  'full-service': { label: 'Full Service',  desc: 'We quote, source, ship, deliver, install, inspect, and hand over.', stages: [1,2,3,4,5,6,7], color: '#231F78' },
+  'buy-only':     { label: 'Buy & Deliver', desc: 'We quote, source, ship, clear, deliver, inspect, and hand over. No installation.', stages: [1,2,3,4,6,7], color: '#2563EB' },
 };
 export const AWARDS = [
   { id: 1, name: 'Excellence in Structural Glass', year: '2023', body: 'Ghana Property Awards' }

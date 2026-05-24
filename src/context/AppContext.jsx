@@ -116,7 +116,7 @@ export const AppProvider = ({ children }) => {
     if (userProfile && JSON.stringify(userProfile) !== JSON.stringify(user)) {
       setUser(userProfile);
     } else if (!currentUser && user !== null) {
-      const savedSession = localStorage.getItem('westlinefuture_session') || localStorage.getItem('glasstech_session');
+      const savedSession = localStorage.getItem('westlinefuture_session');
       if (savedSession) {
         try {
           const sessionData = JSON.parse(savedSession);
@@ -169,9 +169,9 @@ export const AppProvider = ({ children }) => {
     const unsubProject = onSnapshot(projectQuery, (snap) => {
       setClients(snap.docs.map(d => {
         const data = d.data();
-        // Normalize legacy stage IDs → current 10-stage IDs at read time
+        // Normalize legacy 10/12-stage IDs into the canonical 7-stage model at read time.
         const rawStageId = data.stageId ?? data.stage ?? 1;
-        return { id: d.id, ...data, stageId: normalizeStageId(rawStageId), name: data.title || data.project };
+        return { id: d.id, ...data, stageId: normalizeStageId(rawStageId, data.stageModel), stageModel: 'westline-7-stage-v1', name: data.title || data.project };
       }));
     }, (err) => devWarn("Project Sync Error:", err));
 
@@ -355,7 +355,14 @@ export const AppProvider = ({ children }) => {
         }
       });
       setContent(newContent);
-      if (newContent.brand) setBrand(prev => ({ ...prev, ...newContent.brand }));
+      if (newContent.brand) {
+        const cmsBrandName = String(newContent.brand.name || '');
+        const staleBrandPattern = new RegExp(`${['glass', 'tech'].join('')}|${['luxe', 'space'].join('')}`, 'i');
+        const safeBrand = staleBrandPattern.test(cmsBrandName)
+          ? BRAND0
+          : { ...BRAND0, ...newContent.brand, name: 'Westline Future' };
+        setBrand(prev => ({ ...prev, ...safeBrand }));
+      }
     }, (err) => {
       devWarn("CMS Sync Permission Issue:", err);
       setContent(INITIAL_CONTENT);

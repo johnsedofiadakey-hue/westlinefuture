@@ -38,8 +38,8 @@ const SCHEDULE_CONFIGS = {
     label: 'Standard',
     sub: '50% deposit → 50% final',
     milestones: [
-      { key: 'deposit', label: '50% Project Deposit', pct: 0.50, cumPct: 0.50, stageId: 5 },
-      { key: 'final', label: '50% Final Settlement', pct: 0.50, cumPct: 1.00, stageId: 10 },
+      { key: 'deposit', label: '50% Project Deposit', pct: 0.50, cumPct: 0.50, stageId: 2 },
+      { key: 'final', label: '50% Final Settlement', pct: 0.50, cumPct: 1.00, stageId: 7 },
     ],
   },
   '70-30': {

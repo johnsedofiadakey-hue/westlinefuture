@@ -140,7 +140,7 @@ export default function AdminDashboard({ clients, invoices, proposals, brand, ge
                <div className="lxf eyebrow" style={{ fontSize: 10, letterSpacing: '.1em', color: 'rgba(255,255,255,0.5)', fontWeight: 800 }}>Awaiting Release</div>
             </div>
             <div className="lxfh" style={{ fontSize: 32, letterSpacing: '-0.03em' }}>
-               GH₵{(( (clients || []).filter(c => c.stage >= 11).reduce((acc, c) => acc + (parseFloat(String(c.amount || 0).replace(/[₵,GH]/g, '')) || 0), 0) ) / 1000).toFixed(1)}k
+               GH₵{(( (clients || []).filter(c => (c.stageId || c.stage || 0) >= 7).reduce((acc, c) => acc + (parseFloat(String(c.amount || c.budget || 0).replace(/[₵,GH]/g, '')) || 0), 0) ) / 1000).toFixed(1)}k
             </div>
             <div style={{ fontSize: 11, color: '#EF4444', fontWeight: 700 }}>Installation Escrow</div>
          </div>
@@ -231,7 +231,7 @@ export default function AdminDashboard({ clients, invoices, proposals, brand, ge
           return Math.floor((Date.now() - d.getTime()) / 86400000);
         };
         const stuckProjects = clients.filter(project => {
-          if (!project.stageId || project.stageId === 10) return false;
+          if (!project.stageId || project.stageId === 7) return false;
           const history = project.stageHistory || [];
           const entry = [...history].reverse().find(h => h.stageId === project.stageId);
           const ts = entry?.timestamp;

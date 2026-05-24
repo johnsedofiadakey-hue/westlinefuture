@@ -37,7 +37,7 @@ export const AIEngine = {
   useFallbackTemplate(project) {
     const date = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
     return `
-# PROJECT PROPOSAL: ${project.title?.toUpperCase() || 'GLASSTECH PRECISION SYSTEM'}
+# PROJECT PROPOSAL: ${project.title?.toUpperCase() || 'WESTLINE FUTURE PRECISION SYSTEM'}
 **Date:** ${date}
 **Reference ID:** LXF-${Math.floor(1000 + Math.random() * 9000)}
 **Status:** Draft

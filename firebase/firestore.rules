@@ -86,6 +86,19 @@ service cloud.firestore {
       return isAdmin() || isAssignedStaff(data);
     }
 
+    function canWorkerUpdateProject(data) {
+      return isAssignedWorker(data) &&
+        request.resource.data.diff(resource.data).changedKeys().hasOnly([
+          "stageId",
+          "stageModel",
+          "stageHistory",
+          "progress",
+          "status",
+          "nextAction",
+          "updatedAt"
+        ]);
+    }
+
     function canReadClientRecord(data) {
       return isAdminOrStaff() || isAssignedClient(data) || (isAuthenticated() && data.clientEmail == authEmail());
     }
@@ -151,7 +164,8 @@ service cloud.firestore {
     match /projects/{projectId} {
       allow get, list: if canReadProject(resource.data);
       allow create: if isAdminOrStaff();
-      allow update, delete: if canWriteProject(resource.data);
+      allow update: if canWriteProject(resource.data) || canWorkerUpdateProject(resource.data);
+      allow delete: if isAdmin();
 
       match /documents/{docId} {
         allow get, list: if canReadProjectDocument(get(/databases/$(database)/documents/projects/$(projectId)).data, resource.data);
@@ -208,7 +222,9 @@ service cloud.firestore {
     match /emails/{emailId} {
       allow read: if isAdminOrStaff() || (isAuthenticated() && authEmail() == resource.data.to);
       allow write: if isAdminOrStaff();
-      allow create: if isAuthenticated(); 
+      allow create: if request.resource.data.keys().hasAll(["id", "from", "subject", "body", "type", "status", "date"]) &&
+        request.resource.data.status == "Pending" &&
+        request.resource.data.type in ["General Inquiry", "Marketplace Order", "Contact Inquiry"];
     }
 
     match /work_orders/{id} { allow read: if canReadClientRecord(resource.data); allow write: if isAdminOrStaff(); }

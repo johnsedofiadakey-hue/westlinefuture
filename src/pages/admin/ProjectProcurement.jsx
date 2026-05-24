@@ -167,7 +167,7 @@ export default function ProjectProcurement({ clients = [], procurements = [], br
               <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '2px solid #0D0B2E', paddingBottom: 20, marginBottom: 40 }}>
                  <div>
                     <h1 className="lxfh" style={{ fontSize: 32 }}>PURCHASE ORDER</h1>
-                    <div style={{ fontSize: 12, color: '#9B99C8' }}>GLASSTECH FABRICATIONS LTD.</div>
+                    <div style={{ fontSize: 12, color: '#9B99C8' }}>WESTLINE FUTURE</div>
                  </div>
                  <div style={{ textAlign: 'right' }}>
                     <div style={{ fontWeight: 800 }}>PO-{Math.floor(Math.random() * 100000)}</div>

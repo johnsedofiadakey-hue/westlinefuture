@@ -491,7 +491,7 @@ export default function App() {
   };
 
   const checkManualSession = async () => {
-    const savedSession = localStorage.getItem('westlinefuture_session') || localStorage.getItem('glasstech_session');
+    const savedSession = localStorage.getItem('westlinefuture_session');
     if (savedSession) {
       try {
         const sessionData = JSON.parse(savedSession);
@@ -750,11 +750,10 @@ export default function App() {
             }
          }
          
-         // AUTOMATED MILESTONE INVOICING (10-stage pipeline)
+         // AUTOMATED MILESTONE INVOICING (canonical 7-stage pipeline)
          const invoiceTriggers = {
-           2: { title: 'Rendering / CAD 3D Access Fee', percent: 0, type: 'rendering_fee' },
-           5: { title: 'Project Deposit Payment', percent: 50, type: 'deposit' },
-           10: { title: 'Final Handover & Quality Settlement', percent: 50, type: 'final_balance' }
+           2: { title: 'Project Deposit Payment', percent: 50, type: 'deposit' },
+           7: { title: 'Final Handover & Quality Settlement', percent: 50, type: 'final_balance' }
          };
 
          if (invoiceTriggers[stageId] && project) {
@@ -784,14 +783,14 @@ export default function App() {
             }
          }
 
-         // FEEDBACK LOOP: If stage is 10 (Handover), request feedback
-         if (stageId === 10 && project) {
+         // FEEDBACK LOOP: If stage is 7 (Handover), request feedback
+         if (stageId === 7 && project) {
            createNotification(project.clientId, "Project Complete! We'd love to hear your feedback on your Westline Future experience.", "success", "/portal?action=feedback");
          }
       }
       
       const stageObjForPct = CLIENT_PROJECT_STAGES.find(s => s.id === stageId);
-      await updateDoc(doc(db, 'projects', projectId), { stageId, progress: stageObjForPct?.pct ?? Math.round((stageId / 10) * 100), nextAction: computeNextProjectAction(project, stageId) });
+      await updateDoc(doc(db, 'projects', projectId), { stageId, stageModel: 'westline-7-stage-v1', progress: stageObjForPct?.pct ?? Math.round((stageId / 7) * 100), nextAction: computeNextProjectAction(project, stageId) });
       logAction(projectId, 'Stage', `Moved to Stage ${stageId}`);
     } catch (e) { devErr(e); }
   };
@@ -888,17 +887,13 @@ export default function App() {
 
   const computeNextProjectAction = (project, targetStageId = project?.stageId || 1) => {
     if (!project) return 'Review project setup';
-    if (targetStageId <= 1) return 'Create rendering fee invoice';
-    if (targetStageId === 2) return project.renderingFeePaid ? 'Unlock rendering package' : 'Awaiting rendering fee payment';
-    if (targetStageId === 3) {
-      if (!project.renderingUnlocked) return 'Rendering locked until payment is verified';
-      return project.renderingApproved ? 'Prepare final project quote' : 'Awaiting rendering review and approval';
-    }
-    if (targetStageId === 4) return project.quoteApproved ? 'Create project deposit invoice' : 'Awaiting final quote approval';
-    if (targetStageId === 5) return project.depositPaid ? 'Begin procurement and production' : 'Awaiting project deposit payment';
-    if (targetStageId === 8) return 'Field team installation updates required';
-    if (targetStageId === 9) return 'Awaiting inspection sign-off';
-    if (targetStageId === 10) return project.finalPaymentPaid ? 'Issue handover documents' : 'Awaiting final settlement';
+    if (targetStageId <= 1) return 'Prepare final quote and deposit invoice';
+    if (targetStageId === 2) return project.depositPaid ? 'Release procurement and production' : 'Awaiting quote approval and project deposit';
+    if (targetStageId === 3) return 'Track procurement and production status';
+    if (targetStageId === 4) return 'Track shipping, clearance, and site delivery';
+    if (targetStageId === 5) return 'Field team installation updates required';
+    if (targetStageId === 6) return 'Awaiting inspection sign-off';
+    if (targetStageId === 7) return project.finalPaymentPaid ? 'Issue handover documents' : 'Awaiting final settlement';
     return CLIENT_PROJECT_STAGES.find(s => s.id === targetStageId)?.adminPrompt || 'Monitor project progress';
   };
 
@@ -1315,7 +1310,7 @@ export default function App() {
     if (!proj) return 0;
     
     // 1. Stage Progress (40%)
-    const stagePct = ((proj.stageId || 1) / 10) * 100;
+    const stagePct = ((proj.stageId || 1) / 7) * 100;
     
     // 2. Procurement Progress (40%)
     const myProcs = procurements.filter(p => p.parentId === pid);
@@ -1576,7 +1571,7 @@ export default function App() {
         clientIds: [id],
         status: 'Initialized',
         stageId: 1,
-        stageModel: 'westline-10-stage-v1',
+        stageModel: 'westline-7-stage-v1',
         renderingStatus: 'not_started',
         quoteStatus: 'not_started',
         depositStatus: 'not_started',
@@ -1601,12 +1596,12 @@ export default function App() {
     const ts = Date.now();
     const SCHEDULES = {
       standard: [
-        { name: '50% Project Deposit', pct: 0.50, stageId: 5, invoiceType: 'deposit' },
-        { name: '50% Final Settlement', pct: 0.50, stageId: 10, invoiceType: 'final_balance' },
+        { name: '50% Project Deposit', pct: 0.50, stageId: 2, invoiceType: 'deposit' },
+        { name: '50% Final Settlement', pct: 0.50, stageId: 7, invoiceType: 'final_balance' },
       ],
       '70-30': [
-        { name: '70% Before Procurement', pct: 0.70, stageId: 5, invoiceType: 'deposit' },
-        { name: '30% Final Settlement',  pct: 0.30, stageId: 10, invoiceType: 'final_balance' },
+        { name: '70% Before Procurement', pct: 0.70, stageId: 2, invoiceType: 'deposit' },
+        { name: '30% Final Settlement',  pct: 0.30, stageId: 7, invoiceType: 'final_balance' },
       ],
     };
     const template = SCHEDULES[paymentSchedule] || SCHEDULES.standard;
@@ -1635,7 +1630,7 @@ export default function App() {
         clientIds: [clientId],
         projectType: data.projectType || 'full-service',
         stageId: 1,
-        stageModel: 'westline-10-stage-v1',
+        stageModel: 'westline-7-stage-v1',
         status: 'Active',
         budget: data.budget || '',
         projectTotal: parseMoney(data.budget),
@@ -1690,19 +1685,7 @@ export default function App() {
       const snap = await getDoc(doc(db, 'projects', projectId));
       if (!snap.exists()) throw new Error('Project not found');
       const data = snap.data();
-      if (newStageId >= 3 && !data.renderingFeePaid && !options.adminOverride) {
-        notify('error', 'Stage locked: rendering fee must be paid before the client can review drawings.');
-        return;
-      }
-      if (newStageId >= 4 && !data.renderingApproved && !options.adminOverride) {
-        notify('error', 'Stage locked: rendering must be approved before the final quote.');
-        return;
-      }
-      if (newStageId >= 5 && !data.quoteApproved && !options.adminOverride) {
-        notify('error', 'Stage locked: final quote approval is required before project deposit.');
-        return;
-      }
-      if (newStageId >= 6 && !data.depositPaid && !options.adminOverride) {
+      if (newStageId >= 3 && !data.depositPaid && !options.adminOverride) {
         notify('error', 'Stage locked: project deposit must be paid before procurement.');
         return;
       }
@@ -1717,8 +1700,9 @@ export default function App() {
       const stage = CLIENT_PROJECT_STAGES.find(s => s.id === newStageId);
       await updateDoc(doc(db, 'projects', projectId), {
         stageId: newStageId,
-        status: newStageId === 10 && /final payment|settlement|complete|handover/i.test(note) ? 'Completed' : 'Active',
-        progress: stage?.pct ?? Math.round((newStageId / 10) * 100),
+        stageModel: 'westline-7-stage-v1',
+        status: newStageId === 7 && /final payment|settlement|complete|handover/i.test(note) ? 'Completed' : 'Active',
+        progress: stage?.pct ?? Math.round((newStageId / 7) * 100),
         nextAction: computeNextProjectAction({ ...data, stageId: newStageId }, newStageId),
         stageHistory,
         updatedAt: serverTimestamp(),
@@ -2115,7 +2099,6 @@ export default function App() {
     try {
       if (auth) await signOut(auth);
       localStorage.removeItem('westlinefuture_session');
-      localStorage.removeItem('glasstech_session');
       setUser(null);
       setLoginType('client'); // always reset to client/OTP mode on logout
       navigate('/login');

@@ -44,7 +44,7 @@ export default function InvoiceDocument({ inv, isQuote = false, finSettings, ac,
         <div style={{ display: 'flex', gap: 20, alignItems: 'center' }}>
           {brand.logo ? <img src={brand.logo} style={{ height: isMinimal ? 40 : 64, objectFit: 'contain' }} alt="logo" /> : <div style={{ fontSize: 32, fontWeight: 900, color: ac }}>G</div>}
           <div>
-            <h1 style={{ fontSize: 20, fontWeight: 800, textTransform: 'uppercase', letterSpacing: 2 }}>{brand.name || 'GLASSTECH'}</h1>
+            <h1 style={{ fontSize: 20, fontWeight: 800, textTransform: 'uppercase', letterSpacing: 2 }}>{brand.name || 'Westline Future'}</h1>
             <p style={{ fontSize: 10, opacity: 0.6, textTransform: 'uppercase', letterSpacing: 1 }}>{brand.tagline}</p>
           </div>
         </div>
@@ -181,7 +181,7 @@ export default function InvoiceDocument({ inv, isQuote = false, finSettings, ac,
                 transform: 'rotate(-15deg)', margin: '0 0 20px auto'
               }}>
                 <div style={{ textAlign: 'center', padding: 10 }}>
-                  <div style={{ fontSize: 10, fontWeight: 900 }}>GLASSTECH</div>
+                  <div style={{ fontSize: 10, fontWeight: 900 }}>WESTLINE FUTURE</div>
                   <div style={{ fontSize: 16, fontWeight: 900, borderY: '2px solid' }}>CERTIFIED</div>
                   <div style={{ fontSize: 8 }}>OFFICIAL RELEASE</div>
                 </div>

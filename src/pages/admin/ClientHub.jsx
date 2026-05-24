@@ -16,7 +16,7 @@ import {
   collection, onSnapshot, query, orderBy, addDoc, serverTimestamp, doc, updateDoc, arrayUnion
 } from 'firebase/firestore';
 
-const AC = '#231F78';
+const AC = '#0F766E';
 
 // ─── Stage Icon Map ───────────────────────────────────────────────────────────
 const STAGE_ICONS = {
@@ -116,18 +116,18 @@ function PaymentScheduleCard({ project, createInvoice, notify }) {
   };
 
   return (
-    <div style={{ padding: '20px 24px', background: '#fff', borderRadius: 18, border: '1px solid #E8E6F5' }}>
+    <div style={{ padding: '20px 24px', background: '#fff', borderRadius: 18, border: '1px solid #E5E7EB' }}>
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
         <div>
-          <div style={{ fontSize: 13, fontWeight: 800, color: '#0D0B2E', marginBottom: 2 }}>Payment Schedule</div>
-          <div style={{ fontSize: 11, color: '#9B99C8', fontWeight: 600 }}>{config.label} · {config.sub}</div>
+          <div style={{ fontSize: 13, fontWeight: 800, color: '#111827', marginBottom: 2 }}>Payment Schedule</div>
+          <div style={{ fontSize: 11, color: '#6B7280', fontWeight: 600 }}>{config.label} · {config.sub}</div>
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           {scheduleType === 'custom' && (
             <button
               onClick={() => setLogging(p => !p)}
-              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 10, background: '#0D0B2E', color: '#fff', border: 'none', fontSize: 12, fontWeight: 800, cursor: 'pointer' }}
+              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 10, background: '#111827', color: '#fff', border: 'none', fontSize: 12, fontWeight: 800, cursor: 'pointer' }}
             >
               <Plus size={13} /> Log Payment
             </button>
@@ -158,7 +158,7 @@ function PaymentScheduleCard({ project, createInvoice, notify }) {
           )}
           <button
             onClick={() => setChanging(p => !p)}
-            style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '7px 14px', borderRadius: 10, background: changing ? '#0D0B2E' : '#F8F8FD', color: changing ? '#fff' : '#5B5894', border: '1px solid #E8E6F5', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}
+            style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '7px 14px', borderRadius: 10, background: changing ? '#111827' : '#F9FAFB', color: changing ? '#fff' : '#4B5563', border: '1px solid #E5E7EB', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}
           >
             {changing ? 'Done' : 'Change'}
           </button>
@@ -167,18 +167,18 @@ function PaymentScheduleCard({ project, createInvoice, notify }) {
 
       {/* Schedule picker */}
       {changing && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 16, padding: '14px', background: '#F8F8FD', borderRadius: 14 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 16, padding: '14px', background: '#F9FAFB', borderRadius: 14 }}>
           {Object.entries(SCHEDULE_CONFIGS).map(([key, cfg]) => (
             <button
               key={key}
               onClick={() => changeSchedule(key)}
               style={{
-                padding: '12px 10px', borderRadius: 12, border: `2px solid ${scheduleType === key ? '#0D0B2E' : '#E8E6F5'}`,
-                background: scheduleType === key ? '#0D0B2E' : '#fff', cursor: 'pointer', textAlign: 'left', transition: 'all .15s',
+                padding: '12px 10px', borderRadius: 12, border: `2px solid ${scheduleType === key ? '#111827' : '#E5E7EB'}`,
+                background: scheduleType === key ? '#111827' : '#fff', cursor: 'pointer', textAlign: 'left', transition: 'all .15s',
               }}
             >
-              <div style={{ fontSize: 12, fontWeight: 800, color: scheduleType === key ? '#fff' : '#0D0B2E', marginBottom: 3 }}>{cfg.label}</div>
-              <div style={{ fontSize: 10, color: scheduleType === key ? 'rgba(255,255,255,.6)' : '#9B99C8', lineHeight: 1.4 }}>{cfg.sub}</div>
+              <div style={{ fontSize: 12, fontWeight: 800, color: scheduleType === key ? '#fff' : '#111827', marginBottom: 3 }}>{cfg.label}</div>
+              <div style={{ fontSize: 10, color: scheduleType === key ? 'rgba(255,255,255,.6)' : '#6B7280', lineHeight: 1.4 }}>{cfg.sub}</div>
             </button>
           ))}
         </div>
@@ -186,47 +186,47 @@ function PaymentScheduleCard({ project, createInvoice, notify }) {
 
       {/* Log Payment form */}
       {logging && (
-        <div style={{ marginBottom: 16, padding: '16px', background: '#F8F8FD', borderRadius: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <div style={{ fontSize: 12, fontWeight: 800, color: '#0D0B2E' }}>Record a Payment</div>
+        <div style={{ marginBottom: 16, padding: '16px', background: '#F9FAFB', borderRadius: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div style={{ fontSize: 12, fontWeight: 800, color: '#111827' }}>Record a Payment</div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
             <div>
-              <label style={{ fontSize: 10, fontWeight: 700, color: '#9B99C8', textTransform: 'uppercase', letterSpacing: '.06em', display: 'block', marginBottom: 4 }}>Amount (GHS) *</label>
+              <label style={{ fontSize: 10, fontWeight: 700, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '.06em', display: 'block', marginBottom: 4 }}>Amount (GHS) *</label>
               <input
                 type="number"
                 value={logForm.amount}
                 onChange={e => setLogForm(p => ({ ...p, amount: e.target.value }))}
                 placeholder="e.g. 15000"
-                style={{ width: '100%', padding: '9px 12px', borderRadius: 10, border: '1.5px solid #E8E6F5', fontSize: 13, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' }}
+                style={{ width: '100%', padding: '9px 12px', borderRadius: 10, border: '1.5px solid #E5E7EB', fontSize: 13, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' }}
               />
             </div>
             <div>
-              <label style={{ fontSize: 10, fontWeight: 700, color: '#9B99C8', textTransform: 'uppercase', letterSpacing: '.06em', display: 'block', marginBottom: 4 }}>Date</label>
+              <label style={{ fontSize: 10, fontWeight: 700, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '.06em', display: 'block', marginBottom: 4 }}>Date</label>
               <input
                 type="date"
                 value={logForm.date}
                 onChange={e => setLogForm(p => ({ ...p, date: e.target.value }))}
-                style={{ width: '100%', padding: '9px 12px', borderRadius: 10, border: '1.5px solid #E8E6F5', fontSize: 13, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' }}
+                style={{ width: '100%', padding: '9px 12px', borderRadius: 10, border: '1.5px solid #E5E7EB', fontSize: 13, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' }}
               />
             </div>
           </div>
           <div>
-            <label style={{ fontSize: 10, fontWeight: 700, color: '#9B99C8', textTransform: 'uppercase', letterSpacing: '.06em', display: 'block', marginBottom: 4 }}>Note</label>
+            <label style={{ fontSize: 10, fontWeight: 700, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '.06em', display: 'block', marginBottom: 4 }}>Note</label>
             <input
               value={logForm.description}
               onChange={e => setLogForm(p => ({ ...p, description: e.target.value }))}
               placeholder="e.g. Second batch payment — wire transfer"
-              style={{ width: '100%', padding: '9px 12px', borderRadius: 10, border: '1.5px solid #E8E6F5', fontSize: 13, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' }}
+              style={{ width: '100%', padding: '9px 12px', borderRadius: 10, border: '1.5px solid #E5E7EB', fontSize: 13, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' }}
             />
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
             <button
               onClick={logPayment}
               disabled={saving || !logForm.amount}
-              style={{ flex: 1, padding: '10px', borderRadius: 10, background: '#0D0B2E', color: '#fff', border: 'none', fontSize: 13, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, opacity: !logForm.amount ? 0.5 : 1 }}
+              style={{ flex: 1, padding: '10px', borderRadius: 10, background: '#111827', color: '#fff', border: 'none', fontSize: 13, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, opacity: !logForm.amount ? 0.5 : 1 }}
             >
               {saving ? <><Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> Saving...</> : 'Record Payment'}
             </button>
-            <button onClick={() => setLogging(false)} style={{ padding: '10px 16px', borderRadius: 10, background: '#F8F8FD', color: '#5B5894', border: '1px solid #E8E6F5', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+            <button onClick={() => setLogging(false)} style={{ padding: '10px 16px', borderRadius: 10, background: '#F9FAFB', color: '#4B5563', border: '1px solid #E5E7EB', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
               Cancel
             </button>
           </div>
@@ -236,10 +236,10 @@ function PaymentScheduleCard({ project, createInvoice, notify }) {
       {/* Progress bar */}
       {budget > 0 && (
         <div style={{ marginBottom: config.milestones.length > 0 ? 14 : 0 }}>
-          <div style={{ height: 7, background: '#E8E6F5', borderRadius: 4, overflow: 'hidden', marginBottom: 6 }}>
+          <div style={{ height: 7, background: '#E5E7EB', borderRadius: 4, overflow: 'hidden', marginBottom: 6 }}>
             <div style={{ height: '100%', width: `${paidPct}%`, background: 'linear-gradient(90deg, #16A34A80, #16A34A)', borderRadius: 4, transition: 'width 1s ease' }} />
           </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#9B99C8' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#6B7280' }}>
             <span><strong style={{ color: '#16A34A' }}>{fmt(totalPaid)}</strong> paid · {paidPct.toFixed(1)}%</span>
             <span>{fmt(remaining)} remaining · {fmt(budget)}</span>
           </div>
@@ -250,16 +250,16 @@ function PaymentScheduleCard({ project, createInvoice, notify }) {
       {scheduleType === 'custom' && payments.length > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 12 }}>
           {payments.slice(0, 5).map(p => (
-            <div key={p.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 12px', background: '#F8F8FD', borderRadius: 10 }}>
+            <div key={p.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 12px', background: '#F9FAFB', borderRadius: 10 }}>
               <div>
-                <div style={{ fontSize: 12, fontWeight: 700, color: '#0D0B2E' }}>{p.description || 'Payment'}</div>
-                <div style={{ fontSize: 10, color: '#9B99C8' }}>{p.date || '—'}</div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: '#111827' }}>{p.description || 'Payment'}</div>
+                <div style={{ fontSize: 10, color: '#6B7280' }}>{p.date || '—'}</div>
               </div>
               <div style={{ fontSize: 13, fontWeight: 800, color: '#16A34A' }}>{fmt(p.amount)}</div>
             </div>
           ))}
           {payments.length > 5 && (
-            <div style={{ fontSize: 11, color: '#9B99C8', textAlign: 'center', paddingTop: 4 }}>+{payments.length - 5} more payments</div>
+            <div style={{ fontSize: 11, color: '#6B7280', textAlign: 'center', paddingTop: 4 }}>+{payments.length - 5} more payments</div>
           )}
         </div>
       )}
@@ -275,19 +275,19 @@ function PaymentScheduleCard({ project, createInvoice, notify }) {
               <div key={m.key} style={{
                 display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', borderRadius: 12,
                 background: isDue ? '#F0FDF4' : '#FAFAF9',
-                border: `1.5px solid ${isDue ? '#16A34A40' : isPaid ? '#16A34A20' : '#E8E6F5'}`,
+                border: `1.5px solid ${isDue ? '#16A34A40' : isPaid ? '#16A34A20' : '#E5E7EB'}`,
               }}>
-                <div style={{ width: 28, height: 28, borderRadius: 8, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: isPaid ? '#16A34A' : isDue ? '#F0FDF4' : '#E8E6F5', border: isDue ? '2px solid #16A34A' : 'none' }}>
-                  {isPaid ? <CheckCircle2 size={13} color="#fff" /> : <span style={{ fontSize: 10, fontWeight: 900, color: isDue ? '#16A34A' : '#9B99C8' }}>{idx + 1}</span>}
+                <div style={{ width: 28, height: 28, borderRadius: 8, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: isPaid ? '#16A34A' : isDue ? '#F0FDF4' : '#E5E7EB', border: isDue ? '2px solid #16A34A' : 'none' }}>
+                  {isPaid ? <CheckCircle2 size={13} color="#fff" /> : <span style={{ fontSize: 10, fontWeight: 900, color: isDue ? '#16A34A' : '#6B7280' }}>{idx + 1}</span>}
                 </div>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: '#0D0B2E' }}>{m.label}</div>
-                  <div style={{ fontSize: 12, fontWeight: 800, color: isPaid ? '#16A34A' : isDue ? '#16A34A' : '#9B99C8' }}>{fmt(budget * m.pct)}</div>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: '#111827' }}>{m.label}</div>
+                  <div style={{ fontSize: 12, fontWeight: 800, color: isPaid ? '#16A34A' : isDue ? '#16A34A' : '#6B7280' }}>{fmt(budget * m.pct)}</div>
                 </div>
                 <div>
                   {isPaid && <span style={{ fontSize: 10, fontWeight: 800, color: '#065F46', background: '#D1FAE5', padding: '3px 9px', borderRadius: 20 }}>Paid ✓</span>}
                   {isDue && <span style={{ fontSize: 10, fontWeight: 800, color: '#92400E', background: '#FEF3C7', padding: '3px 9px', borderRadius: 20 }}>Due</span>}
-                  {status === 'upcoming' && <span style={{ fontSize: 10, color: '#9B99C8', background: '#E8E6F5', padding: '3px 9px', borderRadius: 20 }}>Upcoming</span>}
+                  {status === 'upcoming' && <span style={{ fontSize: 10, color: '#6B7280', background: '#E5E7EB', padding: '3px 9px', borderRadius: 20 }}>Upcoming</span>}
                 </div>
               </div>
             );
@@ -314,58 +314,58 @@ function ProjectOperatingSystemCard({ project, props }) {
   };
 
   return (
-    <div style={{ padding: '20px 24px', background: '#fff', borderRadius: 18, border: '1px solid #E8E6F5' }}>
+    <div style={{ padding: '20px 24px', background: '#fff', borderRadius: 18, border: '1px solid #E5E7EB' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, marginBottom: 18 }}>
         <div>
-          <div style={{ fontSize: 13, fontWeight: 900, color: '#0D0B2E' }}>Project Operating System</div>
-          <div style={{ fontSize: 11, color: '#9B99C8', marginTop: 4 }}>Rendering gate, quote versioning, add-ons, and audit-ready totals.</div>
+          <div style={{ fontSize: 13, fontWeight: 900, color: '#111827' }}>Project Operating System</div>
+          <div style={{ fontSize: 11, color: '#6B7280', marginTop: 4 }}>Rendering gate, quote versioning, add-ons, and audit-ready totals.</div>
         </div>
-        <div style={{ padding: '7px 12px', borderRadius: 12, background: '#F8F8FD', border: '1px solid #E8E6F5', fontSize: 11, fontWeight: 800, color: '#5B5894', whiteSpace: 'nowrap' }}>
+        <div style={{ padding: '7px 12px', borderRadius: 12, background: '#F9FAFB', border: '1px solid #E5E7EB', fontSize: 11, fontWeight: 800, color: '#4B5563', whiteSpace: 'nowrap' }}>
           {project.nextAction || 'Review next action'}
         </div>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 18 }}>
         {[
-          { label: 'Rendering', value: project.renderingStatus || 'not started', color: project.renderingFeePaid ? '#16A34A' : '#2563EB' },
+          { label: 'Rendering', value: project.renderingStatus || 'not started', color: project.renderingFeePaid ? '#16A34A' : '#0F766E' },
           { label: 'Quote', value: project.quoteStatus || 'not started', color: project.quoteApproved ? '#16A34A' : '#0891B2' },
-          { label: 'Ledger', value: `${fmt(projectTotal)} total`, color: '#0D0B2E' },
+          { label: 'Ledger', value: `${fmt(projectTotal)} total`, color: '#111827' },
         ].map(item => (
-          <div key={item.label} style={{ padding: 14, borderRadius: 14, background: '#F8F8FD', border: '1px solid #E8E6F5' }}>
-            <div style={{ fontSize: 10, fontWeight: 800, color: '#9B99C8', textTransform: 'uppercase', letterSpacing: '.06em' }}>{item.label}</div>
+          <div key={item.label} style={{ padding: 14, borderRadius: 14, background: '#F9FAFB', border: '1px solid #E5E7EB' }}>
+            <div style={{ fontSize: 10, fontWeight: 800, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '.06em' }}>{item.label}</div>
             <div style={{ fontSize: 13, fontWeight: 900, color: item.color, marginTop: 5, textTransform: 'capitalize' }}>{String(item.value).replace(/_/g, ' ')}</div>
           </div>
         ))}
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-        <div style={{ padding: 16, borderRadius: 16, background: '#FAFAF9', border: '1px solid #E8E6F5' }}>
-          <div style={{ fontSize: 12, fontWeight: 900, color: '#0D0B2E', marginBottom: 10 }}>Rendering Access Gate</div>
-          <input value={renderingFee} onChange={e => setRenderingFee(e.target.value)} type="number" placeholder="Rendering fee, e.g. 1500" style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: 10, border: '1px solid #E8E6F5', marginBottom: 8 }} />
+        <div style={{ padding: 16, borderRadius: 16, background: '#FAFAF9', border: '1px solid #E5E7EB' }}>
+          <div style={{ fontSize: 12, fontWeight: 900, color: '#111827', marginBottom: 10 }}>Rendering Access Gate</div>
+          <input value={renderingFee} onChange={e => setRenderingFee(e.target.value)} type="number" placeholder="Rendering fee, e.g. 1500" style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: 10, border: '1px solid #E5E7EB', marginBottom: 8 }} />
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <button onClick={() => run('render-package', () => props.createRenderingPackage?.(project.id, { includedRevisions: 2 }))} style={{ padding: '9px 12px', borderRadius: 10, border: 'none', background: '#0D0B2E', color: '#fff', fontSize: 11, fontWeight: 800, cursor: 'pointer' }}>{saving === 'render-package' ? 'Saving...' : 'Create Package'}</button>
-            <button onClick={() => run('render-invoice', () => props.issueRenderingInvoice?.(project.id, renderingFee, 'paystack'))} style={{ padding: '9px 12px', borderRadius: 10, border: '1px solid #E8E6F5', background: '#fff', color: '#0D0B2E', fontSize: 11, fontWeight: 800, cursor: 'pointer' }}>{saving === 'render-invoice' ? 'Issuing...' : 'Issue Fee Invoice'}</button>
+            <button onClick={() => run('render-package', () => props.createRenderingPackage?.(project.id, { includedRevisions: 2 }))} style={{ padding: '9px 12px', borderRadius: 10, border: 'none', background: '#111827', color: '#fff', fontSize: 11, fontWeight: 800, cursor: 'pointer' }}>{saving === 'render-package' ? 'Saving...' : 'Create Package'}</button>
+            <button onClick={() => run('render-invoice', () => props.issueRenderingInvoice?.(project.id, renderingFee, 'paystack'))} style={{ padding: '9px 12px', borderRadius: 10, border: '1px solid #E5E7EB', background: '#fff', color: '#111827', fontSize: 11, fontWeight: 800, cursor: 'pointer' }}>{saving === 'render-invoice' ? 'Issuing...' : 'Issue Fee Invoice'}</button>
           </div>
         </div>
 
-        <div style={{ padding: 16, borderRadius: 16, background: '#FAFAF9', border: '1px solid #E8E6F5' }}>
-          <div style={{ fontSize: 12, fontWeight: 900, color: '#0D0B2E', marginBottom: 10 }}>Versioned Final Quote</div>
-          <input value={quoteTotal} onChange={e => setQuoteTotal(e.target.value)} type="number" placeholder="Final project quote" style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: 10, border: '1px solid #E8E6F5', marginBottom: 8 }} />
+        <div style={{ padding: 16, borderRadius: 16, background: '#FAFAF9', border: '1px solid #E5E7EB' }}>
+          <div style={{ fontSize: 12, fontWeight: 900, color: '#111827', marginBottom: 10 }}>Versioned Final Quote</div>
+          <input value={quoteTotal} onChange={e => setQuoteTotal(e.target.value)} type="number" placeholder="Final project quote" style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: 10, border: '1px solid #E5E7EB', marginBottom: 8 }} />
           <button onClick={() => run('quote', () => props.createQuoteVersion?.(project.id, { total: quoteTotal, title: `${project.title} Final Quote` }))} style={{ padding: '9px 12px', borderRadius: 10, border: 'none', background: '#0891B2', color: '#fff', fontSize: 11, fontWeight: 800, cursor: 'pointer' }}>{saving === 'quote' ? 'Creating...' : 'Create Quote Version'}</button>
         </div>
       </div>
 
-      <div style={{ marginTop: 14, padding: 16, borderRadius: 16, background: '#FAFAF9', border: '1px solid #E8E6F5' }}>
+      <div style={{ marginTop: 14, padding: 16, borderRadius: 16, background: '#FAFAF9', border: '1px solid #E5E7EB' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', marginBottom: 10 }}>
           <div>
-            <div style={{ fontSize: 12, fontWeight: 900, color: '#0D0B2E' }}>Add-ons & Variations</div>
-            <div style={{ fontSize: 10, color: '#9B99C8', marginTop: 2 }}>Approved add-ons: {fmt(addOnsTotal)}</div>
+            <div style={{ fontSize: 12, fontWeight: 900, color: '#111827' }}>Add-ons & Variations</div>
+            <div style={{ fontSize: 10, color: '#6B7280', marginTop: 2 }}>Approved add-ons: {fmt(addOnsTotal)}</div>
           </div>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 120px 120px auto', gap: 8 }}>
-          <input value={addOn.description} onChange={e => setAddOn(p => ({ ...p, description: e.target.value }))} placeholder="Add-on description" style={{ padding: '10px 12px', borderRadius: 10, border: '1px solid #E8E6F5' }} />
-          <input value={addOn.amount} onChange={e => setAddOn(p => ({ ...p, amount: e.target.value }))} type="number" placeholder="Amount" style={{ padding: '10px 12px', borderRadius: 10, border: '1px solid #E8E6F5' }} />
-          <input value={addOn.timelineImpactDays} onChange={e => setAddOn(p => ({ ...p, timelineImpactDays: e.target.value }))} type="number" placeholder="+ days" style={{ padding: '10px 12px', borderRadius: 10, border: '1px solid #E8E6F5' }} />
+          <input value={addOn.description} onChange={e => setAddOn(p => ({ ...p, description: e.target.value }))} placeholder="Add-on description" style={{ padding: '10px 12px', borderRadius: 10, border: '1px solid #E5E7EB' }} />
+          <input value={addOn.amount} onChange={e => setAddOn(p => ({ ...p, amount: e.target.value }))} type="number" placeholder="Amount" style={{ padding: '10px 12px', borderRadius: 10, border: '1px solid #E5E7EB' }} />
+          <input value={addOn.timelineImpactDays} onChange={e => setAddOn(p => ({ ...p, timelineImpactDays: e.target.value }))} type="number" placeholder="+ days" style={{ padding: '10px 12px', borderRadius: 10, border: '1px solid #E5E7EB' }} />
           <button onClick={() => run('addon', async () => {
             const id = await props.createAddOn?.(project.id, addOn);
             setAddOn({ description: '', amount: '', timelineImpactDays: '' });
@@ -379,7 +379,7 @@ function ProjectOperatingSystemCard({ project, props }) {
 
 // ─── New Project Modal ────────────────────────────────────────────────────────
 const BD_ITEMS_CONFIG = [
-  { key: 'product',      label: 'Product / Materials', color: '#7C3AED', icon: <Package size={13} /> },
+  { key: 'product',      label: 'Product / Materials', color: '#0F766E', icon: <Package size={13} /> },
   { key: 'shipping',     label: 'Shipping & Freight',  color: '#0284C7', icon: <Truck size={13} /> },
   { key: 'installation', label: 'Installation Labour', color: '#D97706', icon: <Wrench size={13} /> },
 ];
@@ -426,16 +426,16 @@ function NewProjectModal({ client, onClose, onCreate }) {
     onClose();
   };
 
-  const lS = { fontSize: 11, fontWeight: 800, color: '#9B99C8', textTransform: 'uppercase', letterSpacing: '.06em', display: 'block', marginBottom: 8 };
-  const iS = { width: '100%', padding: '12px 16px', borderRadius: 12, border: '1.5px solid #E8E6F5', fontSize: 14, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' };
+  const lS = { fontSize: 11, fontWeight: 800, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '.06em', display: 'block', marginBottom: 8 };
+  const iS = { width: '100%', padding: '12px 16px', borderRadius: 12, border: '1.5px solid #E5E7EB', fontSize: 14, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' };
   const fmtTotal = v => `GHS ${Number(v).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
 
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20, overflowY: 'auto' }}>
       <div style={{ background: '#fff', borderRadius: 24, width: '100%', maxWidth: 560, padding: 40, position: 'relative', boxShadow: '0 32px 80px rgba(0,0,0,.2)', margin: '20px auto' }}>
-        <button onClick={onClose} style={{ position: 'absolute', top: 20, right: 20, width: 36, height: 36, borderRadius: 10, border: '1px solid #E8E6F5', background: '#F8F8FD', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><X size={16} /></button>
+        <button onClick={onClose} style={{ position: 'absolute', top: 20, right: 20, width: 36, height: 36, borderRadius: 10, border: '1px solid #E5E7EB', background: '#F9FAFB', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><X size={16} /></button>
         <div style={{ fontSize: 11, fontWeight: 800, color: AC, textTransform: 'uppercase', letterSpacing: '.1em', marginBottom: 6 }}>New Project</div>
-        <div style={{ fontSize: 22, fontWeight: 900, color: '#0D0B2E', marginBottom: 28 }}>{client.name}</div>
+        <div style={{ fontSize: 22, fontWeight: 900, color: '#111827', marginBottom: 28 }}>{client.name}</div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
 
@@ -450,9 +450,9 @@ function NewProjectModal({ client, onClose, onCreate }) {
             <label style={lS}>Project Type</label>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
               {Object.entries(PROJECT_TYPES).map(([key, pt]) => (
-                <button key={key} onClick={() => set('projectType', key)} style={{ padding: '14px 16px', borderRadius: 14, border: `2px solid ${form.projectType === key ? pt.color : '#E8E6F5'}`, background: form.projectType === key ? `${pt.color}10` : '#fff', cursor: 'pointer', textAlign: 'left', transition: 'all .2s' }}>
-                  <div style={{ fontSize: 13, fontWeight: 800, color: form.projectType === key ? pt.color : '#0D0B2E', marginBottom: 4 }}>{pt.label}</div>
-                  <div style={{ fontSize: 11, color: '#9B99C8', lineHeight: 1.4 }}>{pt.desc}</div>
+                <button key={key} onClick={() => set('projectType', key)} style={{ padding: '14px 16px', borderRadius: 14, border: `2px solid ${form.projectType === key ? pt.color : '#E5E7EB'}`, background: form.projectType === key ? `${pt.color}10` : '#fff', cursor: 'pointer', textAlign: 'left', transition: 'all .2s' }}>
+                  <div style={{ fontSize: 13, fontWeight: 800, color: form.projectType === key ? pt.color : '#111827', marginBottom: 4 }}>{pt.label}</div>
+                  <div style={{ fontSize: 11, color: '#6B7280', lineHeight: 1.4 }}>{pt.desc}</div>
                 </button>
               ))}
             </div>
@@ -465,7 +465,7 @@ function NewProjectModal({ client, onClose, onCreate }) {
               <button
                 type="button"
                 onClick={() => setShowBreakdown(p => !p)}
-                style={{ fontSize: 11, fontWeight: 800, color: showBreakdown ? AC : '#5B5894', background: showBreakdown ? '#FFF7ED' : '#F8F8FD', border: `1.5px solid ${showBreakdown ? '#231F7850' : '#E8E6F5'}`, borderRadius: 8, padding: '5px 12px', cursor: 'pointer', transition: 'all .2s', whiteSpace: 'nowrap' }}
+                style={{ fontSize: 11, fontWeight: 800, color: showBreakdown ? AC : '#4B5563', background: showBreakdown ? '#FFF7ED' : '#F9FAFB', border: `1.5px solid ${showBreakdown ? '#0F766E50' : '#E5E7EB'}`, borderRadius: 8, padding: '5px 12px', cursor: 'pointer', transition: 'all .2s', whiteSpace: 'nowrap' }}
               >
                 {showBreakdown ? '− Simple total' : '+ Add cost breakdown'}
               </button>
@@ -474,20 +474,20 @@ function NewProjectModal({ client, onClose, onCreate }) {
             {!showBreakdown ? (
               <input value={form.budget} onChange={e => set('budget', e.target.value)} placeholder="e.g. 75000" type="number" style={iS} />
             ) : (
-              <div style={{ background: '#FAFAF9', borderRadius: 16, border: '1.5px solid #E8E6F5', padding: '14px 14px 10px' }}>
+              <div style={{ background: '#FAFAF9', borderRadius: 16, border: '1.5px solid #E5E7EB', padding: '14px 14px 10px' }}>
 
                 {/* Core cost rows */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 7, marginBottom: 10 }}>
                   {BD_ITEMS_CONFIG.map(({ key, label, color, icon }) => (
-                    <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 12, background: bd[key].enabled ? '#fff' : '#F5F3F0', border: `1.5px solid ${bd[key].enabled ? '#E8E6F5' : '#E8E6F5'}`, opacity: bd[key].enabled ? 1 : 0.55, transition: 'all .2s' }}>
+                    <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 12, background: bd[key].enabled ? '#fff' : '#F5F3F0', border: `1.5px solid ${bd[key].enabled ? '#E5E7EB' : '#E5E7EB'}`, opacity: bd[key].enabled ? 1 : 0.55, transition: 'all .2s' }}>
                       <button onClick={() => toggleBd(key)} style={{ width: 32, height: 18, borderRadius: 9, background: bd[key].enabled ? color : '#E0DAD4', border: 'none', cursor: 'pointer', position: 'relative', flexShrink: 0, transition: 'background .2s' }}>
                         <div style={{ position: 'absolute', top: 1, left: bd[key].enabled ? 15 : 1, width: 16, height: 16, borderRadius: '50%', background: '#fff', transition: 'left .2s', boxShadow: '0 1px 3px rgba(0,0,0,.25)' }} />
                       </button>
                       <div style={{ width: 26, height: 26, borderRadius: 7, background: `${color}15`, display: 'flex', alignItems: 'center', justifyContent: 'center', color, flexShrink: 0 }}>{icon}</div>
-                      <div style={{ flex: 1, fontSize: 12, fontWeight: 700, color: '#0D0B2E' }}>{label}</div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 5, background: '#fff', border: '1.5px solid #E8E6F5', borderRadius: 9, padding: '5px 9px', flexShrink: 0 }}>
-                        <span style={{ fontSize: 11, color: '#9B99C8', fontWeight: 700 }}>GHS</span>
-                        <input type="number" min="0" value={bd[key].amount} onChange={e => setBdAmt(key, e.target.value)} disabled={!bd[key].enabled} placeholder="0" style={{ width: 80, border: 'none', outline: 'none', fontSize: 13, fontWeight: 700, color: '#0D0B2E', background: 'transparent', fontFamily: 'inherit', textAlign: 'right' }} />
+                      <div style={{ flex: 1, fontSize: 12, fontWeight: 700, color: '#111827' }}>{label}</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 5, background: '#fff', border: '1.5px solid #E5E7EB', borderRadius: 9, padding: '5px 9px', flexShrink: 0 }}>
+                        <span style={{ fontSize: 11, color: '#6B7280', fontWeight: 700 }}>GHS</span>
+                        <input type="number" min="0" value={bd[key].amount} onChange={e => setBdAmt(key, e.target.value)} disabled={!bd[key].enabled} placeholder="0" style={{ width: 80, border: 'none', outline: 'none', fontSize: 13, fontWeight: 700, color: '#111827', background: 'transparent', fontFamily: 'inherit', textAlign: 'right' }} />
                       </div>
                     </div>
                   ))}
@@ -496,24 +496,24 @@ function NewProjectModal({ client, onClose, onCreate }) {
                 {/* Extras */}
                 {bd.extras.map(extra => (
                   <div key={extra.id} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 7 }}>
-                    <div style={{ width: 26, height: 26, borderRadius: 7, background: '#E8E6F5', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Plus size={11} color="#9B99C8" /></div>
-                    <input value={extra.label} onChange={e => setExtra(extra.id, 'label', e.target.value)} placeholder="Extra item description" style={{ flex: 1, padding: '8px 11px', borderRadius: 9, border: '1.5px solid #E8E6F5', fontSize: 12, outline: 'none', fontFamily: 'inherit', background: '#fff' }} />
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 5, background: '#fff', border: '1.5px solid #E8E6F5', borderRadius: 9, padding: '5px 9px', flexShrink: 0 }}>
-                      <span style={{ fontSize: 11, color: '#9B99C8', fontWeight: 700 }}>GHS</span>
-                      <input type="number" min="0" value={extra.amount} onChange={e => setExtra(extra.id, 'amount', e.target.value)} placeholder="0" style={{ width: 70, border: 'none', outline: 'none', fontSize: 13, fontWeight: 700, color: '#0D0B2E', background: 'transparent', fontFamily: 'inherit', textAlign: 'right' }} />
+                    <div style={{ width: 26, height: 26, borderRadius: 7, background: '#E5E7EB', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Plus size={11} color="#6B7280" /></div>
+                    <input value={extra.label} onChange={e => setExtra(extra.id, 'label', e.target.value)} placeholder="Extra item description" style={{ flex: 1, padding: '8px 11px', borderRadius: 9, border: '1.5px solid #E5E7EB', fontSize: 12, outline: 'none', fontFamily: 'inherit', background: '#fff' }} />
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 5, background: '#fff', border: '1.5px solid #E5E7EB', borderRadius: 9, padding: '5px 9px', flexShrink: 0 }}>
+                      <span style={{ fontSize: 11, color: '#6B7280', fontWeight: 700 }}>GHS</span>
+                      <input type="number" min="0" value={extra.amount} onChange={e => setExtra(extra.id, 'amount', e.target.value)} placeholder="0" style={{ width: 70, border: 'none', outline: 'none', fontSize: 13, fontWeight: 700, color: '#111827', background: 'transparent', fontFamily: 'inherit', textAlign: 'right' }} />
                     </div>
-                    <button onClick={() => rmExtra(extra.id)} style={{ width: 28, height: 28, borderRadius: 7, border: '1.5px solid #E8E6F5', background: '#F8F8FD', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><X size={12} color="#9B99C8" /></button>
+                    <button onClick={() => rmExtra(extra.id)} style={{ width: 28, height: 28, borderRadius: 7, border: '1.5px solid #E5E7EB', background: '#F9FAFB', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><X size={12} color="#6B7280" /></button>
                   </div>
                 ))}
 
-                <button onClick={addExtra} style={{ fontSize: 11, fontWeight: 800, color: '#5B5894', background: 'transparent', border: 'none', cursor: 'pointer', padding: '4px 0 6px', display: 'flex', alignItems: 'center', gap: 5 }}>
+                <button onClick={addExtra} style={{ fontSize: 11, fontWeight: 800, color: '#4B5563', background: 'transparent', border: 'none', cursor: 'pointer', padding: '4px 0 6px', display: 'flex', alignItems: 'center', gap: 5 }}>
                   <Plus size={12} /> Add extra line
                 </button>
 
                 {bdTotal > 0 && (
-                  <div style={{ marginTop: 8, paddingTop: 12, borderTop: '1.5px solid #E8E6F5', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontSize: 11, fontWeight: 800, color: '#5B5894', textTransform: 'uppercase', letterSpacing: '.04em' }}>Total Project Value</span>
-                    <span style={{ fontSize: 18, fontWeight: 900, color: '#0D0B2E' }}>{fmtTotal(bdTotal)}</span>
+                  <div style={{ marginTop: 8, paddingTop: 12, borderTop: '1.5px solid #E5E7EB', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: 11, fontWeight: 800, color: '#4B5563', textTransform: 'uppercase', letterSpacing: '.04em' }}>Total Project Value</span>
+                    <span style={{ fontSize: 18, fontWeight: 900, color: '#111827' }}>{fmtTotal(bdTotal)}</span>
                   </div>
                 )}
               </div>
@@ -523,7 +523,7 @@ function NewProjectModal({ client, onClose, onCreate }) {
           <div>
             <label style={lS}>Separate Rendering / CAD 3D Fee (GHS)</label>
             <input value={form.renderingFee} onChange={e => set('renderingFee', e.target.value)} placeholder="e.g. 1500" type="number" style={iS} />
-            <div style={{ fontSize: 11, color: '#9B99C8', marginTop: 6, lineHeight: 1.5 }}>
+            <div style={{ fontSize: 11, color: '#6B7280', marginTop: 6, lineHeight: 1.5 }}>
               This is not part of the project sum. The client pays it to unlock the rendering package before quote discussion.
             </div>
           </div>
@@ -533,9 +533,9 @@ function NewProjectModal({ client, onClose, onCreate }) {
             <label style={lS}>Payment Schedule</label>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
               {Object.entries(SCHEDULE_CONFIGS).map(([key, cfg]) => (
-                <button key={key} type="button" onClick={() => set('paymentSchedule', key)} style={{ padding: '12px 10px', borderRadius: 12, border: `2px solid ${form.paymentSchedule === key ? '#0D0B2E' : '#E8E6F5'}`, background: form.paymentSchedule === key ? '#0D0B2E' : '#fff', cursor: 'pointer', textAlign: 'left', transition: 'all .15s' }}>
-                  <div style={{ fontSize: 12, fontWeight: 800, color: form.paymentSchedule === key ? '#fff' : '#0D0B2E', marginBottom: 3 }}>{cfg.label}</div>
-                  <div style={{ fontSize: 10, color: form.paymentSchedule === key ? 'rgba(255,255,255,.6)' : '#9B99C8', lineHeight: 1.4 }}>{cfg.sub}</div>
+                <button key={key} type="button" onClick={() => set('paymentSchedule', key)} style={{ padding: '12px 10px', borderRadius: 12, border: `2px solid ${form.paymentSchedule === key ? '#111827' : '#E5E7EB'}`, background: form.paymentSchedule === key ? '#111827' : '#fff', cursor: 'pointer', textAlign: 'left', transition: 'all .15s' }}>
+                  <div style={{ fontSize: 12, fontWeight: 800, color: form.paymentSchedule === key ? '#fff' : '#111827', marginBottom: 3 }}>{cfg.label}</div>
+                  <div style={{ fontSize: 10, color: form.paymentSchedule === key ? 'rgba(255,255,255,.6)' : '#6B7280', lineHeight: 1.4 }}>{cfg.sub}</div>
                 </button>
               ))}
             </div>
@@ -544,7 +544,7 @@ function NewProjectModal({ client, onClose, onCreate }) {
           {/* Description */}
           <div>
             <label style={lS}>Brief / Description</label>
-            <textarea value={form.description} onChange={e => set('description', e.target.value)} placeholder="Describe the scope, site location, and any special requirements..." rows={3} style={{ width: '100%', padding: '12px 16px', borderRadius: 12, border: '1.5px solid #E8E6F5', fontSize: 13, outline: 'none', resize: 'vertical', boxSizing: 'border-box', fontFamily: 'inherit', lineHeight: 1.6 }} />
+            <textarea value={form.description} onChange={e => set('description', e.target.value)} placeholder="Describe the scope, site location, and any special requirements..." rows={3} style={{ width: '100%', padding: '12px 16px', borderRadius: 12, border: '1.5px solid #E5E7EB', fontSize: 13, outline: 'none', resize: 'vertical', boxSizing: 'border-box', fontFamily: 'inherit', lineHeight: 1.6 }} />
           </div>
 
           {/* Backdate */}
@@ -552,7 +552,7 @@ function NewProjectModal({ client, onClose, onCreate }) {
             <button
               type="button"
               onClick={() => setShowBackdate(p => !p)}
-              style={{ fontSize: 11, fontWeight: 800, color: showBackdate ? '#DC2626' : '#9B99C8', background: 'transparent', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', gap: 5 }}
+              style={{ fontSize: 11, fontWeight: 800, color: showBackdate ? '#DC2626' : '#6B7280', background: 'transparent', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', gap: 5 }}
             >
               <Calendar size={12} />
               {showBackdate ? 'Remove backdate' : 'Backdate this project'}
@@ -578,7 +578,7 @@ function NewProjectModal({ client, onClose, onCreate }) {
         <button
           onClick={submit}
           disabled={saving || !form.title.trim()}
-          style={{ marginTop: 28, width: '100%', height: 52, borderRadius: 14, background: form.title.trim() ? '#0D0B2E' : '#E8E6F5', color: '#fff', border: 'none', fontSize: 14, fontWeight: 800, cursor: form.title.trim() ? 'pointer' : 'default', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, transition: 'background .2s' }}
+          style={{ marginTop: 28, width: '100%', height: 52, borderRadius: 14, background: form.title.trim() ? '#111827' : '#E5E7EB', color: '#fff', border: 'none', fontSize: 14, fontWeight: 800, cursor: form.title.trim() ? 'pointer' : 'default', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, transition: 'background .2s' }}
         >
           {saving ? <><Loader2 size={16} className="spin" /> Creating...</> : 'Create Project'}
         </button>
@@ -609,18 +609,18 @@ function AdvanceModal({ project, stage, nextStage, onClose, onAdvance }) {
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
       <div style={{ background: '#fff', borderRadius: 24, width: '100%', maxWidth: 480, padding: 36, position: 'relative', boxShadow: '0 32px 80px rgba(0,0,0,.2)' }}>
-        <button onClick={onClose} style={{ position: 'absolute', top: 16, right: 16, width: 32, height: 32, borderRadius: 8, border: '1px solid #E8E6F5', background: '#F8F8FD', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><X size={14} /></button>
-        <div style={{ fontSize: 11, fontWeight: 800, color: '#9B99C8', textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 6 }}>Advance Stage</div>
-        <div style={{ fontSize: 20, fontWeight: 900, color: '#0D0B2E', marginBottom: 4 }}>{project.title}</div>
+        <button onClick={onClose} style={{ position: 'absolute', top: 16, right: 16, width: 32, height: 32, borderRadius: 8, border: '1px solid #E5E7EB', background: '#F9FAFB', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><X size={14} /></button>
+        <div style={{ fontSize: 11, fontWeight: 800, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 6 }}>Advance Stage</div>
+        <div style={{ fontSize: 20, fontWeight: 900, color: '#111827', marginBottom: 4 }}>{project.title}</div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '16px 20px', background: '#F8F8FD', borderRadius: 14, margin: '20px 0', border: `1px solid ${nextStage.color}30` }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '16px 20px', background: '#F9FAFB', borderRadius: 14, margin: '20px 0', border: `1px solid ${nextStage.color}30` }}>
           <div style={{ width: 36, height: 36, borderRadius: 10, background: `${nextStage.color}15`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
             {STAGE_ICONS[nextStage.id]}
           </div>
           <div>
-            <div style={{ fontSize: 11, color: '#9B99C8', fontWeight: 700 }}>Moving to</div>
+            <div style={{ fontSize: 11, color: '#6B7280', fontWeight: 700 }}>Moving to</div>
             <div style={{ fontSize: 16, fontWeight: 800, color: nextStage.color }}>{nextStage.name}</div>
-            <div style={{ fontSize: 12, color: '#5B5894', marginTop: 2 }}>{nextStage.adminPrompt}</div>
+            <div style={{ fontSize: 12, color: '#4B5563', marginTop: 2 }}>{nextStage.adminPrompt}</div>
           </div>
         </div>
 
@@ -646,13 +646,13 @@ function AdvanceModal({ project, stage, nextStage, onClose, onAdvance }) {
 
         {/* Internal note */}
         <div style={{ marginBottom: 16 }}>
-          <label style={{ fontSize: 11, fontWeight: 800, color: '#9B99C8', textTransform: 'uppercase', letterSpacing: '.06em', display: 'block', marginBottom: 8 }}>Internal Note (optional)</label>
-          <textarea value={note} onChange={e => setNote(e.target.value)} placeholder="Add context for your team about this stage transition..." rows={3} style={{ width: '100%', padding: '12px 16px', borderRadius: 12, border: '1.5px solid #E8E6F5', fontSize: 13, outline: 'none', resize: 'none', boxSizing: 'border-box', fontFamily: 'inherit', lineHeight: 1.6 }} />
+          <label style={{ fontSize: 11, fontWeight: 800, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '.06em', display: 'block', marginBottom: 8 }}>Internal Note (optional)</label>
+          <textarea value={note} onChange={e => setNote(e.target.value)} placeholder="Add context for your team about this stage transition..." rows={3} style={{ width: '100%', padding: '12px 16px', borderRadius: 12, border: '1.5px solid #E5E7EB', fontSize: 13, outline: 'none', resize: 'none', boxSizing: 'border-box', fontFamily: 'inherit', lineHeight: 1.6 }} />
         </div>
 
         {/* Backdate this stage transition */}
         <div style={{ marginBottom: 20 }}>
-          <label style={{ fontSize: 11, fontWeight: 800, color: '#9B99C8', textTransform: 'uppercase', letterSpacing: '.06em', display: 'block', marginBottom: 8 }}>
+          <label style={{ fontSize: 11, fontWeight: 800, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '.06em', display: 'block', marginBottom: 8 }}>
             <Calendar size={11} style={{ display: 'inline', marginRight: 5, verticalAlign: 'middle' }} />
             Backdate transition (optional)
           </label>
@@ -661,19 +661,19 @@ function AdvanceModal({ project, stage, nextStage, onClose, onAdvance }) {
             value={overrideDate}
             onChange={e => setOverrideDate(e.target.value)}
             max={new Date().toISOString().slice(0, 10)}
-            style={{ padding: '9px 12px', borderRadius: 10, border: '1.5px solid #E8E6F5', fontSize: 13, outline: 'none', fontFamily: 'inherit', color: overrideDate ? '#0D0B2E' : '#9B99C8' }}
+            style={{ padding: '9px 12px', borderRadius: 10, border: '1.5px solid #E5E7EB', fontSize: 13, outline: 'none', fontFamily: 'inherit', color: overrideDate ? '#111827' : '#6B7280' }}
           />
           {overrideDate && (
-            <div style={{ fontSize: 11, color: '#5B5894', marginTop: 5 }}>Stage will be recorded as occurring on {overrideDate}</div>
+            <div style={{ fontSize: 11, color: '#4B5563', marginTop: 5 }}>Stage will be recorded as occurring on {overrideDate}</div>
           )}
         </div>
 
         <div style={{ display: 'flex', gap: 10 }}>
-          <button onClick={onClose} style={{ flex: 1, height: 48, borderRadius: 12, border: '1.5px solid #E8E6F5', background: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Cancel</button>
+          <button onClick={onClose} style={{ flex: 1, height: 48, borderRadius: 12, border: '1.5px solid #E5E7EB', background: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Cancel</button>
           <button
             onClick={submit}
             disabled={saving || (needsApproval && !approvalOverride)}
-            style={{ flex: 2, height: 48, borderRadius: 12, background: (needsApproval && !approvalOverride) ? '#E8E6F5' : nextStage.color, color: '#fff', border: 'none', fontSize: 14, fontWeight: 800, cursor: (needsApproval && !approvalOverride) ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, transition: 'background .2s' }}
+            style={{ flex: 2, height: 48, borderRadius: 12, background: (needsApproval && !approvalOverride) ? '#E5E7EB' : nextStage.color, color: '#fff', border: 'none', fontSize: 14, fontWeight: 800, cursor: (needsApproval && !approvalOverride) ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, transition: 'background .2s' }}
           >
             {saving ? <><Loader2 size={15} className="spin" /> Advancing...</> : `Advance → ${nextStage.short}`}
           </button>
@@ -722,7 +722,7 @@ function ShippingDetailsCard({ project, updateShippingDetails }) {
     width: '100%',
     padding: '10px 14px',
     borderRadius: 12,
-    border: '1.5px solid #E8E6F5',
+    border: '1.5px solid #E5E7EB',
     fontSize: 13,
     outline: 'none',
     boxSizing: 'border-box',
@@ -732,7 +732,7 @@ function ShippingDetailsCard({ project, updateShippingDetails }) {
   const labelStyle = {
     fontSize: 11,
     fontWeight: 800,
-    color: '#9B99C8',
+    color: '#6B7280',
     textTransform: 'uppercase',
     letterSpacing: '.06em',
     display: 'block',
@@ -740,20 +740,20 @@ function ShippingDetailsCard({ project, updateShippingDetails }) {
   };
 
   return (
-    <div style={{ padding: '20px 24px', background: '#fff', borderRadius: 20, border: '1px solid #E8E6F5' }}>
+    <div style={{ padding: '20px 24px', background: '#fff', borderRadius: 20, border: '1px solid #E5E7EB' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <div style={{ width: 34, height: 34, borderRadius: 10, background: '#F0F9FF', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <Anchor size={15} color="#0284C7" />
           </div>
-          <div style={{ fontSize: 13, fontWeight: 800, color: '#0D0B2E' }}>Shipping Details</div>
+          <div style={{ fontSize: 13, fontWeight: 800, color: '#111827' }}>Shipping Details</div>
         </div>
         <button
           onClick={handleSave}
           disabled={saving}
           style={{
             height: 34, padding: '0 16px', borderRadius: 10,
-            background: saved ? '#F0FDF4' : '#0D0B2E',
+            background: saved ? '#F0FDF4' : '#111827',
             color: saved ? '#16A34A' : '#fff',
             border: saved ? '1.5px solid #16A34A40' : 'none',
             fontSize: 12, fontWeight: 800, cursor: 'pointer',
@@ -920,18 +920,18 @@ function ProjectEconomics({ project, user }) {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
 
       {/* ── Internal Cost Breakdown (COGS) ── */}
-      <div style={{ padding: '20px 24px', background: '#fff', borderRadius: 18, border: '1px solid #E8E6F5' }}>
+      <div style={{ padding: '20px 24px', background: '#fff', borderRadius: 18, border: '1px solid #E5E7EB' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <div style={{ width: 34, height: 34, borderRadius: 10, background: '#FFF7ED', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <TrendingUp size={15} color="#D97706" />
             </div>
             <div>
-              <div style={{ fontSize: 13, fontWeight: 800, color: '#0D0B2E' }}>Internal Cost Breakdown</div>
-              <div style={{ fontSize: 11, color: '#9B99C8' }}>Your costs vs sale price — not visible to client</div>
+              <div style={{ fontSize: 13, fontWeight: 800, color: '#111827' }}>Internal Cost Breakdown</div>
+              <div style={{ fontSize: 11, color: '#6B7280' }}>Your costs vs sale price — not visible to client</div>
             </div>
           </div>
-          <button onClick={handleSave} disabled={saving} style={{ height: 34, padding: '0 16px', borderRadius: 10, background: saved ? '#F0FDF4' : '#0D0B2E', color: saved ? '#16A34A' : '#fff', border: saved ? '1.5px solid #16A34A40' : 'none', fontSize: 12, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, transition: 'all .2s' }}>
+          <button onClick={handleSave} disabled={saving} style={{ height: 34, padding: '0 16px', borderRadius: 10, background: saved ? '#F0FDF4' : '#111827', color: saved ? '#16A34A' : '#fff', border: saved ? '1.5px solid #16A34A40' : 'none', fontSize: 12, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, transition: 'all .2s' }}>
             {saving ? <><Loader2 size={13} className="spin" /> Saving...</> : saved ? '✓ Saved' : 'Save'}
           </button>
         </div>
@@ -939,15 +939,15 @@ function ProjectEconomics({ project, user }) {
         {/* Core cost rows */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 12 }}>
           {BD_ITEMS_CONFIG.map(({ key, label, icon, color }) => (
-            <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', borderRadius: 12, background: form[key].enabled ? '#FAFAF9' : '#F8F8FD', border: `1.5px solid ${form[key].enabled ? '#E8E6F5' : '#E8E6F5'}`, opacity: form[key].enabled ? 1 : 0.55, transition: 'all .2s' }}>
-              <button onClick={() => toggle(key)} style={{ width: 36, height: 20, borderRadius: 10, background: form[key].enabled ? color : '#E8E6F5', border: 'none', cursor: 'pointer', position: 'relative', flexShrink: 0, transition: 'background .2s' }}>
+            <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', borderRadius: 12, background: form[key].enabled ? '#FAFAF9' : '#F9FAFB', border: `1.5px solid ${form[key].enabled ? '#E5E7EB' : '#E5E7EB'}`, opacity: form[key].enabled ? 1 : 0.55, transition: 'all .2s' }}>
+              <button onClick={() => toggle(key)} style={{ width: 36, height: 20, borderRadius: 10, background: form[key].enabled ? color : '#E5E7EB', border: 'none', cursor: 'pointer', position: 'relative', flexShrink: 0, transition: 'background .2s' }}>
                 <div style={{ position: 'absolute', top: 2, left: form[key].enabled ? 18 : 2, width: 16, height: 16, borderRadius: '50%', background: '#fff', transition: 'left .2s', boxShadow: '0 1px 3px rgba(0,0,0,.25)' }} />
               </button>
               <div style={{ width: 28, height: 28, borderRadius: 8, background: `${color}15`, display: 'flex', alignItems: 'center', justifyContent: 'center', color, flexShrink: 0 }}>{icon}</div>
-              <div style={{ flex: 1, fontSize: 12, fontWeight: 700, color: '#0D0B2E' }}>{label}</div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#fff', border: '1.5px solid #E8E6F5', borderRadius: 10, padding: '6px 10px' }}>
-                <span style={{ fontSize: 11, color: '#9B99C8', fontWeight: 700, flexShrink: 0 }}>GHS</span>
-                <input type="number" min="0" value={form[key].amount} onChange={e => setAmt(key, e.target.value)} disabled={!form[key].enabled} placeholder="0.00" style={{ width: 90, border: 'none', outline: 'none', fontSize: 13, fontWeight: 700, color: '#0D0B2E', background: 'transparent', fontFamily: 'inherit', textAlign: 'right' }} />
+              <div style={{ flex: 1, fontSize: 12, fontWeight: 700, color: '#111827' }}>{label}</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#fff', border: '1.5px solid #E5E7EB', borderRadius: 10, padding: '6px 10px' }}>
+                <span style={{ fontSize: 11, color: '#6B7280', fontWeight: 700, flexShrink: 0 }}>GHS</span>
+                <input type="number" min="0" value={form[key].amount} onChange={e => setAmt(key, e.target.value)} disabled={!form[key].enabled} placeholder="0.00" style={{ width: 90, border: 'none', outline: 'none', fontSize: 13, fontWeight: 700, color: '#111827', background: 'transparent', fontFamily: 'inherit', textAlign: 'right' }} />
               </div>
             </div>
           ))}
@@ -956,21 +956,21 @@ function ProjectEconomics({ project, user }) {
         {/* Extras */}
         {form.extras.map(extra => (
           <div key={extra.id} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-            <div style={{ width: 28, height: 28, borderRadius: 8, background: '#E8E6F5', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Plus size={12} color="#9B99C8" /></div>
-            <input value={extra.label} onChange={e => setEx(extra.id, 'label', e.target.value)} placeholder="Extra cost description" style={{ flex: 1, padding: '8px 12px', borderRadius: 9, border: '1.5px solid #E8E6F5', fontSize: 12, outline: 'none', fontFamily: 'inherit' }} />
-            <div style={{ display: 'flex', alignItems: 'center', gap: 5, background: '#fff', border: '1.5px solid #E8E6F5', borderRadius: 9, padding: '5px 9px', flexShrink: 0 }}>
-              <span style={{ fontSize: 11, color: '#9B99C8', fontWeight: 700 }}>GHS</span>
-              <input type="number" min="0" value={extra.amount} onChange={e => setEx(extra.id, 'amount', e.target.value)} placeholder="0" style={{ width: 80, border: 'none', outline: 'none', fontSize: 13, fontWeight: 700, color: '#0D0B2E', background: 'transparent', fontFamily: 'inherit', textAlign: 'right' }} />
+            <div style={{ width: 28, height: 28, borderRadius: 8, background: '#E5E7EB', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Plus size={12} color="#6B7280" /></div>
+            <input value={extra.label} onChange={e => setEx(extra.id, 'label', e.target.value)} placeholder="Extra cost description" style={{ flex: 1, padding: '8px 12px', borderRadius: 9, border: '1.5px solid #E5E7EB', fontSize: 12, outline: 'none', fontFamily: 'inherit' }} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 5, background: '#fff', border: '1.5px solid #E5E7EB', borderRadius: 9, padding: '5px 9px', flexShrink: 0 }}>
+              <span style={{ fontSize: 11, color: '#6B7280', fontWeight: 700 }}>GHS</span>
+              <input type="number" min="0" value={extra.amount} onChange={e => setEx(extra.id, 'amount', e.target.value)} placeholder="0" style={{ width: 80, border: 'none', outline: 'none', fontSize: 13, fontWeight: 700, color: '#111827', background: 'transparent', fontFamily: 'inherit', textAlign: 'right' }} />
             </div>
-            <button onClick={() => rmExtra(extra.id)} style={{ width: 28, height: 28, borderRadius: 7, border: '1.5px solid #E8E6F5', background: '#F8F8FD', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><X size={12} color="#9B99C8" /></button>
+            <button onClick={() => rmExtra(extra.id)} style={{ width: 28, height: 28, borderRadius: 7, border: '1.5px solid #E5E7EB', background: '#F9FAFB', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><X size={12} color="#6B7280" /></button>
           </div>
         ))}
-        <button onClick={addExtra} style={{ fontSize: 11, fontWeight: 800, color: '#5B5894', background: 'transparent', border: 'none', cursor: 'pointer', padding: '4px 0 14px', display: 'flex', alignItems: 'center', gap: 5 }}>
+        <button onClick={addExtra} style={{ fontSize: 11, fontWeight: 800, color: '#4B5563', background: 'transparent', border: 'none', cursor: 'pointer', padding: '4px 0 14px', display: 'flex', alignItems: 'center', gap: 5 }}>
           <Plus size={12} /> Add extra cost
         </button>
 
         {/* Summary strip */}
-        <div style={{ background: '#0D0B2E', borderRadius: 14, padding: '16px 20px', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
+        <div style={{ background: '#111827', borderRadius: 14, padding: '16px 20px', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
           {[
             { label: 'Total COGS',   value: fmt(totalCOGS),   color: '#fff' },
             { label: 'Sale Price',   value: fmt(salePrice),   color: AC },
@@ -986,18 +986,18 @@ function ProjectEconomics({ project, user }) {
       </div>
 
       {/* ── Price Adjustments / Surcharges ── */}
-      <div style={{ padding: '20px 24px', background: '#fff', borderRadius: 18, border: '1px solid #E8E6F5' }}>
+      <div style={{ padding: '20px 24px', background: '#fff', borderRadius: 18, border: '1px solid #E5E7EB' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: (surcharges.length > 0 || showAddSC) ? 16 : 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <div style={{ width: 34, height: 34, borderRadius: 10, background: '#FEF2F2', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <AlertCircle size={15} color="#DC2626" />
             </div>
             <div>
-              <div style={{ fontSize: 13, fontWeight: 800, color: '#0D0B2E' }}>Price Adjustments</div>
-              <div style={{ fontSize: 11, color: '#9B99C8' }}>Documented surcharges — visible to client with full reason</div>
+              <div style={{ fontSize: 13, fontWeight: 800, color: '#111827' }}>Price Adjustments</div>
+              <div style={{ fontSize: 11, color: '#6B7280' }}>Documented surcharges — visible to client with full reason</div>
             </div>
           </div>
-          <button onClick={() => setShowAddSC(p => !p)} style={{ height: 32, padding: '0 14px', borderRadius: 9, background: showAddSC ? '#F8F8FD' : '#0D0B2E', color: showAddSC ? '#5B5894' : '#fff', border: showAddSC ? '1.5px solid #E8E6F5' : 'none', fontSize: 12, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, transition: 'all .2s' }}>
+          <button onClick={() => setShowAddSC(p => !p)} style={{ height: 32, padding: '0 14px', borderRadius: 9, background: showAddSC ? '#F9FAFB' : '#111827', color: showAddSC ? '#4B5563' : '#fff', border: showAddSC ? '1.5px solid #E5E7EB' : 'none', fontSize: 12, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, transition: 'all .2s' }}>
             {showAddSC ? 'Cancel' : <><Plus size={13} /> Add Surcharge</>}
           </button>
         </div>
@@ -1009,48 +1009,48 @@ function ProjectEconomics({ project, user }) {
                 <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
                   <div style={{ flex: 1 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                      <span style={{ fontSize: 13, fontWeight: 800, color: '#0D0B2E' }}>{sc.label}</span>
+                      <span style={{ fontSize: 13, fontWeight: 800, color: '#111827' }}>{sc.label}</span>
                       <span style={{ fontSize: 12, fontWeight: 900, color: '#DC2626' }}>+{fmt(sc.amount)}</span>
                     </div>
-                    <div style={{ fontSize: 12, color: '#5B5894', lineHeight: 1.5, marginBottom: 6 }}>{sc.reason}</div>
-                    <div style={{ fontSize: 10, color: '#9B99C8', fontWeight: 600 }}>{sc.date} · Added by {sc.addedBy}</div>
+                    <div style={{ fontSize: 12, color: '#4B5563', lineHeight: 1.5, marginBottom: 6 }}>{sc.reason}</div>
+                    <div style={{ fontSize: 10, color: '#6B7280', fontWeight: 600 }}>{sc.date} · Added by {sc.addedBy}</div>
                   </div>
                   <button onClick={() => removeSurcharge(sc.id)} style={{ width: 28, height: 28, borderRadius: 7, border: '1.5px solid #FECACA', background: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><X size={12} color="#DC2626" /></button>
                 </div>
               </div>
             ))}
-            <div style={{ fontSize: 12, fontWeight: 800, color: '#5B5894', textAlign: 'right' }}>
+            <div style={{ fontSize: 12, fontWeight: 800, color: '#4B5563', textAlign: 'right' }}>
               Total adjustments: <span style={{ color: '#DC2626' }}>+{fmt(totalSurcharges)}</span>
             </div>
           </div>
         )}
 
         {surcharges.length === 0 && !showAddSC && (
-          <div style={{ fontSize: 12, color: '#9B99C8', padding: '6px 0' }}>No price adjustments on this project.</div>
+          <div style={{ fontSize: 12, color: '#6B7280', padding: '6px 0' }}>No price adjustments on this project.</div>
         )}
 
         {showAddSC && (
-          <div style={{ background: '#FAFAF9', borderRadius: 14, border: '1.5px solid #E8E6F5', padding: 16 }}>
+          <div style={{ background: '#FAFAF9', borderRadius: 14, border: '1.5px solid #E5E7EB', padding: 16 }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 160px', gap: 10 }}>
                 <div>
-                  <div style={{ fontSize: 10, fontWeight: 800, color: '#9B99C8', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 6 }}>Adjustment Label *</div>
-                  <input value={newSC.label} onChange={e => setNewSC(p => ({ ...p, label: e.target.value }))} placeholder="e.g. Material price increase" style={{ width: '100%', padding: '9px 12px', borderRadius: 10, border: '1.5px solid #E8E6F5', fontSize: 13, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' }} />
+                  <div style={{ fontSize: 10, fontWeight: 800, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 6 }}>Adjustment Label *</div>
+                  <input value={newSC.label} onChange={e => setNewSC(p => ({ ...p, label: e.target.value }))} placeholder="e.g. Material price increase" style={{ width: '100%', padding: '9px 12px', borderRadius: 10, border: '1.5px solid #E5E7EB', fontSize: 13, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' }} />
                 </div>
                 <div>
-                  <div style={{ fontSize: 10, fontWeight: 800, color: '#9B99C8', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 6 }}>Amount (GHS) *</div>
-                  <input type="number" min="0" value={newSC.amount} onChange={e => setNewSC(p => ({ ...p, amount: e.target.value }))} placeholder="0.00" style={{ width: '100%', padding: '9px 12px', borderRadius: 10, border: '1.5px solid #E8E6F5', fontSize: 13, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' }} />
+                  <div style={{ fontSize: 10, fontWeight: 800, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 6 }}>Amount (GHS) *</div>
+                  <input type="number" min="0" value={newSC.amount} onChange={e => setNewSC(p => ({ ...p, amount: e.target.value }))} placeholder="0.00" style={{ width: '100%', padding: '9px 12px', borderRadius: 10, border: '1.5px solid #E5E7EB', fontSize: 13, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' }} />
                 </div>
               </div>
               <div>
-                <div style={{ fontSize: 10, fontWeight: 800, color: '#9B99C8', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 6 }}>Reason / Explanation * (visible to client)</div>
-                <textarea value={newSC.reason} onChange={e => setNewSC(p => ({ ...p, reason: e.target.value }))} placeholder="Explain why this adjustment was necessary — the client will see this..." rows={3} style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #E8E6F5', fontSize: 13, outline: 'none', resize: 'vertical', boxSizing: 'border-box', fontFamily: 'inherit', lineHeight: 1.6 }} />
+                <div style={{ fontSize: 10, fontWeight: 800, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 6 }}>Reason / Explanation * (visible to client)</div>
+                <textarea value={newSC.reason} onChange={e => setNewSC(p => ({ ...p, reason: e.target.value }))} placeholder="Explain why this adjustment was necessary — the client will see this..." rows={3} style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #E5E7EB', fontSize: 13, outline: 'none', resize: 'vertical', boxSizing: 'border-box', fontFamily: 'inherit', lineHeight: 1.6 }} />
               </div>
               <div>
-                <div style={{ fontSize: 10, fontWeight: 800, color: '#9B99C8', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 6 }}>Effective Date</div>
-                <input type="date" value={newSC.date} onChange={e => setNewSC(p => ({ ...p, date: e.target.value }))} style={{ padding: '9px 12px', borderRadius: 10, border: '1.5px solid #E8E6F5', fontSize: 13, outline: 'none', fontFamily: 'inherit' }} />
+                <div style={{ fontSize: 10, fontWeight: 800, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 6 }}>Effective Date</div>
+                <input type="date" value={newSC.date} onChange={e => setNewSC(p => ({ ...p, date: e.target.value }))} style={{ padding: '9px 12px', borderRadius: 10, border: '1.5px solid #E5E7EB', fontSize: 13, outline: 'none', fontFamily: 'inherit' }} />
               </div>
-              <button onClick={handleAddSurcharge} disabled={savingSC || !newSC.label.trim() || !newSC.amount || !newSC.reason.trim()} style={{ height: 42, borderRadius: 11, background: (newSC.label.trim() && newSC.amount && newSC.reason.trim()) ? '#DC2626' : '#E8E6F5', color: '#fff', border: 'none', fontSize: 13, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, transition: 'background .2s' }}>
+              <button onClick={handleAddSurcharge} disabled={savingSC || !newSC.label.trim() || !newSC.amount || !newSC.reason.trim()} style={{ height: 42, borderRadius: 11, background: (newSC.label.trim() && newSC.amount && newSC.reason.trim()) ? '#DC2626' : '#E5E7EB', color: '#fff', border: 'none', fontSize: 13, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, transition: 'background .2s' }}>
                 {savingSC ? <><Loader2 size={14} className="spin" /> Saving...</> : 'Add Price Adjustment'}
               </button>
             </div>
@@ -1126,21 +1126,21 @@ function DocumentVault({ project, addProjectDocument, user }) {
   };
 
   const fileIcon = (fileType) => {
-    if (!fileType) return <FileText size={14} color="#9B99C8" />;
+    if (!fileType) return <FileText size={14} color="#6B7280" />;
     if (fileType.includes('pdf')) return <FileText size={14} color="#DC2626" />;
-    if (fileType.includes('image') || fileType.includes('jpg') || fileType.includes('png')) return <FileText size={14} color="#7C3AED" />;
+    if (fileType.includes('image') || fileType.includes('jpg') || fileType.includes('png')) return <FileText size={14} color="#0F766E" />;
     return <FileText size={14} color="#0284C7" />;
   };
 
   return (
-    <div style={{ padding: '20px 24px', background: '#fff', borderRadius: 18, border: '1px solid #E8E6F5' }}>
+    <div style={{ padding: '20px 24px', background: '#fff', borderRadius: 18, border: '1px solid #E5E7EB' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
-        <div style={{ fontSize: 13, fontWeight: 800, color: '#0D0B2E' }}>Documents & Progress Photos</div>
+        <div style={{ fontSize: 13, fontWeight: 800, color: '#111827' }}>Documents & Progress Photos</div>
         <div style={{ display: 'flex', gap: 8 }}>
           {/* Progress photo button */}
           <label style={{
             height: 34, padding: '0 14px', borderRadius: 10,
-            background: '#7C3AED15', color: '#7C3AED', border: '1px solid #7C3AED30',
+            background: '#0F766E15', color: '#0F766E', border: '1px solid #0F766E30',
             fontSize: 12, fontWeight: 800, cursor: uploadingPhoto ? 'default' : 'pointer',
             display: 'flex', alignItems: 'center', gap: 6,
             opacity: uploadingPhoto ? 0.6 : 1, transition: 'opacity .2s',
@@ -1159,7 +1159,7 @@ function DocumentVault({ project, addProjectDocument, user }) {
           {/* Document upload button */}
           <label style={{
             height: 34, padding: '0 14px', borderRadius: 10,
-            background: '#0D0B2E', color: '#fff',
+            background: '#111827', color: '#fff',
             fontSize: 12, fontWeight: 800, cursor: uploading ? 'default' : 'pointer',
             display: 'flex', alignItems: 'center', gap: 6,
             opacity: uploading ? 0.6 : 1, transition: 'opacity .2s',
@@ -1178,9 +1178,9 @@ function DocumentVault({ project, addProjectDocument, user }) {
       </div>
 
       {docs.length === 0 ? (
-        <div style={{ padding: '28px 0', textAlign: 'center', border: '1.5px dashed #E8E6F5', borderRadius: 12 }}>
-          <FileText size={28} color="#E8E6F5" style={{ marginBottom: 8 }} />
-          <div style={{ fontSize: 12, color: '#9B99C8', fontWeight: 600 }}>No documents yet</div>
+        <div style={{ padding: '28px 0', textAlign: 'center', border: '1.5px dashed #E5E7EB', borderRadius: 12 }}>
+          <FileText size={28} color="#E5E7EB" style={{ marginBottom: 8 }} />
+          <div style={{ fontSize: 12, color: '#6B7280', fontWeight: 600 }}>No documents yet</div>
           <div style={{ fontSize: 11, color: '#DFD9D1', marginTop: 4, lineHeight: 1.5 }}>Upload quotes, BOLs, and certificates here.</div>
         </div>
       ) : (
@@ -1188,14 +1188,14 @@ function DocumentVault({ project, addProjectDocument, user }) {
           {docs.map(doc => {
             const isPhoto = doc.docType === 'progress_photo' || (doc.fileType || '').includes('image');
             return (
-              <div key={doc.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', background: isPhoto ? '#FAF5FF' : '#F8F8FD', borderRadius: 12, border: `1px solid ${isPhoto ? '#E9D5FF' : '#E8E6F5'}` }}>
-                <div style={{ width: 32, height: 32, borderRadius: 8, background: isPhoto ? '#7C3AED15' : '#fff', border: `1px solid ${isPhoto ? '#E9D5FF' : '#E8E6F5'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                  {isPhoto ? <Camera size={14} color="#7C3AED" /> : fileIcon(doc.fileType)}
+              <div key={doc.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', background: isPhoto ? '#FAF5FF' : '#F9FAFB', borderRadius: 12, border: `1px solid ${isPhoto ? '#E9D5FF' : '#E5E7EB'}` }}>
+                <div style={{ width: 32, height: 32, borderRadius: 8, background: isPhoto ? '#0F766E15' : '#fff', border: `1px solid ${isPhoto ? '#E9D5FF' : '#E5E7EB'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  {isPhoto ? <Camera size={14} color="#0F766E" /> : fileIcon(doc.fileType)}
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: '#0D0B2E', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{doc.name}</div>
-                  <div style={{ fontSize: 10, color: '#9B99C8', marginTop: 2 }}>
-                    {doc.uploadedBy && <span style={{ color: isPhoto ? '#7C3AED' : undefined }}>{doc.uploadedBy} · </span>}
+                  <div style={{ fontSize: 12, fontWeight: 700, color: '#111827', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{doc.name}</div>
+                  <div style={{ fontSize: 10, color: '#6B7280', marginTop: 2 }}>
+                    {doc.uploadedBy && <span style={{ color: isPhoto ? '#0F766E' : undefined }}>{doc.uploadedBy} · </span>}
                     {formatDate(doc.createdAt)}{doc.size ? ` · ${formatSize(doc.size)}` : ''}
                   </div>
                 </div>
@@ -1205,9 +1205,9 @@ function DocumentVault({ project, addProjectDocument, user }) {
                     target="_blank"
                     rel="noopener noreferrer"
                     style={{
-                      width: 30, height: 30, borderRadius: 8, background: '#fff', border: '1px solid #E8E6F5',
+                      width: 30, height: 30, borderRadius: 8, background: '#fff', border: '1px solid #E5E7EB',
                       display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-                      color: '#5B5894', textDecoration: 'none', transition: 'background .15s',
+                      color: '#4B5563', textDecoration: 'none', transition: 'background .15s',
                     }}
                     title={isPhoto ? 'View photo' : 'Download'}
                   >
@@ -1338,9 +1338,9 @@ function ProjectConversation({ project, user, addProjectMessage }) {
   };
 
   const roleColor = (role) => {
-    if (role === 'system') return '#9B99C8';
-    if (role === 'admin') return '#0D0B2E';
-    if (role === 'client') return '#2563EB';
+    if (role === 'system') return '#6B7280';
+    if (role === 'admin') return '#111827';
+    if (role === 'client') return '#0F766E';
     return '#059669';
   };
 
@@ -1359,7 +1359,7 @@ function ProjectConversation({ project, user, addProjectMessage }) {
           { id: 'client', label: 'Client Chat', icon: <MessageSquare size={13} /> },
           { id: 'internal', label: 'Internal Notes', icon: <StickyNote size={13} /> },
         ].map(t => (
-          <button key={t.id} onClick={() => setTab(t.id)} style={{ flex: 1, height: 36, borderRadius: 10, border: `1.5px solid ${tab === t.id ? '#0D0B2E' : '#E8E6F5'}`, background: tab === t.id ? '#0D0B2E' : '#fff', color: tab === t.id ? '#fff' : '#5B5894', fontSize: 11, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, transition: 'all .2s' }}>
+          <button key={t.id} onClick={() => setTab(t.id)} style={{ flex: 1, height: 36, borderRadius: 10, border: `1.5px solid ${tab === t.id ? '#111827' : '#E5E7EB'}`, background: tab === t.id ? '#111827' : '#fff', color: tab === t.id ? '#fff' : '#4B5563', fontSize: 11, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, transition: 'all .2s' }}>
             {t.icon}{t.label}
           </button>
         ))}
@@ -1369,8 +1369,8 @@ function ProjectConversation({ project, user, addProjectMessage }) {
       <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 12, paddingRight: 4, marginBottom: 16 }}>
         {visible.length === 0 && (
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 32, textAlign: 'center' }}>
-            <MessageSquare size={36} color="#E8E6F5" style={{ marginBottom: 12 }} />
-            <div style={{ fontSize: 13, color: '#9B99C8', fontWeight: 600 }}>{tab === 'client' ? 'No client messages yet' : 'No internal notes yet'}</div>
+            <MessageSquare size={36} color="#E5E7EB" style={{ marginBottom: 12 }} />
+            <div style={{ fontSize: 13, color: '#6B7280', fontWeight: 600 }}>{tab === 'client' ? 'No client messages yet' : 'No internal notes yet'}</div>
             <div style={{ fontSize: 11, color: '#DFD9D1', marginTop: 4 }}>{tab === 'client' ? 'Start the conversation below.' : 'Add notes for your team.'}</div>
           </div>
         )}
@@ -1389,18 +1389,18 @@ function ProjectConversation({ project, user, addProjectMessage }) {
               <div style={{
                 maxWidth: '88%', padding: isSystem ? '10px 16px' : '12px 16px',
                 borderRadius: isAdmin ? '18px 18px 4px 18px' : isSystem ? 12 : '18px 18px 18px 4px',
-                background: isAdmin ? '#0D0B2E' : isSystem ? '#F8F8FD' : '#fff',
-                color: isAdmin ? '#fff' : isSystem ? '#9B99C8' : '#0D0B2E',
+                background: isAdmin ? '#111827' : isSystem ? '#F9FAFB' : '#fff',
+                color: isAdmin ? '#fff' : isSystem ? '#6B7280' : '#111827',
                 fontSize: isSystem ? 11 : 13,
-                border: isSystem ? '1px dashed #E8E6F5' : isAdmin ? 'none' : '1px solid #E8E6F5',
+                border: isSystem ? '1px dashed #E5E7EB' : isAdmin ? 'none' : '1px solid #E5E7EB',
                 fontStyle: isSystem ? 'italic' : 'normal',
                 lineHeight: 1.5,
               }}>
                 {editingId === m.id ? (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    <textarea value={editText} onChange={e => setEditText(e.target.value)} rows={3} style={{ width: 260, border: '1px solid #E8E6F5', borderRadius: 10, padding: 10, fontFamily: 'inherit', fontSize: 13 }} />
+                    <textarea value={editText} onChange={e => setEditText(e.target.value)} rows={3} style={{ width: 260, border: '1px solid #E5E7EB', borderRadius: 10, padding: 10, fontFamily: 'inherit', fontSize: 13 }} />
                     <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-                      <button onClick={() => setEditingId(null)} style={{ border: 'none', background: '#F8F8FD', borderRadius: 8, padding: '6px 10px', fontSize: 11, fontWeight: 800, cursor: 'pointer' }}>Cancel</button>
+                      <button onClick={() => setEditingId(null)} style={{ border: 'none', background: '#F9FAFB', borderRadius: 8, padding: '6px 10px', fontSize: 11, fontWeight: 800, cursor: 'pointer' }}>Cancel</button>
                       <button onClick={() => saveEdit(m)} style={{ border: 'none', background: '#16A34A', color: '#fff', borderRadius: 8, padding: '6px 10px', fontSize: 11, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}><Save size={12} /> Save</button>
                     </div>
                   </div>
@@ -1415,18 +1415,18 @@ function ProjectConversation({ project, user, addProjectMessage }) {
                 )}
                 {m.editedAt && <span style={{ display: 'block', fontSize: 10, opacity: .55, marginTop: 6 }}>Edited</span>}
                 {translated && (
-                  <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px solid ${isAdmin ? 'rgba(255,255,255,.18)' : '#E8E6F5'}`, fontSize: 12, opacity: .9 }}>
+                  <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px solid ${isAdmin ? 'rgba(255,255,255,.18)' : '#E5E7EB'}`, fontSize: 12, opacity: .9 }}>
                     <strong>中文:</strong> {translated}
                   </div>
                 )}
               </div>
               {!isSystem && tab === 'client' && (
                 <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
-                  <button onClick={() => translate(m.id, 'zh')} disabled={translatingId === m.id} style={{ border: 'none', background: 'transparent', color: '#9B99C8', fontSize: 10, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <button onClick={() => translate(m.id, 'zh')} disabled={translatingId === m.id} style={{ border: 'none', background: 'transparent', color: '#6B7280', fontSize: 10, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
                     <Languages size={11} /> {translatingId === m.id ? 'Translating...' : 'Translate 中文'}
                   </button>
                   {canEdit && (
-                    <button onClick={() => startEdit(m)} style={{ border: 'none', background: 'transparent', color: '#9B99C8', fontSize: 10, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <button onClick={() => startEdit(m)} style={{ border: 'none', background: 'transparent', color: '#6B7280', fontSize: 10, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
                       <Pencil size={11} /> Edit
                     </button>
                   )}
@@ -1442,19 +1442,19 @@ function ProjectConversation({ project, user, addProjectMessage }) {
       </div>
 
       {/* Input */}
-      <div style={{ flexShrink: 0, display: 'flex', gap: 8, paddingTop: 12, borderTop: '1px solid #E8E6F5' }}>
+      <div style={{ flexShrink: 0, display: 'flex', gap: 8, paddingTop: 12, borderTop: '1px solid #E5E7EB' }}>
         <textarea
           value={text}
           onChange={e => setText(e.target.value)}
           onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }}
           placeholder={tab === 'client' ? 'Message client...' : 'Internal note (team only)...'}
           rows={2}
-          style={{ flex: 1, padding: '10px 14px', borderRadius: 12, border: '1.5px solid #E8E6F5', fontSize: 13, outline: 'none', resize: 'none', boxSizing: 'border-box', fontFamily: 'inherit', lineHeight: 1.5, background: tab === 'internal' ? '#FEFDF5' : '#fff' }}
+          style={{ flex: 1, padding: '10px 14px', borderRadius: 12, border: '1.5px solid #E5E7EB', fontSize: 13, outline: 'none', resize: 'none', boxSizing: 'border-box', fontFamily: 'inherit', lineHeight: 1.5, background: tab === 'internal' ? '#FEFDF5' : '#fff' }}
         />
         <button
           onClick={recording ? stopRecording : startRecording}
           disabled={voiceSaving}
-          style={{ width: 44, height: 44, borderRadius: 12, background: recording ? '#EF4444' : '#F8F8FD', color: recording ? '#fff' : '#5B5894', border: '1px solid #E8E6F5', cursor: voiceSaving ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', alignSelf: 'flex-end', flexShrink: 0 }}
+          style={{ width: 44, height: 44, borderRadius: 12, background: recording ? '#EF4444' : '#F9FAFB', color: recording ? '#fff' : '#4B5563', border: '1px solid #E5E7EB', cursor: voiceSaving ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', alignSelf: 'flex-end', flexShrink: 0 }}
           title={recording ? 'Stop recording' : 'Record voice note'}
         >
           {voiceSaving ? <Loader2 size={16} className="spin" /> : recording ? <Square size={15} /> : <Mic size={16} />}
@@ -1462,7 +1462,7 @@ function ProjectConversation({ project, user, addProjectMessage }) {
         <button
           onClick={send}
           disabled={!text.trim() || sending}
-          style={{ width: 44, height: 44, borderRadius: 12, background: text.trim() ? '#0D0B2E' : '#E8E6F5', color: '#fff', border: 'none', cursor: text.trim() ? 'pointer' : 'default', display: 'flex', alignItems: 'center', justifyContent: 'center', alignSelf: 'flex-end', flexShrink: 0, transition: 'background .2s' }}
+          style={{ width: 44, height: 44, borderRadius: 12, background: text.trim() ? '#111827' : '#E5E7EB', color: '#fff', border: 'none', cursor: text.trim() ? 'pointer' : 'default', display: 'flex', alignItems: 'center', justifyContent: 'center', alignSelf: 'flex-end', flexShrink: 0, transition: 'background .2s' }}
         >
           {sending ? <Loader2 size={16} className="spin" /> : <Send size={16} />}
         </button>
@@ -1520,9 +1520,9 @@ export default function ClientHub({ clientId, dbClients = [], onBack, ...props }
 
   if (!client) return (
     <div style={{ padding: 60, textAlign: 'center' }}>
-      <AlertCircle size={40} color="#9B99C8" style={{ marginBottom: 12 }} />
-      <div style={{ fontSize: 18, fontWeight: 800, color: '#0D0B2E' }}>Client not found</div>
-      <button onClick={onBack} style={{ marginTop: 20, padding: '10px 24px', borderRadius: 12, background: '#0D0B2E', color: '#fff', border: 'none', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Go Back</button>
+      <AlertCircle size={40} color="#6B7280" style={{ marginBottom: 12 }} />
+      <div style={{ fontSize: 18, fontWeight: 800, color: '#111827' }}>Client not found</div>
+      <button onClick={onBack} style={{ marginTop: 20, padding: '10px 24px', borderRadius: 12, background: '#111827', color: '#fff', border: 'none', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Go Back</button>
     </div>
   );
 
@@ -1530,26 +1530,26 @@ export default function ClientHub({ clientId, dbClients = [], onBack, ...props }
     <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 80px)', overflow: 'hidden' }}>
 
       {/* ── TOP BAR ── */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 0 20px 0', flexShrink: 0, borderBottom: '1px solid #E8E6F5', marginBottom: 20 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 0 20px 0', flexShrink: 0, borderBottom: '1px solid #E5E7EB', marginBottom: 20 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          <button onClick={onBack} style={{ width: 40, height: 40, borderRadius: 12, background: '#F8F8FD', border: '1px solid #E8E6F5', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+          <button onClick={onBack} style={{ width: 40, height: 40, borderRadius: 12, background: '#F9FAFB', border: '1px solid #E5E7EB', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
             <ArrowLeft size={17} />
           </button>
-          <div style={{ width: 44, height: 44, borderRadius: 14, background: ac, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, fontWeight: 900, color: '#0D0B2E', flexShrink: 0 }}>
+          <div style={{ width: 44, height: 44, borderRadius: 14, background: ac, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, fontWeight: 900, color: '#111827', flexShrink: 0 }}>
             {(client.name || 'C').slice(0, 1).toUpperCase()}
           </div>
           <div>
-            <div style={{ fontSize: 20, fontWeight: 900, color: '#0D0B2E', lineHeight: 1.2 }}>{client.name}</div>
+            <div style={{ fontSize: 20, fontWeight: 900, color: '#111827', lineHeight: 1.2 }}>{client.name}</div>
             <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 3 }}>
-              <span style={{ fontSize: 11, color: '#9B99C8', fontWeight: 600 }}>{client.phone}</span>
+              <span style={{ fontSize: 11, color: '#6B7280', fontWeight: 600 }}>{client.phone}</span>
               <PSBadge s={client.status || 'Active'} />
-              <span style={{ fontSize: 11, color: '#9B99C8' }}>{projects.length} project{projects.length !== 1 ? 's' : ''}</span>
+              <span style={{ fontSize: 11, color: '#6B7280' }}>{projects.length} project{projects.length !== 1 ? 's' : ''}</span>
             </div>
           </div>
         </div>
         <button
           onClick={() => setShowNewModal(true)}
-          style={{ height: 40, padding: '0 20px', borderRadius: 12, background: '#0D0B2E', color: '#fff', border: 'none', fontSize: 13, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}
+          style={{ height: 40, padding: '0 20px', borderRadius: 12, background: '#111827', color: '#fff', border: 'none', fontSize: 13, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}
         >
           <Plus size={15} /> New Project
         </button>
@@ -1561,7 +1561,7 @@ export default function ClientHub({ clientId, dbClients = [], onBack, ...props }
         {/* LEFT — Projects List */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12, overflowY: 'auto' }}>
           {/* Client info card */}
-          <div style={{ padding: 20, background: '#0D0B2E', borderRadius: 18, color: '#fff' }}>
+          <div style={{ padding: 20, background: '#111827', borderRadius: 18, color: '#fff' }}>
             <div style={{ fontSize: 10, fontWeight: 800, color: ac, textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 12 }}>Client Overview</div>
             {[
               { label: 'Joined', value: client.joined ? new Date(client.joined).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : 'N/A' },
@@ -1577,16 +1577,16 @@ export default function ClientHub({ clientId, dbClients = [], onBack, ...props }
           </div>
 
           {/* Project List */}
-          <div style={{ fontSize: 10, fontWeight: 800, color: '#9B99C8', textTransform: 'uppercase', letterSpacing: '.08em', paddingLeft: 2 }}>Projects</div>
+          <div style={{ fontSize: 10, fontWeight: 800, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '.08em', paddingLeft: 2 }}>Projects</div>
 
           {loadingProjects ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {[1, 2].map(i => <div key={i} style={{ height: 72, borderRadius: 14, background: '#F8F8FD', animation: 'pulse 1.5s infinite' }} />)}
+              {[1, 2].map(i => <div key={i} style={{ height: 72, borderRadius: 14, background: '#F9FAFB', animation: 'pulse 1.5s infinite' }} />)}
             </div>
           ) : projects.length === 0 ? (
-            <div style={{ padding: 24, textAlign: 'center', border: '1.5px dashed #E8E6F5', borderRadius: 14 }}>
-              <Briefcase size={28} color="#E8E6F5" style={{ marginBottom: 8 }} />
-              <div style={{ fontSize: 12, color: '#9B99C8', fontWeight: 600 }}>No projects yet</div>
+            <div style={{ padding: 24, textAlign: 'center', border: '1.5px dashed #E5E7EB', borderRadius: 14 }}>
+              <Briefcase size={28} color="#E5E7EB" style={{ marginBottom: 8 }} />
+              <div style={{ fontSize: 12, color: '#6B7280', fontWeight: 600 }}>No projects yet</div>
               <button onClick={() => setShowNewModal(true)} style={{ marginTop: 10, fontSize: 11, fontWeight: 700, color: ac, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>+ Create first project</button>
             </div>
           ) : (
@@ -1600,16 +1600,16 @@ export default function ClientHub({ clientId, dbClients = [], onBack, ...props }
                   style={{
                     width: '100%', textAlign: 'left', padding: '14px 16px', borderRadius: 14,
                     border: `2px solid ${isActive ? ac : 'transparent'}`,
-                    background: isActive ? `${ac}10` : '#F8F8FD',
+                    background: isActive ? `${ac}10` : '#F9FAFB',
                     cursor: 'pointer', transition: 'all .2s',
                   }}
                 >
-                  <div style={{ fontSize: 13, fontWeight: 800, color: '#0D0B2E', marginBottom: 4, lineHeight: 1.3 }}>{p.title}</div>
+                  <div style={{ fontSize: 13, fontWeight: 800, color: '#111827', marginBottom: 4, lineHeight: 1.3 }}>{p.title}</div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <span style={{ fontSize: 10, fontWeight: 700, color: stg?.color || '#9B99C8', background: `${stg?.color || '#9B99C8'}15`, padding: '2px 8px', borderRadius: 20 }}>{stg?.short || 'Stage 1'}</span>
-                    <span style={{ fontSize: 10, color: '#9B99C8' }}>{PROJECT_TYPES[p.projectType]?.label || 'Full Service'}</span>
+                    <span style={{ fontSize: 10, fontWeight: 700, color: stg?.color || '#6B7280', background: `${stg?.color || '#6B7280'}15`, padding: '2px 8px', borderRadius: 20 }}>{stg?.short || 'Stage 1'}</span>
+                    <span style={{ fontSize: 10, color: '#6B7280' }}>{PROJECT_TYPES[p.projectType]?.label || 'Full Service'}</span>
                   </div>
-                  <div style={{ marginTop: 8, height: 3, background: '#E8E6F5', borderRadius: 2, overflow: 'hidden' }}>
+                  <div style={{ marginTop: 8, height: 3, background: '#E5E7EB', borderRadius: 2, overflow: 'hidden' }}>
                     <div style={{ height: '100%', width: `${stg?.pct || 5}%`, background: stg?.color || ac, borderRadius: 2 }} />
                   </div>
                 </button>
@@ -1622,50 +1622,50 @@ export default function ClientHub({ clientId, dbClients = [], onBack, ...props }
         <div style={{ overflowY: 'auto', paddingRight: 4 }}>
           {!selected ? (
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', textAlign: 'center', padding: 40 }}>
-              <Briefcase size={48} color="#E8E6F5" style={{ marginBottom: 16 }} />
-              <div style={{ fontSize: 18, fontWeight: 800, color: '#0D0B2E', marginBottom: 8 }}>Select a project</div>
-              <div style={{ fontSize: 13, color: '#9B99C8' }}>Choose a project from the left or create a new one.</div>
+              <Briefcase size={48} color="#E5E7EB" style={{ marginBottom: 16 }} />
+              <div style={{ fontSize: 18, fontWeight: 800, color: '#111827', marginBottom: 8 }}>Select a project</div>
+              <div style={{ fontSize: 13, color: '#6B7280' }}>Choose a project from the left or create a new one.</div>
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
 
               {/* Project Header */}
-              <div style={{ padding: '20px 24px', background: '#F8F8FD', borderRadius: 18, border: '1px solid #E8E6F5' }}>
+              <div style={{ padding: '20px 24px', background: '#F9FAFB', borderRadius: 18, border: '1px solid #E5E7EB' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                   <div>
-                    <div style={{ fontSize: 11, fontWeight: 800, color: '#9B99C8', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 4 }}>
+                    <div style={{ fontSize: 11, fontWeight: 800, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 4 }}>
                       {PROJECT_TYPES[selected.projectType]?.label || 'Full Service'}
                     </div>
-                    <div style={{ fontSize: 22, fontWeight: 900, color: '#0D0B2E' }}>{selected.title}</div>
-                    {selected.description && <div style={{ fontSize: 13, color: '#5B5894', marginTop: 6, lineHeight: 1.5 }}>{selected.description}</div>}
+                    <div style={{ fontSize: 22, fontWeight: 900, color: '#111827' }}>{selected.title}</div>
+                    {selected.description && <div style={{ fontSize: 13, color: '#4B5563', marginTop: 6, lineHeight: 1.5 }}>{selected.description}</div>}
                   </div>
                   <div style={{ fontSize: 10, fontWeight: 800, color: currentStageObj?.color || ac, background: `${currentStageObj?.color || ac}15`, padding: '6px 14px', borderRadius: 20, flexShrink: 0 }}>
                     {currentStageObj?.pct || 5}% Complete
                   </div>
                 </div>
 
-                <div style={{ display: 'flex', gap: 24, marginTop: 16, paddingTop: 16, borderTop: '1px solid #E8E6F5' }}>
+                <div style={{ display: 'flex', gap: 24, marginTop: 16, paddingTop: 16, borderTop: '1px solid #E5E7EB' }}>
                   {selected.budget && (
                     <div>
-                      <div style={{ fontSize: 10, color: '#9B99C8', fontWeight: 700 }}>Budget</div>
-                      <div style={{ fontSize: 14, fontWeight: 800, color: '#0D0B2E' }}>GHS {Number(String(selected.projectTotal || selected.budget).replace(/[^0-9.]/g, '') || 0).toLocaleString()}</div>
+                      <div style={{ fontSize: 10, color: '#6B7280', fontWeight: 700 }}>Budget</div>
+                      <div style={{ fontSize: 14, fontWeight: 800, color: '#111827' }}>GHS {Number(String(selected.projectTotal || selected.budget).replace(/[^0-9.]/g, '') || 0).toLocaleString()}</div>
                     </div>
                   )}
                   <div>
-                    <div style={{ fontSize: 10, color: '#9B99C8', fontWeight: 700 }}>Created</div>
-                    <div style={{ fontSize: 14, fontWeight: 800, color: '#0D0B2E' }}>
+                    <div style={{ fontSize: 10, color: '#6B7280', fontWeight: 700 }}>Created</div>
+                    <div style={{ fontSize: 14, fontWeight: 800, color: '#111827' }}>
                       {selected.createdAt?.seconds ? new Date(selected.createdAt.seconds * 1000).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : 'Recently'}
                     </div>
                   </div>
                   <div>
-                    <div style={{ fontSize: 10, color: '#9B99C8', fontWeight: 700 }}>ID</div>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: '#9B99C8', fontFamily: 'monospace' }}>{selected.id.slice(0, 8).toUpperCase()}</div>
+                    <div style={{ fontSize: 10, color: '#6B7280', fontWeight: 700 }}>ID</div>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: '#6B7280', fontFamily: 'monospace' }}>{selected.id.slice(0, 8).toUpperCase()}</div>
                   </div>
                 </div>
 
                 {/* Overall progress bar */}
                 <div style={{ marginTop: 16 }}>
-                  <div style={{ height: 6, background: '#E8E6F5', borderRadius: 3, overflow: 'hidden' }}>
+                  <div style={{ height: 6, background: '#E5E7EB', borderRadius: 3, overflow: 'hidden' }}>
                     <div style={{ height: '100%', width: `${currentStageObj?.pct || 5}%`, background: currentStageObj?.color || ac, borderRadius: 3, transition: 'width 1s ease' }} />
                   </div>
                 </div>
@@ -1683,10 +1683,10 @@ export default function ClientHub({ clientId, dbClients = [], onBack, ...props }
                         <div style={{ fontSize: 10, fontWeight: 800, color: currentStageObj.color, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 4 }}>
                           Current Stage — {currentStageObj.id} of {applicableStages.length}
                         </div>
-                        <div style={{ fontSize: 17, fontWeight: 900, color: '#0D0B2E', marginBottom: 6 }}>{currentStageObj.name}</div>
-                        <div style={{ fontSize: 13, color: '#5B5894', lineHeight: 1.5, marginBottom: 8 }}>{currentStageObj.adminPrompt}</div>
+                        <div style={{ fontSize: 17, fontWeight: 900, color: '#111827', marginBottom: 6 }}>{currentStageObj.name}</div>
+                        <div style={{ fontSize: 13, color: '#4B5563', lineHeight: 1.5, marginBottom: 8 }}>{currentStageObj.adminPrompt}</div>
                         {currentStageObj.whoActs === 'client' && (
-                          <div style={{ fontSize: 11, fontWeight: 700, color: '#2563EB', background: '#EFF6FF', padding: '4px 12px', borderRadius: 20, display: 'inline-block' }}>
+                          <div style={{ fontSize: 11, fontWeight: 700, color: '#0F766E', background: '#ECFDF5', padding: '4px 12px', borderRadius: 20, display: 'inline-block' }}>
                             ⏳ Waiting on client
                           </div>
                         )}
@@ -1720,7 +1720,7 @@ export default function ClientHub({ clientId, dbClients = [], onBack, ...props }
                   </div>
                   <div>
                     <div style={{ fontSize: 16, fontWeight: 900, color: '#16A34A' }}>Project Complete</div>
-                    <div style={{ fontSize: 13, color: '#5B5894' }}>All stages finished. Handover documents should be issued.</div>
+                    <div style={{ fontSize: 13, color: '#4B5563' }}>All stages finished. Handover documents should be issued.</div>
                   </div>
                 </div>
               )}
@@ -1742,10 +1742,10 @@ export default function ClientHub({ clientId, dbClients = [], onBack, ...props }
               <ProjectEconomics project={selected} user={props.user} />
 
               {/* Stage Timeline */}
-              <div style={{ padding: '20px 24px', background: '#fff', borderRadius: 18, border: '1px solid #E8E6F5' }}>
-                <div style={{ fontSize: 13, fontWeight: 800, color: '#0D0B2E', marginBottom: 20 }}>Project Timeline</div>
+              <div style={{ padding: '20px 24px', background: '#fff', borderRadius: 18, border: '1px solid #E5E7EB' }}>
+                <div style={{ fontSize: 13, fontWeight: 800, color: '#111827', marginBottom: 20 }}>Project Timeline</div>
                 <div style={{ position: 'relative' }}>
-                  <div style={{ position: 'absolute', left: 16, top: 0, bottom: 0, width: 2, background: '#E8E6F5', zIndex: 0 }} />
+                  <div style={{ position: 'absolute', left: 16, top: 0, bottom: 0, width: 2, background: '#E5E7EB', zIndex: 0 }} />
                   {applicableStages.map((s, idx) => {
                     const isCurrent = s.id === selected.stageId;
                     const isPast = (selected.stageId || 1) > s.id;
@@ -1755,8 +1755,8 @@ export default function ClientHub({ clientId, dbClients = [], onBack, ...props }
                         {/* Circle */}
                         <div style={{
                           position: 'absolute', left: 0, top: 0, width: 34, height: 34, borderRadius: '50%',
-                          background: isPast ? s.color : isCurrent ? '#fff' : '#F8F8FD',
-                          border: isPast ? `2px solid ${s.color}` : isCurrent ? `2.5px solid ${s.color}` : '2px solid #E8E6F5',
+                          background: isPast ? s.color : isCurrent ? '#fff' : '#F9FAFB',
+                          border: isPast ? `2px solid ${s.color}` : isCurrent ? `2.5px solid ${s.color}` : '2px solid #E5E7EB',
                           display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2,
                           boxShadow: isCurrent ? `0 0 0 4px ${s.color}20` : 'none',
                           color: isPast ? '#fff' : s.color,
@@ -1768,23 +1768,23 @@ export default function ClientHub({ clientId, dbClients = [], onBack, ...props }
                         {/* Content */}
                         <div style={{ flex: 1, paddingTop: 6, paddingBottom: idx < applicableStages.length - 1 ? 0 : 0 }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                            <span style={{ fontSize: 14, fontWeight: isCurrent ? 900 : isPast ? 700 : 500, color: isPast ? '#5B5894' : isCurrent ? '#0D0B2E' : '#9B99C8' }}>{s.name}</span>
+                            <span style={{ fontSize: 14, fontWeight: isCurrent ? 900 : isPast ? 700 : 500, color: isPast ? '#4B5563' : isCurrent ? '#111827' : '#6B7280' }}>{s.name}</span>
                             {isCurrent && <span style={{ fontSize: 9, fontWeight: 800, color: s.color, background: `${s.color}15`, padding: '2px 8px', borderRadius: 20, textTransform: 'uppercase', letterSpacing: '.06em' }}>Now</span>}
                             {(isPast || isCurrent) && stageHistEntry?.timestamp && (() => {
                               const d = stageHistEntry.timestamp?.toDate ? stageHistEntry.timestamp.toDate() : new Date(stageHistEntry.timestamp);
                               const label = d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
                               const daysIn = isCurrent ? Math.max(0, Math.floor((Date.now() - d.getTime()) / 86400000)) : null;
                               return (
-                                <span style={{ fontSize: 10, color: '#9B99C8', display: 'flex', alignItems: 'center', gap: 4 }}>
+                                <span style={{ fontSize: 10, color: '#6B7280', display: 'flex', alignItems: 'center', gap: 4 }}>
                                   {label}
-                                  {daysIn !== null && <span style={{ fontWeight: 700, color: '#5B5894' }}>· {daysIn}d in stage</span>}
+                                  {daysIn !== null && <span style={{ fontWeight: 700, color: '#4B5563' }}>· {daysIn}d in stage</span>}
                                 </span>
                               );
                             })()}
                           </div>
-                          {isCurrent && <div style={{ fontSize: 12, color: '#5B5894', marginTop: 3 }}>{s.adminPrompt}</div>}
+                          {isCurrent && <div style={{ fontSize: 12, color: '#4B5563', marginTop: 3 }}>{s.adminPrompt}</div>}
                           {isPast && stageHistEntry?.note && stageHistEntry.note !== 'Stage advanced' && stageHistEntry.note !== 'Project created' && (
-                            <div style={{ fontSize: 11, color: '#9B99C8', marginTop: 2, fontStyle: 'italic' }}>{stageHistEntry.note}</div>
+                            <div style={{ fontSize: 11, color: '#6B7280', marginTop: 2, fontStyle: 'italic' }}>{stageHistEntry.note}</div>
                           )}
 
                           {/* ── Quote Approval Badge (Stage 2) ── */}
@@ -1829,9 +1829,9 @@ export default function ClientHub({ clientId, dbClients = [], onBack, ...props }
               </div>
 
               {/* Assigned Workers */}
-              <div style={{ padding: '20px 24px', background: '#fff', borderRadius: 18, border: '1px solid #E8E6F5' }}>
+              <div style={{ padding: '20px 24px', background: '#fff', borderRadius: 18, border: '1px solid #E5E7EB' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-                  <div style={{ fontSize: 13, fontWeight: 800, color: '#0D0B2E' }}>Assigned Team</div>
+                  <div style={{ fontSize: 13, fontWeight: 800, color: '#111827' }}>Assigned Team</div>
                 </div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                   {teamMembers.map(m => {
@@ -1842,13 +1842,13 @@ export default function ClientHub({ clientId, dbClients = [], onBack, ...props }
                         onClick={() => props.assignWorkerToProject && props.assignWorkerToProject(selected.id, m.id?.toString() || m.email)}
                         style={{
                           display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px',
-                          borderRadius: 12, border: `1.5px solid ${assigned ? '#0D0B2E' : '#E8E6F5'}`,
-                          background: assigned ? '#0D0B2E' : '#F8F8FD',
-                          color: assigned ? '#fff' : '#5B5894',
+                          borderRadius: 12, border: `1.5px solid ${assigned ? '#111827' : '#E5E7EB'}`,
+                          background: assigned ? '#111827' : '#F9FAFB',
+                          color: assigned ? '#fff' : '#4B5563',
                           cursor: 'pointer', fontSize: 12, fontWeight: 700, transition: 'all .2s',
                         }}
                       >
-                        <div style={{ width: 22, height: 22, borderRadius: '50%', background: assigned ? '#fff' : '#E8E6F5', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 800, color: assigned ? '#0D0B2E' : '#9B99C8', flexShrink: 0 }}>
+                        <div style={{ width: 22, height: 22, borderRadius: '50%', background: assigned ? '#fff' : '#E5E7EB', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 800, color: assigned ? '#111827' : '#6B7280', flexShrink: 0 }}>
                           {(m.name || m.email || '?').slice(0, 1).toUpperCase()}
                         </div>
                         {(m.name || m.email || 'Staff').split(' ')[0]}
@@ -1856,7 +1856,7 @@ export default function ClientHub({ clientId, dbClients = [], onBack, ...props }
                       </button>
                     );
                   })}
-                  {teamMembers.length === 0 && <div style={{ fontSize: 12, color: '#9B99C8' }}>No team members configured.</div>}
+                  {teamMembers.length === 0 && <div style={{ fontSize: 12, color: '#6B7280' }}>No team members configured.</div>}
                 </div>
               </div>
 
@@ -1872,12 +1872,12 @@ export default function ClientHub({ clientId, dbClients = [], onBack, ...props }
         </div>
 
         {/* RIGHT — Conversation */}
-        <div style={{ display: 'flex', flexDirection: 'column', borderLeft: '1px solid #E8E6F5', paddingLeft: 20, overflow: 'hidden' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', borderLeft: '1px solid #E5E7EB', paddingLeft: 20, overflow: 'hidden' }}>
           {selected ? (
             <>
               <div style={{ marginBottom: 16, flexShrink: 0 }}>
-                <div style={{ fontSize: 14, fontWeight: 900, color: '#0D0B2E' }}>Conversation</div>
-                <div style={{ fontSize: 11, color: '#9B99C8', marginTop: 2 }}>{selected.title}</div>
+                <div style={{ fontSize: 14, fontWeight: 900, color: '#111827' }}>Conversation</div>
+                <div style={{ fontSize: 11, color: '#6B7280', marginTop: 2 }}>{selected.title}</div>
               </div>
               <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
                 <ProjectConversation
@@ -1889,8 +1889,8 @@ export default function ClientHub({ clientId, dbClients = [], onBack, ...props }
             </>
           ) : (
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center' }}>
-              <MessageSquare size={36} color="#E8E6F5" style={{ marginBottom: 12 }} />
-              <div style={{ fontSize: 13, color: '#9B99C8', fontWeight: 600 }}>Select a project</div>
+              <MessageSquare size={36} color="#E5E7EB" style={{ marginBottom: 12 }} />
+              <div style={{ fontSize: 13, color: '#6B7280', fontWeight: 600 }}>Select a project</div>
               <div style={{ fontSize: 11, color: '#DFD9D1', marginTop: 4 }}>The conversation thread will appear here.</div>
             </div>
           )}

@@ -2,10 +2,10 @@ import React from 'react';
 import { PAv, PSBadge } from '../../components/Shared';
 
 export default function AdminBookings({ bookings = [], brand }) {
-  const ac = brand.color || '#231F78';
+  const ac = brand.color || '#0F766E';
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-      <h2 className="lxfh" style={{ fontSize: 32, fontWeight: 400, color: '#0D0B2E' }}>Bookings</h2>
+      <h2 className="lxfh" style={{ fontSize: 32, fontWeight: 400, color: '#111827' }}>Bookings</h2>
       <div className="p-card" style={{ overflow: 'hidden' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead><tr>{['ID', 'Client', 'Type', 'Date', 'Time', 'Status'].map(h => <th key={h} className="t-head">{h}</th>)}</tr></thead>

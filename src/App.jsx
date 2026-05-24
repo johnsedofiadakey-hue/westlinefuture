@@ -2272,7 +2272,7 @@ export default function App() {
   const isProtectedRoute = location.pathname.startsWith('/admin') || location.pathname.startsWith('/portal');
 
   if (authLoading && isProtectedRoute) return (
-    <div style={{ background: '#0D0B2E', height: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#231F78', fontFamily: 'Inter' }}>
+    <div style={{ background: '#111827', height: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#0F766E', fontFamily: 'Inter' }}>
       <div className="pulse" style={{ fontSize: '1.2rem', letterSpacing: '4px', textTransform: 'uppercase' }}>Authenticating</div>
       <div style={{ marginTop: '20px', fontSize: '0.8rem', opacity: 0.6 }}>Securing Westline Future Gateway...</div>
     </div>
@@ -2282,7 +2282,7 @@ export default function App() {
     <div className="lxf-platform">
       <div className="mesh-bg" />
       <Suspense fallback={
-        <div style={{ background: '#0D0B2E', height: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#231F78', fontFamily: 'Inter' }}>
+        <div style={{ background: '#111827', height: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#0F766E', fontFamily: 'Inter' }}>
           <div className="pulse" style={{ fontSize: '1.2rem', letterSpacing: '4px', textTransform: 'uppercase' }}>Loading Portal</div>
         </div>
       }>
@@ -2357,7 +2357,7 @@ export default function App() {
       </Suspense>
 
       {notification && (
-        <div style={{ position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)', zIndex: 10000, padding: '12px 24px', borderRadius: 100, background: notification.type === 'error' ? '#EF4444' : '#0D0B2E', color: '#fff', fontSize: 13, boxShadow: '0 8px 32px rgba(0,0,0,.15)' }}>
+        <div style={{ position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)', zIndex: 10000, padding: '12px 24px', borderRadius: 100, background: notification.type === 'error' ? '#EF4444' : '#111827', color: '#fff', fontSize: 13, boxShadow: '0 8px 32px rgba(0,0,0,.15)' }}>
            {notification.msg}
         </div>
       )}

@@ -2,8 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { X, ArrowRight, ChevronLeft, ChevronRight } from 'lucide-react';
 
-const AC = '#231F78';
-const DARK = '#0D0B2E';
+const AC = '#0F766E';
+const DARK = '#111827';
 
 // ─── SHOWROOM DATA ────────────────────────────────────────────────────────────
 const PROJECTS = [

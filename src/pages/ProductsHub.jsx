@@ -17,8 +17,8 @@ const WA_ICON = () => (
 // Removed static import of huge data file
 
 const LIGHT_BG = '#FDFCFB';
-const DARK_TEXT = '#0D0B2E';
-const AC = '#231F78';
+const DARK_TEXT = '#111827';
+const AC = '#0F766E';
 
 // --- HELPERS ---
 function useWindowWidth() {
@@ -56,7 +56,7 @@ const ProductCard = ({ product, onClick, ac, mob, onCompare, isComparing, waNumb
         position: 'relative', transition: 'box-shadow 0.25s',
       }}
     >
-      <div style={{ height: mob ? 220 : 260, background: '#F8F8FD', position: 'relative', overflow: 'hidden' }}>
+      <div style={{ height: mob ? 220 : 260, background: '#F9FAFB', position: 'relative', overflow: 'hidden' }}>
         <img
           src={product.img}
           alt={product.name}
@@ -81,7 +81,7 @@ const ProductCard = ({ product, onClick, ac, mob, onCompare, isComparing, waNumb
       </div>
       <div style={{ padding: mob ? 16 : 20, flex: 1, display: 'flex', flexDirection: 'column' }}>
         <h3 style={{ fontSize: mob ? 15 : 17, fontWeight: 800, margin: '0 0 6px', color: DARK_TEXT }}>{product.name}</h3>
-        <p style={{ fontSize: mob ? 11 : 12, color: 'rgba(13,11,46,0.5)', lineHeight: 1.5, margin: '0 0 16px', flex: 1 }}>
+        <p style={{ fontSize: mob ? 11 : 12, color: 'rgba(17,24,39,0.5)', lineHeight: 1.5, margin: '0 0 16px', flex: 1 }}>
           {product.tagline || (descText.length > 80 ? descText.substring(0, 80) + '...' : descText)}
         </p>
         <div style={{ display: 'flex', gap: 8, borderTop: '1px solid #f5f5f5', paddingTop: 14 }}>
@@ -93,7 +93,7 @@ const ProductCard = ({ product, onClick, ac, mob, onCompare, isComparing, waNumb
           >
             <WA_ICON /> WhatsApp Quote
           </a>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 4, color: DARK_TEXT, fontSize: 11, fontWeight: 800, textTransform: 'uppercase', padding: '10px 12px', background: '#F8F8FD', borderRadius: 10 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4, color: DARK_TEXT, fontSize: 11, fontWeight: 800, textTransform: 'uppercase', padding: '10px 12px', background: '#F9FAFB', borderRadius: 10 }}>
             Details <ArrowRight size={14} />
           </div>
         </div>
@@ -112,7 +112,7 @@ const DetailModal = ({ product, onClose, ac, navigate, mob }) => {
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      style={{ position: 'fixed', inset: 0, zIndex: 10000, background: 'rgba(13,11,46,0.8)', backdropFilter: 'blur(10px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: mob ? 0 : 20 }}
+      style={{ position: 'fixed', inset: 0, zIndex: 10000, background: 'rgba(17,24,39,0.8)', backdropFilter: 'blur(10px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: mob ? 0 : 20 }}
       onClick={onClose}
     >
       <motion.div 
@@ -131,7 +131,7 @@ const DetailModal = ({ product, onClose, ac, navigate, mob }) => {
       >
         <div style={{ display: 'flex', flexWrap: 'wrap', height: '100%', overflowY: 'auto' }}>
           {/* Left: Image & Dynamic Finish Switcher */}
-          <div style={{ flex: '1 1 500px', background: '#F8F8FD', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: mob ? 20 : 40, minHeight: mob ? 300 : 400 }}>
+          <div style={{ flex: '1 1 500px', background: '#F9FAFB', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: mob ? 20 : 40, minHeight: mob ? 300 : 400 }}>
             <motion.img 
               key={selectedColor}
               initial={{ opacity: 0.8, scale: 0.98 }}
@@ -339,13 +339,13 @@ export default function ProductsHub({ brand, user, onPortal, setPage, content })
           <h1 style={{ fontSize: mob ? 32 : 56, fontWeight: 800, letterSpacing: '-0.04em', margin: '12px 0 16px', lineHeight: 1.05 }}>
             Products & <span style={{ color: ac }}>Materials.</span>
           </h1>
-          <p style={{ color: 'rgba(13,11,46,0.5)', fontSize: mob ? 14 : 17, maxWidth: 700, lineHeight: 1.7 }}>
+          <p style={{ color: 'rgba(17,24,39,0.5)', fontSize: mob ? 14 : 17, maxWidth: 700, lineHeight: 1.7 }}>
             Glass, tiles, bathrooms, kitchens, wardrobes, doors, electrical and plumbing materials — all sourced directly and available for supply or full installation worldwide.
           </p>
         </div>
 
         {/* Top CTA strip */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, padding: '16px 24px', background: '#0D0B2E', borderRadius: 16, marginBottom: 40 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, padding: '16px 24px', background: '#111827', borderRadius: 16, marginBottom: 40 }}>
           <div>
             <div style={{ fontSize: 13, fontWeight: 800, color: '#fff' }}>Don't see what you need?</div>
             <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', marginTop: 2 }}>We source any material from China — just tell us what you need.</div>
@@ -364,7 +364,7 @@ export default function ProductsHub({ brand, user, onPortal, setPage, content })
             <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1, ease: 'linear' }} style={{ display: 'inline-block' }}>
               <Zap size={40} color={ac} />
             </motion.div>
-            <p className="lxf" style={{ marginTop: 20, color: '#9B99C8' }}>Syncing Global Catalog...</p>
+            <p className="lxf" style={{ marginTop: 20, color: '#6B7280' }}>Syncing Global Catalog...</p>
           </div>
         )}
 
@@ -431,7 +431,7 @@ export default function ProductsHub({ brand, user, onPortal, setPage, content })
             <div style={{ gridColumn: '1 / -1', padding: '80px 0', textAlign: 'center' }}>
               <div style={{ fontSize: 48, marginBottom: 16 }}>🔍</div>
               <div style={{ fontSize: 18, fontWeight: 800, color: DARK_TEXT, marginBottom: 8 }}>No products in this category yet</div>
-              <div style={{ fontSize: 14, color: '#9B99C8', marginBottom: 24 }}>We can source any material from China — contact us for a custom order.</div>
+              <div style={{ fontSize: 14, color: '#6B7280', marginBottom: 24 }}>We can source any material from China — contact us for a custom order.</div>
               <a
                 href={`https://wa.me/${waNumber}?text=${encodeURIComponent('Hi Westline Future, I\'m looking for a product you may not have listed. Can you help source it?')}`}
                 target="_blank" rel="noopener noreferrer"
@@ -515,7 +515,7 @@ export default function ProductsHub({ brand, user, onPortal, setPage, content })
                 <div style={{ display: 'grid', gridTemplateColumns: `repeat(${comparing.length}, 1fr)`, gap: 32 }}>
                    {compareProducts.map(p => (
                      <div key={p.id}>
-                        <img src={p.img} style={{ width: '100%', height: 200, objectFit: 'contain', background: '#F8F8FD', borderRadius: 16, marginBottom: 24 }} />
+                        <img src={p.img} style={{ width: '100%', height: 200, objectFit: 'contain', background: '#F9FAFB', borderRadius: 16, marginBottom: 24 }} />
                         <h3 style={{ fontSize: 18, fontWeight: 800, marginBottom: 12 }}>{p.name}</h3>
                         
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>

@@ -12,7 +12,7 @@ export default function AdminShowcase({ brand, notify }) {
   const [newScene, setNewScene] = useState({ title: '', location: '', description: '', img: '', hotspots: [] });
   const [uploading, setUploading] = useState(false);
 
-  const ac = brand?.color || '#231F78';
+  const ac = brand?.color || '#0F766E';
 
   useEffect(() => {
     if (!db) return;
@@ -119,7 +119,7 @@ export default function AdminShowcase({ brand, notify }) {
           ))}
         </div>
       ) : (
-        <div style={{ textAlign: 'center', padding: '80px 20px', background: '#F8F8FD', borderRadius: 24, border: '1px dashed #DCD7D1' }}>
+        <div style={{ textAlign: 'center', padding: '80px 20px', background: '#F9FAFB', borderRadius: 24, border: '1px dashed #DCD7D1' }}>
           <ImageIcon size={48} style={{ color: '#ccc', marginBottom: 16 }} />
           <h3 className="lxfh" style={{ fontSize: 20, marginBottom: 8 }}>No Showroom Scenes Yet</h3>
           <p style={{ color: '#888', marginBottom: 24, maxWidth: 400, margin: '0 auto 24px' }}>Add your first immersive cinematic scene to showcase your technical excellence to clients.</p>
@@ -138,12 +138,12 @@ export default function AdminShowcase({ brand, notify }) {
               style={{ background: '#fff', width: '100%', maxWidth: 800, maxHeight: '90vh', borderRadius: 32, overflow: 'hidden', display: 'flex', flexDirection: 'column', boxShadow: '0 40px 100px rgba(0,0,0,0.4)' }}
             >
               {/* FIXED HEADER */}
-              <div style={{ padding: '24px 32px', borderBottom: '1px solid #E8E6F5', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#fff' }}>
+              <div style={{ padding: '24px 32px', borderBottom: '1px solid #E5E7EB', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#fff' }}>
                 <div>
                    <h2 style={{ fontSize: 20, fontWeight: 900, margin: 0 }}>Immersive Scene Creator</h2>
-                   <div style={{ fontSize: 11, color: '#9B99C8', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1 }}>{newScene.hotspots.length} active detail hotspots</div>
+                   <div style={{ fontSize: 11, color: '#6B7280', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1 }}>{newScene.hotspots.length} active detail hotspots</div>
                 </div>
-                <button onClick={() => setShowAdd(false)} style={{ background: '#F8F8FD', border: 'none', width: 44, height: 44, borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><X size={20} /></button>
+                <button onClick={() => setShowAdd(false)} style={{ background: '#F9FAFB', border: 'none', width: 44, height: 44, borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><X size={20} /></button>
               </div>
               
               {/* SCROLLABLE CONTENT */}
@@ -160,12 +160,12 @@ export default function AdminShowcase({ brand, notify }) {
                       <label style={{ display: 'block', fontSize: 10, fontWeight: 900, textTransform: 'uppercase', color: ac, marginBottom: 12 }}>2. Hotspot Registry</label>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                          {newScene.hotspots.length === 0 && (
-                            <div style={{ padding: 20, border: '1px dashed #E8E6F5', borderRadius: 16, textAlign: 'center', color: '#9B99C8', fontSize: 12 }}>
+                            <div style={{ padding: 20, border: '1px dashed #E5E7EB', borderRadius: 16, textAlign: 'center', color: '#6B7280', fontSize: 12 }}>
                                Click on the image to place your first technical hotspot.
                             </div>
                          )}
                          {newScene.hotspots.map((h, i) => (
-                           <div key={i} style={{ padding: 16, background: '#F8F8FD', borderRadius: 16, border: '1px solid #E8E6F5' }}>
+                           <div key={i} style={{ padding: 16, background: '#F9FAFB', borderRadius: 16, border: '1px solid #E5E7EB' }}>
                               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                                  <div style={{ fontSize: 10, fontWeight: 900, color: ac }}>HOTSPOT #{i+1}</div>
                                  <button onClick={() => {
@@ -195,7 +195,7 @@ export default function AdminShowcase({ brand, notify }) {
                    <div 
                      onClick={newScene.img ? addHotspot : () => document.getElementById('scene-up').click()}
                      style={{ 
-                       width: '100%', height: 450, background: '#F8F8FD', borderRadius: 24, 
+                       width: '100%', height: 450, background: '#F9FAFB', borderRadius: 24, 
                        border: '2px dashed #DCD7D1', position: 'relative', overflow: 'hidden',
                        cursor: newScene.img ? 'crosshair' : 'pointer'
                      }}
@@ -218,13 +218,13 @@ export default function AdminShowcase({ brand, notify }) {
                      ) : (
                        <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12 }}>
                           <ImageIcon size={40} style={{ color: '#DCD7D1' }} />
-                          <div style={{ fontSize: 12, fontWeight: 800, color: '#9B99C8' }}>{uploading ? 'Processing Image...' : 'Upload Scene Plate'}</div>
+                          <div style={{ fontSize: 12, fontWeight: 800, color: '#6B7280' }}>{uploading ? 'Processing Image...' : 'Upload Scene Plate'}</div>
                        </div>
                      )}
                      <input id="scene-up" type="file" hidden onChange={handleFileUpload} />
                    </div>
                    {newScene.img && (
-                      <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 8, color: '#9B99C8' }}>
+                      <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 8, color: '#6B7280' }}>
                          <MapPin size={14} />
                          <span style={{ fontSize: 11, fontWeight: 700 }}>Click anywhere on the image to position a hotspot.</span>
                       </div>
@@ -233,7 +233,7 @@ export default function AdminShowcase({ brand, notify }) {
               </div>
 
               {/* FIXED FOOTER */}
-              <div style={{ padding: '24px 32px', borderTop: '1px solid #E8E6F5', display: 'flex', gap: 12, background: '#fff' }}>
+              <div style={{ padding: '24px 32px', borderTop: '1px solid #E5E7EB', display: 'flex', gap: 12, background: '#fff' }}>
                 <button onClick={() => setShowAdd(false)} className="p-btn-light" style={{ flex: 1, height: 56 }}>Discard Draft</button>
                 <button onClick={saveScene} className="p-btn-gold" style={{ flex: 2, height: 56, fontSize: 16 }}>Publish Immersive Scene</button>
               </div>

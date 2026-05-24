@@ -61,7 +61,7 @@ export default function AboutPage({ brand, content, navigate }) {
     <div style={{ paddingTop: mob ? 80 : 120, fontFamily: 'Inter, Satoshi, sans-serif' }}>
 
       {/* ── HERO ── */}
-      <section style={{ padding: mob ? '60px 24px 40px' : '80px 5vw 60px', background: '#F8F8FD' }}>
+      <section style={{ padding: mob ? '60px 24px 40px' : '80px 5vw 60px', background: '#F9FAFB' }}>
         <div style={{ maxWidth: 1400, margin: '0 auto' }}>
           <span style={{ color: ac, fontSize: 10, fontWeight: 800, letterSpacing: '0.3em', textTransform: 'uppercase' }}>
             About Westline Future
@@ -70,7 +70,7 @@ export default function AboutPage({ brand, content, navigate }) {
             Built on glass.<br />
             <em style={{ fontStyle: 'italic', fontWeight: 400, color: ac }}>Finished with purpose.</em>
           </h1>
-          <p style={{ fontSize: mob ? 16 : 22, color: 'rgba(13,11,46,0.55)', maxWidth: 760, lineHeight: 1.7 }}>
+          <p style={{ fontSize: mob ? 16 : 22, color: 'rgba(17,24,39,0.55)', maxWidth: 760, lineHeight: 1.7 }}>
             {data.story || "Ghana's premier structural glass and interior finishing company — precision-engineered projects from a single source, delivered across all 16 regions."}
           </p>
         </div>
@@ -106,22 +106,22 @@ export default function AboutPage({ brand, content, navigate }) {
             <div style={{ color: ac, fontSize: 12, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.2em', marginBottom: 28 }}>
               {data.role || 'Managing Director'}
             </div>
-            <p style={{ color: 'rgba(13,11,46,0.6)', lineHeight: 1.85, fontSize: 16, marginBottom: 32 }}>
+            <p style={{ color: 'rgba(17,24,39,0.6)', lineHeight: 1.85, fontSize: 16, marginBottom: 32 }}>
               {data.bio || 'The leadership of Westline Future brings deep expertise in structural glass, aluminum systems, and international procurement. Our mission: a world-class finish on every project.'}
             </p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16, padding: 24, background: '#F8F8FD', borderRadius: 20, border: '1px solid #E8E6F5' }}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16, padding: 24, background: '#F9FAFB', borderRadius: 20, border: '1px solid #E5E7EB' }}>
                 <MapPin size={20} color={ac} style={{ flexShrink: 0, marginTop: 2 }} />
                 <div>
                   <div style={{ fontSize: 14, fontWeight: 800, color: DARK_TEXT, marginBottom: 4 }}>Accra Headquarters</div>
-                  <div style={{ fontSize: 13, color: 'rgba(13,11,46,0.5)' }}>{brand.location || 'Spintex Road Industrial Area, International'}</div>
+                  <div style={{ fontSize: 13, color: 'rgba(17,24,39,0.5)' }}>{brand.location || 'Spintex Road Industrial Area, International'}</div>
                 </div>
               </div>
-              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16, padding: 24, background: '#F8F8FD', borderRadius: 20, border: '1px solid #E8E6F5' }}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16, padding: 24, background: '#F9FAFB', borderRadius: 20, border: '1px solid #E5E7EB' }}>
                 <Globe2 size={20} color={ac} style={{ flexShrink: 0, marginTop: 2 }} />
                 <div>
                   <div style={{ fontSize: 14, fontWeight: 800, color: DARK_TEXT, marginBottom: 4 }}>National Coverage</div>
-                  <div style={{ fontSize: 13, color: 'rgba(13,11,46,0.5)' }}>All 16 regions of Ghana — field teams deployed nationwide</div>
+                  <div style={{ fontSize: 13, color: 'rgba(17,24,39,0.5)' }}>All 16 regions of Ghana — field teams deployed nationwide</div>
                 </div>
               </div>
             </div>
@@ -142,7 +142,7 @@ export default function AboutPage({ brand, content, navigate }) {
               </div>
               <div>
                 <div style={{ fontSize: 13, fontWeight: 800, color: DARK_TEXT }}>500+ Projects</div>
-                <div style={{ fontSize: 11, color: '#9B99C8' }}>Delivered since 2012</div>
+                <div style={{ fontSize: 11, color: '#6B7280' }}>Delivered since 2012</div>
               </div>
             </div>
           </div>
@@ -150,7 +150,7 @@ export default function AboutPage({ brand, content, navigate }) {
       </section>
 
       {/* ── VALUES ── */}
-      <section style={{ padding: mob ? '60px 24px' : '100px 5vw', background: '#F8F8FD' }}>
+      <section style={{ padding: mob ? '60px 24px' : '100px 5vw', background: '#F9FAFB' }}>
         <div style={{ maxWidth: 1400, margin: '0 auto' }}>
           <div style={{ marginBottom: mob ? 40 : 64 }}>
             <span style={{ color: ac, fontSize: 10, fontWeight: 800, letterSpacing: '0.3em', textTransform: 'uppercase' }}>Our Principles</span>
@@ -167,7 +167,7 @@ export default function AboutPage({ brand, content, navigate }) {
                   background: i === 0 ? DARK_TEXT : '#fff',
                   color: i === 0 ? '#fff' : DARK_TEXT,
                   border: '1px solid',
-                  borderColor: i === 0 ? DARK_TEXT : '#E8E6F5',
+                  borderColor: i === 0 ? DARK_TEXT : '#E5E7EB',
                   display: 'flex', flexDirection: 'column', gap: 20,
                 }}
               >
@@ -199,7 +199,7 @@ export default function AboutPage({ brand, content, navigate }) {
             </h2>
           </div>
           <div style={{ position: 'relative' }}>
-            <div style={{ position: 'absolute', left: mob ? 20 : '50%', top: 0, bottom: 0, width: 2, background: '#E8E6F5', transform: mob ? 'none' : 'translateX(-50%)' }} />
+            <div style={{ position: 'absolute', left: mob ? 20 : '50%', top: 0, bottom: 0, width: 2, background: '#E5E7EB', transform: mob ? 'none' : 'translateX(-50%)' }} />
             <div style={{ display: 'flex', flexDirection: 'column', gap: 40 }}>
               {TIMELINE.map((item, i) => (
                 <div
@@ -226,8 +226,8 @@ export default function AboutPage({ brand, content, navigate }) {
                   </div>
                   <div style={{
                     flex: 1,
-                    background: '#F8F8FD', borderRadius: 20,
-                    border: '1px solid #E8E6F5',
+                    background: '#F9FAFB', borderRadius: 20,
+                    border: '1px solid #E5E7EB',
                     padding: mob ? '20px 24px' : 28,
                   }}>
                     <div style={{ fontSize: mob ? 12 : 13, fontWeight: 900, color: ac, marginBottom: 6 }}>{item.year}</div>
@@ -243,7 +243,7 @@ export default function AboutPage({ brand, content, navigate }) {
 
       {/* ── TEAM ── */}
       {visibleTeam.length > 0 && (
-        <section style={{ padding: mob ? '60px 24px' : '100px 5vw', background: '#F8F8FD' }}>
+        <section style={{ padding: mob ? '60px 24px' : '100px 5vw', background: '#F9FAFB' }}>
           <div style={{ maxWidth: 1400, margin: '0 auto' }}>
             <div style={{ marginBottom: mob ? 40 : 64 }}>
               <span style={{ color: ac, fontSize: 10, fontWeight: 800, letterSpacing: '0.3em', textTransform: 'uppercase' }}>Our People</span>
@@ -253,7 +253,7 @@ export default function AboutPage({ brand, content, navigate }) {
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: mob ? '1fr 1fr' : 'repeat(4, 1fr)', gap: 20 }}>
               {visibleTeam.slice(0, 8).map(m => (
-                <div key={m.id || m.uid} style={{ background: '#fff', borderRadius: 24, overflow: 'hidden', border: '1px solid #E8E6F5' }}>
+                <div key={m.id || m.uid} style={{ background: '#fff', borderRadius: 24, overflow: 'hidden', border: '1px solid #E5E7EB' }}>
                   <div style={{ height: 200, background: `${ac}15`, display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', overflow: 'hidden' }}>
                     {m.photoURL ? (
                       <img src={m.photoURL} alt={m.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
@@ -277,7 +277,7 @@ export default function AboutPage({ brand, content, navigate }) {
       )}
 
       {/* ── CERTIFICATIONS ── */}
-      <section style={{ padding: mob ? '60px 24px' : '80px 5vw', background: '#fff', borderTop: '1px solid #E8E6F5' }}>
+      <section style={{ padding: mob ? '60px 24px' : '80px 5vw', background: '#fff', borderTop: '1px solid #E5E7EB' }}>
         <div style={{ maxWidth: 1200, margin: '0 auto' }}>
           <div style={{ textAlign: 'center', marginBottom: 48 }}>
             <span style={{ color: ac, fontSize: 10, fontWeight: 800, letterSpacing: '0.3em', textTransform: 'uppercase' }}>Standards & Compliance</span>
@@ -292,10 +292,10 @@ export default function AboutPage({ brand, content, navigate }) {
               { icon: <CheckCircle size={22} color={ac} />, label: 'Certified Installers', sub: 'Factory-trained technicians' },
               { icon: <Globe2 size={22} color={ac} />, label: 'Global Supply Chain', sub: 'EU & Asia certified glass' },
             ].map(c => (
-              <div key={c.label} style={{ padding: 28, background: '#F8F8FD', borderRadius: 20, border: '1px solid #E8E6F5', display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div key={c.label} style={{ padding: 28, background: '#F9FAFB', borderRadius: 20, border: '1px solid #E5E7EB', display: 'flex', flexDirection: 'column', gap: 12 }}>
                 <div style={{ width: 48, height: 48, background: `${ac}15`, borderRadius: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{c.icon}</div>
                 <div style={{ fontSize: 14, fontWeight: 800, color: DARK_TEXT }}>{c.label}</div>
-                <div style={{ fontSize: 12, color: '#9B99C8', fontWeight: 600 }}>{c.sub}</div>
+                <div style={{ fontSize: 12, color: '#6B7280', fontWeight: 600 }}>{c.sub}</div>
               </div>
             ))}
           </div>
@@ -316,7 +316,7 @@ export default function AboutPage({ brand, content, navigate }) {
             {navigate && (
               <button
                 onClick={() => navigate('/?page=contact')}
-                style={{ display: 'inline-flex', alignItems: 'center', gap: 10, padding: '18px 40px', background: ac, color: '#0D0B2E', border: 'none', borderRadius: 14, fontWeight: 900, fontSize: 15, cursor: 'pointer' }}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 10, padding: '18px 40px', background: ac, color: '#111827', border: 'none', borderRadius: 14, fontWeight: 900, fontSize: 15, cursor: 'pointer' }}
               >
                 Get a Free Quote <ArrowRight size={16} />
               </button>

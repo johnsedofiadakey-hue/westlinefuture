@@ -27,9 +27,9 @@ export function useWindowWidth() {
   return width;
 }
 export const isMob = (w) => w <= 1024;
-export const LIGHT_BG = '#F8F8FD';
-export const DARK_TEXT = '#0D0B2E';
-export const AC = '#231F78';
+export const LIGHT_BG = '#F9FAFB';
+export const DARK_TEXT = '#111827';
+export const AC = '#0F766E';
 
 // --- SHARED COMPONENTS ---
 
@@ -64,7 +64,7 @@ export function PubNav({ brand, setPage, activePage, onPortal, user, menuOpen, s
     height: 44,
     borderRadius: 14,
     background: '#ffffff',
-    border: '1px solid rgba(13,11,46,0.10)',
+    border: '1px solid rgba(17,24,39,0.10)',
     color: DARK_TEXT,
     zIndex: 1001,
     padding: 0,
@@ -72,7 +72,7 @@ export function PubNav({ brand, setPage, activePage, onPortal, user, menuOpen, s
     alignItems: 'center',
     justifyContent: 'center',
     cursor: 'pointer',
-    boxShadow: '0 8px 24px rgba(13,11,46,0.10)',
+    boxShadow: '0 8px 24px rgba(17,24,39,0.10)',
     position: 'relative'
   };
 
@@ -82,11 +82,11 @@ export function PubNav({ brand, setPage, activePage, onPortal, user, menuOpen, s
       background: mob ? '#ffffff' : (isScrolled ? 'rgba(35,31,120,0.97)' : 'rgba(35,31,120,0.15)'),
       backdropFilter: mob ? 'none' : 'blur(24px) saturate(180%)',
       WebkitBackdropFilter: mob ? 'none' : 'blur(24px) saturate(180%)',
-      borderBottom: mob ? '1px solid rgba(13,11,46,0.08)' : (isScrolled ? '1px solid rgba(255,255,255,0.08)' : 'none'),
+      borderBottom: mob ? '1px solid rgba(17,24,39,0.08)' : (isScrolled ? '1px solid rgba(255,255,255,0.08)' : 'none'),
       transition: 'all 0.5s cubic-bezier(0.16, 1, 0.3, 1)',
       height: mob ? 72 : (scrolled ? 80 : 120),
       display: 'flex', alignItems: 'center', padding: mob ? '0 20px' : '0 5vw',
-      boxShadow: mob ? '0 10px 32px rgba(13,11,46,0.08)' : 'none'
+      boxShadow: mob ? '0 10px 32px rgba(17,24,39,0.08)' : 'none'
     }}>
       <div style={{ maxWidth: 1800, width: '100%', margin: '0 auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         
@@ -106,7 +106,7 @@ export function PubNav({ brand, setPage, activePage, onPortal, user, menuOpen, s
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1, gap: 2 }}>
                 <div style={{ fontSize: mob ? 18 : 24, fontWeight: 900, color: mob ? DARK_TEXT : '#ffffff', letterSpacing: '0.05em' }}>WESTLINE</div>
-                <div style={{ fontSize: mob ? 8 : 10, fontWeight: 400, color: mob ? 'rgba(13,11,46,0.55)' : 'rgba(255,255,255,0.6)', letterSpacing: '0.45em' }}>FUTURE</div>
+                <div style={{ fontSize: mob ? 8 : 10, fontWeight: 400, color: mob ? 'rgba(17,24,39,0.55)' : 'rgba(255,255,255,0.6)', letterSpacing: '0.45em' }}>FUTURE</div>
               </div>
             )}
         </div>
@@ -153,16 +153,16 @@ export function PubNav({ brand, setPage, activePage, onPortal, user, menuOpen, s
                   )}
                 </button>
                 {showNotifDropdown && (
-                  <div style={{ position: 'absolute', top: 40, right: 0, width: 300, background: '#fff', border: '1px solid #E8E6F5', borderRadius: 12, boxShadow: '0 10px 30px rgba(0,0,0,0.1)', zIndex: 1002, padding: '16px' }}>
+                  <div style={{ position: 'absolute', top: 40, right: 0, width: 300, background: '#fff', border: '1px solid #E5E7EB', borderRadius: 12, boxShadow: '0 10px 30px rgba(0,0,0,0.1)', zIndex: 1002, padding: '16px' }}>
                     <div style={{ fontSize: 12, fontWeight: 800, marginBottom: 12, textTransform: 'uppercase', color: DARK_TEXT }}>Notifications</div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 12, maxHeight: 300, overflowY: 'auto' }}>
                       {userNotifications.length > 0 ? userNotifications.map(n => (
-                        <div key={n.id} style={{ fontSize: 12, color: n.read ? '#9B99C8' : '#0D0B2E', borderBottom: '1px solid #F8F8FD', paddingBottom: 8 }}>
+                        <div key={n.id} style={{ fontSize: 12, color: n.read ? '#6B7280' : '#111827', borderBottom: '1px solid #F9FAFB', paddingBottom: 8 }}>
                           {n.message}
-                          <div style={{ fontSize: 10, color: '#9B99C8', marginTop: 4 }}>{new Date(n.createdAt).toLocaleDateString()}</div>
+                          <div style={{ fontSize: 10, color: '#6B7280', marginTop: 4 }}>{new Date(n.createdAt).toLocaleDateString()}</div>
                         </div>
                       )) : (
-                        <div style={{ fontSize: 12, color: '#9B99C8', textAlign: 'center' }}>No notifications</div>
+                        <div style={{ fontSize: 12, color: '#6B7280', textAlign: 'center' }}>No notifications</div>
                       )}
                     </div>
                   </div>
@@ -202,7 +202,7 @@ export function PubNav({ brand, setPage, activePage, onPortal, user, menuOpen, s
           style={{
             ...mobileIconButton,
             background: menuOpen ? DARK_TEXT : '#ffffff',
-            borderColor: menuOpen ? DARK_TEXT : 'rgba(13,11,46,0.10)',
+            borderColor: menuOpen ? DARK_TEXT : 'rgba(17,24,39,0.10)',
             color: menuOpen ? '#ffffff' : DARK_TEXT
           }}
           aria-label={menuOpen ? 'Close menu' : 'Open menu'}
@@ -220,8 +220,8 @@ export function PubNav({ brand, setPage, activePage, onPortal, user, menuOpen, s
         transform: menuOpen ? 'translateX(0)' : 'translateX(100%)',
         transition: 'transform 0.5s cubic-bezier(0.16, 1, 0.3, 1)', zIndex: 1000,
         padding: '104px 28px 40px', display: 'flex', flexDirection: 'column',
-        boxShadow: '-20px 0 60px rgba(13,11,46,0.14)',
-        borderLeft: '1px solid rgba(13,11,46,0.08)'
+        boxShadow: '-20px 0 60px rgba(17,24,39,0.14)',
+        borderLeft: '1px solid rgba(17,24,39,0.08)'
       }}>
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: mob ? 0 : 8 }}>
           {links.map((l, i) => (
@@ -250,13 +250,13 @@ export function PubNav({ brand, setPage, activePage, onPortal, user, menuOpen, s
           ))}
           
           {user && userNotifications.length > 0 && (
-            <div style={{ marginTop: 'auto', paddingTop: 20, borderTop: '1px solid #E8E6F5' }}>
+            <div style={{ marginTop: 'auto', paddingTop: 20, borderTop: '1px solid #E5E7EB' }}>
               <div style={{ fontSize: 12, fontWeight: 800, marginBottom: 12, textTransform: 'uppercase', color: ac }}>Notifications</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12, maxHeight: 200, overflowY: 'auto' }}>
                 {userNotifications.map(n => (
-                  <div key={n.id} style={{ fontSize: 13, color: n.read ? '#9B99C8' : DARK_TEXT, borderBottom: '1px solid #F8F8FD', paddingBottom: 8 }}>
+                  <div key={n.id} style={{ fontSize: 13, color: n.read ? '#6B7280' : DARK_TEXT, borderBottom: '1px solid #F9FAFB', paddingBottom: 8 }}>
                     {n.message}
-                    <div style={{ fontSize: 10, color: '#9B99C8', marginTop: 4 }}>{new Date(n.createdAt).toLocaleDateString()}</div>
+                    <div style={{ fontSize: 10, color: '#6B7280', marginTop: 4 }}>{new Date(n.createdAt).toLocaleDateString()}</div>
                   </div>
                 ))}
               </div>
@@ -281,7 +281,7 @@ export function Footer({ brand, setPage, onPortal, navigate }) {
   const mob = isMob(winW);
 
   return (
-    <footer style={{ background: '#0D0B2E', color: '#ffffff', padding: mob ? '60px 24px' : '100px 5vw 60px' }}>
+    <footer style={{ background: '#111827', color: '#ffffff', padding: mob ? '60px 24px' : '100px 5vw 60px' }}>
       <div style={{ maxWidth: 1400, margin: '0 auto' }}>
         <div style={{ display: 'grid', gridTemplateColumns: mob ? '1fr' : 'repeat(4, 1fr)', gap: 48, marginBottom: 80 }}>
           <div>
@@ -394,7 +394,7 @@ export function Hero({ slides, brand, navigate, setPage }) {
         <div key={s.title || i} style={{
           position: 'absolute', inset: 0, transition: 'opacity 0.8s cubic-bezier(0.4, 0, 0.2, 1)',
           opacity: active === i ? 1 : 0, zIndex: active === i ? 1 : 0,
-          background: '#0D0B2E' 
+          background: '#111827' 
         }}>
           <img 
             src={s.img} 
@@ -427,7 +427,7 @@ export function Hero({ slides, brand, navigate, setPage }) {
                 {s.sub && (
                   <p style={{ 
                     fontSize: mob ? 12 : 20, 
-                    color: 'rgba(13,11,46,0.65)', 
+                    color: 'rgba(17,24,39,0.65)', 
                     maxWidth: 600, 
                     lineHeight: 1.5, 
                     marginBottom: mob ? 20 : 48,
@@ -501,7 +501,7 @@ export function ServicesPreview({ brand, navigate, services }) {
                 {s.Icon ? <s.Icon size={20} strokeWidth={1.75} /> : <Layers size={20} strokeWidth={1.75} />}
               </div>
               <h3 style={{ fontSize: mob ? 14 : 18, fontWeight: 800, marginBottom: 10, color: DARK_TEXT, lineHeight: 1.2 }}>{s.name || s.title}</h3>
-              {!mob && <p style={{ color: 'rgba(13,11,46,0.55)', lineHeight: 1.7, marginBottom: 20, fontSize: 13 }}>{s.short || s.desc}</p>}
+              {!mob && <p style={{ color: 'rgba(17,24,39,0.55)', lineHeight: 1.7, marginBottom: 20, fontSize: 13 }}>{s.short || s.desc}</p>}
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: ac, fontWeight: 800, fontSize: 11, textTransform: 'uppercase' }}>
                 Learn more <ChevronRight size={12} />
               </div>
@@ -525,7 +525,7 @@ function StatsBar({ brand, stats }) {
   const ac = brand.color || AC;
   const items = (stats && stats.length) ? stats : DEFAULT_STATS;
   return (
-    <section style={{ background: '#0D0B2E', padding: '48px 5vw' }}>
+    <section style={{ background: '#111827', padding: '48px 5vw' }}>
       <div style={{ maxWidth: 1400, margin: '0 auto', display: 'grid', gridTemplateColumns: `repeat(${items.length}, 1fr)`, gap: 32 }}>
         {items.map((s, i) => (
           <div key={s.label || i} style={{ textAlign: 'center', borderRight: i < items.length - 1 ? '1px solid rgba(255,255,255,0.08)' : 'none', padding: '8px 16px' }}>
@@ -542,7 +542,7 @@ function StatsBarMobile({ brand, stats }) {
   const ac = brand.color || AC;
   const items = (stats && stats.length) ? stats : DEFAULT_STATS;
   return (
-    <section style={{ background: '#0D0B2E', padding: '40px 24px' }}>
+    <section style={{ background: '#111827', padding: '40px 24px' }}>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px 16px' }}>
         {items.map((s, i) => (
           <div key={s.label || i} style={{ textAlign: 'center' }}>
@@ -584,7 +584,7 @@ function WhyWestline({ brand, navigate, reasons }) {
           {items.map((r, i) => (
             <div key={r.title || i} style={{
               display: 'flex', gap: 24, padding: mob ? '28px 24px' : '40px',
-              background: '#F8F8FD', borderRadius: 24,
+              background: '#F9FAFB', borderRadius: 24,
               border: '1px solid rgba(0,0,0,0.04)',
               transition: 'transform 0.2s, box-shadow 0.2s',
             }}
@@ -596,7 +596,7 @@ function WhyWestline({ brand, navigate, reasons }) {
               </div>
               <div>
                 <h3 style={{ fontSize: 18, fontWeight: 800, color: DARK_TEXT, marginBottom: 10 }}>{r.title}</h3>
-                <p style={{ fontSize: 14, color: 'rgba(13,11,46,0.6)', lineHeight: 1.7, margin: 0 }}>{r.desc}</p>
+                <p style={{ fontSize: 14, color: 'rgba(17,24,39,0.6)', lineHeight: 1.7, margin: 0 }}>{r.desc}</p>
               </div>
             </div>
           ))}
@@ -605,9 +605,9 @@ function WhyWestline({ brand, navigate, reasons }) {
         <div style={{ marginTop: mob ? 40 : 64, textAlign: 'center' }}>
           <button
             onClick={() => navigate('/?page=contact')}
-            style={{ padding: '18px 48px', background: '#0D0B2E', color: '#fff', border: 'none', borderRadius: 14, fontWeight: 800, fontSize: 15, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 10 }}
+            style={{ padding: '18px 48px', background: '#111827', color: '#fff', border: 'none', borderRadius: 14, fontWeight: 800, fontSize: 15, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 10 }}
             onMouseEnter={e => e.currentTarget.style.background = ac}
-            onMouseLeave={e => e.currentTarget.style.background = '#0D0B2E'}
+            onMouseLeave={e => e.currentTarget.style.background = '#111827'}
           >
             Start Your Project <ChevronRight size={16} />
           </button>
@@ -645,7 +645,7 @@ function TestimonialsSection({ brand, testimonials: propTestimonials, cmsTestimo
   const item = items[active];
 
   return (
-    <section style={{ padding: mob ? '80px 24px' : '140px 5vw', background: '#F8F8FD' }}>
+    <section style={{ padding: mob ? '80px 24px' : '140px 5vw', background: '#F9FAFB' }}>
       <div style={{ maxWidth: 900, margin: '0 auto' }}>
         <div style={{ textAlign: 'center', marginBottom: mob ? 40 : 64 }}>
           <span style={{ color: ac, fontSize: 10, fontWeight: 800, letterSpacing: '0.3em', textTransform: 'uppercase' }}>CLIENT STORIES</span>
@@ -667,7 +667,7 @@ function TestimonialsSection({ brand, testimonials: propTestimonials, cmsTestimo
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16 }}>
             <div>
               <div style={{ fontWeight: 800, fontSize: 15, color: DARK_TEXT }}>{item.author || item.name}</div>
-              <div style={{ fontSize: 12, color: 'rgba(13,11,46,0.45)', marginTop: 4 }}>{item.projectTitle || item.role}</div>
+              <div style={{ fontSize: 12, color: 'rgba(17,24,39,0.45)', marginTop: 4 }}>{item.projectTitle || item.role}</div>
             </div>
             <div style={{ display: 'flex', gap: 4 }}>
               {Array.from({ length: item.rating || 5 }).map((_, i) => (
@@ -683,7 +683,7 @@ function TestimonialsSection({ brand, testimonials: propTestimonials, cmsTestimo
               <button
                 key={i}
                 onClick={() => setActive(i)}
-                style={{ width: i === active ? 28 : 8, height: 8, borderRadius: 4, background: i === active ? ac : '#E8E6F5', border: 'none', cursor: 'pointer', transition: 'all 0.3s', padding: 0 }}
+                style={{ width: i === active ? 28 : 8, height: 8, borderRadius: 4, background: i === active ? ac : '#E5E7EB', border: 'none', cursor: 'pointer', transition: 'all 0.3s', padding: 0 }}
               />
             ))}
           </div>
@@ -735,7 +735,7 @@ export default function PublicSite({ brand, setPage, page, onPortal, user, conte
         <ServicesPreview brand={brand} navigate={navigate} services={content?.homeServices || content?.services} />
         <WhyWestline brand={brand} navigate={navigate} reasons={content?.whyUs} />
         <TestimonialsSection brand={brand} testimonials={testimonials} cmsTestimonials={content?.testimonials} />
-        <section style={{ padding: mob ? '80px 24px' : '120px 5vw', background: '#0D0B2E', color: '#fff', textAlign: 'center' }}>
+        <section style={{ padding: mob ? '80px 24px' : '120px 5vw', background: '#111827', color: '#fff', textAlign: 'center' }}>
           <div style={{ maxWidth: 700, margin: '0 auto' }}>
             <span style={{ color: brand.color || AC, fontSize: 10, fontWeight: 800, letterSpacing: '0.3em', textTransform: 'uppercase' }}>GET STARTED</span>
             <h2 style={{ fontSize: mob ? 36 : 60, fontWeight: 800, marginBottom: 16, marginTop: 16, letterSpacing: '-0.04em', lineHeight: 1.1 }}>
@@ -747,7 +747,7 @@ export default function PublicSite({ brand, setPage, page, onPortal, user, conte
             </h2>
             <p style={{ fontSize: 16, color: 'rgba(255,255,255,0.5)', marginBottom: 40, lineHeight: 1.7 }}>{ctaSub}</p>
             <div style={{ display: 'flex', gap: 16, justifyContent: 'center', flexWrap: 'wrap' }}>
-              <button onClick={() => navigate('/?page=contact')} style={{ padding: '18px 48px', background: brand.color || AC, color: '#0D0B2E', border: 'none', borderRadius: 14, fontWeight: 900, fontSize: 15, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+              <button onClick={() => navigate('/?page=contact')} style={{ padding: '18px 48px', background: brand.color || AC, color: '#111827', border: 'none', borderRadius: 14, fontWeight: 900, fontSize: 15, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
                 {ctaBtn1} <ChevronRight size={16} />
               </button>
               <button onClick={() => navigate('/portfolio')} style={{ padding: '18px 48px', background: 'rgba(255,255,255,0.06)', color: '#fff', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 14, fontWeight: 700, fontSize: 15, cursor: 'pointer' }}>

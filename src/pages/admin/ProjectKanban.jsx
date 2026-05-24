@@ -9,12 +9,12 @@ import { CLIENT_PROJECT_STAGES, PROJECT_TYPES } from '../../data';
 
 // ─── Column definitions — canonical 7-stage production pipeline ──────────────
 const KANBAN_COLS = [
-  { id: 'intake',       label: 'Intake',       stages: [1], color: '#231F78', bg: 'rgba(35,31,120,0.07)' },
-  { id: 'quote',        label: 'Quote',        stages: [2], color: '#2563EB', bg: 'rgba(37,99,235,0.07)' },
+  { id: 'intake',       label: 'Intake',       stages: [1], color: '#0F766E', bg: 'rgba(35,31,120,0.07)' },
+  { id: 'quote',        label: 'Quote',        stages: [2], color: '#0F766E', bg: 'rgba(37,99,235,0.07)' },
   { id: 'production',   label: 'Production',   stages: [3], color: '#374151', bg: 'rgba(55,65,81,0.06)' },
   { id: 'delivery',     label: 'Delivery',     stages: [4], color: '#607D8B', bg: 'rgba(96,125,139,0.07)' },
   { id: 'installation', label: 'Installation', stages: [5], color: '#16A34A', bg: 'rgba(22,163,74,0.07)' },
-  { id: 'closeout',     label: 'Closeout',     stages: [6, 7], color: '#4945BE', bg: 'rgba(73,69,190,0.08)' },
+  { id: 'closeout',     label: 'Closeout',     stages: [6, 7], color: '#14B8A6', bg: 'rgba(73,69,190,0.08)' },
 ];
 
 const STAGE_MAP = {};
@@ -143,7 +143,7 @@ function ProjectCard({ project, ac, onOpen, onDragStart }) {
       onClick={() => onOpen(project)}
       style={{
         background: '#fff',
-        border: '1px solid #E8E6F5',
+        border: '1px solid #E5E7EB',
         borderRadius: 16,
         padding: '16px 18px',
         cursor: 'grab',
@@ -163,10 +163,10 @@ function ProjectCard({ project, ac, onOpen, onDragStart }) {
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 10 }}>
         <Grip size={14} color="#DDD" style={{ marginTop: 2, flexShrink: 0 }} />
         <div style={{ flex: 1, minWidth: 0, paddingRight: 64 }}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: '#0D0B2E', lineHeight: 1.3, marginBottom: 3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: '#111827', lineHeight: 1.3, marginBottom: 3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
             {project.project || project.title}
           </div>
-          <div style={{ fontSize: 11, color: '#9B99C8', display: 'flex', alignItems: 'center', gap: 5 }}>
+          <div style={{ fontSize: 11, color: '#6B7280', display: 'flex', alignItems: 'center', gap: 5 }}>
             <User size={10} /> {project.name || 'Unknown Client'}
           </div>
         </div>
@@ -178,19 +178,19 @@ function ProjectCard({ project, ac, onOpen, onDragStart }) {
       </div>
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-        <div style={{ fontSize: 11, fontWeight: 800, color: '#5B5894' }}>{project.budget || '—'}</div>
+        <div style={{ fontSize: 11, fontWeight: 800, color: '#4B5563' }}>{project.budget || '—'}</div>
         {daysInStage !== null && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 10, color: '#9B99C8', fontWeight: 700 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 10, color: '#6B7280', fontWeight: 700 }}>
             <Clock size={10} /> {daysInStage}d here
           </div>
         )}
       </div>
 
       <div>
-        <div style={{ height: 4, background: '#E8E6F5', borderRadius: 2, overflow: 'hidden' }}>
+        <div style={{ height: 4, background: '#E5E7EB', borderRadius: 2, overflow: 'hidden' }}>
           <div style={{ width: `${stage.pct}%`, height: '100%', background: stage.color, transition: 'width 0.6s ease', borderRadius: 2 }} />
         </div>
-        <div style={{ fontSize: 9, color: '#9B99C8', marginTop: 4, textAlign: 'right', fontWeight: 700 }}>{stage.pct}%</div>
+        <div style={{ fontSize: 9, color: '#6B7280', marginTop: 4, textAlign: 'right', fontWeight: 700 }}>{stage.pct}%</div>
       </div>
     </div>
   );
@@ -217,11 +217,11 @@ function KanbanColumn({ col, projects, ac, onOpen, onDragStart, onDrop, onDragOv
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <div style={{ width: 10, height: 10, borderRadius: '50%', background: col.color, boxShadow: `0 0 8px ${col.color}66` }} />
-            <span style={{ fontSize: 12, fontWeight: 800, color: '#0D0B2E', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{col.label}</span>
+            <span style={{ fontSize: 12, fontWeight: 800, color: '#111827', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{col.label}</span>
           </div>
-          <span style={{ fontSize: 11, fontWeight: 700, color: '#9B99C8', background: '#E8E6F5', padding: '2px 8px', borderRadius: 20 }}>{projects.length}</span>
+          <span style={{ fontSize: 11, fontWeight: 700, color: '#6B7280', background: '#E5E7EB', padding: '2px 8px', borderRadius: 20 }}>{projects.length}</span>
         </div>
-        <div style={{ marginTop: 6, fontSize: 10, color: '#9B99C8' }}>
+        <div style={{ marginTop: 6, fontSize: 10, color: '#6B7280' }}>
           {col.stages.map(sid => STAGE_MAP[sid]?.short).join(' · ')}
         </div>
         <div style={{ marginTop: 6, height: 2, background: col.color, borderRadius: 1, opacity: 0.3 }} />
@@ -290,7 +290,7 @@ function ProjectDrawer({ project, ac, onClose, updateProjectStage, updateProject
       <div style={{ width: '100%', maxWidth: 500, height: '100vh', background: '#fff', boxShadow: '-20px 0 60px rgba(0,0,0,0.12)', display: 'flex', flexDirection: 'column', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
 
         {/* Header */}
-        <div style={{ padding: '28px 28px 0', background: '#0D0B2E', color: '#fff', flexShrink: 0 }}>
+        <div style={{ padding: '28px 28px 0', background: '#111827', color: '#fff', flexShrink: 0 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 10, fontWeight: 800, color: ptype.color, textTransform: 'uppercase', letterSpacing: '.1em', marginBottom: 4 }}>{ptype.label}</div>
@@ -308,7 +308,7 @@ function ProjectDrawer({ project, ac, onClose, updateProjectStage, updateProject
 
             {/* Delete confirmation overlay */}
             {confirmDelete && (
-              <div style={{ position: 'absolute', inset: 0, background: 'rgba(13,11,46,0.97)', zIndex: 10, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 40, borderRadius: 0 }}>
+              <div style={{ position: 'absolute', inset: 0, background: 'rgba(17,24,39,0.97)', zIndex: 10, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 40, borderRadius: 0 }}>
                 <div style={{ width: 56, height: 56, borderRadius: '50%', background: 'rgba(239,68,68,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 20 }}>
                   <AlertTriangle size={28} color="#EF4444" />
                 </div>
@@ -364,12 +364,12 @@ function ProjectDrawer({ project, ac, onClose, updateProjectStage, updateProject
               {/* Current stage card */}
               <div style={{ padding: 20, background: `${stage.color}10`, border: `1px solid ${stage.color}30`, borderRadius: 16 }}>
                 <div style={{ fontSize: 11, fontWeight: 800, color: stage.color, textTransform: 'uppercase', letterSpacing: '.1em', marginBottom: 6 }}>Required Action</div>
-                <p style={{ fontSize: 13, color: '#0D0B2E', margin: 0, lineHeight: 1.6, fontWeight: 500 }}>{stage.adminPrompt}</p>
+                <p style={{ fontSize: 13, color: '#111827', margin: 0, lineHeight: 1.6, fontWeight: 500 }}>{stage.adminPrompt}</p>
                 {stageHistoryMap[stageId]?.timestamp && (
-                  <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#9B99C8' }}>
+                  <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#6B7280' }}>
                     <Calendar size={12} /> Entered {fmtDate(stageHistoryMap[stageId].timestamp)}
                     {daysSince(stageHistoryMap[stageId].timestamp) !== null && (
-                      <span style={{ fontWeight: 700, color: '#5B5894' }}>· {daysSince(stageHistoryMap[stageId].timestamp)}d ago</span>
+                      <span style={{ fontWeight: 700, color: '#4B5563' }}>· {daysSince(stageHistoryMap[stageId].timestamp)}d ago</span>
                     )}
                   </div>
                 )}
@@ -377,29 +377,29 @@ function ProjectDrawer({ project, ac, onClose, updateProjectStage, updateProject
 
               {/* Quick stats */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                <div style={{ padding: 16, background: '#F8F8FD', borderRadius: 14 }}>
-                  <div style={{ fontSize: 10, color: '#9B99C8', textTransform: 'uppercase', fontWeight: 800, marginBottom: 8 }}>Stages Done</div>
-                  <div style={{ fontSize: 22, fontWeight: 800, color: '#0D0B2E' }}>{currentIdx}<span style={{ fontSize: 13, color: '#9B99C8', fontWeight: 500 }}>/{availableStages.length}</span></div>
+                <div style={{ padding: 16, background: '#F9FAFB', borderRadius: 14 }}>
+                  <div style={{ fontSize: 10, color: '#6B7280', textTransform: 'uppercase', fontWeight: 800, marginBottom: 8 }}>Stages Done</div>
+                  <div style={{ fontSize: 22, fontWeight: 800, color: '#111827' }}>{currentIdx}<span style={{ fontSize: 13, color: '#6B7280', fontWeight: 500 }}>/{availableStages.length}</span></div>
                 </div>
-                <div style={{ padding: 16, background: '#F8F8FD', borderRadius: 14 }}>
-                  <div style={{ fontSize: 10, color: '#9B99C8', textTransform: 'uppercase', fontWeight: 800, marginBottom: 8 }}>Invoiced</div>
-                  <div style={{ fontSize: 22, fontWeight: 800, color: '#0D0B2E' }}>{projInvoices.filter(i => i.status === 'Paid').length}<span style={{ fontSize: 13, color: '#9B99C8', fontWeight: 500 }}>/{projInvoices.length}</span></div>
+                <div style={{ padding: 16, background: '#F9FAFB', borderRadius: 14 }}>
+                  <div style={{ fontSize: 10, color: '#6B7280', textTransform: 'uppercase', fontWeight: 800, marginBottom: 8 }}>Invoiced</div>
+                  <div style={{ fontSize: 22, fontWeight: 800, color: '#111827' }}>{projInvoices.filter(i => i.status === 'Paid').length}<span style={{ fontSize: 13, color: '#6B7280', fontWeight: 500 }}>/{projInvoices.length}</span></div>
                 </div>
               </div>
 
               {/* Actions */}
               <div>
-                <div style={{ fontSize: 11, fontWeight: 800, color: '#9B99C8', textTransform: 'uppercase', letterSpacing: '.1em', marginBottom: 14 }}>Quick Actions</div>
+                <div style={{ fontSize: 11, fontWeight: 800, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '.1em', marginBottom: 14 }}>Quick Actions</div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                   {nextStage && (
-                    <button onClick={advance} style={{ padding: '12px 16px', background: ac, color: '#0D0B2E', border: 'none', borderRadius: 12, fontSize: 12, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, gridColumn: '1 / -1' }}>
+                    <button onClick={advance} style={{ padding: '12px 16px', background: ac, color: '#111827', border: 'none', borderRadius: 12, fontSize: 12, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, gridColumn: '1 / -1' }}>
                       <ChevronRight size={14} /> Advance to {nextStage.name}
                     </button>
                   )}
-                  <button onClick={() => sendWhatsAppUpdate && sendWhatsAppUpdate(project.clientId, project.id, stage.name)} style={{ padding: '12px 16px', background: '#F8F8FD', color: '#0D0B2E', border: '1px solid #E8E6F5', borderRadius: 12, fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                  <button onClick={() => sendWhatsAppUpdate && sendWhatsAppUpdate(project.clientId, project.id, stage.name)} style={{ padding: '12px 16px', background: '#F9FAFB', color: '#111827', border: '1px solid #E5E7EB', borderRadius: 12, fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
                     <MessageCircle size={14} /> Notify Client
                   </button>
-                  <button onClick={() => createInvoice && createInvoice({ parentId: project.id, clientId: project.clientId, title: `${stage.name} Payment`, amount: '', status: 'Pending' })} style={{ padding: '12px 16px', background: '#F8F8FD', color: '#0D0B2E', border: '1px solid #E8E6F5', borderRadius: 12, fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                  <button onClick={() => createInvoice && createInvoice({ parentId: project.id, clientId: project.clientId, title: `${stage.name} Payment`, amount: '', status: 'Pending' })} style={{ padding: '12px 16px', background: '#F9FAFB', color: '#111827', border: '1px solid #E5E7EB', borderRadius: 12, fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
                     <FileText size={14} /> New Invoice
                   </button>
                 </div>
@@ -410,7 +410,7 @@ function ProjectDrawer({ project, ac, onClose, updateProjectStage, updateProject
           {/* ── TIMELINE TAB ─────────────────────────────────────── */}
           {tab === 'timeline' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-              <div style={{ fontSize: 11, fontWeight: 800, color: '#9B99C8', textTransform: 'uppercase', letterSpacing: '.1em', marginBottom: 16 }}>Project Journey</div>
+              <div style={{ fontSize: 11, fontWeight: 800, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '.1em', marginBottom: 16 }}>Project Journey</div>
               {availableStages.map((s, i) => {
                 const isPast = stageId > s.id;
                 const isCurrent = stageId === s.id;
@@ -423,22 +423,22 @@ function ProjectDrawer({ project, ac, onClose, updateProjectStage, updateProject
                   <div key={s.id} style={{ display: 'flex', gap: 12, position: 'relative', opacity: isFuture ? 0.4 : 1 }}>
                     {/* Connector line */}
                     {i < availableStages.length - 1 && (
-                      <div style={{ position: 'absolute', left: 16, top: 36, width: 2, height: 'calc(100% - 4px)', background: isPast ? s.color : '#E8E6F5', borderRadius: 1 }} />
+                      <div style={{ position: 'absolute', left: 16, top: 36, width: 2, height: 'calc(100% - 4px)', background: isPast ? s.color : '#E5E7EB', borderRadius: 1 }} />
                     )}
                     {/* Circle */}
-                    <div style={{ width: 34, height: 34, borderRadius: '50%', background: isPast ? s.color : isCurrent ? '#fff' : '#E8E6F5', border: isCurrent ? `2px solid ${s.color}` : 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, zIndex: 1 }}>
+                    <div style={{ width: 34, height: 34, borderRadius: '50%', background: isPast ? s.color : isCurrent ? '#fff' : '#E5E7EB', border: isCurrent ? `2px solid ${s.color}` : 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, zIndex: 1 }}>
                       {isPast ? <Check size={14} color="#fff" strokeWidth={3} /> : <span style={{ fontSize: 14 }}>{s.emoji}</span>}
                     </div>
                     {/* Content */}
                     <div style={{ flex: 1, paddingBottom: 20 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
-                        <span style={{ fontSize: 13, fontWeight: isCurrent ? 700 : 500, color: isCurrent ? '#0D0B2E' : isPast ? '#5B5894' : '#9B99C8' }}>{s.name}</span>
+                        <span style={{ fontSize: 13, fontWeight: isCurrent ? 700 : 500, color: isCurrent ? '#111827' : isPast ? '#4B5563' : '#6B7280' }}>{s.name}</span>
                         {isCurrent && <span style={{ fontSize: 9, fontWeight: 800, color: s.color, background: `${s.color}15`, padding: '2px 8px', borderRadius: 20, textTransform: 'uppercase' }}>Active</span>}
                       </div>
                       {enteredDate && (
-                        <div style={{ fontSize: 11, color: '#9B99C8', display: 'flex', gap: 10 }}>
+                        <div style={{ fontSize: 11, color: '#6B7280', display: 'flex', gap: 10 }}>
                           <span>Entered {enteredDate}</span>
-                          {daysIn !== null && <span style={{ fontWeight: 700, color: '#5B5894' }}>{daysIn}d in stage</span>}
+                          {daysIn !== null && <span style={{ fontWeight: 700, color: '#4B5563' }}>{daysIn}d in stage</span>}
                           {isPast && entry?.note && <span style={{ fontStyle: 'italic' }}>— {entry.note}</span>}
                         </div>
                       )}
@@ -454,13 +454,13 @@ function ProjectDrawer({ project, ac, onClose, updateProjectStage, updateProject
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
               <div style={{ fontSize: 14, fontWeight: 700 }}>Invoices ({projInvoices.length})</div>
               {projInvoices.length === 0 ? (
-                <div style={{ padding: 40, textAlign: 'center', color: '#9B99C8', fontSize: 13, background: '#F8F8FD', borderRadius: 16 }}>No invoices yet for this project.</div>
+                <div style={{ padding: 40, textAlign: 'center', color: '#6B7280', fontSize: 13, background: '#F9FAFB', borderRadius: 16 }}>No invoices yet for this project.</div>
               ) : (
                 projInvoices.map(inv => (
-                  <div key={inv.id} style={{ padding: '14px 16px', background: '#F8F8FD', borderRadius: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div key={inv.id} style={{ padding: '14px 16px', background: '#F9FAFB', borderRadius: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div>
                       <div style={{ fontSize: 13, fontWeight: 700 }}>{inv.title || 'Invoice'}</div>
-                      <div style={{ fontSize: 11, color: '#9B99C8', marginTop: 2 }}>{inv.date || '—'}</div>
+                      <div style={{ fontSize: 11, color: '#6B7280', marginTop: 2 }}>{inv.date || '—'}</div>
                     </div>
                     <div style={{ textAlign: 'right' }}>
                       <div style={{ fontSize: 14, fontWeight: 800 }}>{inv.amount}</div>
@@ -473,7 +473,7 @@ function ProjectDrawer({ project, ac, onClose, updateProjectStage, updateProject
                 const total = projInvoices.reduce((a, b) => a + parseFloat((b.amount || '0').replace(/[^0-9.]/g, '')), 0);
                 const paid = projInvoices.filter(i => i.status === 'Paid').reduce((a, b) => a + parseFloat((b.amount || '0').replace(/[^0-9.]/g, '')), 0);
                 return (
-                  <div style={{ padding: 16, background: '#0D0B2E', borderRadius: 14, color: '#fff' }}>
+                  <div style={{ padding: 16, background: '#111827', borderRadius: 14, color: '#fff' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
                       <span style={{ fontSize: 12, opacity: 0.6 }}>Total Invoiced</span>
                       <span style={{ fontSize: 14, fontWeight: 800 }}>GHS {total.toLocaleString()}</span>
@@ -496,11 +496,11 @@ function ProjectDrawer({ project, ac, onClose, updateProjectStage, updateProject
           {/* ── TEAM TAB ─────────────────────────────────────── */}
           {tab === 'team' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <div style={{ fontSize: 11, fontWeight: 800, color: '#9B99C8', textTransform: 'uppercase', letterSpacing: '.1em', marginBottom: 4 }}>
+              <div style={{ fontSize: 11, fontWeight: 800, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '.1em', marginBottom: 4 }}>
                 Assigned Team — only assigned members can message this client
               </div>
               {teamMembers.length === 0 ? (
-                <div style={{ padding: 32, textAlign: 'center', color: '#9B99C8', fontSize: 13, background: '#F8F8FD', borderRadius: 16 }}>
+                <div style={{ padding: 32, textAlign: 'center', color: '#6B7280', fontSize: 13, background: '#F9FAFB', borderRadius: 16 }}>
                   No staff accounts yet. Create staff accounts in the Team section.
                 </div>
               ) : (
@@ -509,13 +509,13 @@ function ProjectDrawer({ project, ac, onClose, updateProjectStage, updateProject
                   const isAssigned = assignedWorkers.includes(m.id) || assignedWorkers.includes(m.uid);
                   const isLoading = assigning === (m.id || m.uid);
                   return (
-                    <div key={m.id || m.uid} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', background: isAssigned ? '#F0FDF4' : '#F8F8FD', border: `1px solid ${isAssigned ? '#BBF7D0' : '#E8E6F5'}`, borderRadius: 14, transition: 'all 0.2s' }}>
-                      <div style={{ width: 36, height: 36, borderRadius: 10, background: isAssigned ? '#16A34A' : '#E8E6F5', color: isAssigned ? '#fff' : '#5B5894', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 800, flexShrink: 0 }}>
+                    <div key={m.id || m.uid} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', background: isAssigned ? '#F0FDF4' : '#F9FAFB', border: `1px solid ${isAssigned ? '#BBF7D0' : '#E5E7EB'}`, borderRadius: 14, transition: 'all 0.2s' }}>
+                      <div style={{ width: 36, height: 36, borderRadius: 10, background: isAssigned ? '#16A34A' : '#E5E7EB', color: isAssigned ? '#fff' : '#4B5563', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 800, flexShrink: 0 }}>
                         {(m.name || 'S')[0].toUpperCase()}
                       </div>
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 13, fontWeight: 700, color: '#0D0B2E' }}>{m.name}</div>
-                        <div style={{ fontSize: 11, color: '#5B5894' }}>{m.jobRole || m.role}</div>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: '#111827' }}>{m.name}</div>
+                        <div style={{ fontSize: 11, color: '#4B5563' }}>{m.jobRole || m.role}</div>
                       </div>
                       {isAssigned && (
                         <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 10, fontWeight: 800, color: '#16A34A' }}>
@@ -525,7 +525,7 @@ function ProjectDrawer({ project, ac, onClose, updateProjectStage, updateProject
                       <button
                         onClick={() => handleToggleAssignment(m.id || m.uid)}
                         disabled={isLoading}
-                        style={{ padding: '7px 14px', borderRadius: 10, border: 'none', background: isAssigned ? '#EF4444' : ac, color: isAssigned ? '#fff' : '#0D0B2E', fontSize: 11, fontWeight: 800, cursor: 'pointer', opacity: isLoading ? 0.6 : 1, flexShrink: 0 }}
+                        style={{ padding: '7px 14px', borderRadius: 10, border: 'none', background: isAssigned ? '#EF4444' : ac, color: isAssigned ? '#fff' : '#111827', fontSize: 11, fontWeight: 800, cursor: 'pointer', opacity: isLoading ? 0.6 : 1, flexShrink: 0 }}
                       >
                         {isLoading ? '…' : isAssigned ? 'Remove' : 'Assign'}
                       </button>
@@ -543,7 +543,7 @@ function ProjectDrawer({ project, ac, onClose, updateProjectStage, updateProject
 
 // ─── Main export ──────────────────────────────────────────────────────────────
 export default function ProjectKanban({ clients = [], brand, updateProjectStage, updateProject, createInvoice, sendWhatsAppUpdate, notify, invoices = [], deleteProject, teamMembers = [], assignWorkerToProject, staffMode = false, ...props }) {
-  const ac = brand?.color || '#231F78';
+  const ac = brand?.color || '#0F766E';
   const [search, setSearch] = useState('');
   const [viewMode, setViewMode] = useState('board');
   const [focusFilter, setFocusFilter] = useState('all');
@@ -606,11 +606,11 @@ export default function ProjectKanban({ clients = [], brand, updateProjectStage,
 
   const filterSelectStyle = {
     height: 40,
-    border: '1px solid #E8E6F5',
+    border: '1px solid #E5E7EB',
     borderRadius: 12,
     padding: '0 12px',
     background: '#fff',
-    color: '#0D0B2E',
+    color: '#111827',
     fontSize: 12,
     fontWeight: 700,
     outline: 'none',
@@ -622,9 +622,9 @@ export default function ProjectKanban({ clients = [], brand, updateProjectStage,
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 16 }}>
         <div>
           <h2 style={{ fontSize: 32, fontWeight: 400, fontFamily: 'var(--font-heading)', margin: 0 }}>Project Board</h2>
-          <p style={{ color: '#9B99C8', fontSize: 13, margin: '4px 0 0' }}>Portfolio control for stage gates, blockers, payments, field work, and project managers</p>
+          <p style={{ color: '#6B7280', fontSize: 13, margin: '4px 0 0' }}>Portfolio control for stage gates, blockers, payments, field work, and project managers</p>
         </div>
-        <div style={{ display: 'flex', gap: 8, background: '#fff', border: '1px solid #E8E6F5', padding: 4, borderRadius: 14 }}>
+        <div style={{ display: 'flex', gap: 8, background: '#fff', border: '1px solid #E5E7EB', padding: 4, borderRadius: 14 }}>
           {[
             { id: 'board', label: 'Board', icon: <LayoutGrid size={14} /> },
             { id: 'list', label: 'List', icon: <ListFilter size={14} /> },
@@ -636,7 +636,7 @@ export default function ProjectKanban({ clients = [], brand, updateProjectStage,
                 display: 'flex', alignItems: 'center', gap: 6,
                 height: 32, padding: '0 12px', borderRadius: 10, border: 'none',
                 background: viewMode === mode.id ? ac : 'transparent',
-                color: viewMode === mode.id ? '#fff' : '#5B5894',
+                color: viewMode === mode.id ? '#fff' : '#4B5563',
                 fontSize: 12, fontWeight: 800, cursor: 'pointer',
               }}
             >
@@ -649,15 +649,15 @@ export default function ProjectKanban({ clients = [], brand, updateProjectStage,
       {/* Stats */}
       <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
         {[
-          { label: 'Total', value: totalProjects, color: '#0D0B2E' },
+          { label: 'Total', value: totalProjects, color: '#111827' },
           { label: 'Active', value: activeProjects, color: '#2196F3' },
           { label: 'Blocked', value: blockedProjects, color: '#EF4444' },
           { label: 'Completed', value: completedProjects, color: '#16A34A' },
           { label: 'Showing', value: filtered.length, color: ac },
         ].map(stat => (
-          <div key={stat.label} style={{ padding: '12px 20px', background: '#fff', border: '1px solid #E8E6F5', borderRadius: 14, display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div key={stat.label} style={{ padding: '12px 20px', background: '#fff', border: '1px solid #E5E7EB', borderRadius: 14, display: 'flex', alignItems: 'center', gap: 12 }}>
             <div style={{ width: 8, height: 8, borderRadius: '50%', background: stat.color }} />
-            <span style={{ fontSize: 11, fontWeight: 800, color: '#9B99C8', textTransform: 'uppercase' }}>{stat.label}</span>
+            <span style={{ fontSize: 11, fontWeight: 800, color: '#6B7280', textTransform: 'uppercase' }}>{stat.label}</span>
             <span style={{ fontSize: 20, fontWeight: 800, color: stat.color }}>{stat.value}</span>
           </div>
         ))}
@@ -666,7 +666,7 @@ export default function ProjectKanban({ clients = [], brand, updateProjectStage,
       {/* Controls */}
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(220px, 1.4fr) repeat(3, minmax(160px, .8fr))', gap: 12, alignItems: 'center' }}>
         <div style={{ position: 'relative' }}>
-          <Search size={14} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#9B99C8' }} />
+          <Search size={14} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#6B7280' }} />
           <input
             className="p-inp"
             placeholder="Search project, client, next action..."
@@ -711,8 +711,8 @@ export default function ProjectKanban({ clients = [], brand, updateProjectStage,
           ))}
         </div>
       ) : (
-        <div style={{ background: '#fff', border: '1px solid #E8E6F5', borderRadius: 18, overflow: 'hidden' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(220px, 1.4fr) minmax(160px, .9fr) minmax(150px, .8fr) minmax(180px, 1fr) minmax(150px, .8fr) 90px', gap: 16, padding: '14px 18px', background: '#F8F8FD', color: '#9B99C8', fontSize: 10, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '.08em' }}>
+        <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 18, overflow: 'hidden' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(220px, 1.4fr) minmax(160px, .9fr) minmax(150px, .8fr) minmax(180px, 1fr) minmax(150px, .8fr) 90px', gap: 16, padding: '14px 18px', background: '#F9FAFB', color: '#6B7280', fontSize: 10, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '.08em' }}>
             <div>Project</div>
             <div>Stage</div>
             <div>Owner</div>
@@ -721,7 +721,7 @@ export default function ProjectKanban({ clients = [], brand, updateProjectStage,
             <div></div>
           </div>
           {filtered.length === 0 ? (
-            <div style={{ padding: 36, textAlign: 'center', color: '#9B99C8', fontSize: 13 }}>No projects match the current filters.</div>
+            <div style={{ padding: 36, textAlign: 'center', color: '#6B7280', fontSize: 13 }}>No projects match the current filters.</div>
           ) : filtered.map(project => {
             const stage = STAGE_MAP[project.stageId || 1] || CLIENT_PROJECT_STAGES[0];
             return (
@@ -735,7 +735,7 @@ export default function ProjectKanban({ clients = [], brand, updateProjectStage,
                   gap: 16,
                   padding: '16px 18px',
                   border: 'none',
-                  borderTop: '1px solid #E8E6F5',
+                  borderTop: '1px solid #E5E7EB',
                   background: '#fff',
                   cursor: 'pointer',
                   alignItems: 'center',
@@ -743,18 +743,18 @@ export default function ProjectKanban({ clients = [], brand, updateProjectStage,
                 }}
               >
                 <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: 14, fontWeight: 800, color: '#0D0B2E', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{projectTitle(project)}</div>
-                  <div style={{ fontSize: 11, color: '#9B99C8', marginTop: 3 }}>{clientName(project)}</div>
+                  <div style={{ fontSize: 14, fontWeight: 800, color: '#111827', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{projectTitle(project)}</div>
+                  <div style={{ fontSize: 11, color: '#6B7280', marginTop: 3 }}>{clientName(project)}</div>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <span style={{ width: 8, height: 8, borderRadius: '50%', background: stage.color, flexShrink: 0 }} />
                   <span style={{ fontSize: 12, fontWeight: 800, color: stage.color }}>{stage.short}</span>
                 </div>
-                <div style={{ fontSize: 12, color: '#5B5894', fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{ownerLabel(project, teamMembers)}</div>
-                <div style={{ fontSize: 12, color: isBlocked(project) ? '#EF4444' : '#5B5894', fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                <div style={{ fontSize: 12, color: '#4B5563', fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{ownerLabel(project, teamMembers)}</div>
+                <div style={{ fontSize: 12, color: isBlocked(project) ? '#EF4444' : '#4B5563', fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                   {project.nextAction || (isWaitingOnClient(project) ? 'Client action required' : 'Internal update due')}
                 </div>
-                <div style={{ fontSize: 12, color: '#0D0B2E', fontWeight: 800 }}>{moneyLabel(project.budget || project.totalAmount)}</div>
+                <div style={{ fontSize: 12, color: '#111827', fontWeight: 800 }}>{moneyLabel(project.budget || project.totalAmount)}</div>
                 <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: ac, fontSize: 11, fontWeight: 900 }}>Open <ChevronRight size={13} /></span>
                 </div>

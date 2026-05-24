@@ -61,21 +61,21 @@ function AssignClientsModal({ member, clients, onClose }) {
     <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
       <div style={{ background: '#fff', borderRadius: 24, width: '100%', maxWidth: 480, boxShadow: '0 32px 80px rgba(0,0,0,.2)', display: 'flex', flexDirection: 'column', maxHeight: '80vh' }}>
         {/* Header */}
-        <div style={{ padding: '28px 28px 20px', borderBottom: '1px solid #E8E6F5', flexShrink: 0 }}>
+        <div style={{ padding: '28px 28px 20px', borderBottom: '1px solid #E5E7EB', flexShrink: 0 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
             <div>
-              <div style={{ fontSize: 11, fontWeight: 800, color: '#231F78', textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 4 }}>Client Assignment</div>
-              <div style={{ fontSize: 20, fontWeight: 900, color: '#0D0B2E' }}>{member.name}</div>
+              <div style={{ fontSize: 11, fontWeight: 800, color: '#0F766E', textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 4 }}>Client Assignment</div>
+              <div style={{ fontSize: 20, fontWeight: 900, color: '#111827' }}>{member.name}</div>
             </div>
-            <button onClick={onClose} style={{ width: 32, height: 32, borderRadius: 8, border: '1px solid #E8E6F5', background: '#F8F8FD', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><X size={14} /></button>
+            <button onClick={onClose} style={{ width: 32, height: 32, borderRadius: 8, border: '1px solid #E5E7EB', background: '#F9FAFB', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><X size={14} /></button>
           </div>
           <div style={{ position: 'relative' }}>
-            <Search size={13} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#9B99C8' }} />
+            <Search size={13} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#6B7280' }} />
             <input
               value={search}
               onChange={e => setSearch(e.target.value)}
               placeholder="Search clients..."
-              style={{ width: '100%', padding: '9px 12px 9px 34px', borderRadius: 10, border: '1.5px solid #E8E6F5', fontSize: 13, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' }}
+              style={{ width: '100%', padding: '9px 12px 9px 34px', borderRadius: 10, border: '1.5px solid #E5E7EB', fontSize: 13, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' }}
             />
           </div>
         </div>
@@ -83,7 +83,7 @@ function AssignClientsModal({ member, clients, onClose }) {
         {/* Client list */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '12px 20px' }}>
           {filtered.length === 0 ? (
-            <div style={{ padding: 32, textAlign: 'center', color: '#9B99C8', fontSize: 13 }}>No clients found</div>
+            <div style={{ padding: 32, textAlign: 'center', color: '#6B7280', fontSize: 13 }}>No clients found</div>
           ) : filtered.map(c => {
             const isSelected = selected.has(c.id);
             return (
@@ -93,17 +93,17 @@ function AssignClientsModal({ member, clients, onClose }) {
                 style={{
                   width: '100%', display: 'flex', alignItems: 'center', gap: 12,
                   padding: '12px 14px', borderRadius: 12, marginBottom: 6,
-                  background: isSelected ? '#F0F9FF' : '#F8F8FD',
+                  background: isSelected ? '#F0F9FF' : '#F9FAFB',
                   border: `1.5px solid ${isSelected ? '#0284C7' : 'transparent'}`,
                   cursor: 'pointer', textAlign: 'left', transition: 'all .15s',
                 }}
               >
-                <div style={{ width: 36, height: 36, borderRadius: 10, background: isSelected ? '#0284C7' : '#E8E6F5', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 900, color: isSelected ? '#fff' : '#9B99C8', flexShrink: 0 }}>
+                <div style={{ width: 36, height: 36, borderRadius: 10, background: isSelected ? '#0284C7' : '#E5E7EB', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 900, color: isSelected ? '#fff' : '#6B7280', flexShrink: 0 }}>
                   {(c.name || 'C')[0].toUpperCase()}
                 </div>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: '#0D0B2E' }}>{c.name}</div>
-                  <div style={{ fontSize: 11, color: '#9B99C8' }}>{c.phone || c.email || '—'}</div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: '#111827' }}>{c.name}</div>
+                  <div style={{ fontSize: 11, color: '#6B7280' }}>{c.phone || c.email || '—'}</div>
                 </div>
                 {isSelected && <Check size={14} color="#0284C7" />}
               </button>
@@ -112,12 +112,12 @@ function AssignClientsModal({ member, clients, onClose }) {
         </div>
 
         {/* Footer */}
-        <div style={{ padding: '16px 28px 24px', borderTop: '1px solid #E8E6F5', flexShrink: 0, display: 'flex', gap: 10 }}>
-          <button onClick={onClose} style={{ flex: 1, height: 46, borderRadius: 12, border: '1.5px solid #E8E6F5', background: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Cancel</button>
+        <div style={{ padding: '16px 28px 24px', borderTop: '1px solid #E5E7EB', flexShrink: 0, display: 'flex', gap: 10 }}>
+          <button onClick={onClose} style={{ flex: 1, height: 46, borderRadius: 12, border: '1.5px solid #E5E7EB', background: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Cancel</button>
           <button
             onClick={handleSave}
             disabled={saving}
-            style={{ flex: 2, height: 46, borderRadius: 12, background: saved ? '#16A34A' : '#0D0B2E', color: '#fff', border: 'none', fontSize: 13, fontWeight: 800, cursor: 'pointer', transition: 'background .2s' }}
+            style={{ flex: 2, height: 46, borderRadius: 12, background: saved ? '#16A34A' : '#111827', color: '#fff', border: 'none', fontSize: 13, fontWeight: 800, cursor: 'pointer', transition: 'background .2s' }}
           >
             {saving ? 'Saving…' : saved ? `✓ Saved — ${selected.size} assigned` : `Assign ${selected.size} Client${selected.size !== 1 ? 's' : ''}`}
           </button>
@@ -129,7 +129,7 @@ function AssignClientsModal({ member, clients, onClose }) {
 
 export default function AdminStaff({ team = [], brand, createStaffAccount, clients = [], dbClients = [], notify, ...props }) {
   const allClients = dbClients.length > 0 ? dbClients : clients;
-  const ac = brand.color || '#231F78';
+  const ac = brand.color || '#0F766E';
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState({ name: '', email: '', role: 'Technician' });
   const [creating, setCreating] = useState(false);
@@ -215,13 +215,13 @@ export default function AdminStaff({ team = [], brand, createStaffAccount, clien
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
-          <h2 className="lxfh" style={{ fontSize: 32, fontWeight: 400, color: '#0D0B2E' }}>Staff Governance</h2>
-          <p className="lxf" style={{ color: '#9B99C8', fontSize: 13, marginTop: 4 }}>Manage team accounts, certifications, and client assignments.</p>
+          <h2 className="lxfh" style={{ fontSize: 32, fontWeight: 400, color: '#111827' }}>Staff Governance</h2>
+          <p className="lxf" style={{ color: '#6B7280', fontSize: 13, marginTop: 4 }}>Manage team accounts, certifications, and client assignments.</p>
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
           <button
             onClick={() => { setShowRepair(true); setRepairResult(null); setRepairForm({ email: '', name: '', role: 'Technician' }); }}
-            style={{ padding: '10px 16px', fontSize: 13, gap: 8, display: 'flex', alignItems: 'center', borderRadius: 12, border: '1.5px solid #E8E6F5', background: '#F8F8FD', cursor: 'pointer', fontWeight: 700, color: '#5B5894', fontFamily: 'inherit' }}
+            style={{ padding: '10px 16px', fontSize: 13, gap: 8, display: 'flex', alignItems: 'center', borderRadius: 12, border: '1.5px solid #E5E7EB', background: '#F9FAFB', cursor: 'pointer', fontWeight: 700, color: '#4B5563', fontFamily: 'inherit' }}
           >
             <Search size={14} /> Recover Account
           </button>
@@ -234,13 +234,13 @@ export default function AdminStaff({ team = [], brand, createStaffAccount, clien
       {/* Stats */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
         {[
-          { label: 'Total Staff', value: team.length, color: '#0D0B2E' },
+          { label: 'Total Staff', value: team.length, color: '#111827' },
           { label: 'Active', value: team.filter(m => m.status !== 'Inactive').length, color: '#16A34A' },
           { label: 'Assigned Clients', value: team.reduce((acc, m) => acc + (m.assignedClients?.length || 0), 0), color: ac },
         ].map(s => (
           <div key={s.label} className="p-card" style={{ padding: 20, textAlign: 'center' }}>
             <div className="lxfh" style={{ fontSize: 28, fontWeight: 900, color: s.color, marginBottom: 4 }}>{s.value}</div>
-            <div className="lxf" style={{ fontSize: 11, color: '#9B99C8', textTransform: 'uppercase', letterSpacing: '.08em' }}>{s.label}</div>
+            <div className="lxf" style={{ fontSize: 11, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '.08em' }}>{s.label}</div>
           </div>
         ))}
       </div>
@@ -259,22 +259,22 @@ export default function AdminStaff({ team = [], brand, createStaffAccount, clien
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                     <PAv i={m.av || m.name?.charAt(0)} s={40} c={ac} />
                     <div>
-                      <div className="lxf" style={{ fontSize: 14, fontWeight: 600, color: '#0D0B2E' }}>{m.name}</div>
-                      <div className="lxf" style={{ fontSize: 11, color: '#9B99C8' }}>{m.email || m.phone || '—'}</div>
+                      <div className="lxf" style={{ fontSize: 14, fontWeight: 600, color: '#111827' }}>{m.name}</div>
+                      <div className="lxf" style={{ fontSize: 11, color: '#6B7280' }}>{m.email || m.phone || '—'}</div>
                     </div>
                   </div>
                 </td>
                 <td style={{ padding: '16px' }}>
-                  <div className="lxf" style={{ fontSize: 13, color: '#0D0B2E' }}>{m.role || m.jobRole || '—'}</div>
+                  <div className="lxf" style={{ fontSize: 13, color: '#111827' }}>{m.role || m.jobRole || '—'}</div>
                 </td>
                 <td style={{ padding: '16px' }}>
                   <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                     {BADGES.map(b => (
                       <button key={b.id} onClick={() => toggleBadge(m, b.id)} style={{
                         display: 'flex', alignItems: 'center', gap: 4, padding: '4px 10px', borderRadius: 20,
-                        border: `1.5px solid ${(m.certs || []).includes(b.id) ? b.color : '#E8E6F5'}`,
+                        border: `1.5px solid ${(m.certs || []).includes(b.id) ? b.color : '#E5E7EB'}`,
                         background: (m.certs || []).includes(b.id) ? `${b.color}15` : 'none',
-                        color: (m.certs || []).includes(b.id) ? b.color : '#9B99C8',
+                        color: (m.certs || []).includes(b.id) ? b.color : '#6B7280',
                         fontSize: 10, fontWeight: 700, cursor: 'pointer',
                       }}>
                         {b.icon} {b.label}
@@ -285,7 +285,7 @@ export default function AdminStaff({ team = [], brand, createStaffAccount, clien
                 <td style={{ padding: '16px' }}>
                   <button
                     onClick={() => setAssignTarget(m)}
-                    style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 8, background: '#F8F8FD', border: '1px solid #E8E6F5', fontSize: 12, fontWeight: 700, cursor: 'pointer', color: '#5B5894' }}
+                    style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 8, background: '#F9FAFB', border: '1px solid #E5E7EB', fontSize: 12, fontWeight: 700, cursor: 'pointer', color: '#4B5563' }}
                   >
                     <UserCog size={13} />
                     {(m.assignedClients?.length || 0)} assigned
@@ -295,7 +295,7 @@ export default function AdminStaff({ team = [], brand, createStaffAccount, clien
                   <select
                     value={m.status || 'Active'}
                     onChange={e => updateM(m.id, { status: e.target.value })}
-                    style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid #E8E6F5', fontSize: 12, fontWeight: 700, background: '#fff', cursor: 'pointer' }}
+                    style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid #E5E7EB', fontSize: 12, fontWeight: 700, background: '#fff', cursor: 'pointer' }}
                   >
                     {['Active', 'On Leave', 'Inactive'].map(s => <option key={s}>{s}</option>)}
                   </select>
@@ -309,17 +309,17 @@ export default function AdminStaff({ team = [], brand, createStaffAccount, clien
                       title="Send password reset link via SMS"
                       style={{
                         display: 'flex', alignItems: 'center', gap: 5, padding: '6px 10px', borderRadius: 8,
-                        background: resetStates[m.id] === 'sent' ? '#F0FDF4' : '#F8F8FD',
-                        border: `1px solid ${resetStates[m.id] === 'sent' ? '#16A34A40' : '#E8E6F5'}`,
+                        background: resetStates[m.id] === 'sent' ? '#F0FDF4' : '#F9FAFB',
+                        border: `1px solid ${resetStates[m.id] === 'sent' ? '#16A34A40' : '#E5E7EB'}`,
                         fontSize: 11, fontWeight: 700, cursor: 'pointer',
-                        color: resetStates[m.id] === 'sent' ? '#16A34A' : '#5B5894',
+                        color: resetStates[m.id] === 'sent' ? '#16A34A' : '#4B5563',
                       }}
                     >
                       <Mail size={12} />
                       {resetStates[m.id] === 'sending' ? 'Sending…' : resetStates[m.id] === 'sent' ? 'Sent ✓' : 'Reset'}
                     </button>
                     {/* Delete */}
-                    <button onClick={() => deleteM(m.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9B99C8', padding: 6 }}>
+                    <button onClick={() => deleteM(m.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#6B7280', padding: 6 }}>
                       <Trash2 size={16} />
                     </button>
                   </div>
@@ -327,8 +327,8 @@ export default function AdminStaff({ team = [], brand, createStaffAccount, clien
               </tr>
             ))}
             {team.length === 0 && (
-              <tr><td colSpan={6} style={{ padding: 48, textAlign: 'center', color: '#9B99C8' }}>
-                <Users size={40} color="#E8E6F5" style={{ marginBottom: 12 }} />
+              <tr><td colSpan={6} style={{ padding: 48, textAlign: 'center', color: '#6B7280' }}>
+                <Users size={40} color="#E5E7EB" style={{ marginBottom: 12 }} />
                 <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 4 }}>No staff accounts yet</div>
                 <div style={{ fontSize: 12 }}>Create a staff account to get started.</div>
               </td></tr>
@@ -353,9 +353,9 @@ export default function AdminStaff({ team = [], brand, createStaffAccount, clien
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
               <div>
                 <h3 className="lxfh" style={{ fontSize: 22, marginBottom: 4 }}>Recover Staff Account</h3>
-                <p className="lxf" style={{ color: '#9B99C8', fontSize: 13 }}>Re-links a Firebase Auth account that's missing from the staff register. Use this for accounts created before the system update.</p>
+                <p className="lxf" style={{ color: '#6B7280', fontSize: 13 }}>Re-links a Firebase Auth account that's missing from the staff register. Use this for accounts created before the system update.</p>
               </div>
-              <button onClick={() => setShowRepair(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9B99C8', flexShrink: 0 }}><X size={20} /></button>
+              <button onClick={() => setShowRepair(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#6B7280', flexShrink: 0 }}><X size={20} /></button>
             </div>
 
             {repairResult ? (
@@ -366,7 +366,7 @@ export default function AdminStaff({ team = [], brand, createStaffAccount, clien
                       <Check size={24} color="#16A34A" />
                     </div>
                     <div className="lxfh" style={{ fontSize: 18, marginBottom: 8 }}>Account Recovered</div>
-                    <p className="lxf" style={{ color: '#5B5894', fontSize: 13, marginBottom: 20 }}>
+                    <p className="lxf" style={{ color: '#4B5563', fontSize: 13, marginBottom: 20 }}>
                       <strong>{repairResult.name}</strong> now appears in the staff register as a <strong>{repairResult.role}</strong>. They can log in with their existing password.
                     </p>
                     <button onClick={() => setShowRepair(false)} className="p-btn-dark" style={{ width: '100%', padding: 14 }}>Done</button>
@@ -386,15 +386,15 @@ export default function AdminStaff({ team = [], brand, createStaffAccount, clien
               <>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
                   <div>
-                    <label className="lxf" style={{ fontSize: 11, fontWeight: 800, color: '#9B99C8', textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>Email Address *</label>
+                    <label className="lxf" style={{ fontSize: 11, fontWeight: 800, color: '#6B7280', textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>Email Address *</label>
                     <input className="p-inp" type="email" value={repairForm.email} onChange={e => setRepairForm(f => ({ ...f, email: e.target.value }))} placeholder="existing@email.com" style={{ width: '100%', boxSizing: 'border-box' }} />
                   </div>
                   <div>
-                    <label className="lxf" style={{ fontSize: 11, fontWeight: 800, color: '#9B99C8', textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>Full Name (if missing)</label>
+                    <label className="lxf" style={{ fontSize: 11, fontWeight: 800, color: '#6B7280', textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>Full Name (if missing)</label>
                     <input className="p-inp" value={repairForm.name} onChange={e => setRepairForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g. Kofi Mensah" style={{ width: '100%', boxSizing: 'border-box' }} />
                   </div>
                   <div>
-                    <label className="lxf" style={{ fontSize: 11, fontWeight: 800, color: '#9B99C8', textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>Role</label>
+                    <label className="lxf" style={{ fontSize: 11, fontWeight: 800, color: '#6B7280', textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>Role</label>
                     <select className="p-inp" value={repairForm.role} onChange={e => setRepairForm(f => ({ ...f, role: e.target.value }))} style={{ width: '100%', boxSizing: 'border-box' }}>
                       {STAFF_ROLES.map(r => <option key={r}>{r}</option>)}
                     </select>
@@ -423,21 +423,21 @@ export default function AdminStaff({ team = [], brand, createStaffAccount, clien
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
                   <div>
                     <h3 className="lxfh" style={{ fontSize: 22, marginBottom: 4 }}>Create Staff Account</h3>
-                    <p className="lxf" style={{ color: '#9B99C8', fontSize: 13 }}>Staff can log in and manage their assigned clients.</p>
+                    <p className="lxf" style={{ color: '#6B7280', fontSize: 13 }}>Staff can log in and manage their assigned clients.</p>
                   </div>
-                  <button onClick={() => setShowModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9B99C8' }}><X size={20} /></button>
+                  <button onClick={() => setShowModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#6B7280' }}><X size={20} /></button>
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
                   <div>
-                    <label className="lxf" style={{ fontSize: 11, fontWeight: 800, color: '#9B99C8', textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>Full Name *</label>
+                    <label className="lxf" style={{ fontSize: 11, fontWeight: 800, color: '#6B7280', textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>Full Name *</label>
                     <input className="p-inp" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g. Kofi Mensah" style={{ width: '100%', boxSizing: 'border-box' }} />
                   </div>
                   <div>
-                    <label className="lxf" style={{ fontSize: 11, fontWeight: 800, color: '#9B99C8', textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>Email Address *</label>
+                    <label className="lxf" style={{ fontSize: 11, fontWeight: 800, color: '#6B7280', textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>Email Address *</label>
                     <input className="p-inp" type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} placeholder="staff@company.com" style={{ width: '100%', boxSizing: 'border-box' }} />
                   </div>
                   <div>
-                    <label className="lxf" style={{ fontSize: 11, fontWeight: 800, color: '#9B99C8', textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>Role</label>
+                    <label className="lxf" style={{ fontSize: 11, fontWeight: 800, color: '#6B7280', textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>Role</label>
                     <select className="p-inp" value={form.role} onChange={e => setForm(f => ({ ...f, role: e.target.value }))} style={{ width: '100%', boxSizing: 'border-box' }}>
                       {STAFF_ROLES.map(r => <option key={r}>{r}</option>)}
                     </select>
@@ -459,25 +459,25 @@ export default function AdminStaff({ team = [], brand, createStaffAccount, clien
                     <Check size={28} color="#16A34A" />
                   </div>
                   <h3 className="lxfh" style={{ fontSize: 22, marginBottom: 6 }}>Account Created</h3>
-                  <p className="lxf" style={{ color: '#9B99C8', fontSize: 13 }}>Share these credentials with <strong>{created.name}</strong>. They must change their password on first login.</p>
+                  <p className="lxf" style={{ color: '#6B7280', fontSize: 13 }}>Share these credentials with <strong>{created.name}</strong>. They must change their password on first login.</p>
                 </div>
-                <div style={{ background: '#F8F8FD', borderRadius: 14, padding: 20, marginBottom: 20 }}>
+                <div style={{ background: '#F9FAFB', borderRadius: 14, padding: 20, marginBottom: 20 }}>
                   {[
                     { label: 'Name', value: created.name },
                     { label: 'Email / Login', value: created.email },
                   ].map(row => (
-                    <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: 10, marginBottom: 10, borderBottom: '1px solid #E8E6F5' }}>
-                      <span className="lxf" style={{ fontSize: 12, color: '#9B99C8', fontWeight: 700 }}>{row.label}</span>
-                      <span className="lxf" style={{ fontSize: 13, fontWeight: 700, color: '#0D0B2E' }}>{row.value}</span>
+                    <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: 10, marginBottom: 10, borderBottom: '1px solid #E5E7EB' }}>
+                      <span className="lxf" style={{ fontSize: 12, color: '#6B7280', fontWeight: 700 }}>{row.label}</span>
+                      <span className="lxf" style={{ fontSize: 13, fontWeight: 700, color: '#111827' }}>{row.value}</span>
                     </div>
                   ))}
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span className="lxf" style={{ fontSize: 12, color: '#9B99C8', fontWeight: 700 }}>Temp Password</span>
+                    <span className="lxf" style={{ fontSize: 12, color: '#6B7280', fontWeight: 700 }}>Temp Password</span>
                     <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                      <span className="lxf" style={{ fontSize: 13, fontWeight: 800, color: '#0D0B2E', fontFamily: 'monospace', letterSpacing: 1 }}>
+                      <span className="lxf" style={{ fontSize: 13, fontWeight: 800, color: '#111827', fontFamily: 'monospace', letterSpacing: 1 }}>
                         {showPw ? created.password : '●'.repeat(created.password.length)}
                       </span>
-                      <button onClick={() => setShowPw(p => !p)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9B99C8', padding: 0 }}>
+                      <button onClick={() => setShowPw(p => !p)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#6B7280', padding: 0 }}>
                         {showPw ? <EyeOff size={14} /> : <Eye size={14} />}
                       </button>
                     </div>

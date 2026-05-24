@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { ChevronRight, ArrowRight, Layers, AppWindow, ShowerHead, ChefHat, Shirt, LayoutGrid, DoorOpen, Zap, Droplets } from 'lucide-react';
 import { useWindowWidth } from './PublicSite';
 
-const DARK_TEXT = '#0D0B2E';
+const DARK_TEXT = '#111827';
 const LIGHT_BG = '#FDFCFB';
 
 const ALL_SERVICES = [
@@ -108,7 +108,7 @@ const ALL_SERVICES = [
 ];
 
 export default function ServicesPage({ brand, navigate }) {
-  const ac = brand?.color || '#231F78';
+  const ac = brand?.color || '#0F766E';
   const winW = useWindowWidth();
   const mob = winW <= 900;
   const [activeId, setActiveId] = useState(null);
@@ -118,7 +118,7 @@ export default function ServicesPage({ brand, navigate }) {
   return (
     <div style={{ background: LIGHT_BG }}>
       {/* Hero */}
-      <section style={{ padding: mob ? '120px 24px 80px' : '180px 5vw 100px', background: '#0D0B2E', color: '#fff' }}>
+      <section style={{ padding: mob ? '120px 24px 80px' : '180px 5vw 100px', background: '#111827', color: '#fff' }}>
         <div style={{ maxWidth: 1400, margin: '0 auto' }}>
           <span style={{ color: ac, fontSize: 10, fontWeight: 800, letterSpacing: '0.3em', textTransform: 'uppercase' }}>WHAT WE DO</span>
           <h1 style={{ fontSize: mob ? 40 : 72, fontWeight: 800, letterSpacing: '-0.04em', margin: '16px 0', color: '#fff', lineHeight: 1.05 }}>
@@ -175,11 +175,11 @@ export default function ServicesPage({ brand, navigate }) {
                   </div>
                   <div>
                     <h2 style={{ fontSize: mob ? 18 : 24, fontWeight: 800, color: DARK_TEXT, margin: '0 0 4px' }}>{svc.name}</h2>
-                    <p style={{ fontSize: 13, color: '#9B99C8', margin: 0, fontWeight: 500 }}>{svc.tagline}</p>
+                    <p style={{ fontSize: 13, color: '#6B7280', margin: 0, fontWeight: 500 }}>{svc.tagline}</p>
                   </div>
                 </div>
-                <div style={{ width: 36, height: 36, borderRadius: 12, background: isOpen ? ac : '#F8F8FD', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'all 0.25s' }}>
-                  <ChevronRight size={18} color={isOpen ? '#fff' : '#9B99C8'} style={{ transform: isOpen ? 'rotate(90deg)' : 'none', transition: 'transform 0.25s' }} />
+                <div style={{ width: 36, height: 36, borderRadius: 12, background: isOpen ? ac : '#F9FAFB', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'all 0.25s' }}>
+                  <ChevronRight size={18} color={isOpen ? '#fff' : '#6B7280'} style={{ transform: isOpen ? 'rotate(90deg)' : 'none', transition: 'transform 0.25s' }} />
                 </div>
               </button>
 
@@ -188,7 +188,7 @@ export default function ServicesPage({ brand, navigate }) {
                 <div style={{ padding: mob ? '0 28px 32px' : '0 48px 48px', borderTop: '1px solid rgba(0,0,0,0.04)' }}>
                   <div style={{ display: 'grid', gridTemplateColumns: mob ? '1fr' : '1fr 1fr', gap: 48, paddingTop: 32 }}>
                     <div>
-                      <p style={{ fontSize: 15, color: 'rgba(13,11,46,0.65)', lineHeight: 1.8, marginBottom: 32 }}>{svc.desc}</p>
+                      <p style={{ fontSize: 15, color: 'rgba(17,24,39,0.65)', lineHeight: 1.8, marginBottom: 32 }}>{svc.desc}</p>
                       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 32 }}>
                         {svc.keywords.map(kw => (
                           <span key={kw} style={{ padding: '4px 10px', background: `${ac}10`, color: ac, fontSize: 10, fontWeight: 700, borderRadius: 100, border: `1px solid ${ac}20` }}>{kw}</span>
@@ -212,10 +212,10 @@ export default function ServicesPage({ brand, navigate }) {
                       </div>
                     </div>
                     <div>
-                      <div style={{ fontSize: 11, fontWeight: 800, color: '#9B99C8', textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: 16 }}>What we cover</div>
+                      <div style={{ fontSize: 11, fontWeight: 800, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: 16 }}>What we cover</div>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                         {svc.items.map(item => (
-                          <div key={item} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', background: '#F8F8FD', borderRadius: 12 }}>
+                          <div key={item} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', background: '#F9FAFB', borderRadius: 12 }}>
                             <div style={{ width: 6, height: 6, borderRadius: '50%', background: ac, flexShrink: 0 }} />
                             <span style={{ fontSize: 13, fontWeight: 600, color: DARK_TEXT }}>{item}</span>
                           </div>
@@ -231,7 +231,7 @@ export default function ServicesPage({ brand, navigate }) {
       </div>
 
       {/* Areas we serve */}
-      <section style={{ padding: mob ? '60px 24px' : '100px 5vw', background: '#0D0B2E', color: '#fff' }}>
+      <section style={{ padding: mob ? '60px 24px' : '100px 5vw', background: '#111827', color: '#fff' }}>
         <div style={{ maxWidth: 1400, margin: '0 auto', textAlign: 'center' }}>
           <span style={{ color: ac, fontSize: 10, fontWeight: 800, letterSpacing: '0.3em', textTransform: 'uppercase' }}>OUR REACH</span>
           <h2 style={{ fontSize: mob ? 32 : 52, fontWeight: 800, letterSpacing: '-0.03em', margin: '16px 0 12px' }}>Serving all of Ghana</h2>
@@ -254,7 +254,7 @@ export default function ServicesPage({ brand, navigate }) {
           <h2 style={{ fontSize: mob ? 32 : 52, fontWeight: 800, color: DARK_TEXT, letterSpacing: '-0.03em', marginBottom: 16 }}>
             Not sure what you need? <em style={{ fontStyle: 'italic', fontWeight: 400, color: ac }}>Just ask.</em>
           </h2>
-          <p style={{ fontSize: 15, color: '#9B99C8', marginBottom: 40, lineHeight: 1.7 }}>
+          <p style={{ fontSize: 15, color: '#6B7280', marginBottom: 40, lineHeight: 1.7 }}>
             Send us a WhatsApp message or call us. We will visit your site, assess the work, and give you a free detailed quote.
           </p>
           <div style={{ display: 'flex', gap: 16, justifyContent: 'center', flexWrap: 'wrap' }}>

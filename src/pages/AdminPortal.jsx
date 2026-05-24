@@ -160,7 +160,7 @@ function AdminChat({ messages, sendMessage, clients, brand }) {
   const [activeClient, setActiveClient] = useState(null);
   const [msgDraft, setMsgDraft] = useState('');
   const msgInputRef = useRef(null);
-  const ac = brand.color || '#231F78';
+  const ac = brand.color || '#0F766E';
   
   return (
     <div className="p-card" style={{ height: 'calc(100vh - 120px)', display: 'grid', gridTemplateColumns: '300px 1fr' }}>
@@ -225,7 +225,7 @@ function AdminChat({ messages, sendMessage, clients, brand }) {
 }
 
 function AdminTestimonials({ testimonials, brand }) {
-  const ac = brand.color || '#231F78';
+  const ac = brand.color || '#0F766E';
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 32 }}>
        <div className="p-card" style={{ padding: 32 }}>

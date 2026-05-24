@@ -7,7 +7,7 @@ import {
 import { NotificationBell } from '../../components/Shared';
 
 export default function AdminLayout({ user, onLogout, onPreview, brand, view, setView, userNotifications, markNotificationRead, onSearchChange, children, staffMode = false, ...props }) {
-  const ac = brand.color || '#231F78';
+  const ac = brand.color || '#0F766E';
   const [expandedFolders, setExpandedFolders] = useState({});
   const [searchValue, setSearchValue] = useState('');
 
@@ -85,7 +85,7 @@ export default function AdminLayout({ user, onLogout, onPreview, brand, view, se
       {!isMobile && (
         <aside className="p-sidebar-narrow" style={{ 
           width: 280, 
-          background: '#0D0B2E', 
+          background: '#111827', 
           borderRight: '1px solid rgba(255, 255, 255, 0.05)',
           display: 'flex',
           flexDirection: 'column'
@@ -124,7 +124,7 @@ export default function AdminLayout({ user, onLogout, onPreview, brand, view, se
                         background: view === m.id ? 'rgba(255,255,255,0.05)' : 'none', 
                         border: 'none', 
                         borderRadius: 12, 
-                        color: view === m.id ? ac : '#9B99C8', 
+                        color: view === m.id ? ac : '#6B7280', 
                         cursor: 'pointer', 
                         transition: 'all 0.2s',
                         position: 'relative'
@@ -215,7 +215,7 @@ export default function AdminLayout({ user, onLogout, onPreview, brand, view, se
                           paddingRight: searchValue ? 36 : 80,
                           fontSize: 12,
                           fontWeight: 500,
-                          color: '#0D0B2E',
+                          color: '#111827',
                           outline: 'none',
                           transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
                         }}
@@ -223,7 +223,7 @@ export default function AdminLayout({ user, onLogout, onPreview, brand, view, se
                         onBlur={(e) => { e.target.style.background = 'rgba(255,255,255,0.4)'; e.target.style.boxShadow = 'none'; }}
                       />
                       {searchValue && (
-                        <button onClick={() => { setSearchValue(''); onSearchChange?.(''); }} style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#9B99C8', display: 'flex', alignItems: 'center' }}>✕</button>
+                        <button onClick={() => { setSearchValue(''); onSearchChange?.(''); }} style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#6B7280', display: 'flex', alignItems: 'center' }}>✕</button>
                       )}
                    </div>
                  )}
@@ -233,7 +233,7 @@ export default function AdminLayout({ user, onLogout, onPreview, brand, view, se
                         value={props.lang}
                         onChange={e => props.setLang(e.target.value)}
                         aria-label="Language"
-                        style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid #E8E6F5', background: '#fff', fontSize: 10, fontWeight: 800, cursor: 'pointer' }}
+                        style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid #E5E7EB', background: '#fff', fontSize: 10, fontWeight: 800, cursor: 'pointer' }}
                       >
                         <option value="en">EN</option>
                         <option value="fr">FR</option>
@@ -242,7 +242,7 @@ export default function AdminLayout({ user, onLogout, onPreview, brand, view, se
                    
                    <NotificationBell notifications={userNotifications} onMarkRead={markNotificationRead} />
                    
-                   <button onClick={onPreview} className="p-btn-light" style={{ padding: '8px 12px', fontSize: 11, borderRadius: 10, display: 'flex', alignItems: 'center', gap: 6, background: '#fff', border: '1px solid #E8E6F5' }}>
+                   <button onClick={onPreview} className="p-btn-light" style={{ padding: '8px 12px', fontSize: 11, borderRadius: 10, display: 'flex', alignItems: 'center', gap: 6, background: '#fff', border: '1px solid #E5E7EB' }}>
                      <Eye size={14} /> <span className="dt-only">Site Preview</span>
                    </button>
                    
@@ -251,7 +251,7 @@ export default function AdminLayout({ user, onLogout, onPreview, brand, view, se
                    </div>
                    
                    {!isMobile && (
-                     <button onClick={onLogout} style={{ background: 'none', border: 'none', color: '#9B99C8', padding: 8, cursor: 'pointer' }}><LogOut size={18} /></button>
+                     <button onClick={onLogout} style={{ background: 'none', border: 'none', color: '#6B7280', padding: 8, cursor: 'pointer' }}><LogOut size={18} /></button>
                    )}
                  </div>
                </div>
@@ -261,14 +261,14 @@ export default function AdminLayout({ user, onLogout, onPreview, brand, view, se
 
           <div className="fade-in admin-content-wrap" style={{ padding: isMobile ? '20px 20px 120px' : '40px 60px' }}>
             {view === 'dash' && (
-              <div style={{ padding: 32, background: '#FDFCFB', border: '1px solid #E8E6F5', borderRadius: 32, marginBottom: 40 }}>
+              <div style={{ padding: 32, background: '#FDFCFB', border: '1px solid #E5E7EB', borderRadius: 32, marginBottom: 40 }}>
                  <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 24 }}>
-                    <div style={{ width: 48, height: 48, background: '#0D0B2E', borderRadius: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', color: ac }}>
+                    <div style={{ width: 48, height: 48, background: '#111827', borderRadius: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', color: ac }}>
                        <Briefcase size={24} />
                     </div>
                     <div>
                        <h3 className="lxfh" style={{ fontSize: 22, margin: 0 }}>Operational Guide</h3>
-                       <p className="lxf" style={{ color: '#9B99C8', fontSize: 13 }}>Follow these steps to run your business</p>
+                       <p className="lxf" style={{ color: '#6B7280', fontSize: 13 }}>Follow these steps to run your business</p>
                     </div>
                  </div>
                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 24 }}>
@@ -278,10 +278,10 @@ export default function AdminLayout({ user, onLogout, onPreview, brand, view, se
                       { t: '3. Add Sourcing', d: 'Add items in Sourcing Hub for client approval.', i: <Package size={18} /> },
                       { t: '4. Get Paid', d: 'Trigger an Invoice and share the portal link.', i: <FileText size={18} /> }
                     ].map(step => (
-                       <div key={step.t} style={{ padding: 20, background: '#fff', borderRadius: 20, border: '1px solid #F8F8FD' }}>
+                       <div key={step.t} style={{ padding: 20, background: '#fff', borderRadius: 20, border: '1px solid #F9FAFB' }}>
                           <div style={{ color: ac, marginBottom: 12 }}>{step.i}</div>
                           <h4 className="lxfh" style={{ fontSize: 14, marginBottom: 6 }}>{step.t}</h4>
-                          <p className="lxf" style={{ fontSize: 11, color: '#9B99C8', lineHeight: 1.5 }}>{step.d}</p>
+                          <p className="lxf" style={{ fontSize: 11, color: '#6B7280', lineHeight: 1.5 }}>{step.d}</p>
                        </div>
                     ))}
                  </div>
@@ -296,7 +296,7 @@ export default function AdminLayout({ user, onLogout, onPreview, brand, view, se
       {isMobile && (
         <div className="glass-dock" style={{ 
           position: 'fixed', bottom: 20, left: 20, right: 20, height: 72, 
-          background: 'rgba(13, 11, 46, 0.95)', backdropFilter: 'blur(20px)', 
+          background: 'rgba(17, 24, 39, 0.95)', backdropFilter: 'blur(20px)', 
           borderRadius: 24, border: '1px solid rgba(255,255,255,0.1)', 
           display: 'flex', justifyContent: 'space-around', alignItems: 'center', 
           padding: '0 10px', zIndex: 1000, boxShadow: '0 20px 50px rgba(0,0,0,0.3)'
@@ -306,7 +306,7 @@ export default function AdminLayout({ user, onLogout, onPreview, brand, view, se
               key={m.id} 
               onClick={() => setView(m.id)} 
               style={{ 
-                background: 'none', border: 'none', color: view === m.id ? ac : '#9B99C8', 
+                background: 'none', border: 'none', color: view === m.id ? ac : '#6B7280', 
                 display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, cursor: 'pointer' 
               }}
             >

@@ -4,25 +4,25 @@
 html{scroll-behavior:smooth;}
 
 :root {
-  /* Brand Core — Westline Future Deep Indigo Palette */
-  --ac: #231F78;
+  /* Brand Core — Westline Future Graphite Teal Palette */
+  --ac: #0F766E;
   --ac-rgb: 35, 31, 120;
-  --ac-deep: #1A166B;
-  --ac-light: #C5C3EC;
+  --ac-deep: #115E59;
+  --ac-light: #99F6E4;
 
-  --bg: #F4F4FA;
-  --bg-alt: #F8F8FD;
-  --bg-deep: #0D0B2E;
+  --bg: #F7F7F4;
+  --bg-alt: #F9FAFB;
+  --bg-deep: #111827;
 
-  --fg: #0D0B2E;
-  --dim: #5B5894;
-  --muted: #9B99C8;
-  --border: rgba(13, 11, 46, 0.08);
+  --fg: #111827;
+  --dim: #4B5563;
+  --muted: #6B7280;
+  --border: rgba(17, 24, 39, 0.08);
 
   /* Shadows & Depth */
-  --sh-sm: 0 4px 12px rgba(13, 11, 46, 0.03);
-  --sh-md: 0 12px 40px rgba(13, 11, 46, 0.06);
-  --sh-lg: 0 32px 64px rgba(13, 11, 46, 0.08);
+  --sh-sm: 0 4px 12px rgba(17, 24, 39, 0.03);
+  --sh-md: 0 12px 40px rgba(17, 24, 39, 0.06);
+  --sh-lg: 0 32px 64px rgba(17, 24, 39, 0.08);
   
   /* Modern Typography */
   --font-h: 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif;
@@ -73,12 +73,12 @@ html{scroll-behavior:smooth;}
 
 [data-theme='minimal'] {
   --font-h: 'Outfit', sans-serif;
-  --ac: #231F78;
-  --bg: #F8F8FD;
-  --fg: #0D0B2E;
+  --ac: #0F766E;
+  --bg: #F9FAFB;
+  --fg: #111827;
   --card-bg: #ffffff;
   --border: rgba(0,0,0,0.06);
-  --dim: #5B5894;
+  --dim: #4B5563;
 }
 
 /* 📱 RESPONSIVE SYSTEM */
@@ -129,7 +129,7 @@ html{scroll-behavior:smooth;}
   --font-h: 'Inter', sans-serif;
   --font-p: 'Space Mono', monospace;
   --radius: 0px;
-  --ac: #0D0B2E;
+  --ac: #111827;
   --ac-rgb: 13, 11, 46;
   --bg: #ffffff;
   --border: rgba(0,0,0,0.15);
@@ -149,13 +149,13 @@ html{scroll-behavior:smooth;}
 }
 
 .dark-theme {
-  --bg: #0D0B2E; 
-  --bg-alt: #0D0B2E;
-  --fg: #F8F8FD;
+  --bg: #111827; 
+  --bg-alt: #111827;
+  --fg: #F9FAFB;
   --dim: #A8A095;
-  --muted: #5B5894;
+  --muted: #4B5563;
   --border: rgba(255, 255, 255, 0.1);
-  --glass-bg: rgba(13, 11, 46, 0.85);
+  --glass-bg: rgba(17, 24, 39, 0.85);
   --glass-border: rgba(255, 255, 255, 0.1);
 }
 
@@ -206,7 +206,7 @@ body {
 
 .magnetic-card:hover {
   transform: translateY(-16px) scale(1.02);
-  box-shadow: 0 40px 90px rgba(13, 11, 46, 0.12);
+  box-shadow: 0 40px 90px rgba(17, 24, 39, 0.12);
   border-color: var(--ac);
 }
 
@@ -264,23 +264,23 @@ body {
 
 /* BUTTON REFINEMENTS */
 .p-btn-dark {
-  background: #0D0B2E;
+  background: #111827;
   color: #fff;
   border-radius: 12px;
   border: none;
   font-weight: 600;
   transition: all .3s;
-  box-shadow: 0 4px 12px rgba(13, 11, 46, 0.2);
+  box-shadow: 0 4px 12px rgba(17, 24, 39, 0.2);
 }
 
 .p-btn-dark:hover {
-  background: #1A166B;
+  background: #115E59;
   transform: translateY(-2px);
-  box-shadow: 0 8px 20px rgba(13, 11, 46, 0.3);
+  box-shadow: 0 8px 20px rgba(17, 24, 39, 0.3);
 }
 
 .p-btn-gold {
-  background: linear-gradient(135deg, #231F78, #4945BE);
+  background: linear-gradient(135deg, #0F766E, #14B8A6);
   color: #ffffff;
   box-shadow: 0 4px 15px rgba(35, 31, 120, 0.3);
 }
@@ -288,7 +288,7 @@ body {
 /* SCROLLBAR LUXE */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #C5C3EC; border-radius: 10px; border: 2px solid var(--bg); }
+::-webkit-scrollbar-thumb { background: #99F6E4; border-radius: 10px; border: 2px solid var(--bg); }
 ::-webkit-scrollbar-thumb:hover { background: var(--muted); }
 
 /* FADE IN STAGGERED */
@@ -436,7 +436,7 @@ body {
 
 .p-sidebar-narrow {
   width: 80px;
-  background: #0D0B2E;
+  background: #111827;
   display: flex;
   flex-direction: column;
   position: fixed;
@@ -570,7 +570,7 @@ body {
 }
 
 .dark-theme .portal-sidebar {
-  background: #0D0B2E;
+  background: #111827;
 }
 
 /* SIDEBAR COLLAPSED (Optional) */
@@ -658,12 +658,12 @@ body {
 }
 
 .pub-btn-gold:hover {
-  background: #0D0B2E;
+  background: #111827;
   transform: translateY(-2px);
 }
 
 .pub-btn-dark {
-  background: #0D0B2E;
+  background: #111827;
   color: #fff;
   border: none;
   cursor: pointer;
@@ -680,7 +680,7 @@ body {
 
 .pub-btn-outline {
   background: transparent;
-  border: 1px solid #0D0B2E;
+  border: 1px solid #111827;
   color: #ffffff;
   cursor: pointer;
   font-weight: 700;
@@ -690,7 +690,7 @@ body {
 }
 
 .pub-btn-outline:hover {
-  background: #0D0B2E;
+  background: #111827;
   color: #fff;
 }
 
@@ -714,7 +714,7 @@ body {
 /* Custom Form Styles */
 .pub-inp {
   background: #fff;
-  border: 1px solid #E8E6F5;
+  border: 1px solid #E5E7EB;
   outline: none;
   transition: border-color 0.3s;
 }
@@ -750,7 +750,7 @@ body {
 }
 
 .minimal-btn {
-  background: #0D0B2E;
+  background: #111827;
   color: #fff;
   border: none;
   padding: 12px 24px;
@@ -857,7 +857,7 @@ body {
   flex-direction: column;
   align-items: center;
   gap: 2px;
-  color: #5B5894;
+  color: #4B5563;
   font-size: 10px;
   text-transform: uppercase;
   font-weight: 800;
@@ -902,7 +902,7 @@ body {
   flex-direction: column;
   align-items: center;
   gap: 4px;
-  color: #5B5894;
+  color: #4B5563;
   font-size: 9px;
   text-transform: uppercase;
   font-weight: 800;

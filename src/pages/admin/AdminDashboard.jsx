@@ -9,7 +9,7 @@ import {
 import { REV, CLIENT_PROJECT_STAGES } from '../../data';
 
 export default function AdminDashboard({ clients, invoices, proposals, brand, getSLA, stats, ...props }) {
-  const ac = brand.color || '#231F78';
+  const ac = brand.color || '#0F766E';
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
   useEffect(() => {
     const h = () => setIsMobile(window.innerWidth <= 768);
@@ -74,7 +74,7 @@ export default function AdminDashboard({ clients, invoices, proposals, brand, ge
         display: 'flex', 
         flexDirection: 'column',
         gap: 32,
-        background: '#0D0B2E', 
+        background: '#111827', 
         color: '#fff', 
         borderRadius: isMobile ? 32 : 48, 
         border: 'none',
@@ -95,7 +95,7 @@ export default function AdminDashboard({ clients, invoices, proposals, brand, ge
       {/* 1.5 ADMIN WATCHDOG (SYSTEM HEALTH MONITOR) */}
       <div className="p-card" style={{ 
         padding: 32, 
-        background: 'linear-gradient(135deg, #0D0B2E 0%, #2A2420 100%)', 
+        background: 'linear-gradient(135deg, #111827 0%, #2A2420 100%)', 
         borderRadius: 32, 
         color: '#fff',
         display: 'grid',
@@ -161,7 +161,7 @@ export default function AdminDashboard({ clients, invoices, proposals, brand, ge
          {[
            { step: '01', label: 'Onboard', sub: 'Stakeholder Registry', color: ac, icon: <Users size={20} />, view: 'operations', action: 'Add Client' },
            { step: '02', label: 'Deploy', sub: 'Initialize Project', color: '#B45309', icon: <Plus size={20} />, view: 'operations', action: 'Manage Hubs' },
-           { step: '03', label: 'Execute', sub: 'Production & Logistics', color: '#0D0B2E', icon: <Activity size={20} />, view: 'operations', action: 'Track Progress' },
+           { step: '03', label: 'Execute', sub: 'Production & Logistics', color: '#111827', icon: <Activity size={20} />, view: 'operations', action: 'Track Progress' },
            { step: '04', label: 'Settle', sub: 'Financial Ledger', color: '#16A34A', icon: <DollarSign size={20} />, view: 'financials', action: 'Review Invoices' },
          ].map(s => (
            <div 
@@ -187,9 +187,9 @@ export default function AdminDashboard({ clients, invoices, proposals, brand, ge
                 </button>
               </div>
               <div style={{ zIndex: 1 }}>
-                 <div className="lxf" style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', color: '#9B99C8', letterSpacing: 1 }}>Step {s.step}</div>
+                 <div className="lxf" style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', color: '#6B7280', letterSpacing: 1 }}>Step {s.step}</div>
                  <div className="lxfh" style={{ fontSize: 20, marginTop: 4 }}>{s.label}</div>
-                 <div className="lxf" style={{ fontSize: 12, color: '#5B5894' }}>{s.sub}</div>
+                 <div className="lxf" style={{ fontSize: 12, color: '#4B5563' }}>{s.sub}</div>
               </div>
               <button 
                 onClick={() => props.setView(s.view)}
@@ -214,9 +214,9 @@ export default function AdminDashboard({ clients, invoices, proposals, brand, ge
                  {s.trend > 0 ? <TrendingUp size={14} /> : <AlertTriangle size={14} />} {Math.abs(s.trend)}%
               </div>
             </div>
-            <div className="lxf eyebrow" style={{ fontSize: 10, color: '#5B5894', marginBottom: 6, fontWeight: 800 }}>{s.label}</div>
-            <div className="lxfh" style={{ fontSize: 36, fontWeight: 300, color: '#0D0B2E', letterSpacing: '-0.02em' }}>{s.value}</div>
-            <p className="lxf" style={{ fontSize: 13, color: '#9B99C8', marginTop: 14 }}>{s.sub}</p>
+            <div className="lxf eyebrow" style={{ fontSize: 10, color: '#4B5563', marginBottom: 6, fontWeight: 800 }}>{s.label}</div>
+            <div className="lxfh" style={{ fontSize: 36, fontWeight: 300, color: '#111827', letterSpacing: '-0.02em' }}>{s.value}</div>
+            <p className="lxf" style={{ fontSize: 13, color: '#6B7280', marginTop: 14 }}>{s.sub}</p>
           </div>
         ))}
       </div>
@@ -242,18 +242,18 @@ export default function AdminDashboard({ clients, invoices, proposals, brand, ge
         }).sort((a, b) => getDays(b) - getDays(a)).slice(0, 8);
 
         return (
-          <div style={{ background: '#fff', border: '1px solid #E8E6F5', borderRadius: 20, padding: 28 }}>
+          <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 20, padding: 28 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
               <div style={{ width: 44, height: 44, borderRadius: 12, background: '#FFF7ED', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <AlertTriangle size={20} color="#D97706" />
               </div>
               <div>
                 <div className="lxfh" style={{ fontSize: 18, letterSpacing: '-0.01em' }}>Needs Attention</div>
-                <div className="lxf" style={{ fontSize: 12, color: '#9B99C8' }}>Projects stuck in their current stage for 5+ days</div>
+                <div className="lxf" style={{ fontSize: 12, color: '#6B7280' }}>Projects stuck in their current stage for 5+ days</div>
               </div>
             </div>
             {stuckProjects.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '32px 16px', border: '1px dashed #E8E6F5', borderRadius: 16, color: '#16A34A', fontSize: 13, background: 'rgba(22,163,74,0.03)' }}>
+              <div style={{ textAlign: 'center', padding: '32px 16px', border: '1px dashed #E5E7EB', borderRadius: 16, color: '#16A34A', fontSize: 13, background: 'rgba(22,163,74,0.03)' }}>
                 <CheckCircle size={22} style={{ marginBottom: 8 }} />
                 <div style={{ fontWeight: 700 }}>All projects are moving ✓</div>
               </div>
@@ -264,10 +264,10 @@ export default function AdminDashboard({ clients, invoices, proposals, brand, ge
                   const stageObj = CLIENT_PROJECT_STAGES.find(s => s.id === project.stageId);
                   const badgeBg = days > 14 ? '#EF4444' : '#D97706';
                   return (
-                    <div key={project.id} style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '12px 16px', background: '#F8F8FD', borderRadius: 12 }}>
+                    <div key={project.id} style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '12px 16px', background: '#F9FAFB', borderRadius: 12 }}>
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 14, fontWeight: 700, color: '#0D0B2E', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{project.title || project.name || 'Untitled Project'}</div>
-                        <div style={{ fontSize: 11, color: '#5B5894', marginTop: 2 }}>{project.clientName || ''} · {stageObj?.name || `Stage ${project.stageId}`}</div>
+                        <div style={{ fontSize: 14, fontWeight: 700, color: '#111827', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{project.title || project.name || 'Untitled Project'}</div>
+                        <div style={{ fontSize: 11, color: '#4B5563', marginTop: 2 }}>{project.clientName || ''} · {stageObj?.name || `Stage ${project.stageId}`}</div>
                       </div>
                       <div style={{ background: badgeBg, color: '#fff', padding: '4px 10px', borderRadius: 100, fontSize: 11, fontWeight: 800, whiteSpace: 'nowrap' }}>
                         {days}d stuck
@@ -277,7 +277,7 @@ export default function AdminDashboard({ clients, invoices, proposals, brand, ge
                           props.onSelectClient && props.onSelectClient(project.clientId);
                           props.setView && props.setView('client-hub');
                         }}
-                        style={{ padding: '8px 14px', borderRadius: 10, background: '#0D0B2E', color: '#fff', border: 'none', fontSize: 12, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}
+                        style={{ padding: '8px 14px', borderRadius: 10, background: '#111827', color: '#fff', border: 'none', fontSize: 12, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}
                       >
                         View →
                       </button>
@@ -297,19 +297,19 @@ export default function AdminDashboard({ clients, invoices, proposals, brand, ge
            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 48 }}>
               <div>
                 <h3 className="lxfh" style={{ fontSize: 28, letterSpacing: '-0.02em' }}>Financial Velocity</h3>
-                <p className="lxf" style={{ fontSize: 14, color: '#5B5894' }}>Trailing revenue against production targets.</p>
+                <p className="lxf" style={{ fontSize: 14, color: '#4B5563' }}>Trailing revenue against production targets.</p>
               </div>
-              {!isMobile && <button className="p-btn-light lxf" style={{ padding: '12px 24px', fontSize: 11, borderRadius: 14, border: '1px solid #E8E6F5', fontWeight: 800 }}>AUDIT STATEMENTS</button>}
+              {!isMobile && <button className="p-btn-light lxf" style={{ padding: '12px 24px', fontSize: 11, borderRadius: 14, border: '1px solid #E5E7EB', fontWeight: 800 }}>AUDIT STATEMENTS</button>}
            </div>
            
             <div style={{ height: 320, width: '100%', minHeight: 320, background: 'var(--bg-alt)', borderRadius: 16, overflow: 'hidden', position: 'relative' }}>
              <ResponsiveContainer width="100%" height={320} minHeight={320}>
                <AreaChart data={dynamicRevData} margin={{ top: 20, right: 30, left: 0, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,.03)" vertical={false} />
-                <XAxis dataKey="m" tick={{ fill: '#9B99C8', fontSize: 10 }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fill: '#9B99C8', fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={v => `GH₵${v}k`} />
+                <XAxis dataKey="m" tick={{ fill: '#6B7280', fontSize: 10 }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fill: '#6B7280', fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={v => `GH₵${v}k`} />
                 <Tooltip 
-                  contentStyle={{ borderRadius: 16, border: 'none', boxShadow: '0 20px 40px rgba(0,0,0,0.1)', background: '#0D0B2E', color: '#fff' }} 
+                  contentStyle={{ borderRadius: 16, border: 'none', boxShadow: '0 20px 40px rgba(0,0,0,0.1)', background: '#111827', color: '#fff' }} 
                   itemStyle={{ fontSize: 12, fontWeight: 800 }}
                 />
                 <Area type="monotone" dataKey="v" name="Actual Revenue" stroke={ac} fill="url(#dashColor)" strokeWidth={3} />
@@ -327,7 +327,7 @@ export default function AdminDashboard({ clients, invoices, proposals, brand, ge
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 32 }}>
           {/* PRODUCTION CAPACITY GAUGE */}
-          <div className="p-card" style={{ padding: 40, background: '#0D0B2E', color: '#fff', borderRadius: 32, border: 'none' }}>
+          <div className="p-card" style={{ padding: 40, background: '#111827', color: '#fff', borderRadius: 32, border: 'none' }}>
              {(() => {
                const maxCap = 50;
                const pct = Math.min(100, Math.round((activeJobs / maxCap) * 100));
@@ -358,13 +358,13 @@ export default function AdminDashboard({ clients, invoices, proposals, brand, ge
              
              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                 {(props.logs || []).slice(0, 5).map(l => (
-                  <div key={l.id} style={{ display: 'flex', gap: 16, alignItems: 'center', padding: '12px', borderRadius: 16, border: '1px solid #F8F8FD' }}>
-                     <div style={{ width: 44, height: 44, borderRadius: 12, background: '#F8F8FD', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <div key={l.id} style={{ display: 'flex', gap: 16, alignItems: 'center', padding: '12px', borderRadius: 16, border: '1px solid #F9FAFB' }}>
+                     <div style={{ width: 44, height: 44, borderRadius: 12, background: '#F9FAFB', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                         <Activity size={18} color={ac} />
                      </div>
                      <div style={{ flex: 1 }}>
                         <div style={{ fontSize: 14, fontWeight: 800 }}>{l.action}</div>
-                        <div style={{ fontSize: 11, color: '#9B99C8' }}>{l.project_title || 'System Core'} • {new Date(l.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
+                        <div style={{ fontSize: 11, color: '#6B7280' }}>{l.project_title || 'System Core'} • {new Date(l.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
                      </div>
                   </div>
                 ))}
@@ -372,7 +372,7 @@ export default function AdminDashboard({ clients, invoices, proposals, brand, ge
              
               <button 
                 onClick={() => typeof props.setMod === 'function' && props.setMod('AuditLog')}
-                style={{ width: '100%', marginTop: 24, padding: 14, borderRadius: 12, background: '#F8F8FD', border: '1px solid #E8E6F5', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}
+                style={{ width: '100%', marginTop: 24, padding: 14, borderRadius: 12, background: '#F9FAFB', border: '1px solid #E5E7EB', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}
               >
                 Full Operations Audit
               </button>
@@ -398,7 +398,7 @@ export default function AdminDashboard({ clients, invoices, proposals, brand, ge
                   </div>
                 ))}
                 {(props.content?.products || []).filter(p => p.stock <= p.threshold).length === 0 && (
-                  <div style={{ textAlign: 'center', padding: 40, border: '1px dashed #E8E6F5', borderRadius: 20, color: '#16A34A', fontSize: 13, background: 'rgba(22, 163, 74, 0.03)' }}>
+                  <div style={{ textAlign: 'center', padding: 40, border: '1px dashed #E5E7EB', borderRadius: 20, color: '#16A34A', fontSize: 13, background: 'rgba(22, 163, 74, 0.03)' }}>
                      <CheckCircle size={24} style={{ marginBottom: 8 }} />
                      <div>All inventory levels are within nominal parameters.</div>
                   </div>

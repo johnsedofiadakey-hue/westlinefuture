@@ -3,12 +3,12 @@ import { DollarSign, MessageSquare, CheckCircle, Users, Factory, Truck } from 'l
 
 export const PROJECT_STAGES = [
   {
-    id: 1, name: 'Client Intake & Site Brief', statusLabel: 'Brief captured', days: 3, color: '#231F78',
+    id: 1, name: 'Client Intake & Site Brief', statusLabel: 'Brief captured', days: 3, color: '#0F766E',
     icon: 'clipboard-list', description: 'Capturing client details, measurements, requirements, budget range, and site notes.',
     tasks: ['Confirm client profile', 'Capture site measurements', 'Document project requirements', 'Prepare quote and deposit invoice']
   },
   {
-    id: 2, name: 'Quote Approval & Deposit', statusLabel: 'Quote and deposit', days: 5, color: '#2563EB', requiresPayment: true, requiresApproval: true, paymentPct: 50, paymentType: 'deposit',
+    id: 2, name: 'Quote Approval & Deposit', statusLabel: 'Quote and deposit', days: 5, color: '#0F766E', requiresPayment: true, requiresApproval: true, paymentPct: 50, paymentType: 'deposit',
     icon: 'file-check', description: 'Final quote approval and verified deposit before procurement is released.',
     tasks: ['Prepare final quote', 'Capture client approval', 'Issue deposit invoice', 'Verify payment']
   },
@@ -28,29 +28,29 @@ export const PROJECT_STAGES = [
     tasks: ['Prepare site', 'Complete installation checklist', 'Upload site photos', 'Request inspection']
   },
   {
-    id: 6, name: 'Inspection & Sign-Off', statusLabel: 'Quality review', days: 2, color: '#A855F7', requiresApproval: true,
+    id: 6, name: 'Inspection & Sign-Off', statusLabel: 'Quality review', days: 2, color: '#14B8A6', requiresApproval: true,
     icon: 'scan-search', description: 'Quality review, snag list, corrections, and formal client/admin sign-off.',
     tasks: ['Complete inspection checklist', 'Resolve snag list', 'Capture client sign-off', 'Prepare handover']
   },
   {
-    id: 7, name: 'Handover & Final Settlement', statusLabel: 'Final settlement', days: 1, color: '#4945BE', requiresPayment: true, paymentPct: 50, paymentType: 'final_balance',
+    id: 7, name: 'Handover & Final Settlement', statusLabel: 'Final settlement', days: 1, color: '#14B8A6', requiresPayment: true, paymentPct: 50, paymentType: 'final_balance',
     icon: 'star', description: 'Final payment, warranty, documents, completion report, and closeout.',
     tasks: ['Confirm final payment', 'Issue handover documents', 'Close project', 'Request client feedback']
   }
 ];
 
 export const KANBAN_COLUMNS = [
-  { id: 'intake',       label: 'Intake',       stages: [1], color: '#231F78', bg: 'rgba(35,31,120,0.07)' },
-  { id: 'quote',        label: 'Quote',        stages: [2], color: '#2563EB', bg: 'rgba(37,99,235,0.07)' },
+  { id: 'intake',       label: 'Intake',       stages: [1], color: '#0F766E', bg: 'rgba(35,31,120,0.07)' },
+  { id: 'quote',        label: 'Quote',        stages: [2], color: '#0F766E', bg: 'rgba(37,99,235,0.07)' },
   { id: 'production',   label: 'Production',   stages: [3], color: '#374151', bg: 'rgba(55,65,81,0.06)' },
   { id: 'delivery',     label: 'Delivery',     stages: [4], color: '#607D8B', bg: 'rgba(96,125,139,0.07)' },
   { id: 'installation', label: 'Installation', stages: [5], color: '#16A34A', bg: 'rgba(22,163,74,0.07)' },
-  { id: 'closeout',     label: 'Closeout',     stages: [6,7], color: '#4945BE', bg: 'rgba(73,69,190,0.08)' },
+  { id: 'closeout',     label: 'Closeout',     stages: [6,7], color: '#14B8A6', bg: 'rgba(73,69,190,0.08)' },
 ];
 
 export const LIFE_RIBBON = [
-  { id: 'onboard', label: 'Start', icon: <Users size={24} />, stages: [1], color: '#231F78', text: 'We are setting up your project and checking all the details.' },
-  { id: 'quote', label: 'Approve', icon: <DollarSign size={24} />, stages: [2], color: '#2563EB', text: 'Your final quote and deposit are handled before procurement starts.' },
+  { id: 'onboard', label: 'Start', icon: <Users size={24} />, stages: [1], color: '#0F766E', text: 'We are setting up your project and checking all the details.' },
+  { id: 'quote', label: 'Approve', icon: <DollarSign size={24} />, stages: [2], color: '#0F766E', text: 'Your final quote and deposit are handled before procurement starts.' },
   { id: 'factory', label: 'Build', icon: <Factory size={24} />, stages: [3], color: '#374151', text: 'Your items are being sourced and prepared for production.' },
   { id: 'shipping', label: 'Move', icon: <Truck size={24} />, stages: [4], color: '#607D8B', text: 'Your order is packed and moving toward your location.' },
   { id: 'delivered', label: 'Finish', icon: <CheckCircle size={24} />, stages: [5,6,7], color: '#16A34A', text: 'Everything is installed, inspected, settled, and handed over.' }
@@ -59,7 +59,7 @@ export const LIFE_RIBBON = [
 export const PROCUREMENT_STAGES = [
   { id: 'to-buy', name: 'To Buy', icon: '🛒', color: '#DFD9D1' },
   { id: 'ordered', name: 'Order Placed', icon: '📝', color: '#FF9800' },
-  { id: 'production', name: 'In Production', icon: '🏭', color: '#0D0B2E' },
+  { id: 'production', name: 'In Production', icon: '🏭', color: '#111827' },
   { id: 'warehouse', name: 'At Warehouse', icon: '📦', color: '#3F51B5' },
   { id: 'transit', name: 'In Transit', icon: '🚢', color: '#9C27B0' },
   { id: 'site', name: 'At Site', icon: '🏠', color: '#16A34A' }
@@ -78,7 +78,7 @@ export const BRAND0 = {
   name: 'Westline Future',
   tagline: 'Global Trading Co, Ltd',
   logo: '/logo.png',
-  color: '#231F78',
+  color: '#0F766E',
   phone: '',
   email: 'admin@westlinefuture.com',
   location: '',
@@ -138,14 +138,14 @@ export const REV = [
 ];
 
 export const PIE_D = [
-  { name: 'Residential', value: 45, color: '#231F78' },
-  { name: 'Commercial', value: 35, color: '#0D0B2E' },
+  { name: 'Residential', value: 45, color: '#0F766E' },
+  { name: 'Commercial', value: 35, color: '#111827' },
   { name: 'Industrial', value: 20, color: '#607D8B' }
 ];
 
 export const PIE_C = [
-  { name: 'Ghana', value: 70, color: '#231F78' },
-  { name: 'Togo', value: 15, color: '#0D0B2E' },
+  { name: 'Ghana', value: 70, color: '#0F766E' },
+  { name: 'Togo', value: 15, color: '#111827' },
   { name: 'Nigeria', value: 15, color: '#607D8B' }
 ];
 
@@ -159,13 +159,13 @@ export const CLIENT_NAMES = ['Westline Future Client', 'AFCFTA Secretariat', 'Ai
 // ─── Canonical 7-Stage Client Project Pipeline ───────────────────────────────
 export const CLIENT_PROJECT_STAGES = [
   {
-    id: 1, name: 'Client Intake & Site Brief', short: 'Intake', emoji: '🔍', color: '#231F78', pct: 14,
+    id: 1, name: 'Client Intake & Site Brief', short: 'Intake', emoji: '🔍', color: '#0F766E', pct: 14,
     whoActs: 'admin',
     clientMsg: 'Our team is reviewing your requirements, site notes, and initial brief.',
     adminPrompt: 'Confirm client details, measurements, site notes, scope, and quote requirements.',
   },
   {
-    id: 2, name: 'Quote Approval & Deposit', short: 'Quote', emoji: '📄', color: '#2563EB', pct: 28,
+    id: 2, name: 'Quote Approval & Deposit', short: 'Quote', emoji: '📄', color: '#0F766E', pct: 28,
     whoActs: 'client',
     clientMsg: 'Please review the final quote and pay the project deposit so procurement can begin.',
     adminPrompt: 'Capture quote approval, issue the deposit invoice, and verify payment before procurement.',
@@ -192,14 +192,14 @@ export const CLIENT_PROJECT_STAGES = [
     fullServiceOnly: true,
   },
   {
-    id: 6, name: 'Inspection & Sign-Off', short: 'Sign-off', emoji: '🔎', color: '#A855F7', pct: 86,
+    id: 6, name: 'Inspection & Sign-Off', short: 'Sign-off', emoji: '🔎', color: '#14B8A6', pct: 86,
     whoActs: 'both',
     clientMsg: 'Quality check is in progress. Please sign off once you are satisfied with the work.',
     adminPrompt: 'Run QC inspection checklist, resolve snags, and obtain client sign-off before handover.',
     needsClientApproval: true,
   },
   {
-    id: 7, name: 'Handover & Final Settlement', short: 'Handover', emoji: '🌟', color: '#4945BE', pct: 100,
+    id: 7, name: 'Handover & Final Settlement', short: 'Handover', emoji: '🌟', color: '#14B8A6', pct: 100,
     whoActs: 'client',
     clientMsg: 'Your project is complete. Please make the final balance payment to receive handover documents.',
     adminPrompt: 'Confirm final payment, issue handover certificate, and mark project complete.',
@@ -221,8 +221,8 @@ export function normalizeStageId(id, stageModel = '') {
 }
 
 export const PROJECT_TYPES = {
-  'full-service': { label: 'Full Service',  desc: 'We quote, source, ship, deliver, install, inspect, and hand over.', stages: [1,2,3,4,5,6,7], color: '#231F78' },
-  'buy-only':     { label: 'Buy & Deliver', desc: 'We quote, source, ship, clear, deliver, inspect, and hand over. No installation.', stages: [1,2,3,4,6,7], color: '#2563EB' },
+  'full-service': { label: 'Full Service',  desc: 'We quote, source, ship, deliver, install, inspect, and hand over.', stages: [1,2,3,4,5,6,7], color: '#0F766E' },
+  'buy-only':     { label: 'Buy & Deliver', desc: 'We quote, source, ship, clear, deliver, inspect, and hand over. No installation.', stages: [1,2,3,4,6,7], color: '#0F766E' },
 };
 export const AWARDS = [
   { id: 1, name: 'Excellence in Structural Glass', year: '2023', body: 'Ghana Property Awards' }

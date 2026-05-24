@@ -8,7 +8,7 @@ import AdminProjectGallery from './AdminProjectGallery';
 import AdminGovernance from './AdminGovernance';
 
 export default function AdminInstallations({ clients = [], updateProject, dbClients, brand, transactions = [], recordOfflinePayment, calculateProjectPulse, teamMembers = [], assignWorkerToProject, ...props }) {
-  const ac = brand.color || '#231F78';
+  const ac = brand.color || '#0F766E';
   const [search, setSearch] = useState('');
   const [stageFilter, setStageFilter] = useState('active-field');
   const [sel, setSel] = useState(null);
@@ -62,15 +62,15 @@ export default function AdminInstallations({ clients = [], updateProject, dbClie
             <button onClick={() => setSel(null)} className="p-btn-light" style={{ width: 40, height: 40, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><ArrowLeft size={18} /></button>
             <div>
               <h2 className="lxfh" style={{ fontSize: 24, fontWeight: 400 }}>{projectName(proj)}</h2>
-              <div className="lxf" style={{ fontSize: 13, color: '#9B99C8' }}>{proj.cat || 'Full Interior Finishing'} • {clientName(proj)}</div>
+              <div className="lxf" style={{ fontSize: 13, color: '#6B7280' }}>{proj.cat || 'Full Interior Finishing'} • {clientName(proj)}</div>
             </div>
           </div>
           <div style={{ textAlign: 'right', display: 'flex', gap: 24 }}>
             <div>
-              <div className="lxf" style={{ fontSize: 10, color: '#9B99C8', textTransform: 'uppercase', letterSpacing: '.15em' }}>Field Progress</div>
-              <div className="lxfh" style={{ fontSize: 18, color: '#5B5894', textAlign: 'right' }}>{proj.progress || 0}%</div>
+              <div className="lxf" style={{ fontSize: 10, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '.15em' }}>Field Progress</div>
+              <div className="lxfh" style={{ fontSize: 18, color: '#4B5563', textAlign: 'right' }}>{proj.progress || 0}%</div>
             </div>
-            <div style={{ paddingLeft: 24, borderLeft: '1px solid #E8E6F5' }}>
+            <div style={{ paddingLeft: 24, borderLeft: '1px solid #E5E7EB' }}>
               <div className="lxf" style={{ fontSize: 10, color: ac, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.15em' }}>Overall Project Pulse</div>
               <div className="lxfh" style={{ fontSize: 24, color: ac, textAlign: 'right' }}>{calculateProjectPulse(proj.id)}%</div>
             </div>
@@ -84,7 +84,7 @@ export default function AdminInstallations({ clients = [], updateProject, dbClie
             <div className="p-card" style={{ padding: 24 }}>
               <h3 className="lxfh" style={{ fontSize: 18, marginBottom: 24 }}>Field Stage Control</h3>
               <div style={{ display: 'flex', flexDirection: 'column', position: 'relative' }}>
-                <div style={{ position: 'absolute', left: 15, top: 0, bottom: 0, width: 2, background: '#E8E6F5' }} />
+                <div style={{ position: 'absolute', left: 15, top: 0, bottom: 0, width: 2, background: '#E5E7EB' }} />
                 
                 {PROJECT_STAGES.map((s, idx) => {
                   const currentStageId = projectStageId(proj);
@@ -110,12 +110,12 @@ export default function AdminInstallations({ clients = [], updateProject, dbClie
                       <div style={{ flex: 1, paddingTop: 4 }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                           <div>
-                            <div className="lxf" style={{ fontSize: 15, fontWeight: isCurrent ? 700 : 500, color: isCurrent ? '#0D0B2E' : isPast ? '#5B5894' : '#9B99C8', display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <div className="lxf" style={{ fontSize: 15, fontWeight: isCurrent ? 700 : 500, color: isCurrent ? '#111827' : isPast ? '#4B5563' : '#6B7280', display: 'flex', alignItems: 'center', gap: 8 }}>
                                {s.name}
                                {s.requiresPayment && <span style={{ fontSize: 9, background: 'rgba(239,68,68,0.1)', color: '#EF4444', padding: '2px 6px', borderRadius: 4, fontWeight: 800 }}>PAYMENT GATE</span>}
                                {s.requiresApproval && <span style={{ fontSize: 9, background: 'rgba(33,150,243,0.1)', color: '#2196F3', padding: '2px 6px', borderRadius: 4, fontWeight: 800 }}>APPROVAL GATE</span>}
                             </div>
-                            {isCurrent && <div className="lxf" style={{ fontSize: 12, color: '#9B99C8', marginTop: 4 }}>Active stage • Estimated {s.days} days remaining</div>}
+                            {isCurrent && <div className="lxf" style={{ fontSize: 12, color: '#6B7280', marginTop: 4 }}>Active stage • Estimated {s.days} days remaining</div>}
                           </div>
                           {isCurrent && (
                             <div style={{ display: 'flex', gap: 8 }}>
@@ -150,26 +150,26 @@ export default function AdminInstallations({ clients = [], updateProject, dbClie
                </div>
                
                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                  <div className="lxf" style={{ fontSize: 10, color: '#9B99C8', textTransform: 'uppercase', letterSpacing: '.05em' }}>Transactions</div>
+                  <div className="lxf" style={{ fontSize: 10, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '.05em' }}>Transactions</div>
                   {(transactions || []).filter(t => t.parentId === sel).map(t => (
-                    <div key={t.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', background: '#F8F8FD', borderRadius: 8, borderLeft: `3px solid ${ac}` }}>
+                    <div key={t.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', background: '#F9FAFB', borderRadius: 8, borderLeft: `3px solid ${ac}` }}>
                        <div>
                           <div className="lxf" style={{ fontSize: 12, fontWeight: 700 }}>${parseFloat(t.amount).toLocaleString()}</div>
-                          <div className="lxf" style={{ fontSize: 10, color: '#9B99C8' }}>{t.date} via {t.method}</div>
+                          <div className="lxf" style={{ fontSize: 10, color: '#6B7280' }}>{t.date} via {t.method}</div>
                        </div>
                        <SBadge s="VERIFIED" />
                     </div>
                   ))}
-                  {(transactions || []).filter(t => t.parentId === sel).length === 0 && <div className="lxf" style={{ fontSize: 11, color: '#9B99C8', fontStyle: 'italic' }}>No transactions recorded.</div>}
+                  {(transactions || []).filter(t => t.parentId === sel).length === 0 && <div className="lxf" style={{ fontSize: 11, color: '#6B7280', fontStyle: 'italic' }}>No transactions recorded.</div>}
                </div>
 
                <div style={{ marginTop: 24, paddingTop: 20, borderTop: '1px solid rgba(0,0,0,.05)' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                    <span className="lxf" style={{ fontSize: 13, color: '#9B99C8' }}>Total Verified</span>
+                    <span className="lxf" style={{ fontSize: 13, color: '#6B7280' }}>Total Verified</span>
                     <span className="lxf" style={{ fontSize: 14, fontWeight: 700, color: '#16A34A' }}>${(transactions || []).filter(t => t.parentId === sel).reduce((a, b) => a + (parseFloat(String(b.amount || '0').replace(/[^0-9.]/g, '')) || 0), 0).toLocaleString()}</span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span className="lxf" style={{ fontSize: 13, color: '#9B99C8' }}>Remaining Balance</span>
+                    <span className="lxf" style={{ fontSize: 13, color: '#6B7280' }}>Remaining Balance</span>
                     <span className="lxf" style={{ fontSize: 14, fontWeight: 700, color: '#ff4444' }}>${(totalBudget - (transactions || []).filter(t => t.parentId === sel).reduce((a, b) => a + (parseFloat(String(b.amount || '0').replace(/[^0-9.]/g, '')) || 0), 0)).toLocaleString()}</span>
                   </div>
                </div>
@@ -185,7 +185,7 @@ export default function AdminInstallations({ clients = [], updateProject, dbClie
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
                     <HardHat size={16} color={ac} />
                     <h3 className="lxfh" style={{ fontSize: 16 }}>Field Crew</h3>
-                    <span style={{ marginLeft: 'auto', fontSize: 11, color: '#9B99C8' }}>{assignedWorkers.length} assigned</span>
+                    <span style={{ marginLeft: 'auto', fontSize: 11, color: '#6B7280' }}>{assignedWorkers.length} assigned</span>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                     {fieldWorkers.map(w => {
@@ -198,8 +198,8 @@ export default function AdminInstallations({ clients = [], updateProject, dbClie
                           style={{
                             display: 'flex', alignItems: 'center', gap: 10,
                             padding: '10px 12px', borderRadius: 10,
-                            background: isAssigned ? '#F0FDF4' : '#F8F8FD',
-                            border: `1.5px solid ${isAssigned ? '#BBF7D0' : '#E8E6F5'}`,
+                            background: isAssigned ? '#F0FDF4' : '#F9FAFB',
+                            border: `1.5px solid ${isAssigned ? '#BBF7D0' : '#E5E7EB'}`,
                             cursor: 'pointer', width: '100%', textAlign: 'left'
                           }}
                         >
@@ -207,10 +207,10 @@ export default function AdminInstallations({ clients = [], updateProject, dbClie
                             {isAssigned ? <UserCheck size={14} color="#fff" /> : <UserX size={14} color="#9A948E" />}
                           </div>
                           <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontSize: 13, fontWeight: 700, color: isAssigned ? '#15803D' : '#0D0B2E', marginBottom: 1 }}>{w.name}</div>
-                            <div style={{ fontSize: 10, color: '#9B99C8' }}>{w.jobRole || 'Field Worker'}</div>
+                            <div style={{ fontSize: 13, fontWeight: 700, color: isAssigned ? '#15803D' : '#111827', marginBottom: 1 }}>{w.name}</div>
+                            <div style={{ fontSize: 10, color: '#6B7280' }}>{w.jobRole || 'Field Worker'}</div>
                           </div>
-                          <div style={{ fontSize: 10, fontWeight: 800, color: isAssigned ? '#16A34A' : '#9B99C8', textTransform: 'uppercase' }}>
+                          <div style={{ fontSize: 10, fontWeight: 800, color: isAssigned ? '#16A34A' : '#6B7280', textTransform: 'uppercase' }}>
                             {isAssigned ? 'On crew' : 'Add'}
                           </div>
                         </button>
@@ -239,7 +239,7 @@ export default function AdminInstallations({ clients = [], updateProject, dbClie
           <div className="overlay-modal" onClick={() => setShowManual(false)}>
              <div className="modal-box lxf" style={{ maxWidth: 400 }} onClick={e => e.stopPropagation()}>
                 <h3 className="lxfh" style={{ fontSize: 22, marginBottom: 8 }}>Record External Payment</h3>
-                <p style={{ fontSize: 13, color: '#9B99C8', marginBottom: 24 }}>Manually add a payment for audit purposes (Cash, Bank Trace, etc).</p>
+                <p style={{ fontSize: 13, color: '#6B7280', marginBottom: 24 }}>Manually add a payment for audit purposes (Cash, Bank Trace, etc).</p>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                    {manErr && <div style={{ padding: '10px 14px', background: '#FEF2F2', border: '1px solid #FEE2E2', borderRadius: 8, color: '#DC2626', fontSize: 12 }}>{manErr}</div>}
                    <PFormField label="Amount ($)"><input className="p-inp" type="number" value={manData.amount} onChange={e => setManData({...manData, amount: e.target.value})} /></PFormField>
@@ -266,7 +266,7 @@ export default function AdminInstallations({ clients = [], updateProject, dbClie
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
           <h2 className="lxfh" style={{ fontSize: 32, fontWeight: 400, margin: 0 }}>Field Operations Center</h2>
-          <div className="lxf" style={{ fontSize: 13, color: '#9B99C8', marginTop: 4 }}>Installer assignments, site progress, photos, checklists, and inspection readiness</div>
+          <div className="lxf" style={{ fontSize: 13, color: '#6B7280', marginTop: 4 }}>Installer assignments, site progress, photos, checklists, and inspection readiness</div>
         </div>
         <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
           <select value={stageFilter} onChange={e => setStageFilter(e.target.value)} className="p-inp" style={{ height: 40, width: 180, fontSize: 12, fontWeight: 700 }}>
@@ -278,7 +278,7 @@ export default function AdminInstallations({ clients = [], updateProject, dbClie
             <option value="all">All projects</option>
           </select>
           <div style={{ position: 'relative' }}>
-            <Search size={14} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#9B99C8' }} />
+            <Search size={14} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#6B7280' }} />
             <input className="p-inp" placeholder="Search projects..." value={search} onChange={e => setSearch(e.target.value)} style={{ paddingLeft: 34, width: 240 }} />
           </div>
         </div>
@@ -288,12 +288,12 @@ export default function AdminInstallations({ clients = [], updateProject, dbClie
         {[
           { label: 'Delivery Ready', value: deliveryCount, color: '#607D8B' },
           { label: 'Installing Now', value: installationCount, color: '#16A34A' },
-          { label: 'Inspection Queue', value: inspectionCount, color: '#4945BE' },
+          { label: 'Inspection Queue', value: inspectionCount, color: '#14B8A6' },
           { label: 'Crew Assigned', value: crewAssignedCount, color: ac },
         ].map(stat => (
           <div key={stat.label} className="p-card" style={{ padding: 18, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div>
-              <div className="lxf" style={{ fontSize: 10, color: '#9B99C8', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '.08em' }}>{stat.label}</div>
+              <div className="lxf" style={{ fontSize: 10, color: '#6B7280', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '.08em' }}>{stat.label}</div>
               <div className="lxfh" style={{ fontSize: 28, color: stat.color, marginTop: 4 }}>{stat.value}</div>
             </div>
             <HardHat size={22} color={stat.color} />
@@ -314,26 +314,26 @@ export default function AdminInstallations({ clients = [], updateProject, dbClie
                   <div style={{ flex: 1 }}>
                      <div className="lxf" style={{ fontSize: 10, color: ac, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.1em', marginBottom: 4 }}>{c.cat || 'Full Interior'}</div>
                      <div className="lxfh" style={{ fontSize: 18, fontWeight: 700 }}>{projectName(c)}</div>
-                     <div className="lxf" style={{ fontSize: 12, color: '#9B99C8', marginTop: 3 }}>{clientName(c)}</div>
+                     <div className="lxf" style={{ fontSize: 12, color: '#6B7280', marginTop: 3 }}>{clientName(c)}</div>
                   </div>
-                  <div style={{ width: 44, height: 44, borderRadius: 12, background: '#F8F8FD', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <div style={{ width: 44, height: 44, borderRadius: 12, background: '#F9FAFB', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                      <PSBadge s={currentStageObj?.name || 'Order Confirmed'} />
                   </div>
                </div>
 
                <div style={{ marginTop: 8 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8, fontSize: 11, fontWeight: 700 }}>
-                     <span style={{ color: '#5B5894' }}>FIELD PROGRESS</span>
+                     <span style={{ color: '#4B5563' }}>FIELD PROGRESS</span>
                      <span>{c.progress || 0}%</span>
                   </div>
-                  <div className="prog" style={{ height: 6, width: '100%', background: '#E8E6F5' }}>
+                  <div className="prog" style={{ height: 6, width: '100%', background: '#E5E7EB' }}>
                      <div className="prog-f" style={{ width: `${c.progress || 0}%`, background: ac }} />
                   </div>
                </div>
 
-               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 16, borderTop: '1px solid #F8F8FD' }}>
+               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 16, borderTop: '1px solid #F9FAFB' }}>
                   <div style={{ display: 'flex', gap: 8 }}>
-                     <div className="lxf" style={{ fontSize: 11, color: '#9B99C8', display: 'flex', alignItems: 'center', gap: 5 }}>
+                     <div className="lxf" style={{ fontSize: 11, color: '#6B7280', display: 'flex', alignItems: 'center', gap: 5 }}>
                        <UserCheck size={13} /> {(c.assignedWorkers || []).length} crew
                      </div>
                      <button 
@@ -351,7 +351,7 @@ export default function AdminInstallations({ clients = [], updateProject, dbClie
                      style={{ 
                         background: 'none', 
                         border: 'none', 
-                        color: '#0D0B2E', 
+                        color: '#111827', 
                         fontWeight: 700, 
                         fontSize: 12, 
                         cursor: 'pointer',

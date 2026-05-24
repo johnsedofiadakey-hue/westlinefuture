@@ -21,7 +21,7 @@ export default function AdminClients({ dbClients, createClient, updateClient, de
 
   const PHONE_RE = /^\+?[\d\s\-().]{7,20}$/;
 
-  const ac = brand.color || '#231F78';
+  const ac = brand.color || '#0F766E';
   const { invoices = [], workOrders = [] } = props;
 
   const toggleSelect = (id) => {
@@ -84,8 +84,8 @@ export default function AdminClients({ dbClients, createClient, updateClient, de
     <div className="p-fade admin-clients-container" style={{ padding: '20px 0' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 40 }}>
         <div>
-          <h2 className="lxfh" style={{ fontSize: 28, fontWeight: 700, color: '#0D0B2E' }}>Client Directory</h2>
-          <p className="lxf" style={{ color: '#9B99C8', fontSize: 13, marginTop: 4 }}>Manage your clients and track their project status.</p>
+          <h2 className="lxfh" style={{ fontSize: 28, fontWeight: 700, color: '#111827' }}>Client Directory</h2>
+          <p className="lxf" style={{ color: '#6B7280', fontSize: 13, marginTop: 4 }}>Manage your clients and track their project status.</p>
         </div>
         <div style={{ display: 'flex', gap: 12 }}>
           {selectedIds.length > 0 && (
@@ -93,7 +93,7 @@ export default function AdminClients({ dbClients, createClient, updateClient, de
               <Trash2 size={18} /> Delete Selected
             </button>
           )}
-          <button onClick={() => setConfirmDelete({ type: 'all' })} className="p-btn-dark" style={{ background: '#0D0B2E', color: '#fff', border: 'none', display: 'flex', alignItems: 'center', gap: 10, padding: '12px 24px', opacity: 0.5 }}>
+          <button onClick={() => setConfirmDelete({ type: 'all' })} className="p-btn-dark" style={{ background: '#111827', color: '#fff', border: 'none', display: 'flex', alignItems: 'center', gap: 10, padding: '12px 24px', opacity: 0.5 }}>
             <AlertCircle size={18} /> Delete All
           </button>
           <button onClick={() => setShowAdd(true)} className="p-btn-dark" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 24px' }}>
@@ -104,10 +104,10 @@ export default function AdminClients({ dbClients, createClient, updateClient, de
 
       <div style={{ marginBottom: 32, display: 'flex', gap: 16 }}>
          <div style={{ flex: 1, position: 'relative' }}>
-            <Search style={{ position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)', color: '#9B99C8' }} size={18} />
+            <Search style={{ position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)', color: '#6B7280' }} size={18} />
             <input 
                className="p-inp" 
-               style={{ paddingLeft: 48, height: 56, borderRadius: 16, background: '#F8F8FD', border: '1px solid #E8E6F5' }} 
+               style={{ paddingLeft: 48, height: 56, borderRadius: 16, background: '#F9FAFB', border: '1px solid #E5E7EB' }} 
                placeholder="Find client..." 
                value={search}
                onChange={e => setSearch(e.target.value)}
@@ -116,26 +116,26 @@ export default function AdminClients({ dbClients, createClient, updateClient, de
          <select 
            value={props.currency} 
            onChange={e => props.setCurrency(e.target.value)}
-           style={{ height: 56, padding: '0 20px', borderRadius: 16, border: '1px solid #E8E6F5', background: '#fff', fontSize: 14, fontWeight: 700 }}
+           style={{ height: 56, padding: '0 20px', borderRadius: 16, border: '1px solid #E5E7EB', background: '#fff', fontSize: 14, fontWeight: 700 }}
          >
            <option value="GHS">GHS (₵)</option>
            <option value="USD">USD ($)</option>
          </select>
       </div>
 
-      <div className="p-card" style={{ padding: 0, overflow: 'hidden', border: '1px solid #E8E6F5' }}>
+      <div className="p-card" style={{ padding: 0, overflow: 'hidden', border: '1px solid #E5E7EB' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-          <thead style={{ background: '#F8F8FD', borderBottom: '1px solid #E8E6F5' }}>
+          <thead style={{ background: '#F9FAFB', borderBottom: '1px solid #E5E7EB' }}>
             <tr>
               <th style={{ padding: '16px 24px', width: 40 }}>
-                <button onClick={toggleAll} style={{ background: 'none', border: 'none', cursor: 'pointer', color: selectedIds.length === filtered.length ? ac : '#9B99C8' }}>
+                <button onClick={toggleAll} style={{ background: 'none', border: 'none', cursor: 'pointer', color: selectedIds.length === filtered.length ? ac : '#6B7280' }}>
                    {selectedIds.length === filtered.length ? <CheckSquare size={20} /> : <Square size={20} />}
                 </button>
               </th>
-              <th style={{ padding: '16px 24px', fontSize: 10, textTransform: 'uppercase', letterSpacing: 1, color: '#9B99C8' }}>Stakeholder</th>
-              <th style={{ padding: '16px 24px', fontSize: 10, textTransform: 'uppercase', letterSpacing: 1, color: '#9B99C8' }}>Entity / Company</th>
-              <th style={{ padding: '16px 24px', fontSize: 10, textTransform: 'uppercase', letterSpacing: 1, color: '#9B99C8' }}>Operational Pulse</th>
-              <th style={{ padding: '16px 24px', fontSize: 10, textTransform: 'uppercase', letterSpacing: 1, color: '#9B99C8', textAlign: 'right' }}>Actions</th>
+              <th style={{ padding: '16px 24px', fontSize: 10, textTransform: 'uppercase', letterSpacing: 1, color: '#6B7280' }}>Stakeholder</th>
+              <th style={{ padding: '16px 24px', fontSize: 10, textTransform: 'uppercase', letterSpacing: 1, color: '#6B7280' }}>Entity / Company</th>
+              <th style={{ padding: '16px 24px', fontSize: 10, textTransform: 'uppercase', letterSpacing: 1, color: '#6B7280' }}>Operational Pulse</th>
+              <th style={{ padding: '16px 24px', fontSize: 10, textTransform: 'uppercase', letterSpacing: 1, color: '#6B7280', textAlign: 'right' }}>Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -154,9 +154,9 @@ export default function AdminClients({ dbClients, createClient, updateClient, de
               const latestProject = myProjects[myProjects.length - 1];
               const isSelected = selectedIds.includes(client.id);
               return (
-                <tr key={client.id} style={{ borderBottom: '1px solid #F8F8FD', background: isSelected ? `${ac}08` : 'transparent' }} className="table-row-hover">
+                <tr key={client.id} style={{ borderBottom: '1px solid #F9FAFB', background: isSelected ? `${ac}08` : 'transparent' }} className="table-row-hover">
                   <td style={{ padding: '20px 24px' }}>
-                    <button onClick={() => toggleSelect(client.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: isSelected ? ac : '#9B99C8' }}>
+                    <button onClick={() => toggleSelect(client.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: isSelected ? ac : '#6B7280' }}>
                        {isSelected ? <CheckSquare size={20} /> : <Square size={20} />}
                     </button>
                   </td>
@@ -165,7 +165,7 @@ export default function AdminClients({ dbClients, createClient, updateClient, de
                       <PAv i={client.name?.[0]} s={40} c={ac} />
                       <div>
                         <div className="lxfh" style={{ fontSize: 15, fontWeight: 700 }}>{client.name}</div>
-                        <div style={{ fontSize: 11, color: '#9B99C8' }}>{client.phone}</div>
+                        <div style={{ fontSize: 11, color: '#6B7280' }}>{client.phone}</div>
                       </div>
                     </div>
                   </td>
@@ -180,13 +180,13 @@ export default function AdminClients({ dbClients, createClient, updateClient, de
                         <span className="lxf" style={{ fontSize: 13 }}>{latestProject.title}</span>
                       </div>
                     ) : (
-                      <span className="lxf" style={{ fontSize: 12, color: '#9B99C8' }}>Standby</span>
+                      <span className="lxf" style={{ fontSize: 12, color: '#6B7280' }}>Standby</span>
                     )}
                   </td>
                   <td style={{ padding: '20px 24px', textAlign: 'right' }}>
                     <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
                       <button onClick={() => props.onSelectClient?.(client.id)} className="p-btn-dark" style={{ height: 36, padding: '0 16px', fontSize: 11 }}>Hub</button>
-                      <button onClick={() => startEdit(client)} style={{ background: '#F8F8FD', border: 'none', padding: 10, borderRadius: 8, color: '#0D0B2E', cursor: 'pointer' }}><Edit2 size={16} /></button>
+                      <button onClick={() => startEdit(client)} style={{ background: '#F9FAFB', border: 'none', padding: 10, borderRadius: 8, color: '#111827', cursor: 'pointer' }}><Edit2 size={16} /></button>
                       <button onClick={() => setConfirmDelete({ type: 'single', id: client.id })} style={{ background: '#FFF1F1', border: 'none', padding: 10, borderRadius: 8, color: '#EF4444', cursor: 'pointer' }}><Trash2 size={16} /></button>
                     </div>
                   </td>
@@ -199,19 +199,19 @@ export default function AdminClients({ dbClients, createClient, updateClient, de
 
       {/* CUSTOM DELETE CONFIRMATION MODAL */}
       {confirmDelete && (
-        <div className="overlay-modal" style={{ background: 'rgba(13,11,46,0.9)', backdropFilter: 'blur(20px)', zIndex: 4000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div className="overlay-modal" style={{ background: 'rgba(17,24,39,0.9)', backdropFilter: 'blur(20px)', zIndex: 4000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
            <div className="modal-box" style={{ background: '#fff', width: '100%', maxWidth: 400, borderRadius: 24, padding: 32, textAlign: 'center' }}>
               <div style={{ width: 64, height: 64, borderRadius: '50%', background: '#FFF1F1', color: '#EF4444', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 24px' }}>
                  <AlertTriangle size={32} />
               </div>
               <h3 className="lxfh" style={{ fontSize: 20, marginBottom: 8 }}>Confirm Deletion</h3>
-              <p style={{ fontSize: 14, color: '#9B99C8', marginBottom: 32 }}>
+              <p style={{ fontSize: 14, color: '#6B7280', marginBottom: 32 }}>
                  {confirmDelete.type === 'all' ? 'Are you sure you want to delete ALL clients? This is a master reset.' : 
                   confirmDelete.type === 'multi' ? `Are you sure you want to delete ${selectedIds.length} selected clients?` :
                   'Are you sure you want to remove this client? This action is permanent.'}
               </p>
               <div style={{ display: 'flex', gap: 12 }}>
-                 <button onClick={() => setConfirmDelete(null)} style={{ flex: 1, height: 50, borderRadius: 12, border: '1px solid #E8E6F5', background: 'none', fontWeight: 700, cursor: 'pointer' }}>Cancel</button>
+                 <button onClick={() => setConfirmDelete(null)} style={{ flex: 1, height: 50, borderRadius: 12, border: '1px solid #E5E7EB', background: 'none', fontWeight: 700, cursor: 'pointer' }}>Cancel</button>
                  <button onClick={handleConfirmedDelete} style={{ flex: 1, height: 50, borderRadius: 12, border: 'none', background: '#EF4444', color: '#fff', fontWeight: 700, cursor: 'pointer' }}>Delete</button>
               </div>
            </div>
@@ -226,23 +226,23 @@ export default function AdminClients({ dbClients, createClient, updateClient, de
           }}>
              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 32 }}>
                 <h3 className="lxfh" style={{ fontSize: 24, margin: 0 }}>{editingClient ? 'Modify Stakeholder' : 'Register Stakeholder'}</h3>
-                <button onClick={resetForm} style={{ background: 'none', border: 'none', color: '#9B99C8', cursor: 'pointer' }}><X size={24} /></button>
+                <button onClick={resetForm} style={{ background: 'none', border: 'none', color: '#6B7280', cursor: 'pointer' }}><X size={24} /></button>
              </div>
              
              <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
                 <div className="p-field">
-                   <label style={{ fontSize: 10, textTransform: 'uppercase', fontWeight: 800, color: '#9B99C8', marginBottom: 8, display: 'block' }}>Full Legal Name</label>
+                   <label style={{ fontSize: 10, textTransform: 'uppercase', fontWeight: 800, color: '#6B7280', marginBottom: 8, display: 'block' }}>Full Legal Name</label>
                    <input className="p-inp" value={newC.name} onChange={e => setNewC({...newC, name: e.target.value})} placeholder="e.g. Samuel Amissah" style={{ borderColor: formErrors.name ? '#EF4444' : undefined }} />
                    {formErrors.name && <div style={{ color: '#DC2626', fontSize: 11, marginTop: 4 }}>{formErrors.name}</div>}
                 </div>
 
                 <div className="p-field">
-                   <label style={{ fontSize: 10, textTransform: 'uppercase', fontWeight: 800, color: '#9B99C8', marginBottom: 8, display: 'block' }}>Direct Phone (Primary ID)</label>
+                   <label style={{ fontSize: 10, textTransform: 'uppercase', fontWeight: 800, color: '#6B7280', marginBottom: 8, display: 'block' }}>Direct Phone (Primary ID)</label>
                    <input className="p-inp" value={newC.phone} onChange={e => setNewC({...newC, phone: e.target.value})} placeholder="e.g. +233 24 000 0000" style={{ borderColor: formErrors.phone ? '#EF4444' : undefined }} />
                    {formErrors.phone && <div style={{ color: '#DC2626', fontSize: 11, marginTop: 4 }}>{formErrors.phone}</div>}
                 </div>
                 <div className="p-field">
-                   <label style={{ fontSize: 10, textTransform: 'uppercase', fontWeight: 800, color: '#9B99C8', marginBottom: 8, display: 'block' }}>Company / Entity</label>
+                   <label style={{ fontSize: 10, textTransform: 'uppercase', fontWeight: 800, color: '#6B7280', marginBottom: 8, display: 'block' }}>Company / Entity</label>
                    <input className="p-inp" value={newC.company} onChange={e => setNewC({...newC, company: e.target.value})} placeholder="e.g. Amissah Developments" />
                 </div>
              </div>

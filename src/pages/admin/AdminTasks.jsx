@@ -4,7 +4,7 @@ import { FF as PFormField } from '../../components/Shared';
 import { PROJECT_STAGES } from '../../data';
 
 export default function AdminTasks({ projectId, projectTitle, tasks, createTask, deleteTask, updateTask, teamMembers, brand, notify }) {
-  const ac = brand.color || '#231F78';
+  const ac = brand.color || '#0F766E';
   const [showAdd, setShowAdd] = useState(false);
   const [nt, setNt] = useState({ title: '', desc: '', assignedTo: '', stage: 1, dueDate: '' });
   
@@ -44,7 +44,7 @@ export default function AdminTasks({ projectId, projectTitle, tasks, createTask,
       </div>
 
       {showAdd && (
-        <div style={{ background: '#F8F8FD', padding: 16, borderRadius: 8, marginBottom: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div style={{ background: '#F9FAFB', padding: 16, borderRadius: 8, marginBottom: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
             <PFormField label="Task Title"><input className="p-inp" value={nt.title} onChange={e => setNt({...nt, title: e.target.value})} /></PFormField>
             <PFormField label="Assign To">
               <select className="p-inp" value={nt.assignedTo} onChange={e => setNt({...nt, assignedTo: e.target.value})}>
@@ -75,15 +75,15 @@ export default function AdminTasks({ projectId, projectTitle, tasks, createTask,
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {projectTasks.length === 0 && <div className="lxf" style={{ color: '#9B99C8', fontSize: 12, textAlign: 'center', padding: '10px 0' }}>No tasks found</div>}
+        {projectTasks.length === 0 && <div className="lxf" style={{ color: '#6B7280', fontSize: 12, textAlign: 'center', padding: '10px 0' }}>No tasks found</div>}
         {projectTasks.map(t => (
-          <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px', background: '#F8F8FD', borderRadius: 8 }}>
+          <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px', background: '#F9FAFB', borderRadius: 8 }}>
              <button onClick={() => updateTask(t.id, { status: t.status === 'completed' ? 'pending' : 'completed' }, projectId)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: t.status === 'completed' ? '#16A34A' : '#DFD9D1' }}>
                 <CheckCircle size={18} />
              </button>
              <div style={{ flex: 1 }}>
-                <div className="lxf" style={{ fontSize: 13, fontWeight: 500, textDecoration: t.status === 'completed' ? 'line-through' : 'none', color: t.status === 'completed' ? '#9B99C8' : '#0D0B2E' }}>{t.title}</div>
-                <div className="lxf" style={{ fontSize: 10, color: '#9B99C8' }}>{teamMembers.find(m=>m.id === t.assignedTo)?.name || 'Unassigned'} • Stage {t.stage}</div>
+                <div className="lxf" style={{ fontSize: 13, fontWeight: 500, textDecoration: t.status === 'completed' ? 'line-through' : 'none', color: t.status === 'completed' ? '#6B7280' : '#111827' }}>{t.title}</div>
+                <div className="lxf" style={{ fontSize: 10, color: '#6B7280' }}>{teamMembers.find(m=>m.id === t.assignedTo)?.name || 'Unassigned'} • Stage {t.stage}</div>
              </div>
              <button onClick={() => deleteTask && deleteTask(t.id, projectId)} style={{ background: 'none', border: 'none', color: '#ff4444', cursor: 'pointer', opacity: 0.4 }}><Trash2 size={14} /></button>
           </div>

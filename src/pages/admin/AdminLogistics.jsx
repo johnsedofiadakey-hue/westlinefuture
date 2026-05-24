@@ -18,7 +18,7 @@ const LOGISTICS_MILESTONES = [
 const BLANK_CONTAINER = { shipmentRef: '', supplier: '', eta: '', value: '', items: [], notes: '' };
 
 export default function AdminLogistics({ containers = [], workOrders = [], clients = [], brand, ...props }) {
-  const ac = brand.color || '#231F78';
+  const ac = brand.color || '#0F766E';
   const [activeTab, setActiveTab] = useState('containers');
   const [showAddContainer, setShowAddContainer] = useState(false);
   const [newContainer, setNewContainer] = useState(BLANK_CONTAINER);
@@ -90,8 +90,8 @@ export default function AdminLogistics({ containers = [], workOrders = [], clien
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
-           <h2 className="lxfh" style={{ fontSize: 28, fontWeight: 700, color: '#0D0B2E', margin: 0 }}>Supply Chain Command Center</h2>
-           <p className="lxf" style={{ fontSize: 13, color: '#9B99C8', margin: '6px 0 0' }}>Procurement, containers, customs, warehouse, delivery readiness, and financial release gates</p>
+           <h2 className="lxfh" style={{ fontSize: 28, fontWeight: 700, color: '#111827', margin: 0 }}>Supply Chain Command Center</h2>
+           <p className="lxf" style={{ fontSize: 13, color: '#6B7280', margin: '6px 0 0' }}>Procurement, containers, customs, warehouse, delivery readiness, and financial release gates</p>
            <div style={{ display: 'flex', gap: 16, marginTop: 12 }}>
               {[
                 { id: 'containers', label: 'Shipments' },
@@ -102,7 +102,7 @@ export default function AdminLogistics({ containers = [], workOrders = [], clien
                   onClick={() => setActiveTab(t.id)}
                   style={{ 
                     background: 'none', border: 'none', padding: '0 0 8px', 
-                    fontSize: 12, fontWeight: 800, color: activeTab === t.id ? ac : '#9B99C8',
+                    fontSize: 12, fontWeight: 800, color: activeTab === t.id ? ac : '#6B7280',
                     borderBottom: `2px solid ${activeTab === t.id ? ac : 'transparent'}`,
                     cursor: 'pointer', textTransform: 'uppercase', letterSpacing: 1
                   }}
@@ -120,14 +120,14 @@ export default function AdminLogistics({ containers = [], workOrders = [], clien
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 14 }}>
         {[
-          { label: 'Active Shipments', value: containers.length, color: '#0D0B2E', icon: <Ship size={20} /> },
+          { label: 'Active Shipments', value: containers.length, color: '#111827', icon: <Ship size={20} /> },
           { label: 'At Risk / Customs', value: atRiskCount, color: '#EF4444', icon: <ShieldAlert size={20} /> },
           { label: 'Local Ready', value: localReadyCount, color: '#16A34A', icon: <MapPin size={20} /> },
           { label: 'Open Work Orders', value: linkedWorkOrderCount, color: ac, icon: <Package size={20} /> },
         ].map(stat => (
           <div key={stat.label} className="p-card" style={{ padding: 18, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div>
-              <div className="lxf" style={{ fontSize: 10, color: '#9B99C8', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '.08em' }}>{stat.label}</div>
+              <div className="lxf" style={{ fontSize: 10, color: '#6B7280', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '.08em' }}>{stat.label}</div>
               <div className="lxfh" style={{ fontSize: 28, color: stat.color, marginTop: 4 }}>{stat.value}</div>
             </div>
             <div style={{ color: stat.color }}>{stat.icon}</div>
@@ -151,7 +151,7 @@ export default function AdminLogistics({ containers = [], workOrders = [], clien
               <div key={c.id} className="p-card" style={{ padding: 24, border: c.atRisk ? '1px solid #EF4444' : '1px solid var(--border)' }}>
                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
                     <div>
-                       <div style={{ fontSize: 10, fontWeight: 800, color: '#9B99C8', textTransform: 'uppercase' }}>Shipment Ref</div>
+                       <div style={{ fontSize: 10, fontWeight: 800, color: '#6B7280', textTransform: 'uppercase' }}>Shipment Ref</div>
                        <div style={{ fontSize: 15, fontWeight: 700 }}>{c.shipmentRef}</div>
                     </div>
                     {c.atRisk && (
@@ -163,7 +163,7 @@ export default function AdminLogistics({ containers = [], workOrders = [], clien
 
                  {/* MILESTONE TOGGLE */}
                  <div style={{ display: 'flex', justifyContent: 'space-between', position: 'relative', marginBottom: 32, padding: '0 10px' }}>
-                    <div style={{ position: 'absolute', top: 12, left: 20, right: 20, height: 2, background: '#E8E6F5', zIndex: 0 }} />
+                    <div style={{ position: 'absolute', top: 12, left: 20, right: 20, height: 2, background: '#E5E7EB', zIndex: 0 }} />
                     {LOGISTICS_MILESTONES.map((m, idx) => {
                        const isPast = LOGISTICS_MILESTONES.findIndex(x => x.id === c.status) >= idx;
                        const isCurrent = c.status === m.id;
@@ -172,19 +172,19 @@ export default function AdminLogistics({ containers = [], workOrders = [], clien
                            key={m.id}
                            onClick={() => handleUpdateContainerStatus(c.id, m.id)}
                            style={{ 
-                             zIndex: 1, background: isPast ? ac : '#fff', border: `2px solid ${isPast ? ac : '#E8E6F5'}`, 
+                             zIndex: 1, background: isPast ? ac : '#fff', border: `2px solid ${isPast ? ac : '#E5E7EB'}`, 
                              width: 26, height: 26, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                             color: isPast ? '#fff' : '#9B99C8', cursor: 'pointer', transition: 'all 0.3s'
+                             color: isPast ? '#fff' : '#6B7280', cursor: 'pointer', transition: 'all 0.3s'
                            }}
                          >
                             {isPast ? <CheckCircle2 size={12} /> : idx + 1}
-                            <div style={{ position: 'absolute', top: 32, fontSize: 9, fontWeight: 800, color: isPast ? '#0D0B2E' : '#9B99C8', whiteSpace: 'nowrap' }}>{m.label}</div>
+                            <div style={{ position: 'absolute', top: 32, fontSize: 9, fontWeight: 800, color: isPast ? '#111827' : '#6B7280', whiteSpace: 'nowrap' }}>{m.label}</div>
                          </button>
                        );
                     })}
                  </div>
 
-                 <div style={{ background: '#F8F8FD', padding: 16, borderRadius: 16, marginBottom: 20 }}>
+                 <div style={{ background: '#F9FAFB', padding: 16, borderRadius: 16, marginBottom: 20 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
                        <div style={{ fontSize: 11, color: '#625C54' }}>Linked Work Orders:</div>
                        <div style={{ fontSize: 11, fontWeight: 700 }}>{c.items?.length || 0} Items</div>
@@ -201,7 +201,7 @@ export default function AdminLogistics({ containers = [], workOrders = [], clien
                  </div>
 
                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#9B99C8' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#6B7280' }}>
                        <Clock size={14} />
                        <span style={{ fontSize: 12 }}>ETA: {c.eta}</span>
                     </div>
@@ -224,7 +224,7 @@ export default function AdminLogistics({ containers = [], workOrders = [], clien
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 32 }}>
                <div>
                   <h3 className="lxfh" style={{ fontSize: 20 }}>Digital Pro-Forma Engine</h3>
-                  <p className="lxf" style={{ fontSize: 13, color: '#9B99C8' }}>Convert customer requirements into China-ready shopping lists.</p>
+                  <p className="lxf" style={{ fontSize: 13, color: '#6B7280' }}>Convert customer requirements into China-ready shopping lists.</p>
                </div>
                <div style={{ display: 'flex', gap: 12 }}>
                   <button onClick={() => window.open(generateWhatsAppLink(workOrders.filter(w => w.status === 'Pending')), '_blank')} className="p-btn-gold" style={{ background: '#25D366', border: 'none', color: '#fff' }}>
@@ -238,20 +238,20 @@ export default function AdminLogistics({ containers = [], workOrders = [], clien
 
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                <thead>
-                  <tr style={{ borderBottom: '2px solid #E8E6F5', textAlign: 'left' }}>
-                     <th style={{ padding: 16, fontSize: 11, fontWeight: 800, color: '#9B99C8', textTransform: 'uppercase' }}>Work Order</th>
-                     <th style={{ padding: 16, fontSize: 11, fontWeight: 800, color: '#9B99C8', textTransform: 'uppercase' }}>Client</th>
-                     <th style={{ padding: 16, fontSize: 11, fontWeight: 800, color: '#9B99C8', textTransform: 'uppercase' }}>Budget</th>
-                     <th style={{ padding: 16, fontSize: 11, fontWeight: 800, color: '#9B99C8', textTransform: 'uppercase' }}>Procurement Status</th>
+                  <tr style={{ borderBottom: '2px solid #E5E7EB', textAlign: 'left' }}>
+                     <th style={{ padding: 16, fontSize: 11, fontWeight: 800, color: '#6B7280', textTransform: 'uppercase' }}>Work Order</th>
+                     <th style={{ padding: 16, fontSize: 11, fontWeight: 800, color: '#6B7280', textTransform: 'uppercase' }}>Client</th>
+                     <th style={{ padding: 16, fontSize: 11, fontWeight: 800, color: '#6B7280', textTransform: 'uppercase' }}>Budget</th>
+                     <th style={{ padding: 16, fontSize: 11, fontWeight: 800, color: '#6B7280', textTransform: 'uppercase' }}>Procurement Status</th>
                      <th style={{ padding: 16 }}></th>
                   </tr>
                </thead>
                <tbody>
                   {workOrders.map(wo => (
-                     <tr key={wo.id} style={{ borderBottom: '1px solid #E8E6F5' }}>
+                     <tr key={wo.id} style={{ borderBottom: '1px solid #E5E7EB' }}>
                         <td style={{ padding: 16 }}>
                            <div style={{ fontSize: 14, fontWeight: 700 }}>{wo.title}</div>
-                           <div style={{ fontSize: 11, color: '#9B99C8' }}>ID: {wo.id}</div>
+                           <div style={{ fontSize: 11, color: '#6B7280' }}>ID: {wo.id}</div>
                         </td>
                         <td style={{ padding: 16, fontSize: 13 }}>{clients.find(c => c.id === wo.clientId)?.name || 'Guest'}</td>
                         <td style={{ padding: 16, fontSize: 13, fontWeight: 700 }}>{wo.budget || '—'}</td>
@@ -278,7 +278,7 @@ export default function AdminLogistics({ containers = [], workOrders = [], clien
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 32, marginTop: 40 }}>
          <div /> {/* Spacer */}
          <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-            <div className="p-card" style={{ padding: 24, background: '#0D0B2E', color: '#fff', borderRadius: 32 }}>
+            <div className="p-card" style={{ padding: 24, background: '#111827', color: '#fff', borderRadius: 32 }}>
                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
                   <h3 className="lxfh" style={{ fontSize: 18, color: '#fff' }}>Site Equipment Pulse</h3>
                   <Scan size={20} color={ac} />
@@ -295,7 +295,7 @@ export default function AdminLogistics({ containers = [], workOrders = [], clien
                        </div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                              <div style={{ width: 24, height: 24, borderRadius: '50%', background: ac, color: '#0D0B2E', fontSize: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, border: '2px solid rgba(255,255,255,0.2)' }}>{a.user}</div>
+                              <div style={{ width: 24, height: 24, borderRadius: '50%', background: ac, color: '#111827', fontSize: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, border: '2px solid rgba(255,255,255,0.2)' }}>{a.user}</div>
                               <span style={{ fontSize: 11, color: 'rgba(255,255,255,.7)' }}>Lead Allocation</span>
                            </div>
                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -313,11 +313,11 @@ export default function AdminLogistics({ containers = [], workOrders = [], clien
                <Box size={32} color={ac} style={{ marginBottom: 12, opacity: 0.5 }} />
                <div className="lxfh" style={{ fontSize: 16, marginBottom: 4 }}>Warehouse Pulse</div>
                {warehouseCount > 0 ? (
-                 <p style={{ fontSize: 12, color: '#9B99C8', lineHeight: 1.6 }}>
-                   <strong style={{ color: '#0D0B2E' }}>{warehouseCount}</strong> shipment{warehouseCount !== 1 ? 's' : ''} ({warehouseItems} items) at central warehouse awaiting site deployment.
+                 <p style={{ fontSize: 12, color: '#6B7280', lineHeight: 1.6 }}>
+                   <strong style={{ color: '#111827' }}>{warehouseCount}</strong> shipment{warehouseCount !== 1 ? 's' : ''} ({warehouseItems} items) at central warehouse awaiting site deployment.
                  </p>
                ) : (
-                 <p style={{ fontSize: 12, color: '#9B99C8', lineHeight: 1.6 }}>No shipments currently at the warehouse.</p>
+                 <p style={{ fontSize: 12, color: '#6B7280', lineHeight: 1.6 }}>No shipments currently at the warehouse.</p>
                )}
             </div>
          </div>
@@ -332,14 +332,14 @@ export default function AdminLogistics({ containers = [], workOrders = [], clien
 
       {/* NEW CONTAINER MODAL */}
       {showAddContainer && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 3000, background: 'rgba(13,11,46,0.6)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }} onClick={() => setShowAddContainer(false)}>
+        <div style={{ position: 'fixed', inset: 0, zIndex: 3000, background: 'rgba(17,24,39,0.6)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }} onClick={() => setShowAddContainer(false)}>
           <div style={{ background: '#fff', borderRadius: 28, padding: 40, width: '100%', maxWidth: 560, boxShadow: '0 40px 80px rgba(0,0,0,0.2)' }} onClick={e => e.stopPropagation()}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 32 }}>
               <div>
                 <h2 className="lxfh" style={{ fontSize: 22, margin: 0 }}>New Shipment</h2>
-                <p className="lxf" style={{ fontSize: 13, color: '#9B99C8', marginTop: 4 }}>Track a new container or sea freight</p>
+                <p className="lxf" style={{ fontSize: 13, color: '#6B7280', marginTop: 4 }}>Track a new container or sea freight</p>
               </div>
-              <button onClick={() => setShowAddContainer(false)} style={{ background: '#F8F8FD', border: 'none', width: 36, height: 36, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+              <button onClick={() => setShowAddContainer(false)} style={{ background: '#F9FAFB', border: 'none', width: 36, height: 36, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
                 <X size={18} />
               </button>
             </div>
@@ -365,8 +365,8 @@ export default function AdminLogistics({ containers = [], workOrders = [], clien
             </div>
 
             <div style={{ display: 'flex', gap: 12, marginTop: 32 }}>
-              <button onClick={() => setShowAddContainer(false)} style={{ flex: 1, padding: 16, borderRadius: 14, background: '#F8F8FD', border: 'none', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Cancel</button>
-              <button onClick={handleCreateContainer} disabled={saving} style={{ flex: 2, padding: 16, borderRadius: 14, background: '#0D0B2E', border: 'none', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', opacity: saving ? 0.7 : 1 }}>
+              <button onClick={() => setShowAddContainer(false)} style={{ flex: 1, padding: 16, borderRadius: 14, background: '#F9FAFB', border: 'none', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Cancel</button>
+              <button onClick={handleCreateContainer} disabled={saving} style={{ flex: 2, padding: 16, borderRadius: 14, background: '#111827', border: 'none', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', opacity: saving ? 0.7 : 1 }}>
                 {saving ? 'Adding...' : 'Add Shipment'}
               </button>
             </div>

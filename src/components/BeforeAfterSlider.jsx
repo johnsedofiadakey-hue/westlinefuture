@@ -62,8 +62,8 @@ export default function BeforeAfterSlider({ before, after, labelBefore = "Before
         display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10, transform: 'translateX(-50%)'
       }}>
          <div style={{ width: 40, height: 40, borderRadius: '50%', background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 0 20px rgba(0,0,0,0.2)' }}>
-            <div style={{ width: 4, height: 4, borderRadius: '50%', background: '#0D0B2E', margin: '0 2px' }} />
-            <div style={{ width: 4, height: 4, borderRadius: '50%', background: '#0D0B2E', margin: '0 2px' }} />
+            <div style={{ width: 4, height: 4, borderRadius: '50%', background: '#111827', margin: '0 2px' }} />
+            <div style={{ width: 4, height: 4, borderRadius: '50%', background: '#111827', margin: '0 2px' }} />
          </div>
       </div>
     </div>

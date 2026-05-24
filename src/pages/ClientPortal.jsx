@@ -17,7 +17,7 @@ import {
 } from 'firebase/firestore';
 import { createPaystackPayment } from '../lib/paystack';
 
-const AC = '#231F78';
+const AC = '#0F766E';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 function fmtShort(val) {
@@ -37,7 +37,7 @@ function daysSince(val) {
 // ─── Payment Receipt PDF ─────────────────────────────────────────────────────
 // ─── Shared Branded PDF Renderer ─────────────────────────────────────────────
 function printBrandedDoc(opts, brand) {
-  const ac = brand?.color || '#231F78';
+  const ac = brand?.color || '#0F766E';
   const co = brand?.name || 'Westline Future Ltd.';
   const addr = brand?.address || 'International';
   const phone = brand?.phone || '';
@@ -76,7 +76,7 @@ function printBrandedDoc(opts, brand) {
   const lineItemsHtml = lineItems.length > 0 ? `
     <table style="width:100%;border-collapse:collapse;margin-bottom:32px;font-size:13px;">
       <thead>
-        <tr style="background:#0D0B2E;color:#fff;">
+        <tr style="background:#111827;color:#fff;">
           <th style="padding:12px 16px;text-align:left;font-size:10px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;">Description</th>
           <th style="padding:12px 16px;text-align:center;font-size:10px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;">Qty</th>
           <th style="padding:12px 16px;text-align:center;font-size:10px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;">Unit</th>
@@ -87,11 +87,11 @@ function printBrandedDoc(opts, brand) {
       <tbody>
         ${lineItems.map((item, i) => `
           <tr style="background:${i % 2 === 0 ? '#FAFAF9' : '#fff'};">
-            <td style="padding:14px 16px;font-weight:600;color:#0D0B2E;">${item.desc || item.description || '—'}</td>
-            <td style="padding:14px 16px;text-align:center;color:#5B5894;">${item.qty ?? 1}</td>
-            <td style="padding:14px 16px;text-align:center;color:#5B5894;">${item.unit || 'job'}</td>
-            <td style="padding:14px 16px;text-align:right;color:#5B5894;">${item.rate ? `GH₵ ${Number(item.rate).toLocaleString(undefined, { minimumFractionDigits: 2 })}` : '—'}</td>
-            <td style="padding:14px 16px;text-align:right;font-weight:700;color:#0D0B2E;">${item.total || item.amount ? `GH₵ ${Number(item.total || item.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}` : '—'}</td>
+            <td style="padding:14px 16px;font-weight:600;color:#111827;">${item.desc || item.description || '—'}</td>
+            <td style="padding:14px 16px;text-align:center;color:#4B5563;">${item.qty ?? 1}</td>
+            <td style="padding:14px 16px;text-align:center;color:#4B5563;">${item.unit || 'job'}</td>
+            <td style="padding:14px 16px;text-align:right;color:#4B5563;">${item.rate ? `GH₵ ${Number(item.rate).toLocaleString(undefined, { minimumFractionDigits: 2 })}` : '—'}</td>
+            <td style="padding:14px 16px;text-align:right;font-weight:700;color:#111827;">${item.total || item.amount ? `GH₵ ${Number(item.total || item.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}` : '—'}</td>
           </tr>`).join('')}
       </tbody>
     </table>` : '';
@@ -99,9 +99,9 @@ function printBrandedDoc(opts, brand) {
   const rowsHtml = rows.length > 0 ? `
     <div style="margin-bottom:32px;">
       ${rows.map(r => `
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;padding:13px 0;border-bottom:1px solid #E8E6F5;gap:20px;">
-          <span style="font-size:12px;color:#9B99C8;font-weight:600;white-space:nowrap;">${r.label}</span>
-          <span style="font-size:13px;font-weight:700;color:#0D0B2E;text-align:right;">${r.value}</span>
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;padding:13px 0;border-bottom:1px solid #E5E7EB;gap:20px;">
+          <span style="font-size:12px;color:#6B7280;font-weight:600;white-space:nowrap;">${r.label}</span>
+          <span style="font-size:13px;font-weight:700;color:#111827;text-align:right;">${r.value}</span>
         </div>`).join('')}
     </div>` : '';
 
@@ -114,14 +114,14 @@ function printBrandedDoc(opts, brand) {
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
   <style>
     *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
-    html, body { background: #fff; font-family: 'Inter', -apple-system, sans-serif; color: #0D0B2E; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    html, body { background: #fff; font-family: 'Inter', -apple-system, sans-serif; color: #111827; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     body { padding: 0; }
     .page { width: 210mm; min-height: 297mm; margin: 0 auto; padding: 72px; position: relative; overflow: hidden; background: #fff; }
-    .watermark { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(-40deg); font-size: 100px; font-weight: 900; opacity: 0.025; white-space: nowrap; pointer-events: none; color: #0D0B2E; z-index: 0; }
+    .watermark { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(-40deg); font-size: 100px; font-weight: 900; opacity: 0.025; white-space: nowrap; pointer-events: none; color: #111827; z-index: 0; }
     .content { position: relative; z-index: 1; }
     @page { size: A4; margin: 0; }
     @media print { html, body { width: 210mm; } .page { box-shadow: none !important; } button { display: none !important; } }
-    @media screen { .page { box-shadow: 0 0 60px rgba(0,0,0,0.12); margin: 40px auto; border-radius: 4px; } body { background: #E8E6F5; } }
+    @media screen { .page { box-shadow: 0 0 60px rgba(0,0,0,0.12); margin: 40px auto; border-radius: 4px; } body { background: #E5E7EB; } }
   </style>
 </head>
 <body>
@@ -131,31 +131,31 @@ function printBrandedDoc(opts, brand) {
   <div class="content">
 
     <!-- HEADER -->
-    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-top:40px;margin-bottom:48px;padding-bottom:32px;border-bottom:1.5px solid #E8E6F5;">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-top:40px;margin-bottom:48px;padding-bottom:32px;border-bottom:1.5px solid #E5E7EB;">
       <div style="display:flex;align-items:center;gap:18px;">
         ${logoHtml}
         <div>
-          <div style="font-size:15px;font-weight:800;color:#0D0B2E;letter-spacing:-.3px;">${co}</div>
-          <div style="font-size:11px;color:#9B99C8;margin-top:2px;">${addr}</div>
-          ${phone ? `<div style="font-size:11px;color:#9B99C8;">${phone}${email ? ' · ' + email : ''}</div>` : ''}
+          <div style="font-size:15px;font-weight:800;color:#111827;letter-spacing:-.3px;">${co}</div>
+          <div style="font-size:11px;color:#6B7280;margin-top:2px;">${addr}</div>
+          ${phone ? `<div style="font-size:11px;color:#6B7280;">${phone}${email ? ' · ' + email : ''}</div>` : ''}
           ${web ? `<div style="font-size:11px;color:${ac};">${web}</div>` : ''}
         </div>
       </div>
       <div style="text-align:right;">
         <div style="font-size:9px;font-weight:800;letter-spacing:.2em;text-transform:uppercase;color:${ac};margin-bottom:6px;">${docType}</div>
-        <div style="font-size:28px;font-weight:900;letter-spacing:-1px;color:#0D0B2E;">#${docNumber || 'DRAFT'}</div>
+        <div style="font-size:28px;font-weight:900;letter-spacing:-1px;color:#111827;">#${docNumber || 'DRAFT'}</div>
         ${statusBadge ? `<div style="display:inline-block;margin-top:10px;padding:5px 14px;border-radius:20px;font-size:11px;font-weight:800;background:${statusColor}18;color:${statusColor};border:1px solid ${statusColor}40;">${statusBadge}</div>` : ''}
       </div>
     </div>
 
     <!-- META ROW -->
     <div style="display:grid;grid-template-columns:repeat(${dueStr ? 3 : 2},1fr);gap:20px;margin-bottom:36px;">
-      <div style="padding:16px 20px;background:#F8F8FD;border-radius:12px;">
+      <div style="padding:16px 20px;background:#F9FAFB;border-radius:12px;">
         <div style="font-size:9px;text-transform:uppercase;letter-spacing:.14em;color:${ac};font-weight:800;margin-bottom:6px;">Date Issued</div>
         <div style="font-size:14px;font-weight:700;">${dateStr}</div>
       </div>
-      ${dueStr ? `<div style="padding:16px 20px;background:#F8F8FD;border-radius:12px;"><div style="font-size:9px;text-transform:uppercase;letter-spacing:.14em;color:${ac};font-weight:800;margin-bottom:6px;">Due Date</div><div style="font-size:14px;font-weight:700;">${dueStr}</div></div>` : ''}
-      <div style="padding:16px 20px;background:#0D0B2E;border-radius:12px;">
+      ${dueStr ? `<div style="padding:16px 20px;background:#F9FAFB;border-radius:12px;"><div style="font-size:9px;text-transform:uppercase;letter-spacing:.14em;color:${ac};font-weight:800;margin-bottom:6px;">Due Date</div><div style="font-size:14px;font-weight:700;">${dueStr}</div></div>` : ''}
+      <div style="padding:16px 20px;background:#111827;border-radius:12px;">
         <div style="font-size:9px;text-transform:uppercase;letter-spacing:.14em;color:${ac};font-weight:800;margin-bottom:6px;">Reference</div>
         <div style="font-size:13px;font-weight:700;color:#fff;font-family:monospace;">${docNumber || 'GT-DRAFT'}</div>
       </div>
@@ -163,19 +163,19 @@ function printBrandedDoc(opts, brand) {
 
     <!-- BILL TO / FROM -->
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:36px;">
-      <div style="padding:20px 24px;border:1.5px solid #E8E6F5;border-radius:14px;">
+      <div style="padding:20px 24px;border:1.5px solid #E5E7EB;border-radius:14px;">
         <div style="font-size:9px;text-transform:uppercase;letter-spacing:.14em;color:${ac};font-weight:800;margin-bottom:10px;">${isReceipt ? 'Received From' : 'Bill To'}</div>
-        <div style="font-size:15px;font-weight:800;color:#0D0B2E;margin-bottom:4px;">${clientName}</div>
-        ${clientPhone ? `<div style="font-size:12px;color:#5B5894;margin-bottom:2px;">${clientPhone}</div>` : ''}
-        ${clientEmail ? `<div style="font-size:12px;color:#5B5894;margin-bottom:2px;">${clientEmail}</div>` : ''}
-        ${clientAddress ? `<div style="font-size:12px;color:#5B5894;">${clientAddress}</div>` : ''}
+        <div style="font-size:15px;font-weight:800;color:#111827;margin-bottom:4px;">${clientName}</div>
+        ${clientPhone ? `<div style="font-size:12px;color:#4B5563;margin-bottom:2px;">${clientPhone}</div>` : ''}
+        ${clientEmail ? `<div style="font-size:12px;color:#4B5563;margin-bottom:2px;">${clientEmail}</div>` : ''}
+        ${clientAddress ? `<div style="font-size:12px;color:#4B5563;">${clientAddress}</div>` : ''}
       </div>
-      <div style="padding:20px 24px;border:1.5px solid #E8E6F5;border-radius:14px;">
+      <div style="padding:20px 24px;border:1.5px solid #E5E7EB;border-radius:14px;">
         <div style="font-size:9px;text-transform:uppercase;letter-spacing:.14em;color:${ac};font-weight:800;margin-bottom:10px;">From</div>
-        <div style="font-size:15px;font-weight:800;color:#0D0B2E;margin-bottom:4px;">${co}</div>
-        <div style="font-size:12px;color:#5B5894;margin-bottom:2px;">${addr}</div>
-        ${phone ? `<div style="font-size:12px;color:#5B5894;margin-bottom:2px;">${phone}</div>` : ''}
-        ${email ? `<div style="font-size:12px;color:#5B5894;">${email}</div>` : ''}
+        <div style="font-size:15px;font-weight:800;color:#111827;margin-bottom:4px;">${co}</div>
+        <div style="font-size:12px;color:#4B5563;margin-bottom:2px;">${addr}</div>
+        ${phone ? `<div style="font-size:12px;color:#4B5563;margin-bottom:2px;">${phone}</div>` : ''}
+        ${email ? `<div style="font-size:12px;color:#4B5563;">${email}</div>` : ''}
       </div>
     </div>
 
@@ -186,7 +186,7 @@ function printBrandedDoc(opts, brand) {
 
     <!-- TOTAL BOX -->
     <div style="display:flex;justify-content:flex-end;margin-bottom:32px;">
-      <div style="min-width:280px;background:#0D0B2E;border-radius:16px;overflow:hidden;">
+      <div style="min-width:280px;background:#111827;border-radius:16px;overflow:hidden;">
         <div style="padding:20px 24px;display:flex;justify-content:space-between;align-items:center;">
           <span style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.1em;color:rgba(255,255,255,0.5);">${totalLabel}</span>
           <span style="font-size:24px;font-weight:900;color:${ac};letter-spacing:-0.5px;">${totalAmount}</span>
@@ -194,17 +194,17 @@ function printBrandedDoc(opts, brand) {
       </div>
     </div>
 
-    ${bankDetails ? `<div style="margin-bottom:24px;padding:16px 20px;background:#F8F8FD;border-radius:12px;border:1px solid #E8E6F5;"><div style="font-size:9px;text-transform:uppercase;letter-spacing:.14em;color:${ac};font-weight:800;margin-bottom:8px;">Payment Details</div><div style="font-size:12px;color:#5B5894;line-height:1.7;">${bankDetails.replace(/\n/g, '<br/>')}</div></div>` : ''}
-    ${notes ? `<div style="margin-bottom:24px;padding:16px 20px;background:#F8F8FD;border-radius:12px;border:1px solid #E8E6F5;"><div style="font-size:9px;text-transform:uppercase;letter-spacing:.14em;color:${ac};font-weight:800;margin-bottom:8px;">Notes</div><div style="font-size:12px;color:#5B5894;line-height:1.7;">${notes}</div></div>` : ''}
-    ${terms ? `<div style="margin-bottom:24px;padding:16px 20px;background:#F8F8FD;border-radius:12px;"><div style="font-size:9px;text-transform:uppercase;letter-spacing:.14em;color:#9B99C8;font-weight:800;margin-bottom:8px;">Terms & Conditions</div><div style="font-size:11px;color:#9B99C8;line-height:1.7;">${terms.replace(/\n/g, '<br/>')}</div></div>` : ''}
+    ${bankDetails ? `<div style="margin-bottom:24px;padding:16px 20px;background:#F9FAFB;border-radius:12px;border:1px solid #E5E7EB;"><div style="font-size:9px;text-transform:uppercase;letter-spacing:.14em;color:${ac};font-weight:800;margin-bottom:8px;">Payment Details</div><div style="font-size:12px;color:#4B5563;line-height:1.7;">${bankDetails.replace(/\n/g, '<br/>')}</div></div>` : ''}
+    ${notes ? `<div style="margin-bottom:24px;padding:16px 20px;background:#F9FAFB;border-radius:12px;border:1px solid #E5E7EB;"><div style="font-size:9px;text-transform:uppercase;letter-spacing:.14em;color:${ac};font-weight:800;margin-bottom:8px;">Notes</div><div style="font-size:12px;color:#4B5563;line-height:1.7;">${notes}</div></div>` : ''}
+    ${terms ? `<div style="margin-bottom:24px;padding:16px 20px;background:#F9FAFB;border-radius:12px;"><div style="font-size:9px;text-transform:uppercase;letter-spacing:.14em;color:#6B7280;font-weight:800;margin-bottom:8px;">Terms & Conditions</div><div style="font-size:11px;color:#6B7280;line-height:1.7;">${terms.replace(/\n/g, '<br/>')}</div></div>` : ''}
 
     <!-- FOOTER -->
-    <div style="margin-top:40px;padding-top:20px;border-top:1.5px solid #E8E6F5;display:flex;justify-content:space-between;align-items:center;">
-      <div style="font-size:11px;color:#9B99C8;line-height:1.7;">${footerNote || `This is an official document from ${co}.<br/>For queries contact ${email} or ${phone}`}</div>
+    <div style="margin-top:40px;padding-top:20px;border-top:1.5px solid #E5E7EB;display:flex;justify-content:space-between;align-items:center;">
+      <div style="font-size:11px;color:#6B7280;line-height:1.7;">${footerNote || `This is an official document from ${co}.<br/>For queries contact ${email} or ${phone}`}</div>
       <div style="text-align:right;">
-        <div style="font-size:9px;text-transform:uppercase;letter-spacing:.14em;color:#9B99C8;font-weight:700;margin-bottom:4px;">Authorised by</div>
-        <div style="width:120px;height:1px;background:#9B99C8;margin-left:auto;margin-top:28px;"></div>
-        <div style="font-size:10px;color:#9B99C8;margin-top:4px;">${co}</div>
+        <div style="font-size:9px;text-transform:uppercase;letter-spacing:.14em;color:#6B7280;font-weight:700;margin-bottom:4px;">Authorised by</div>
+        <div style="width:120px;height:1px;background:#6B7280;margin-left:auto;margin-top:28px;"></div>
+        <div style="font-size:10px;color:#6B7280;margin-top:4px;">${co}</div>
       </div>
     </div>
   </div>
@@ -327,7 +327,7 @@ function downloadInvoicePDF(invoice, project, client, brand) {
     totalAmount: totalStr,
     totalLabel: isPaid ? 'TOTAL PAID' : isQuote ? 'QUOTED AMOUNT' : 'TOTAL DUE',
     statusBadge: isPaid ? 'PAID' : isQuote ? 'PENDING APPROVAL' : 'PAYMENT DUE',
-    statusColor: isPaid ? '#16A34A' : isQuote ? '#D97706' : '#2563EB',
+    statusColor: isPaid ? '#16A34A' : isQuote ? '#D97706' : '#0F766E',
     notes: invoice.notes || '',
     bankDetails: brand?.bankDetails || 'Bank Name | Account Number | Branch',
     terms: '1. Payments are due within 14 days of invoice date.\n2. Late payments attract 2% monthly interest.\n3. All glass fabrication works are subject to our standard warranty policy.',
@@ -339,7 +339,7 @@ function downloadInvoicePDF(invoice, project, client, brand) {
 function FileTypeIcon({ fileType }) {
   const ft = (fileType || '').toLowerCase();
   if (ft.includes('image') || ft.includes('jpg') || ft.includes('jpeg') || ft.includes('png') || ft.includes('webp')) {
-    return <Image size={18} color="#7C3AED" />;
+    return <Image size={18} color="#0F766E" />;
   }
   if (ft.includes('pdf')) return <FileText size={18} color="#DC2626" />;
   if (ft.includes('zip') || ft.includes('rar')) return <Archive size={18} color="#B45309" />;
@@ -409,8 +409,8 @@ function PaymentButton({ label, amountGHS, email, projectId, invoiceId, paymentT
         style={{
           display: 'inline-flex', alignItems: 'center', gap: 10,
           padding: '14px 28px', borderRadius: 14, border: 'none',
-          background: disabled ? '#E8E6F5' : 'linear-gradient(135deg, #16A34A, #15803D)',
-          color: disabled ? '#9B99C8' : '#fff',
+          background: disabled ? '#E5E7EB' : 'linear-gradient(135deg, #16A34A, #15803D)',
+          color: disabled ? '#6B7280' : '#fff',
           fontSize: 15, fontWeight: 800, cursor: disabled ? 'default' : 'pointer',
           boxShadow: disabled ? 'none' : '0 4px 16px rgba(22,163,74,.35)',
           transition: 'all .2s',
@@ -464,12 +464,12 @@ function StageActionCard({ project, user, approveQuote, payInvoice, updateProjec
       );
     }
     return (
-      <div style={{ padding: '24px 28px', borderRadius: 20, background: 'linear-gradient(135deg, #EFF6FF, #DBEAFE)', border: '1.5px solid #2563EB30', marginBottom: 4 }}>
+      <div style={{ padding: '24px 28px', borderRadius: 20, background: 'linear-gradient(135deg, #ECFDF5, #D1FAE5)', border: '1.5px solid #0F766E30', marginBottom: 4 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-          <AlertCircle size={18} color="#2563EB" />
-          <span style={{ fontSize: 12, fontWeight: 800, color: '#2563EB', textTransform: 'uppercase', letterSpacing: '.06em' }}>Quote Approval & Deposit</span>
+          <AlertCircle size={18} color="#0F766E" />
+          <span style={{ fontSize: 12, fontWeight: 800, color: '#0F766E', textTransform: 'uppercase', letterSpacing: '.06em' }}>Quote Approval & Deposit</span>
         </div>
-        <div style={{ fontSize: 20, fontWeight: 900, color: '#0D0B2E', marginBottom: 6 }}>Your final project quote is ready</div>
+        <div style={{ fontSize: 20, fontWeight: 900, color: '#111827', marginBottom: 6 }}>Your final project quote is ready</div>
         <div style={{ fontSize: 14, color: '#374151', lineHeight: 1.6, marginBottom: 20 }}>
           Review the final quote with your account manager, then pay the project deposit so procurement can begin.
         </div>
@@ -496,9 +496,9 @@ function StageActionCard({ project, user, approveQuote, payInvoice, updateProjec
         <div style={{
           padding: '20px 24px', borderRadius: 20,
           background: 'linear-gradient(135deg, #F5F3FF, #EDE9FE)',
-          border: '1.5px solid #7C3AED40', display: 'flex', alignItems: 'center', gap: 16, marginBottom: 4,
+          border: '1.5px solid #0F766E40', display: 'flex', alignItems: 'center', gap: 16, marginBottom: 4,
         }}>
-          <CheckCircle2 size={24} color="#7C3AED" />
+          <CheckCircle2 size={24} color="#0F766E" />
         <div style={{ fontSize: 14, fontWeight: 700, color: '#4C1D95' }}>Inspection sign-off submitted. Our team will prepare handover.</div>
         </div>
       );
@@ -507,13 +507,13 @@ function StageActionCard({ project, user, approveQuote, payInvoice, updateProjec
       <div style={{
         padding: '24px 28px', borderRadius: 20,
         background: 'linear-gradient(135deg, #F5F3FF, #EDE9FE)',
-        border: '1.5px solid #7C3AED30', marginBottom: 4,
+        border: '1.5px solid #0F766E30', marginBottom: 4,
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-          <AlertCircle size={18} color="#7C3AED" />
-            <span style={{ fontSize: 12, fontWeight: 800, color: '#7C3AED', textTransform: 'uppercase', letterSpacing: '.06em' }}>Inspection Sign-Off</span>
+          <AlertCircle size={18} color="#0F766E" />
+            <span style={{ fontSize: 12, fontWeight: 800, color: '#0F766E', textTransform: 'uppercase', letterSpacing: '.06em' }}>Inspection Sign-Off</span>
         </div>
-        <div style={{ fontSize: 20, fontWeight: 900, color: '#0D0B2E', marginBottom: 6 }}>Please review and sign off the inspection</div>
+        <div style={{ fontSize: 20, fontWeight: 900, color: '#111827', marginBottom: 6 }}>Please review and sign off the inspection</div>
         <div style={{ fontSize: 14, color: '#374151', lineHeight: 1.6, marginBottom: 20 }}>
           Our team has completed quality checks and any open snag items. Review the latest documents and photos, then confirm your sign-off below.
         </div>
@@ -529,8 +529,8 @@ function StageActionCard({ project, user, approveQuote, payInvoice, updateProjec
           style={{
             display: 'inline-flex', alignItems: 'center', gap: 10,
             padding: '14px 32px', borderRadius: 14, border: 'none',
-            background: acting ? '#E8E6F5' : '#7C3AED',
-            color: acting ? '#9B99C8' : '#fff',
+            background: acting ? '#E5E7EB' : '#0F766E',
+            color: acting ? '#6B7280' : '#fff',
             fontSize: 15, fontWeight: 800, cursor: acting ? 'default' : 'pointer',
             boxShadow: acting ? 'none' : '0 4px 16px rgba(124,58,237,.35)',
             transition: 'all .2s',
@@ -556,7 +556,7 @@ function StageActionCard({ project, user, approveQuote, payInvoice, updateProjec
           <AlertCircle size={18} color="#0EA5E9" />
           <span style={{ fontSize: 12, fontWeight: 800, color: '#0EA5E9', textTransform: 'uppercase', letterSpacing: '.06em' }}>Final Payment</span>
         </div>
-        <div style={{ fontSize: 20, fontWeight: 900, color: '#0D0B2E', marginBottom: 4 }}>Your final balance payment is due</div>
+        <div style={{ fontSize: 20, fontWeight: 900, color: '#111827', marginBottom: 4 }}>Your final balance payment is due</div>
         {budget > 0 && (
           <div style={{ fontSize: 15, fontWeight: 700, color: '#0EA5E9', marginBottom: 6 }}>
             Amount: GHS {Number(halfBudget).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -635,8 +635,8 @@ function InstallationStatusCard({ project }) {
         </div>
         <div>
           <div style={{ fontSize: 12, fontWeight: 800, color: '#16A34A', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 2 }}>Installation · In Progress</div>
-          <div style={{ fontSize: 18, fontWeight: 900, color: '#0D0B2E' }}>Our crew is on-site</div>
-          {startDate && <div style={{ fontSize: 12, color: '#5B5894', marginTop: 2 }}>Started {startDate}</div>}
+          <div style={{ fontSize: 18, fontWeight: 900, color: '#111827' }}>Our crew is on-site</div>
+          {startDate && <div style={{ fontSize: 12, color: '#4B5563', marginTop: 2 }}>Started {startDate}</div>}
         </div>
         <div style={{ marginLeft: 'auto', padding: '6px 14px', borderRadius: 20, background: '#16A34A', color: '#fff', fontSize: 11, fontWeight: 800, display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }}>
           <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#4ADE80', animation: 'pulse 1.5s infinite' }} />
@@ -658,13 +658,13 @@ function InstallationStatusCard({ project }) {
               <div
                 key={photo.id}
                 onClick={() => setZoom(photo)}
-                style={{ aspectRatio: '1', borderRadius: 12, overflow: 'hidden', background: '#E8E6F5', cursor: 'pointer', position: 'relative' }}
+                style={{ aspectRatio: '1', borderRadius: 12, overflow: 'hidden', background: '#E5E7EB', cursor: 'pointer', position: 'relative' }}
               >
                 {photo.url ? (
                   <img src={photo.url} alt={photo.name || 'Site photo'} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                 ) : (
                   <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <Camera size={18} color="#9B99C8" />
+                    <Camera size={18} color="#6B7280" />
                   </div>
                 )}
               </div>
@@ -678,8 +678,8 @@ function InstallationStatusCard({ project }) {
 
       {recentPhotos.length === 0 && (
         <div style={{ marginTop: 12, padding: '14px 16px', background: 'rgba(255,255,255,.6)', borderRadius: 12, display: 'flex', alignItems: 'center', gap: 10 }}>
-          <Camera size={16} color="#9B99C8" />
-          <span style={{ fontSize: 12, color: '#5B5894' }}>Progress photos will appear here as our crew completes each section.</span>
+          <Camera size={16} color="#6B7280" />
+          <span style={{ fontSize: 12, color: '#4B5563' }}>Progress photos will appear here as our crew completes each section.</span>
         </div>
       )}
 
@@ -767,28 +767,28 @@ function DocViewer({ doc, onClose }) {
         display: 'flex', flexDirection: 'column', boxShadow: '0 40px 80px rgba(0,0,0,0.6)',
       }}>
         {/* Header */}
-        <div style={{ padding: '14px 20px', background: '#0D0B2E', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
+        <div style={{ padding: '14px 20px', background: '#111827', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            {isImage ? <Image size={16} color="#231F78" /> : <FileText size={16} color="#231F78" />}
+            {isImage ? <Image size={16} color="#0F766E" /> : <FileText size={16} color="#0F766E" />}
             <span className="lxf" style={{ fontSize: 13, fontWeight: 700, color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 400 }}>{doc.name}</span>
           </div>
           <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
             <a href={doc.url} download={doc.name} target="_blank" rel="noopener noreferrer"
-              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 10, background: '#231F78', color: '#0D0B2E', fontSize: 12, fontWeight: 800, textDecoration: 'none' }}>
+              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 10, background: '#0F766E', color: '#111827', fontSize: 12, fontWeight: 800, textDecoration: 'none' }}>
               <Download size={13} /> Download
             </a>
             <button onClick={onClose} style={{ width: 36, height: 36, borderRadius: 10, background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>✕</button>
           </div>
         </div>
         {/* Content */}
-        <div style={{ flex: 1, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#F8F8FD' }}>
+        <div style={{ flex: 1, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#F9FAFB' }}>
           {isImage && <img src={doc.url} alt={doc.name} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', padding: 16 }} />}
           {isPDF && <iframe src={doc.url} title={doc.name} style={{ width: '100%', height: '100%', border: 'none' }} />}
           {!isImage && !isPDF && (
-            <div style={{ textAlign: 'center', color: '#5B5894' }}>
-              <FileText size={48} color="#9B99C8" style={{ marginBottom: 16 }} />
+            <div style={{ textAlign: 'center', color: '#4B5563' }}>
+              <FileText size={48} color="#6B7280" style={{ marginBottom: 16 }} />
               <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 8 }}>Preview not available</div>
-              <a href={doc.url} download={doc.name} style={{ color: '#231F78', fontWeight: 700 }}>Download the file instead</a>
+              <a href={doc.url} download={doc.name} style={{ color: '#0F766E', fontWeight: 700 }}>Download the file instead</a>
             </div>
           )}
         </div>
@@ -827,7 +827,7 @@ function DocumentsTab({ projectId, project }) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         {[1, 2, 3].map(i => (
-          <div key={i} style={{ height: 72, borderRadius: 14, background: '#E8E6F5', animation: 'pulse 1.5s infinite' }} />
+          <div key={i} style={{ height: 72, borderRadius: 14, background: '#E5E7EB', animation: 'pulse 1.5s infinite' }} />
         ))}
       </div>
     );
@@ -837,8 +837,8 @@ function DocumentsTab({ projectId, project }) {
     return (
       <div style={{ padding: '60px 24px', textAlign: 'center' }}>
         <div style={{ fontSize: 44, marginBottom: 14 }}>📂</div>
-        <div style={{ fontSize: 16, fontWeight: 800, color: '#0D0B2E', marginBottom: 8 }}>No documents yet</div>
-        <div style={{ fontSize: 13, color: '#9B99C8', lineHeight: 1.6, maxWidth: 380, margin: '0 auto' }}>
+        <div style={{ fontSize: 16, fontWeight: 800, color: '#111827', marginBottom: 8 }}>No documents yet</div>
+        <div style={{ fontSize: 13, color: '#6B7280', lineHeight: 1.6, maxWidth: 380, margin: '0 auto' }}>
           No documents uploaded yet. Your account manager will upload quotes, BOLs, and certificates here.
         </div>
       </div>
@@ -862,13 +862,13 @@ function DocumentsTab({ projectId, project }) {
             <div key={doc.id} style={{
               display: 'flex', alignItems: 'center', gap: 14,
               padding: '14px 18px', background: '#FAFAF9', borderRadius: 16,
-              border: '1.5px solid #E8E6F5', transition: 'border-color .2s',
+              border: '1.5px solid #E5E7EB', transition: 'border-color .2s',
             }}>
-              <div style={{ width: 44, height: 44, borderRadius: 12, background: '#E8E6F5', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <div style={{ width: 44, height: 44, borderRadius: 12, background: '#E5E7EB', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                 <FileTypeIcon fileType={doc.fileType} />
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 14, fontWeight: 700, color: '#0D0B2E', marginBottom: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: '#111827', marginBottom: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {doc.name}
                 </div>
                 <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -877,13 +877,13 @@ function DocumentsTab({ projectId, project }) {
                       {stageInfo.short}
                     </span>
                   )}
-                  {uploadedDate && <span style={{ fontSize: 11, color: '#9B99C8' }}>{uploadedDate}</span>}
-                  {sizeMB && <span style={{ fontSize: 11, color: '#9B99C8' }}>{sizeMB} MB</span>}
-                  {doc.uploadedBy && <span style={{ fontSize: 11, color: '#9B99C8' }}>by {doc.uploadedBy}</span>}
+                  {uploadedDate && <span style={{ fontSize: 11, color: '#6B7280' }}>{uploadedDate}</span>}
+                  {sizeMB && <span style={{ fontSize: 11, color: '#6B7280' }}>{sizeMB} MB</span>}
+                  {doc.uploadedBy && <span style={{ fontSize: 11, color: '#6B7280' }}>by {doc.uploadedBy}</span>}
                 </div>
               </div>
               {isLockedRendering ? (
-                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 12px', borderRadius: 10, background: '#F8F8FD', color: '#9B99C8', fontSize: 12, fontWeight: 800, border: '1px solid #E8E6F5' }}>
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 12px', borderRadius: 10, background: '#F9FAFB', color: '#6B7280', fontSize: 12, fontWeight: 800, border: '1px solid #E5E7EB' }}>
                   <Lock size={13} /> Locked
                 </div>
               ) : doc.url && (
@@ -893,7 +893,7 @@ function DocumentsTab({ projectId, project }) {
                     style={{
                       display: 'flex', alignItems: 'center', gap: 6,
                       padding: '8px 14px', borderRadius: 10,
-                      background: '#E8E6F5', color: '#0D0B2E',
+                      background: '#E5E7EB', color: '#111827',
                       fontSize: 12, fontWeight: 700, border: 'none', cursor: 'pointer',
                     }}
                   >
@@ -907,7 +907,7 @@ function DocumentsTab({ projectId, project }) {
                     style={{
                       display: 'flex', alignItems: 'center', gap: 6,
                       padding: '8px 14px', borderRadius: 10,
-                      background: '#0D0B2E', color: '#fff',
+                      background: '#111827', color: '#fff',
                       fontSize: 12, fontWeight: 700, textDecoration: 'none',
                     }}
                   >
@@ -953,7 +953,7 @@ function PhotoFeed({ projectId }) {
     return (
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
         {[1, 2, 3, 4, 5, 6].map(i => (
-          <div key={i} style={{ aspectRatio: '1', borderRadius: 14, background: '#E8E6F5', animation: 'pulse 1.5s infinite' }} />
+          <div key={i} style={{ aspectRatio: '1', borderRadius: 14, background: '#E5E7EB', animation: 'pulse 1.5s infinite' }} />
         ))}
       </div>
     );
@@ -963,8 +963,8 @@ function PhotoFeed({ projectId }) {
     return (
       <div style={{ padding: '60px 24px', textAlign: 'center' }}>
         <div style={{ fontSize: 44, marginBottom: 14 }}>📸</div>
-        <div style={{ fontSize: 16, fontWeight: 800, color: '#0D0B2E', marginBottom: 8 }}>No site photos yet</div>
-        <div style={{ fontSize: 13, color: '#9B99C8', lineHeight: 1.6, maxWidth: 380, margin: '0 auto' }}>
+        <div style={{ fontSize: 16, fontWeight: 800, color: '#111827', marginBottom: 8 }}>No site photos yet</div>
+        <div style={{ fontSize: 13, color: '#6B7280', lineHeight: 1.6, maxWidth: 380, margin: '0 auto' }}>
           Your team will share progress photos here.
         </div>
       </div>
@@ -1000,7 +1000,7 @@ function PhotoFeed({ projectId }) {
               style={{
                 position: 'relative', aspectRatio: '1', borderRadius: 14,
                 overflow: 'hidden', cursor: 'pointer',
-                background: '#E8E6F5',
+                background: '#E5E7EB',
                 boxShadow: '0 2px 12px rgba(0,0,0,.08)',
                 transition: 'transform .2s, box-shadow .2s',
               }}
@@ -1015,7 +1015,7 @@ function PhotoFeed({ projectId }) {
               />
               <div style={{
                 position: 'absolute', bottom: 0, left: 0, right: 0,
-                background: 'linear-gradient(to top, rgba(13,11,46,.85) 0%, transparent 100%)',
+                background: 'linear-gradient(to top, rgba(17,24,39,.85) 0%, transparent 100%)',
                 padding: '20px 10px 8px',
               }}>
                 {stage && (
@@ -1030,7 +1030,7 @@ function PhotoFeed({ projectId }) {
               <div style={{
                 position: 'absolute', top: 8, right: 8,
                 width: 28, height: 28, borderRadius: 8,
-                background: 'rgba(13,11,46,.5)', backdropFilter: 'blur(4px)',
+                background: 'rgba(17,24,39,.5)', backdropFilter: 'blur(4px)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
               }}>
                 <ZoomIn size={13} color="#fff" />
@@ -1099,7 +1099,7 @@ function CostBreakdownCard({ project, fmt, card, pad, isMobile }) {
   if (!hasBd && surcharges.length === 0) return null;
 
   const BD_ROWS = [
-    { key: 'product',      label: 'Product / Materials',  color: '#7C3AED' },
+    { key: 'product',      label: 'Product / Materials',  color: '#0F766E' },
     { key: 'shipping',     label: 'Shipping & Freight',   color: '#0284C7' },
     { key: 'installation', label: 'Installation Labour',  color: '#D97706' },
   ].filter(r => breakdown[r.key]?.enabled && breakdown[r.key]?.amount > 0);
@@ -1112,33 +1112,33 @@ function CostBreakdownCard({ project, fmt, card, pad, isMobile }) {
 
   return (
     <div style={{ ...card, padding: pad }}>
-      <div style={{ fontSize: 13, fontWeight: 800, color: '#0D0B2E', marginBottom: 4 }}>Project Cost Breakdown</div>
-      <div style={{ fontSize: 11, color: '#9B99C8', marginBottom: 18 }}>Itemised summary of your project cost</div>
+      <div style={{ fontSize: 13, fontWeight: 800, color: '#111827', marginBottom: 4 }}>Project Cost Breakdown</div>
+      <div style={{ fontSize: 11, color: '#6B7280', marginBottom: 18 }}>Itemised summary of your project cost</div>
 
       {/* Line items */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
         {BD_ROWS.map((r, i) => (
-          <div key={r.key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '11px 0', borderBottom: `1px solid #E8E6F5` }}>
+          <div key={r.key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '11px 0', borderBottom: `1px solid #E5E7EB` }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <div style={{ width: 8, height: 8, borderRadius: '50%', background: r.color, flexShrink: 0 }} />
               <span style={{ fontSize: 13, color: '#3D3530', fontWeight: 600 }}>{r.label}</span>
             </div>
-            <span style={{ fontSize: 13, fontWeight: 800, color: '#0D0B2E' }}>{fmt(breakdown[r.key].amount)}</span>
+            <span style={{ fontSize: 13, fontWeight: 800, color: '#111827' }}>{fmt(breakdown[r.key].amount)}</span>
           </div>
         ))}
         {extraRows.map(e => (
-          <div key={e.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '11px 0', borderBottom: '1px solid #E8E6F5' }}>
+          <div key={e.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '11px 0', borderBottom: '1px solid #E5E7EB' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#6B7280', flexShrink: 0 }} />
               <span style={{ fontSize: 13, color: '#3D3530', fontWeight: 600 }}>{e.label}</span>
             </div>
-            <span style={{ fontSize: 13, fontWeight: 800, color: '#0D0B2E' }}>{fmt(e.amount)}</span>
+            <span style={{ fontSize: 13, fontWeight: 800, color: '#111827' }}>{fmt(e.amount)}</span>
           </div>
         ))}
 
         {/* Surcharges */}
         {surcharges.map(sc => (
-          <div key={sc.id} style={{ padding: '12px 0', borderBottom: '1px solid #E8E6F5' }}>
+          <div key={sc.id} style={{ padding: '12px 0', borderBottom: '1px solid #E5E7EB' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#DC2626', flexShrink: 0, marginTop: 2 }} />
@@ -1148,16 +1148,16 @@ function CostBreakdownCard({ project, fmt, card, pad, isMobile }) {
             </div>
             <div style={{ marginLeft: 18, padding: '10px 14px', background: '#FEF2F2', borderRadius: 10, border: '1px solid #FECACA30' }}>
               <div style={{ fontSize: 11, fontWeight: 800, color: '#DC2626', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 4 }}>Reason for adjustment</div>
-              <div style={{ fontSize: 12, color: '#5B5894', lineHeight: 1.6 }}>{sc.reason}</div>
-              <div style={{ fontSize: 10, color: '#9B99C8', marginTop: 6, fontWeight: 600 }}>Effective {sc.date}</div>
+              <div style={{ fontSize: 12, color: '#4B5563', lineHeight: 1.6 }}>{sc.reason}</div>
+              <div style={{ fontSize: 10, color: '#6B7280', marginTop: 6, fontWeight: 600 }}>Effective {sc.date}</div>
             </div>
           </div>
         ))}
 
         {/* Total */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 14, marginTop: 4 }}>
-          <span style={{ fontSize: 14, fontWeight: 900, color: '#0D0B2E' }}>Total Project Value</span>
-          <span style={{ fontSize: 16, fontWeight: 900, color: '#0D0B2E' }}>{fmt(grandTotal)}</span>
+          <span style={{ fontSize: 14, fontWeight: 900, color: '#111827' }}>Total Project Value</span>
+          <span style={{ fontSize: 16, fontWeight: 900, color: '#111827' }}>{fmt(grandTotal)}</span>
         </div>
       </div>
     </div>
@@ -1239,28 +1239,28 @@ function PaymentsTab({ project, user, transactions: propTxns, invoices: propInvs
   const card = {
     background: '#fff',
     borderRadius: isMobile ? 24 : 20,
-    border: isMobile ? 'none' : '1px solid #E8E6F5',
+    border: isMobile ? 'none' : '1px solid #E5E7EB',
     boxShadow: isMobile ? '0 2px 16px rgba(0,0,0,.08)' : '0 4px 20px rgba(0,0,0,.05)',
   };
   const pad = isMobile ? '20px 18px' : '24px 28px';
-  const sectionTitle = { fontSize: 13, fontWeight: 800, color: '#0D0B2E', marginBottom: 16 };
+  const sectionTitle = { fontSize: 13, fontWeight: 800, color: '#111827', marginBottom: 16 };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: isMobile ? 14 : 20 }}>
 
       {/* Currency toggle */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: isMobile ? '0 2px' : 0 }}>
-        <div style={{ fontSize: 12, color: '#9B99C8', fontWeight: 600 }}>
-          Base currency: <strong style={{ color: '#0D0B2E' }}>GHS</strong>
+        <div style={{ fontSize: 12, color: '#6B7280', fontWeight: 600 }}>
+          Base currency: <strong style={{ color: '#111827' }}>GHS</strong>
         </div>
         <button
           onClick={() => setShowUSD(p => !p)}
           style={{
             display: 'flex', alignItems: 'center', gap: 7,
             padding: '8px 16px', borderRadius: 22,
-            background: showUSD ? '#0D0B2E' : '#F8F8FD',
-            border: `2px solid ${showUSD ? '#0D0B2E' : '#E8E6F5'}`,
-            color: showUSD ? '#231F78' : '#5B5894',
+            background: showUSD ? '#111827' : '#F9FAFB',
+            border: `2px solid ${showUSD ? '#111827' : '#E5E7EB'}`,
+            color: showUSD ? '#0F766E' : '#4B5563',
             fontSize: 12, fontWeight: 800, cursor: 'pointer',
             minHeight: 40, touchAction: 'manipulation', transition: 'all .2s',
           }}
@@ -1278,14 +1278,14 @@ function PaymentsTab({ project, user, transactions: propTxns, invoices: propInvs
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
           <div>
             <div style={sectionTitle}>Payment Schedule</div>
-            <div style={{ fontSize: 10, fontWeight: 700, color: '#9B99C8', textTransform: 'uppercase', letterSpacing: '.06em', marginTop: -10 }}>
+            <div style={{ fontSize: 10, fontWeight: 700, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '.06em', marginTop: -10 }}>
               {scheduleConfig.label}
             </div>
           </div>
           {budget > 0 && (
             <div style={{ textAlign: 'right', flexShrink: 0 }}>
               <div style={{ fontSize: 13, fontWeight: 900, color: '#16A34A' }}>{fmt(totalPaid)}</div>
-              <div style={{ fontSize: 10, color: '#9B99C8', fontWeight: 600 }}>paid so far</div>
+              <div style={{ fontSize: 10, color: '#6B7280', fontWeight: 600 }}>paid so far</div>
             </div>
           )}
         </div>
@@ -1293,11 +1293,11 @@ function PaymentsTab({ project, user, transactions: propTxns, invoices: propInvs
         {/* Progress bar */}
         {budget > 0 && (
           <div style={{ marginBottom: isCustom ? 16 : 20 }}>
-            <div style={{ height: 10, background: '#E8E6F5', borderRadius: 5, overflow: 'hidden', marginBottom: 6 }}>
+            <div style={{ height: 10, background: '#E5E7EB', borderRadius: 5, overflow: 'hidden', marginBottom: 6 }}>
               <div style={{ height: '100%', width: `${paidPct}%`, background: 'linear-gradient(90deg, #16A34A80, #16A34A)', borderRadius: 5, transition: 'width 1.2s ease' }} />
             </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#9B99C8' }}>
-              <span style={{ fontWeight: 700, color: paidPct >= 100 ? '#16A34A' : '#0D0B2E' }}>{paidPct.toFixed(1)}% paid</span>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#6B7280' }}>
+              <span style={{ fontWeight: 700, color: paidPct >= 100 ? '#16A34A' : '#111827' }}>{paidPct.toFixed(1)}% paid</span>
               <span>{fmt(budget - totalPaid)} remaining · Total {fmt(budget)}</span>
             </div>
           </div>
@@ -1307,22 +1307,22 @@ function PaymentsTab({ project, user, transactions: propTxns, invoices: propInvs
         {isCustom ? (
           <div>
             {budget <= 0 ? (
-              <div style={{ fontSize: 13, color: '#9B99C8', textAlign: 'center', padding: '12px 0' }}>
+              <div style={{ fontSize: 13, color: '#6B7280', textAlign: 'center', padding: '12px 0' }}>
                 No project budget set yet.
               </div>
             ) : (
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                 <div style={{ padding: '14px 16px', background: '#F0FDF4', borderRadius: 14, border: '1.5px solid #16A34A20' }}>
-                  <div style={{ fontSize: 10, fontWeight: 800, color: '#9B99C8', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 4 }}>Amount Paid</div>
+                  <div style={{ fontSize: 10, fontWeight: 800, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 4 }}>Amount Paid</div>
                   <div style={{ fontSize: 18, fontWeight: 900, color: '#16A34A' }}>{fmt(totalPaid)}</div>
-                  <div style={{ fontSize: 10, color: '#9B99C8', marginTop: 2 }}>{allPayments.length} payment{allPayments.length !== 1 ? 's' : ''}</div>
+                  <div style={{ fontSize: 10, color: '#6B7280', marginTop: 2 }}>{allPayments.length} payment{allPayments.length !== 1 ? 's' : ''}</div>
                 </div>
                 <div style={{ padding: '14px 16px', background: '#FFFBEB', borderRadius: 14, border: '1.5px solid #D9770620' }}>
-                  <div style={{ fontSize: 10, fontWeight: 800, color: '#9B99C8', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 4 }}>Balance Due</div>
+                  <div style={{ fontSize: 10, fontWeight: 800, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 4 }}>Balance Due</div>
                   <div style={{ fontSize: 18, fontWeight: 900, color: totalPaid >= budget ? '#16A34A' : '#D97706' }}>
                     {totalPaid >= budget ? 'Cleared ✓' : fmt(budget - totalPaid)}
                   </div>
-                  <div style={{ fontSize: 10, color: '#9B99C8', marginTop: 2 }}>{paidPct.toFixed(0)}% of {fmt(budget)}</div>
+                  <div style={{ fontSize: 10, color: '#6B7280', marginTop: 2 }}>{paidPct.toFixed(0)}% of {fmt(budget)}</div>
                 </div>
               </div>
             )}
@@ -1339,23 +1339,23 @@ function PaymentsTab({ project, user, transactions: propTxns, invoices: propInvs
                   display: 'flex', alignItems: 'center', gap: isMobile ? 12 : 14,
                   padding: isMobile ? '13px 14px' : '15px 18px', borderRadius: 14,
                   background: isDue ? '#F0FDF4' : '#FAFAF9',
-                  border: `1.5px solid ${isDue ? '#16A34A40' : isPaid ? '#16A34A20' : '#E8E6F5'}`,
+                  border: `1.5px solid ${isDue ? '#16A34A40' : isPaid ? '#16A34A20' : '#E5E7EB'}`,
                 }}>
                   <div style={{
                     width: 32, height: 32, borderRadius: 9, flexShrink: 0,
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    background: isPaid ? '#16A34A' : isDue ? '#F0FDF4' : '#E8E6F5',
+                    background: isPaid ? '#16A34A' : isDue ? '#F0FDF4' : '#E5E7EB',
                     border: isDue ? '2px solid #16A34A' : 'none',
                   }}>
                     {isPaid
                       ? <Check size={14} color="#fff" />
-                      : <span style={{ fontSize: 11, fontWeight: 900, color: isDue ? '#16A34A' : '#9B99C8' }}>{idx + 1}</span>
+                      : <span style={{ fontSize: 11, fontWeight: 900, color: isDue ? '#16A34A' : '#6B7280' }}>{idx + 1}</span>
                     }
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: '#0D0B2E' }}>{m.label}</div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: '#111827' }}>{m.label}</div>
                     {budget > 0 && (
-                      <div style={{ fontSize: 13, fontWeight: 800, color: isPaid ? '#16A34A' : isDue ? '#16A34A' : '#9B99C8', marginTop: 2 }}>
+                      <div style={{ fontSize: 13, fontWeight: 800, color: isPaid ? '#16A34A' : isDue ? '#16A34A' : '#6B7280', marginTop: 2 }}>
                         {fmt(budget * m.pct)}
                       </div>
                     )}
@@ -1363,15 +1363,15 @@ function PaymentsTab({ project, user, transactions: propTxns, invoices: propInvs
                   <div style={{ flexShrink: 0 }}>
                     {isPaid && <span style={{ fontSize: 10, fontWeight: 800, color: '#065F46', background: '#D1FAE5', padding: '4px 10px', borderRadius: 20 }}>Paid ✓</span>}
                     {isDue && <span style={{ fontSize: 10, fontWeight: 800, color: '#92400E', background: '#FEF3C7', padding: '4px 10px', borderRadius: 20 }}>Due Now</span>}
-                    {status === 'upcoming' && <span style={{ fontSize: 10, fontWeight: 700, color: '#9B99C8', background: '#E8E6F5', padding: '4px 10px', borderRadius: 20 }}>Upcoming</span>}
+                    {status === 'upcoming' && <span style={{ fontSize: 10, fontWeight: 700, color: '#6B7280', background: '#E5E7EB', padding: '4px 10px', borderRadius: 20 }}>Upcoming</span>}
                   </div>
                 </div>
               );
             })}
 
             {currentDueMilestone && budget > 0 && (
-              <div style={{ marginTop: 10, paddingTop: 16, borderTop: '1px solid #E8E6F5' }}>
-                <div style={{ fontSize: 13, color: '#5B5894', marginBottom: 12 }}>
+              <div style={{ marginTop: 10, paddingTop: 16, borderTop: '1px solid #E5E7EB' }}>
+                <div style={{ fontSize: 13, color: '#4B5563', marginBottom: 12 }}>
                   Ready to pay your <strong>{currentDueMilestone.label}</strong>?
                 </div>
                 <PaymentButton
@@ -1396,46 +1396,46 @@ function PaymentsTab({ project, user, transactions: propTxns, invoices: propInvs
         {allPayments.length === 0 ? (
           <div style={{ padding: '32px 0', textAlign: 'center' }}>
             <div style={{ fontSize: 36, marginBottom: 10 }}>💸</div>
-            <div style={{ fontSize: 14, fontWeight: 700, color: '#0D0B2E', marginBottom: 4 }}>No payments yet</div>
-            <div style={{ fontSize: 12, color: '#9B99C8' }}>Your payment records will appear here.</div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: '#111827', marginBottom: 4 }}>No payments yet</div>
+            <div style={{ fontSize: 12, color: '#6B7280' }}>Your payment records will appear here.</div>
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {allPayments.map(t => (
-              <div key={t.id} style={{ background: '#FAFAF9', borderRadius: 16, border: '1px solid #E8E6F5', overflow: 'hidden' }}>
+              <div key={t.id} style={{ background: '#FAFAF9', borderRadius: 16, border: '1px solid #E5E7EB', overflow: 'hidden' }}>
                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: isMobile ? '14px 14px 10px' : '16px 18px 10px' }}>
                   <div style={{ width: 38, height: 38, borderRadius: 11, background: '#D1FAE5', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 2 }}>
                     <Check size={16} color="#16A34A" />
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: '#0D0B2E', marginBottom: 4 }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: '#111827', marginBottom: 4 }}>
                       {t.description || t.title || 'Payment received'}
                     </div>
-                    <div style={{ fontSize: 11, color: '#9B99C8', marginBottom: 4 }}>
+                    <div style={{ fontSize: 11, color: '#6B7280', marginBottom: 4 }}>
                       {fmtDate(t.date || t.createdAt, true)}
                     </div>
                     {t.reference && (
-                      <div style={{ display: 'inline-block', fontSize: 10, color: '#5B5894', fontFamily: 'monospace', background: '#E8E6F5', padding: '2px 8px', borderRadius: 6 }}>
+                      <div style={{ display: 'inline-block', fontSize: 10, color: '#4B5563', fontFamily: 'monospace', background: '#E5E7EB', padding: '2px 8px', borderRadius: 6 }}>
                         {t.reference}
                       </div>
                     )}
                     {t.method && (
-                      <div style={{ fontSize: 11, color: '#9B99C8', marginTop: 4 }}>via {t.method}</div>
+                      <div style={{ fontSize: 11, color: '#6B7280', marginTop: 4 }}>via {t.method}</div>
                     )}
                   </div>
                   <div style={{ textAlign: 'right', flexShrink: 0 }}>
                     <div style={{ fontSize: 16, fontWeight: 900, color: '#16A34A' }}>{fmt(t.amount)}</div>
                     {showUSD && (
-                      <div style={{ fontSize: 10, color: '#9B99C8', marginTop: 2 }}>
+                      <div style={{ fontSize: 10, color: '#6B7280', marginTop: 2 }}>
                         ≈ GHS {Number(t.amount || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}
                       </div>
                     )}
                   </div>
                 </div>
-                <div style={{ borderTop: '1px solid #E8E6F5', padding: isMobile ? '9px 14px' : '9px 18px', display: 'flex', justifyContent: 'flex-end' }}>
+                <div style={{ borderTop: '1px solid #E5E7EB', padding: isMobile ? '9px 14px' : '9px 18px', display: 'flex', justifyContent: 'flex-end' }}>
                   <button
                     onClick={() => downloadPaymentReceipt(t, project, user, brand)}
-                    style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 10, background: '#E8E6F5', border: 'none', fontSize: 11, fontWeight: 700, color: '#0D0B2E', cursor: 'pointer', touchAction: 'manipulation', minHeight: 34 }}
+                    style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 10, background: '#E5E7EB', border: 'none', fontSize: 11, fontWeight: 700, color: '#111827', cursor: 'pointer', touchAction: 'manipulation', minHeight: 34 }}
                   >
                     <Download size={12} /> Download Receipt
                   </button>
@@ -1452,28 +1452,28 @@ function PaymentsTab({ project, user, transactions: propTxns, invoices: propInvs
         {allInvoices.length === 0 ? (
           <div style={{ padding: '28px 0', textAlign: 'center' }}>
             <div style={{ fontSize: 36, marginBottom: 10 }}>📄</div>
-            <div style={{ fontSize: 13, fontWeight: 700, color: '#0D0B2E', marginBottom: 4 }}>No invoices yet</div>
-            <div style={{ fontSize: 12, color: '#9B99C8' }}>Invoices will appear here as they are issued.</div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: '#111827', marginBottom: 4 }}>No invoices yet</div>
+            <div style={{ fontSize: 12, color: '#6B7280' }}>Invoices will appear here as they are issued.</div>
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {allInvoices.map(inv => (
-              <div key={inv.id} style={{ background: '#FAFAF9', borderRadius: 16, border: '1px solid #E8E6F5', overflow: 'hidden' }}>
+              <div key={inv.id} style={{ background: '#FAFAF9', borderRadius: 16, border: '1px solid #E5E7EB', overflow: 'hidden' }}>
                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: isMobile ? '14px 14px 10px' : '16px 18px 10px' }}>
                   <div style={{ width: 38, height: 38, borderRadius: 11, background: '#FEF3C7', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 2 }}>
                     <FileText size={16} color="#D97706" />
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: '#0D0B2E', marginBottom: 3 }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: '#111827', marginBottom: 3 }}>
                       Invoice #{inv.invoiceNumber || (inv.id || '').slice(0, 8).toUpperCase()}
                     </div>
-                    <div style={{ fontSize: 11, color: '#9B99C8', marginBottom: 6 }}>
+                    <div style={{ fontSize: 11, color: '#6B7280', marginBottom: 6 }}>
                       {fmtDate(inv.createdAt || inv.date)}
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                      <span style={{ fontSize: 15, fontWeight: 800, color: '#0D0B2E' }}>{fmt(inv.amount || 0)}</span>
+                      <span style={{ fontSize: 15, fontWeight: 800, color: '#111827' }}>{fmt(inv.amount || 0)}</span>
                       {showUSD && inv.amount && (
-                        <span style={{ fontSize: 10, color: '#9B99C8' }}>≈ GHS {Number(inv.amount).toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+                        <span style={{ fontSize: 10, color: '#6B7280' }}>≈ GHS {Number(inv.amount).toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
                       )}
                       <span style={{
                         fontSize: 10, fontWeight: 800, padding: '3px 10px', borderRadius: 20,
@@ -1483,13 +1483,13 @@ function PaymentsTab({ project, user, transactions: propTxns, invoices: propInvs
                         {inv.status || 'Pending'}
                       </span>
                     </div>
-                    {inv.title && <div style={{ fontSize: 12, color: '#5B5894', marginTop: 4 }}>{inv.title}</div>}
+                    {inv.title && <div style={{ fontSize: 12, color: '#4B5563', marginTop: 4 }}>{inv.title}</div>}
                   </div>
                 </div>
-                <div style={{ borderTop: '1px solid #E8E6F5', padding: isMobile ? '9px 14px' : '9px 18px', display: 'flex', justifyContent: 'flex-end' }}>
+                <div style={{ borderTop: '1px solid #E5E7EB', padding: isMobile ? '9px 14px' : '9px 18px', display: 'flex', justifyContent: 'flex-end' }}>
                   <button
                     onClick={() => downloadInvoicePDF(inv, project, user, brand)}
-                    style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 10, background: '#0D0B2E', border: 'none', fontSize: 11, fontWeight: 700, color: '#fff', cursor: 'pointer', touchAction: 'manipulation', minHeight: 34 }}
+                    style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 10, background: '#111827', border: 'none', fontSize: 11, fontWeight: 700, color: '#fff', cursor: 'pointer', touchAction: 'manipulation', minHeight: 34 }}
                   >
                     <Download size={12} /> Download Invoice
                   </button>
@@ -1626,8 +1626,8 @@ function ProjectChat({ project, user, addProjectMessage }) {
         {messages.length === 0 && (
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '60px 20px', textAlign: 'center' }}>
             <div style={{ fontSize: 36, marginBottom: 12 }}>💬</div>
-            <div style={{ fontSize: 15, fontWeight: 700, color: '#0D0B2E', marginBottom: 6 }}>Start a conversation</div>
-            <div style={{ fontSize: 13, color: '#9B99C8', lineHeight: 1.5 }}>Have a question about your project? Send us a message and our team will respond shortly.</div>
+            <div style={{ fontSize: 15, fontWeight: 700, color: '#111827', marginBottom: 6 }}>Start a conversation</div>
+            <div style={{ fontSize: 13, color: '#6B7280', lineHeight: 1.5 }}>Have a question about your project? Send us a message and our team will respond shortly.</div>
           </div>
         )}
         {messages.map(m => {
@@ -1638,24 +1638,24 @@ function ProjectChat({ project, user, addProjectMessage }) {
           return (
             <div key={m.id} style={{ display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start' }}>
               {!isSystem && (
-                <div style={{ fontSize: 10, fontWeight: 700, color: isMe ? AC : '#2563EB', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '.04em' }}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: isMe ? AC : '#0F766E', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '.04em' }}>
                   {isMe ? 'You' : 'Westline Future Team'}
                 </div>
               )}
               <div style={{
                 maxWidth: '80%', padding: isSystem ? '10px 16px' : '13px 18px',
                 borderRadius: isMe ? '18px 18px 4px 18px' : isSystem ? 12 : '18px 18px 18px 4px',
-                background: isMe ? '#0D0B2E' : isSystem ? '#F8F8FD' : '#fff',
-                color: isMe ? '#fff' : isSystem ? '#9B99C8' : '#0D0B2E',
+                background: isMe ? '#111827' : isSystem ? '#F9FAFB' : '#fff',
+                color: isMe ? '#fff' : isSystem ? '#6B7280' : '#111827',
                 fontSize: isSystem ? 12 : 14, fontStyle: isSystem ? 'italic' : 'normal',
-                border: isSystem ? '1px dashed #E8E6F5' : isMe ? 'none' : '1px solid #E8E6F5',
+                border: isSystem ? '1px dashed #E5E7EB' : isMe ? 'none' : '1px solid #E5E7EB',
                 lineHeight: 1.5,
               }}>
                 {editingId === m.id ? (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    <textarea value={editText} onChange={e => setEditText(e.target.value)} rows={3} style={{ width: 260, border: '1px solid #E8E6F5', borderRadius: 10, padding: 10, fontFamily: 'inherit', fontSize: 13 }} />
+                    <textarea value={editText} onChange={e => setEditText(e.target.value)} rows={3} style={{ width: 260, border: '1px solid #E5E7EB', borderRadius: 10, padding: 10, fontFamily: 'inherit', fontSize: 13 }} />
                     <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-                      <button onClick={() => setEditingId(null)} style={{ border: 'none', background: '#F8F8FD', borderRadius: 8, padding: '6px 10px', fontSize: 11, fontWeight: 800, cursor: 'pointer' }}>Cancel</button>
+                      <button onClick={() => setEditingId(null)} style={{ border: 'none', background: '#F9FAFB', borderRadius: 8, padding: '6px 10px', fontSize: 11, fontWeight: 800, cursor: 'pointer' }}>Cancel</button>
                       <button onClick={() => saveEdit(m)} style={{ border: 'none', background: '#16A34A', color: '#fff', borderRadius: 8, padding: '6px 10px', fontSize: 11, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}><Save size={12} /> Save</button>
                     </div>
                   </div>
@@ -1670,18 +1670,18 @@ function ProjectChat({ project, user, addProjectMessage }) {
                 )}
                 {m.editedAt && <span style={{ display: 'block', fontSize: 10, opacity: .55, marginTop: 6 }}>Edited</span>}
                 {translated && (
-                  <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px solid ${isMe ? 'rgba(255,255,255,.18)' : '#E8E6F5'}`, fontSize: 12, opacity: .9 }}>
+                  <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px solid ${isMe ? 'rgba(255,255,255,.18)' : '#E5E7EB'}`, fontSize: 12, opacity: .9 }}>
                     <strong>English:</strong> {translated}
                   </div>
                 )}
               </div>
               {!isSystem && (
                 <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
-                  <button onClick={() => translate(m.id)} disabled={translatingId === m.id} style={{ border: 'none', background: 'transparent', color: '#9B99C8', fontSize: 10, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <button onClick={() => translate(m.id)} disabled={translatingId === m.id} style={{ border: 'none', background: 'transparent', color: '#6B7280', fontSize: 10, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
                     <Languages size={11} /> {translatingId === m.id ? 'Translating...' : 'Translate English'}
                   </button>
                   {canEdit && (
-                    <button onClick={() => startEdit(m)} style={{ border: 'none', background: 'transparent', color: '#9B99C8', fontSize: 10, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <button onClick={() => startEdit(m)} style={{ border: 'none', background: 'transparent', color: '#6B7280', fontSize: 10, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
                       <Edit3 size={11} /> Edit
                     </button>
                   )}
@@ -1695,19 +1695,19 @@ function ProjectChat({ project, user, addProjectMessage }) {
         })}
         <div ref={bottomRef} />
       </div>
-      <div style={{ flexShrink: 0, display: 'flex', gap: 10, borderTop: '1px solid #E8E6F5', paddingTop: 14 }}>
+      <div style={{ flexShrink: 0, display: 'flex', gap: 10, borderTop: '1px solid #E5E7EB', paddingTop: 14 }}>
         <textarea
           value={text}
           onChange={e => setText(e.target.value)}
           onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }}
           placeholder="Send a message to our team..."
           rows={2}
-          style={{ flex: 1, padding: '12px 16px', borderRadius: 14, border: '1.5px solid #E8E6F5', fontSize: 16, outline: 'none', resize: 'none', boxSizing: 'border-box', fontFamily: 'inherit', lineHeight: 1.5 }}
+          style={{ flex: 1, padding: '12px 16px', borderRadius: 14, border: '1.5px solid #E5E7EB', fontSize: 16, outline: 'none', resize: 'none', boxSizing: 'border-box', fontFamily: 'inherit', lineHeight: 1.5 }}
         />
         <button
           onClick={recording ? stopRecording : startRecording}
           disabled={voiceSaving}
-          style={{ width: 48, height: 48, borderRadius: 14, background: recording ? '#EF4444' : '#F8F8FD', color: recording ? '#fff' : '#5B5894', border: '1px solid #E8E6F5', cursor: voiceSaving ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', alignSelf: 'flex-end', flexShrink: 0 }}
+          style={{ width: 48, height: 48, borderRadius: 14, background: recording ? '#EF4444' : '#F9FAFB', color: recording ? '#fff' : '#4B5563', border: '1px solid #E5E7EB', cursor: voiceSaving ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', alignSelf: 'flex-end', flexShrink: 0 }}
           title={recording ? 'Stop recording' : 'Record voice note'}
         >
           {voiceSaving ? <Loader2 size={18} style={{ animation: 'spin 1s linear infinite' }} /> : recording ? <Square size={15} /> : <Mic size={18} />}
@@ -1715,7 +1715,7 @@ function ProjectChat({ project, user, addProjectMessage }) {
         <button
           onClick={send}
           disabled={!text.trim() || sending}
-          style={{ width: 48, height: 48, borderRadius: 14, background: text.trim() ? '#0D0B2E' : '#E8E6F5', color: '#fff', border: 'none', cursor: text.trim() ? 'pointer' : 'default', display: 'flex', alignItems: 'center', justifyContent: 'center', alignSelf: 'flex-end', flexShrink: 0, transition: 'background .2s' }}
+          style={{ width: 48, height: 48, borderRadius: 14, background: text.trim() ? '#111827' : '#E5E7EB', color: '#fff', border: 'none', cursor: text.trim() ? 'pointer' : 'default', display: 'flex', alignItems: 'center', justifyContent: 'center', alignSelf: 'flex-end', flexShrink: 0, transition: 'background .2s' }}
         >
           {sending ? <Loader2 size={18} style={{ animation: 'spin 1s linear infinite' }} /> : <Send size={18} />}
         </button>
@@ -1774,20 +1774,20 @@ function StageTimeline({ project, onRequestChange, isMobile }) {
   return (
     <div>
       {/* Enhanced progress bar with est. completion */}
-      <div style={{ marginBottom: 24, padding: '16px 20px', background: '#F8F8FD', borderRadius: 16 }}>
+      <div style={{ marginBottom: 24, padding: '16px 20px', background: '#F9FAFB', borderRadius: 16 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 10 }}>
           <div>
-            <div style={{ fontSize: 11, fontWeight: 800, color: '#9B99C8', textTransform: 'uppercase', letterSpacing: '.1em', marginBottom: 2 }}>Overall Progress</div>
-            <div style={{ fontSize: 22, fontWeight: 900, color: '#0D0B2E' }}>{progressPct}%</div>
+            <div style={{ fontSize: 11, fontWeight: 800, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '.1em', marginBottom: 2 }}>Overall Progress</div>
+            <div style={{ fontSize: 22, fontWeight: 900, color: '#111827' }}>{progressPct}%</div>
           </div>
           {estCompletion && (
             <div style={{ textAlign: 'right' }}>
-              <div style={{ fontSize: 10, fontWeight: 700, color: '#9B99C8', textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 2 }}>Est. Completion</div>
+              <div style={{ fontSize: 10, fontWeight: 700, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 2 }}>Est. Completion</div>
               <div style={{ fontSize: 12, fontWeight: 800, color: ac }}>{estCompletion}</div>
             </div>
           )}
         </div>
-        <div style={{ height: 10, background: '#E8E6F5', borderRadius: 5, overflow: 'hidden' }}>
+        <div style={{ height: 10, background: '#E5E7EB', borderRadius: 5, overflow: 'hidden' }}>
           <div style={{
             height: '100%',
             width: `${progressPct}%`,
@@ -1810,7 +1810,7 @@ function StageTimeline({ project, onRequestChange, isMobile }) {
             const isLast = idx === applicableStages.length - 1;
             const dotColor = isPast ? s.color : isCurrent ? s.color : '#DFD9D1';
             const dotBg = isPast ? s.color : isCurrent ? '#fff' : '#F5F3F0';
-            const dotBorder = isPast ? s.color : isCurrent ? s.color : '#E8E6F5';
+            const dotBorder = isPast ? s.color : isCurrent ? s.color : '#E5E7EB';
             return (
               <div key={s.id} data-current={isCurrent ? 'true' : 'false'} style={{ display: 'flex', gap: 14, alignItems: 'stretch', minHeight: isCurrent ? 64 : 44 }}>
                 {/* Left rail */}
@@ -1840,7 +1840,7 @@ function StageTimeline({ project, onRequestChange, isMobile }) {
                     <div style={{
                       fontSize: isCurrent ? 14 : 12,
                       fontWeight: isCurrent ? 900 : isPast ? 700 : 500,
-                      color: isCurrent ? s.color : isPast ? '#0D0B2E' : '#9B99C8',
+                      color: isCurrent ? s.color : isPast ? '#111827' : '#6B7280',
                       lineHeight: 1.3,
                     }}>
                       {s.short || s.name}
@@ -1852,10 +1852,10 @@ function StageTimeline({ project, onRequestChange, isMobile }) {
                     )}
                   </div>
                   {enteredDate && (isPast || isCurrent) && (
-                    <div style={{ fontSize: 11, color: '#9B99C8', marginTop: 1 }}>{enteredDate}</div>
+                    <div style={{ fontSize: 11, color: '#6B7280', marginTop: 1 }}>{enteredDate}</div>
                   )}
                   {isCurrent && s.clientMsg && (
-                    <div style={{ fontSize: 11, color: '#5B5894', marginTop: 4, lineHeight: 1.5, fontStyle: 'italic' }}>
+                    <div style={{ fontSize: 11, color: '#4B5563', marginTop: 4, lineHeight: 1.5, fontStyle: 'italic' }}>
                       {s.clientMsg}
                     </div>
                   )}
@@ -1882,14 +1882,14 @@ function StageTimeline({ project, onRequestChange, isMobile }) {
                 <div style={{ display: 'flex', alignItems: 'center', width: '100%', justifyContent: 'center', position: 'relative' }}>
                   {/* connector before */}
                   {idx > 0 && (
-                    <div style={{ position: 'absolute', right: '50%', top: 20, marginRight: 14, height: 2, left: 0, background: isPast ? s.color : '#E8E6F5' }} />
+                    <div style={{ position: 'absolute', right: '50%', top: 20, marginRight: 14, height: 2, left: 0, background: isPast ? s.color : '#E5E7EB' }} />
                   )}
                   <div style={{
                     width: 36, height: 36, borderRadius: '50%', zIndex: 1, flexShrink: 0,
-                    background: isPast ? s.color : isCurrent ? '#fff' : '#E8E6F5',
-                    border: isPast ? `2px solid ${s.color}` : isCurrent ? `2.5px solid ${s.color}` : '2px solid #E8E6F5',
+                    background: isPast ? s.color : isCurrent ? '#fff' : '#E5E7EB',
+                    border: isPast ? `2px solid ${s.color}` : isCurrent ? `2.5px solid ${s.color}` : '2px solid #E5E7EB',
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    color: isPast ? '#fff' : isCurrent ? s.color : '#9B99C8',
+                    color: isPast ? '#fff' : isCurrent ? s.color : '#6B7280',
                     boxShadow: isCurrent ? `0 0 0 4px ${s.color}20` : 'none',
                     transition: 'all .3s',
                   }}>
@@ -1897,14 +1897,14 @@ function StageTimeline({ project, onRequestChange, isMobile }) {
                   </div>
                   {/* connector after */}
                   {!isLast && (
-                    <div style={{ position: 'absolute', left: '50%', top: 20, marginLeft: 14, height: 2, right: 0, background: isPast ? s.color : '#E8E6F5' }} />
+                    <div style={{ position: 'absolute', left: '50%', top: 20, marginLeft: 14, height: 2, right: 0, background: isPast ? s.color : '#E5E7EB' }} />
                   )}
                 </div>
-                <div style={{ fontSize: 10, fontWeight: 700, color: isPast ? '#5B5894' : isCurrent ? s.color : '#DFD9D1', textAlign: 'center', lineHeight: 1.2, maxWidth: 68, marginTop: 2 }}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: isPast ? '#4B5563' : isCurrent ? s.color : '#DFD9D1', textAlign: 'center', lineHeight: 1.2, maxWidth: 68, marginTop: 2 }}>
                   {s.short}
                 </div>
                 {enteredDate && (isPast || isCurrent) && (
-                  <div style={{ fontSize: 9, color: '#9B99C8', textAlign: 'center', lineHeight: 1.2 }}>{enteredDate}</div>
+                  <div style={{ fontSize: 9, color: '#6B7280', textAlign: 'center', lineHeight: 1.2 }}>{enteredDate}</div>
                 )}
               </div>
             );
@@ -1923,22 +1923,22 @@ function StageTimeline({ project, onRequestChange, isMobile }) {
               <div style={{ fontSize: 11, fontWeight: 800, color: currentStage.color, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 4 }}>
                 Stage {currentStage.id} of {applicableStages.length} — Active Now
               </div>
-              <div style={{ fontSize: 18, fontWeight: 900, color: '#0D0B2E', marginBottom: 6 }}>{currentStage.name}</div>
-              <div style={{ fontSize: 14, color: '#5B5894', lineHeight: 1.6, marginBottom: 10 }}>{currentStage.clientMsg}</div>
+              <div style={{ fontSize: 18, fontWeight: 900, color: '#111827', marginBottom: 6 }}>{currentStage.name}</div>
+              <div style={{ fontSize: 14, color: '#4B5563', lineHeight: 1.6, marginBottom: 10 }}>{currentStage.clientMsg}</div>
               {(() => {
                 const entry = (project.stageHistory || []).find(h => h.stageId === currentStage.id);
                 const date = entry?.timestamp ? fmtShort(entry.timestamp) : null;
                 const days = entry?.timestamp ? daysSince(entry.timestamp) : null;
                 return date ? (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#9B99C8', marginBottom: 8 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#6B7280', marginBottom: 8 }}>
                     <Clock size={11} /> Entered {date}
-                    {days !== null && <span style={{ fontWeight: 700, color: '#5B5894' }}>· {days} day{days !== 1 ? 's' : ''} in this stage</span>}
+                    {days !== null && <span style={{ fontWeight: 700, color: '#4B5563' }}>· {days} day{days !== 1 ? 's' : ''} in this stage</span>}
                   </div>
                 ) : null;
               })()}
               <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 8 }}>
                 {currentStage.whoActs === 'client' && (
-                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700, color: '#2563EB', background: '#EFF6FF', padding: '6px 14px', borderRadius: 20, border: '1px solid #BFDBFE' }}>
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700, color: '#0F766E', background: '#ECFDF5', padding: '6px 14px', borderRadius: 20, border: '1px solid #A7F3D0' }}>
                     <AlertCircle size={13} /> Action required from you
                   </div>
                 )}
@@ -1947,9 +1947,9 @@ function StageTimeline({ project, onRequestChange, isMobile }) {
                     onClick={onRequestChange}
                     style={{
                       display: 'inline-flex', alignItems: 'center', gap: 6,
-                      fontSize: 12, fontWeight: 700, color: '#5B5894',
-                      background: '#F8F8FD', padding: '6px 14px', borderRadius: 20,
-                      border: '1px solid #E8E6F5', cursor: 'pointer',
+                      fontSize: 12, fontWeight: 700, color: '#4B5563',
+                      background: '#F9FAFB', padding: '6px 14px', borderRadius: 20,
+                      border: '1px solid #E5E7EB', cursor: 'pointer',
                     }}
                   >
                     <Edit3 size={12} /> Request Change
@@ -1964,14 +1964,14 @@ function StageTimeline({ project, onRequestChange, isMobile }) {
       {/* Mobile: action strip below the trail */}
       {currentStage && isMobile && (
         <div style={{ marginTop: 16, padding: '16px', background: `${currentStage.color}08`, borderRadius: 16, border: `1.5px solid ${currentStage.color}25` }}>
-          <div style={{ fontSize: 13, fontWeight: 900, color: '#0D0B2E', marginBottom: 6 }}>
+          <div style={{ fontSize: 13, fontWeight: 900, color: '#111827', marginBottom: 6 }}>
             {currentStage.name}
           </div>
           {(() => {
             const entry = (project.stageHistory || []).find(h => h.stageId === currentStage.id);
             const days = entry?.timestamp ? daysSince(entry.timestamp) : null;
             return days !== null ? (
-              <div style={{ fontSize: 11, color: '#9B99C8', marginBottom: 10 }}>
+              <div style={{ fontSize: 11, color: '#6B7280', marginBottom: 10 }}>
                 <Clock size={10} style={{ display: 'inline', marginRight: 4 }} />
                 {days} day{days !== 1 ? 's' : ''} in this stage
               </div>
@@ -1979,7 +1979,7 @@ function StageTimeline({ project, onRequestChange, isMobile }) {
           })()}
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             {currentStage.whoActs === 'client' && (
-              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 700, color: '#2563EB', background: '#EFF6FF', padding: '7px 14px', borderRadius: 20, border: '1px solid #BFDBFE' }}>
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 700, color: '#0F766E', background: '#ECFDF5', padding: '7px 14px', borderRadius: 20, border: '1px solid #A7F3D0' }}>
                 <AlertCircle size={12} /> Action needed
               </div>
             )}
@@ -1988,9 +1988,9 @@ function StageTimeline({ project, onRequestChange, isMobile }) {
                 onClick={onRequestChange}
                 style={{
                   display: 'inline-flex', alignItems: 'center', gap: 6,
-                  fontSize: 12, fontWeight: 700, color: '#5B5894',
-                  background: '#F8F8FD', padding: '7px 14px', borderRadius: 20,
-                  border: '1px solid #E8E6F5', cursor: 'pointer',
+                  fontSize: 12, fontWeight: 700, color: '#4B5563',
+                  background: '#F9FAFB', padding: '7px 14px', borderRadius: 20,
+                  border: '1px solid #E5E7EB', cursor: 'pointer',
                 }}
               >
                 <Edit3 size={12} /> Request Change
@@ -2051,7 +2051,7 @@ function ChangeRequestModal({ project, user, onClose }) {
       onClick={onClose}
       style={{
         position: 'fixed', inset: 0, zIndex: 500,
-        background: 'rgba(13,11,46,.6)', backdropFilter: 'blur(6px)',
+        background: 'rgba(17,24,39,.6)', backdropFilter: 'blur(6px)',
         display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24,
       }}
     >
@@ -2067,46 +2067,46 @@ function ChangeRequestModal({ project, user, onClose }) {
           <div style={{ textAlign: 'center', padding: '20px 0' }}>
             <div style={{ fontSize: 48, marginBottom: 16 }}>✅</div>
             <div style={{ fontSize: 18, fontWeight: 900, color: '#16A34A', marginBottom: 8 }}>Request Submitted</div>
-            <div style={{ fontSize: 13, color: '#9B99C8' }}>Our team will review your change request and get back to you shortly.</div>
+            <div style={{ fontSize: 13, color: '#6B7280' }}>Our team will review your change request and get back to you shortly.</div>
           </div>
         ) : (
           <>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
               <div>
-                <div style={{ fontSize: 11, fontWeight: 800, color: '#9B99C8', textTransform: 'uppercase', letterSpacing: '.1em', marginBottom: 4 }}>Project Change</div>
-                <div style={{ fontSize: 20, fontWeight: 900, color: '#0D0B2E' }}>Request a Change</div>
+                <div style={{ fontSize: 11, fontWeight: 800, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '.1em', marginBottom: 4 }}>Project Change</div>
+                <div style={{ fontSize: 20, fontWeight: 900, color: '#111827' }}>Request a Change</div>
               </div>
-              <button onClick={onClose} style={{ width: 36, height: 36, borderRadius: 10, background: '#E8E6F5', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <X size={16} color="#5B5894" />
+              <button onClick={onClose} style={{ width: 36, height: 36, borderRadius: 10, background: '#E5E7EB', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <X size={16} color="#4B5563" />
               </button>
             </div>
 
             <form onSubmit={handleSubmit}>
               <div style={{ marginBottom: 18 }}>
-                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#5B5894', marginBottom: 8 }}>Change Type</label>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#4B5563', marginBottom: 8 }}>Change Type</label>
                 <select
                   value={type}
                   onChange={e => setType(e.target.value)}
-                  style={{ width: '100%', padding: '12px 16px', borderRadius: 12, border: '1.5px solid #E8E6F5', fontSize: 14, fontFamily: 'inherit', outline: 'none', background: '#fff', color: '#0D0B2E', appearance: 'none', boxSizing: 'border-box' }}
+                  style={{ width: '100%', padding: '12px 16px', borderRadius: 12, border: '1.5px solid #E5E7EB', fontSize: 14, fontFamily: 'inherit', outline: 'none', background: '#fff', color: '#111827', appearance: 'none', boxSizing: 'border-box' }}
                 >
                   {changeTypes.map(t => <option key={t} value={t}>{t}</option>)}
                 </select>
               </div>
 
               <div style={{ marginBottom: 18 }}>
-                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#5B5894', marginBottom: 8 }}>Description <span style={{ color: '#DC2626' }}>*</span></label>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#4B5563', marginBottom: 8 }}>Description <span style={{ color: '#DC2626' }}>*</span></label>
                 <textarea
                   value={description}
                   onChange={e => setDescription(e.target.value)}
                   required
                   placeholder="Describe the change you'd like to request..."
                   rows={4}
-                  style={{ width: '100%', padding: '12px 16px', borderRadius: 12, border: '1.5px solid #E8E6F5', fontSize: 14, fontFamily: 'inherit', outline: 'none', resize: 'vertical', lineHeight: 1.5, boxSizing: 'border-box' }}
+                  style={{ width: '100%', padding: '12px 16px', borderRadius: 12, border: '1.5px solid #E5E7EB', fontSize: 14, fontFamily: 'inherit', outline: 'none', resize: 'vertical', lineHeight: 1.5, boxSizing: 'border-box' }}
                 />
               </div>
 
               <div style={{ marginBottom: 28 }}>
-                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#5B5894', marginBottom: 8 }}>Urgency</label>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#4B5563', marginBottom: 8 }}>Urgency</label>
                 <div style={{ display: 'flex', gap: 10 }}>
                   {urgencies.map(u => (
                     <button
@@ -2116,8 +2116,8 @@ function ChangeRequestModal({ project, user, onClose }) {
                       style={{
                         flex: 1, padding: '10px 0', borderRadius: 12, border: 'none', cursor: 'pointer',
                         fontWeight: 700, fontSize: 13, transition: 'all .15s',
-                        background: urgency === u ? (u === 'Urgent' ? '#FEE2E2' : '#0D0B2E') : '#E8E6F5',
-                        color: urgency === u ? (u === 'Urgent' ? '#991B1B' : '#fff') : '#5B5894',
+                        background: urgency === u ? (u === 'Urgent' ? '#FEE2E2' : '#111827') : '#E5E7EB',
+                        color: urgency === u ? (u === 'Urgent' ? '#991B1B' : '#fff') : '#4B5563',
                       }}
                     >
                       {u === 'Urgent' ? '🔴 Urgent' : '⚪ Normal'}
@@ -2131,8 +2131,8 @@ function ChangeRequestModal({ project, user, onClose }) {
                 disabled={!description.trim() || submitting}
                 style={{
                   width: '100%', height: 48, borderRadius: 14, border: 'none',
-                  background: !description.trim() || submitting ? '#E8E6F5' : '#0D0B2E',
-                  color: !description.trim() || submitting ? '#9B99C8' : '#fff',
+                  background: !description.trim() || submitting ? '#E5E7EB' : '#111827',
+                  color: !description.trim() || submitting ? '#6B7280' : '#fff',
                   fontSize: 15, fontWeight: 800, cursor: !description.trim() || submitting ? 'default' : 'pointer',
                   display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
                   transition: 'all .2s',
@@ -2173,7 +2173,7 @@ function ReviewModal({ project, user, onSubmit, onDismiss }) {
       onClick={onDismiss}
       style={{
         position: 'fixed', inset: 0, zIndex: 500,
-        background: 'rgba(13,11,46,.7)', backdropFilter: 'blur(8px)',
+        background: 'rgba(17,24,39,.7)', backdropFilter: 'blur(8px)',
         display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24,
       }}
     >
@@ -2190,13 +2190,13 @@ function ReviewModal({ project, user, onSubmit, onDismiss }) {
           <>
             <div style={{ fontSize: 48, marginBottom: 14 }}>🌟</div>
             <div style={{ fontSize: 20, fontWeight: 900, color: '#16A34A', marginBottom: 8 }}>Thank you!</div>
-            <div style={{ fontSize: 14, color: '#9B99C8' }}>Your review helps us improve. We appreciate your trust.</div>
+            <div style={{ fontSize: 14, color: '#6B7280' }}>Your review helps us improve. We appreciate your trust.</div>
           </>
         ) : (
           <>
             <div style={{ fontSize: 44, marginBottom: 12 }}>🌟</div>
-            <div style={{ fontSize: 22, fontWeight: 900, color: '#0D0B2E', marginBottom: 8 }}>Your Project is Complete!</div>
-            <div style={{ fontSize: 14, color: '#5B5894', lineHeight: 1.6, marginBottom: 28 }}>
+            <div style={{ fontSize: 22, fontWeight: 900, color: '#111827', marginBottom: 8 }}>Your Project is Complete!</div>
+            <div style={{ fontSize: 14, color: '#4B5563', lineHeight: 1.6, marginBottom: 28 }}>
               We'd love to hear about your experience. Your feedback helps us deliver even better projects.
             </div>
 
@@ -2211,13 +2211,13 @@ function ReviewModal({ project, user, onSubmit, onDismiss }) {
                   onMouseLeave={() => setHovered(0)}
                   style={{
                     width: 48, height: 48, borderRadius: 12, border: 'none',
-                    background: (hovered || rating) >= s ? '#FEF3C7' : '#E8E6F5',
+                    background: (hovered || rating) >= s ? '#FEF3C7' : '#E5E7EB',
                     cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
                     transition: 'all .15s',
                     transform: (hovered || rating) >= s ? 'scale(1.1)' : 'scale(1)',
                   }}
                 >
-                  <Star size={24} fill={(hovered || rating) >= s ? '#F59E0B' : 'none'} color={(hovered || rating) >= s ? '#F59E0B' : '#9B99C8'} />
+                  <Star size={24} fill={(hovered || rating) >= s ? '#F59E0B' : 'none'} color={(hovered || rating) >= s ? '#F59E0B' : '#6B7280'} />
                 </button>
               ))}
             </div>
@@ -2233,7 +2233,7 @@ function ReviewModal({ project, user, onSubmit, onDismiss }) {
               onChange={e => setText(e.target.value)}
               placeholder="Share your experience (optional)..."
               rows={3}
-              style={{ width: '100%', padding: '12px 16px', borderRadius: 14, border: '1.5px solid #E8E6F5', fontSize: 14, fontFamily: 'inherit', outline: 'none', resize: 'none', lineHeight: 1.5, boxSizing: 'border-box', marginBottom: 20 }}
+              style={{ width: '100%', padding: '12px 16px', borderRadius: 14, border: '1.5px solid #E5E7EB', fontSize: 14, fontFamily: 'inherit', outline: 'none', resize: 'none', lineHeight: 1.5, boxSizing: 'border-box', marginBottom: 20 }}
             />
 
             <button
@@ -2241,8 +2241,8 @@ function ReviewModal({ project, user, onSubmit, onDismiss }) {
               disabled={rating === 0 || submitting}
               style={{
                 width: '100%', height: 48, borderRadius: 14, border: 'none',
-                background: rating === 0 ? '#E8E6F5' : '#0D0B2E',
-                color: rating === 0 ? '#9B99C8' : '#fff',
+                background: rating === 0 ? '#E5E7EB' : '#111827',
+                color: rating === 0 ? '#6B7280' : '#fff',
                 fontSize: 15, fontWeight: 800, cursor: rating === 0 ? 'default' : 'pointer',
                 display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
                 marginBottom: 14, transition: 'all .2s',
@@ -2256,7 +2256,7 @@ function ReviewModal({ project, user, onSubmit, onDismiss }) {
 
             <button
               onClick={onDismiss}
-              style={{ background: 'none', border: 'none', fontSize: 13, fontWeight: 600, color: '#9B99C8', cursor: 'pointer', padding: '4px 0' }}
+              style={{ background: 'none', border: 'none', fontSize: 13, fontWeight: 600, color: '#6B7280', cursor: 'pointer', padding: '4px 0' }}
             >
               I'll do this later
             </button>
@@ -2294,13 +2294,13 @@ function ReferralCard({ user, ac }) {
         <Gift size={22} color={ac} />
       </div>
       <div style={{ flex: 1, minWidth: 180 }}>
-        <div style={{ fontSize: 13, fontWeight: 800, color: '#0D0B2E', marginBottom: 2 }}>Refer a client, earn a discount</div>
-        <div style={{ fontSize: 12, color: '#5B5894', lineHeight: 1.5 }}>Share your code and get a discount on your next project when they sign on.</div>
+        <div style={{ fontSize: 13, fontWeight: 800, color: '#111827', marginBottom: 2 }}>Refer a client, earn a discount</div>
+        <div style={{ fontSize: 12, color: '#4B5563', lineHeight: 1.5 }}>Share your code and get a discount on your next project when they sign on.</div>
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
         <div style={{
           padding: '8px 16px', borderRadius: 20,
-          background: '#0D0B2E', color: ac,
+          background: '#111827', color: ac,
           fontSize: 13, fontWeight: 900, fontFamily: 'monospace',
           letterSpacing: '.06em',
         }}>
@@ -2311,8 +2311,8 @@ function ReferralCard({ user, ac }) {
           style={{
             display: 'inline-flex', alignItems: 'center', gap: 6,
             padding: '8px 16px', borderRadius: 20, border: 'none',
-            background: copied ? '#D1FAE5' : '#E8E6F5',
-            color: copied ? '#065F46' : '#5B5894',
+            background: copied ? '#D1FAE5' : '#E5E7EB',
+            color: copied ? '#065F46' : '#4B5563',
             fontSize: 12, fontWeight: 700, cursor: 'pointer',
             transition: 'all .2s',
           }}
@@ -2331,7 +2331,7 @@ function ClientNotificationBell({ notifications = [], onMarkRead, ac }) {
   return (
     <div style={{ position: 'relative' }}>
       <button onClick={() => setOpen(o => !o)} style={{ width: 40, height: 40, borderRadius: 12, background: 'rgba(255,255,255,0.6)', border: '1px solid rgba(255,255,255,0.8)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
-        <Bell size={18} color={unread.length > 0 ? ac : '#5B5894'} fill={unread.length > 0 ? ac : 'none'} />
+        <Bell size={18} color={unread.length > 0 ? ac : '#4B5563'} fill={unread.length > 0 ? ac : 'none'} />
         {unread.length > 0 && (
           <div style={{ position: 'absolute', top: -4, right: -4, width: 18, height: 18, borderRadius: '50%', background: '#EF4444', color: '#fff', fontSize: 10, fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             {unread.length > 9 ? '9+' : unread.length}
@@ -2339,20 +2339,20 @@ function ClientNotificationBell({ notifications = [], onMarkRead, ac }) {
         )}
       </button>
       {open && (
-        <div onClick={e => e.stopPropagation()} style={{ position: 'absolute', right: 0, top: 48, width: 340, maxHeight: 400, overflowY: 'auto', background: '#fff', borderRadius: 18, border: '1.5px solid #E8E6F5', boxShadow: '0 20px 60px rgba(0,0,0,0.15)', zIndex: 1000 }}>
-          <div style={{ padding: '16px 20px', borderBottom: '1px solid #E8E6F5', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div style={{ fontSize: 13, fontWeight: 800, color: '#0D0B2E' }}>Notifications</div>
+        <div onClick={e => e.stopPropagation()} style={{ position: 'absolute', right: 0, top: 48, width: 340, maxHeight: 400, overflowY: 'auto', background: '#fff', borderRadius: 18, border: '1.5px solid #E5E7EB', boxShadow: '0 20px 60px rgba(0,0,0,0.15)', zIndex: 1000 }}>
+          <div style={{ padding: '16px 20px', borderBottom: '1px solid #E5E7EB', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ fontSize: 13, fontWeight: 800, color: '#111827' }}>Notifications</div>
             {unread.length > 0 && <button onClick={() => { notifications.forEach(n => !n.read && onMarkRead?.(n.id)); setOpen(false); }} style={{ background: 'none', border: 'none', fontSize: 11, fontWeight: 700, color: ac, cursor: 'pointer' }}>Mark all read</button>}
           </div>
           {notifications.length === 0 ? (
-            <div style={{ padding: '40px 20px', textAlign: 'center', color: '#9B99C8', fontSize: 13 }}>No notifications yet</div>
+            <div style={{ padding: '40px 20px', textAlign: 'center', color: '#6B7280', fontSize: 13 }}>No notifications yet</div>
           ) : (
             notifications.slice(0, 20).map(n => (
-              <div key={n.id} onClick={() => onMarkRead?.(n.id)} style={{ padding: '14px 20px', borderBottom: '1px solid #F8F8FD', display: 'flex', gap: 12, alignItems: 'flex-start', background: n.read ? '#fff' : '#FAFAF7', cursor: 'pointer', transition: 'background .15s' }}>
-                <div style={{ width: 8, height: 8, borderRadius: '50%', background: n.read ? '#E8E6F5' : ac, marginTop: 5, flexShrink: 0 }} />
+              <div key={n.id} onClick={() => onMarkRead?.(n.id)} style={{ padding: '14px 20px', borderBottom: '1px solid #F9FAFB', display: 'flex', gap: 12, alignItems: 'flex-start', background: n.read ? '#fff' : '#FAFAF7', cursor: 'pointer', transition: 'background .15s' }}>
+                <div style={{ width: 8, height: 8, borderRadius: '50%', background: n.read ? '#E5E7EB' : ac, marginTop: 5, flexShrink: 0 }} />
                 <div>
-                  <div style={{ fontSize: 13, color: '#0D0B2E', lineHeight: 1.4, fontWeight: n.read ? 500 : 700 }}>{n.msg}</div>
-                  <div style={{ fontSize: 11, color: '#9B99C8', marginTop: 4 }}>
+                  <div style={{ fontSize: 13, color: '#111827', lineHeight: 1.4, fontWeight: n.read ? 500 : 700 }}>{n.msg}</div>
+                  <div style={{ fontSize: 11, color: '#6B7280', marginTop: 4 }}>
                     {n.createdAt?.seconds ? new Date(n.createdAt.seconds * 1000).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : ''}
                   </div>
                 </div>
@@ -2420,7 +2420,7 @@ function PushNotificationBell({ ac }) {
       {tooltip && (
         <div style={{
           position: 'absolute', right: 0, top: '110%', marginTop: 4,
-          background: '#0D0B2E', color: '#fff', fontSize: 11, fontWeight: 600,
+          background: '#111827', color: '#fff', fontSize: 11, fontWeight: 600,
           padding: '6px 12px', borderRadius: 10, whiteSpace: 'nowrap',
           boxShadow: '0 4px 16px rgba(0,0,0,.3)', zIndex: 200,
           border: '1px solid rgba(255,255,255,.1)',
@@ -2442,7 +2442,7 @@ function ProjectCard({ project, isSelected, onClick }) {
       onClick={onClick}
       style={{
         width: '100%', textAlign: 'left', padding: '20px 24px',
-        borderRadius: 20, border: `2px solid ${isSelected ? AC : '#E8E6F5'}`,
+        borderRadius: 20, border: `2px solid ${isSelected ? AC : '#E5E7EB'}`,
         background: isSelected ? `${AC}08` : '#fff',
         cursor: 'pointer', transition: 'all .25s',
         boxShadow: isSelected ? `0 8px 24px ${AC}18` : '0 2px 8px rgba(0,0,0,.04)',
@@ -2450,17 +2450,17 @@ function ProjectCard({ project, isSelected, onClick }) {
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
         <div style={{ flex: 1, marginRight: 12 }}>
-          <div style={{ fontSize: 15, fontWeight: 800, color: '#0D0B2E', lineHeight: 1.3, marginBottom: 4 }}>{project.title}</div>
-          <div style={{ fontSize: 11, fontWeight: 600, color: '#9B99C8' }}>{pt?.label || 'Full Service'}</div>
+          <div style={{ fontSize: 15, fontWeight: 800, color: '#111827', lineHeight: 1.3, marginBottom: 4 }}>{project.title}</div>
+          <div style={{ fontSize: 11, fontWeight: 600, color: '#6B7280' }}>{pt?.label || 'Full Service'}</div>
         </div>
         <div style={{ fontSize: 10, fontWeight: 800, color: stg?.color || AC, background: `${stg?.color || AC}15`, padding: '4px 12px', borderRadius: 20, whiteSpace: 'nowrap', flexShrink: 0 }}>
           {stg?.short || 'Stage 1'}
         </div>
       </div>
-      <div style={{ height: 4, background: '#E8E6F5', borderRadius: 2, overflow: 'hidden', marginBottom: 10 }}>
+      <div style={{ height: 4, background: '#E5E7EB', borderRadius: 2, overflow: 'hidden', marginBottom: 10 }}>
         <div style={{ height: '100%', width: `${stg?.pct || 5}%`, background: stg?.color || AC, borderRadius: 2, transition: 'width 1s ease' }} />
       </div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#9B99C8', fontWeight: 600 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#6B7280', fontWeight: 600 }}>
         <span>{stg?.pct || 5}% complete</span>
         {project.budget && <span>Budget: GHS {Number(project.budget).toLocaleString()}</span>}
       </div>
@@ -2495,7 +2495,7 @@ function ProjectHeaderCard({ project, isMobile, ac, brand }) {
   const waLink = `https://wa.me/${waPhone}?text=${waMsg}`;
 
   return (
-    <div style={{ background: '#fff', borderRadius: isMobile ? 24 : 20, border: isMobile ? 'none' : '1px solid #E8E6F5', boxShadow: isMobile ? '0 2px 16px rgba(0,0,0,.08)' : '0 4px 20px rgba(0,0,0,.05)', overflow: 'hidden' }}>
+    <div style={{ background: '#fff', borderRadius: isMobile ? 24 : 20, border: isMobile ? 'none' : '1px solid #E5E7EB', boxShadow: isMobile ? '0 2px 16px rgba(0,0,0,.08)' : '0 4px 20px rgba(0,0,0,.05)', overflow: 'hidden' }}>
 
       {/* Header row */}
       <div style={{ padding: isMobile ? '20px 18px 16px' : '24px 28px 18px' }}>
@@ -2504,14 +2504,14 @@ function ProjectHeaderCard({ project, isMobile, ac, brand }) {
             <div style={{ fontSize: 11, fontWeight: 800, color: ac, textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 5 }}>
               {PROJECT_TYPES[project.projectType]?.label || 'Full Service'} Project
             </div>
-            <div style={{ fontSize: isMobile ? 19 : 23, fontWeight: 900, color: '#0D0B2E', lineHeight: 1.25 }}>{project.title}</div>
+            <div style={{ fontSize: isMobile ? 19 : 23, fontWeight: 900, color: '#111827', lineHeight: 1.25 }}>{project.title}</div>
           </div>
           <div style={{
             fontSize: 10, fontWeight: 800, flexShrink: 0,
-            color: project.status === 'Completed' ? '#16A34A' : project.status === 'On Hold' ? '#D97706' : '#2563EB',
-            background: project.status === 'Completed' ? '#F0FDF4' : project.status === 'On Hold' ? '#FFFBEB' : '#EFF6FF',
+            color: project.status === 'Completed' ? '#16A34A' : project.status === 'On Hold' ? '#D97706' : '#0F766E',
+            background: project.status === 'Completed' ? '#F0FDF4' : project.status === 'On Hold' ? '#FFFBEB' : '#ECFDF5',
             padding: '5px 12px', borderRadius: 20,
-            border: `1px solid ${project.status === 'Completed' ? '#DCFCE7' : project.status === 'On Hold' ? '#FDE68A' : '#DBEAFE'}`,
+            border: `1px solid ${project.status === 'Completed' ? '#DCFCE7' : project.status === 'On Hold' ? '#FDE68A' : '#D1FAE5'}`,
             letterSpacing: '.04em',
           }}>
             {project.status || 'Active'}
@@ -2519,42 +2519,42 @@ function ProjectHeaderCard({ project, isMobile, ac, brand }) {
         </div>
 
         {project.description && (
-          <div style={{ fontSize: 14, color: '#5B5894', lineHeight: 1.6, marginBottom: 14 }}>
+          <div style={{ fontSize: 14, color: '#4B5563', lineHeight: 1.6, marginBottom: 14 }}>
             {project.description}
           </div>
         )}
 
         {/* Progress bar */}
         <div style={{ marginBottom: 16 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, fontWeight: 700, color: '#9B99C8', marginBottom: 6 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, fontWeight: 700, color: '#6B7280', marginBottom: 6 }}>
             <span>Stage {project.stageId || 1} of {stageTotal}</span>
             <span>{progressPct}% complete</span>
           </div>
-          <div style={{ height: 6, background: '#E8E6F5', borderRadius: 4, overflow: 'hidden' }}>
+          <div style={{ height: 6, background: '#E5E7EB', borderRadius: 4, overflow: 'hidden' }}>
             <div style={{ height: '100%', width: `${progressPct}%`, background: `linear-gradient(90deg, ${ac}, ${ac}CC)`, borderRadius: 4, transition: 'width 1s ease' }} />
           </div>
         </div>
 
         {/* Key stats row */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: isMobile ? 10 : 16 }}>
-          <div style={{ background: '#F8F8FD', borderRadius: 14, padding: isMobile ? '12px 14px' : '14px 16px' }}>
-            <div style={{ fontSize: 10, color: '#9B99C8', fontWeight: 700, marginBottom: 4 }}>Started</div>
-            <div style={{ fontSize: isMobile ? 12 : 13, fontWeight: 800, color: '#0D0B2E' }}>{startDate}</div>
+          <div style={{ background: '#F9FAFB', borderRadius: 14, padding: isMobile ? '12px 14px' : '14px 16px' }}>
+            <div style={{ fontSize: 10, color: '#6B7280', fontWeight: 700, marginBottom: 4 }}>Started</div>
+            <div style={{ fontSize: isMobile ? 12 : 13, fontWeight: 800, color: '#111827' }}>{startDate}</div>
           </div>
           {budget > 0 ? (
-            <div style={{ background: '#F8F8FD', borderRadius: 14, padding: isMobile ? '12px 14px' : '14px 16px' }}>
-              <div style={{ fontSize: 10, color: '#9B99C8', fontWeight: 700, marginBottom: 4 }}>Project Value</div>
-              <div style={{ fontSize: isMobile ? 12 : 13, fontWeight: 800, color: '#0D0B2E' }}>GHS {Number(budget).toLocaleString()}</div>
+            <div style={{ background: '#F9FAFB', borderRadius: 14, padding: isMobile ? '12px 14px' : '14px 16px' }}>
+              <div style={{ fontSize: 10, color: '#6B7280', fontWeight: 700, marginBottom: 4 }}>Project Value</div>
+              <div style={{ fontSize: isMobile ? 12 : 13, fontWeight: 800, color: '#111827' }}>GHS {Number(budget).toLocaleString()}</div>
             </div>
           ) : (
-            <div style={{ background: '#F8F8FD', borderRadius: 14, padding: isMobile ? '12px 14px' : '14px 16px' }}>
-              <div style={{ fontSize: 10, color: '#9B99C8', fontWeight: 700, marginBottom: 4 }}>Type</div>
-              <div style={{ fontSize: isMobile ? 12 : 13, fontWeight: 800, color: '#0D0B2E' }}>{PROJECT_TYPES[project.projectType]?.label || 'Full Service'}</div>
+            <div style={{ background: '#F9FAFB', borderRadius: 14, padding: isMobile ? '12px 14px' : '14px 16px' }}>
+              <div style={{ fontSize: 10, color: '#6B7280', fontWeight: 700, marginBottom: 4 }}>Type</div>
+              <div style={{ fontSize: isMobile ? 12 : 13, fontWeight: 800, color: '#111827' }}>{PROJECT_TYPES[project.projectType]?.label || 'Full Service'}</div>
             </div>
           )}
-          <div style={{ background: '#F8F8FD', borderRadius: 14, padding: isMobile ? '12px 14px' : '14px 16px' }}>
-            <div style={{ fontSize: 10, color: '#9B99C8', fontWeight: 700, marginBottom: 4 }}>Days In</div>
-            <div style={{ fontSize: isMobile ? 12 : 13, fontWeight: 800, color: '#0D0B2E' }}>
+          <div style={{ background: '#F9FAFB', borderRadius: 14, padding: isMobile ? '12px 14px' : '14px 16px' }}>
+            <div style={{ fontSize: 10, color: '#6B7280', fontWeight: 700, marginBottom: 4 }}>Days In</div>
+            <div style={{ fontSize: isMobile ? 12 : 13, fontWeight: 800, color: '#111827' }}>
               {project.createdAt
                 ? `${Math.max(1, daysSince(project.createdAt))} days`
                 : '—'}
@@ -2565,10 +2565,10 @@ function ProjectHeaderCard({ project, isMobile, ac, brand }) {
 
       {/* Payment summary strip — only when budget is known */}
       {budget > 0 && (
-        <div style={{ borderTop: '1px solid #E8E6F5', padding: isMobile ? '14px 18px' : '16px 28px', background: '#FAFAF9' }}>
+        <div style={{ borderTop: '1px solid #E5E7EB', padding: isMobile ? '14px 18px' : '16px 28px', background: '#FAFAF9' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-            <span style={{ fontSize: 12, fontWeight: 700, color: '#5B5894' }}>Payment progress</span>
-            <span style={{ fontSize: 12, fontWeight: 800, color: '#0D0B2E' }}>{paidPct}% paid</span>
+            <span style={{ fontSize: 12, fontWeight: 700, color: '#4B5563' }}>Payment progress</span>
+            <span style={{ fontSize: 12, fontWeight: 800, color: '#111827' }}>{paidPct}% paid</span>
           </div>
           <div style={{ height: 8, background: '#EDE8E3', borderRadius: 4, overflow: 'hidden', marginBottom: 10 }}>
             <div style={{ height: '100%', width: `${paidPct}%`, background: paidPct === 100 ? '#16A34A' : ac, borderRadius: 4, transition: 'width 1s ease' }} />
@@ -2587,7 +2587,7 @@ function ProjectHeaderCard({ project, isMobile, ac, brand }) {
       )}
 
       {/* WhatsApp contact button */}
-      <div style={{ borderTop: '1px solid #E8E6F5', padding: isMobile ? '14px 18px' : '16px 28px' }}>
+      <div style={{ borderTop: '1px solid #E5E7EB', padding: isMobile ? '14px 18px' : '16px 28px' }}>
         <a
           href={waLink}
           target="_blank"
@@ -2724,7 +2724,7 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
       {notifToast && (
         <div onClick={() => setNotifToast(null)} style={{
           position: 'fixed', top: 24, right: 24, zIndex: 9998,
-          background: '#0D0B2E', color: '#fff', padding: '14px 20px',
+          background: '#111827', color: '#fff', padding: '14px 20px',
           borderRadius: 16, boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
           display: 'flex', gap: 12, alignItems: 'center', cursor: 'pointer',
           maxWidth: 360, animation: 'slideInRight .3s ease',
@@ -2741,7 +2741,7 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
 
       {isMobile ? (
         /* ── MOBILE: HERO APP HEADER (dark banner + greeting, non-sticky so it scrolls away) ── */
-        <div style={{ background: '#0D0B2E', paddingTop: 'env(safe-area-inset-top, 0px)' }}>
+        <div style={{ background: '#111827', paddingTop: 'env(safe-area-inset-top, 0px)' }}>
           <div style={{ height: 52, padding: '0 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               {props.brand?.logo && (
@@ -2772,7 +2772,7 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
       ) : (
         /* ── DESKTOP: STICKY TOP NAV ── */
         <div style={{
-          background: '#0D0B2E', padding: '0 24px', height: 56,
+          background: '#111827', padding: '0 24px', height: 56,
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
           position: 'sticky', top: 0, zIndex: 100,
         }}>
@@ -2800,10 +2800,10 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
         {/* ── DESKTOP WELCOME HEADER ── */}
         {!isMobile && (
           <div style={{ marginBottom: 28 }}>
-            <div style={{ fontSize: 28, fontWeight: 900, color: '#0D0B2E', marginBottom: 6 }}>
+            <div style={{ fontSize: 28, fontWeight: 900, color: '#111827', marginBottom: 6 }}>
               Welcome back, {(user?.name || 'there').split(' ')[0]} 👋
             </div>
-            <div style={{ fontSize: 15, color: '#5B5894', marginBottom: 20 }}>
+            <div style={{ fontSize: 15, color: '#4B5563', marginBottom: 20 }}>
               {loadingProjects ? 'Loading your projects...' : projects.length === 0
                 ? 'You have no active projects yet. Speak to our team to get started.'
                 : `${activeCount} active project${activeCount !== 1 ? 's' : ''}${completedCount > 0 ? ` · ${completedCount} completed` : ''}`}
@@ -2828,19 +2828,19 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
         ) : projectsError ? (
           <div style={{ padding: isMobile ? '48px 24px' : '80px 40px', textAlign: 'center', background: '#fff', borderRadius: 24, boxShadow: isMobile ? '0 2px 16px rgba(0,0,0,.08)' : 'none', marginTop: isMobile ? 8 : 0 }}>
             <div style={{ fontSize: 40, marginBottom: 16 }}>⚠️</div>
-            <div style={{ fontSize: 17, fontWeight: 800, color: '#0D0B2E', marginBottom: 8 }}>Couldn't load your projects</div>
-            <div style={{ fontSize: 13, color: '#9B99C8', marginBottom: 24, lineHeight: 1.6 }}>
+            <div style={{ fontSize: 17, fontWeight: 800, color: '#111827', marginBottom: 8 }}>Couldn't load your projects</div>
+            <div style={{ fontSize: 13, color: '#6B7280', marginBottom: 24, lineHeight: 1.6 }}>
               There was a connection issue. Please refresh the page or contact our team.
             </div>
-            <button onClick={() => window.location.reload()} style={{ padding: '12px 24px', background: '#0D0B2E', color: '#fff', border: 'none', borderRadius: 14, fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
+            <button onClick={() => window.location.reload()} style={{ padding: '12px 24px', background: '#111827', color: '#fff', border: 'none', borderRadius: 14, fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
               Retry
             </button>
           </div>
         ) : projects.length === 0 ? (
-          <div style={{ padding: isMobile ? '60px 28px' : '80px 40px', textAlign: 'center', background: '#fff', borderRadius: isMobile ? 24 : 24, border: isMobile ? 'none' : '1.5px dashed #E8E6F5', boxShadow: isMobile ? '0 2px 16px rgba(0,0,0,.08)' : 'none', marginTop: isMobile ? 8 : 0 }}>
+          <div style={{ padding: isMobile ? '60px 28px' : '80px 40px', textAlign: 'center', background: '#fff', borderRadius: isMobile ? 24 : 24, border: isMobile ? 'none' : '1.5px dashed #E5E7EB', boxShadow: isMobile ? '0 2px 16px rgba(0,0,0,.08)' : 'none', marginTop: isMobile ? 8 : 0 }}>
             <div style={{ fontSize: 48, marginBottom: 16 }}>🏗️</div>
-            <div style={{ fontSize: 20, fontWeight: 800, color: '#0D0B2E', marginBottom: 8 }}>No projects yet</div>
-            <div style={{ fontSize: 14, color: '#9B99C8', marginBottom: 24, lineHeight: 1.6, maxWidth: 400, margin: '0 auto 24px' }}>
+            <div style={{ fontSize: 20, fontWeight: 800, color: '#111827', marginBottom: 8 }}>No projects yet</div>
+            <div style={{ fontSize: 14, color: '#6B7280', marginBottom: 24, lineHeight: 1.6, maxWidth: 400, margin: '0 auto 24px' }}>
               Once your account manager creates a project for you, it will appear here with real-time updates.
             </div>
             <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 14, fontWeight: 700, color: ac, background: `${ac}10`, padding: '12px 24px', borderRadius: 14, border: `1.5px solid ${ac}30` }}>
@@ -2860,9 +2860,9 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
                       onClick={() => { setSelectedId(p.id); setActiveTab('timeline'); }}
                       style={{
                         flexShrink: 0, padding: '8px 16px', borderRadius: 20,
-                        border: `2px solid ${p.id === selectedId ? ac : '#E8E6F5'}`,
+                        border: `2px solid ${p.id === selectedId ? ac : '#E5E7EB'}`,
                         background: p.id === selectedId ? `${ac}15` : '#fff',
-                        color: p.id === selectedId ? '#0D0B2E' : '#5B5894',
+                        color: p.id === selectedId ? '#111827' : '#4B5563',
                         fontSize: 13, fontWeight: 700, cursor: 'pointer',
                         whiteSpace: 'nowrap', minHeight: 44, touchAction: 'manipulation',
                       }}
@@ -2873,7 +2873,7 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
                 </div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                  <div style={{ fontSize: 11, fontWeight: 800, color: '#9B99C8', textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 4 }}>Your Projects</div>
+                  <div style={{ fontSize: 11, fontWeight: 800, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 4 }}>Your Projects</div>
                   {projects.map(p => (
                     <ProjectCard
                       key={p.id}
@@ -2895,15 +2895,15 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
 
                 {/* Tabs — desktop only; mobile uses bottom dock */}
                 {!isMobile && (
-                  <div style={{ display: 'flex', gap: 4, background: '#fff', padding: 5, borderRadius: 16, border: '1px solid #E8E6F5', overflowX: 'auto', scrollbarWidth: 'none' }}>
+                  <div style={{ display: 'flex', gap: 4, background: '#fff', padding: 5, borderRadius: 16, border: '1px solid #E5E7EB', overflowX: 'auto', scrollbarWidth: 'none' }}>
                     {tabs.map(t => (
                       <button
                         key={t.id}
                         onClick={() => setActiveTab(t.id)}
                         style={{
                           height: 38, padding: '0 16px', borderRadius: 12, border: 'none',
-                          background: activeTab === t.id ? '#0D0B2E' : 'transparent',
-                          color: activeTab === t.id ? '#fff' : '#5B5894',
+                          background: activeTab === t.id ? '#111827' : 'transparent',
+                          color: activeTab === t.id ? '#fff' : '#4B5563',
                           fontSize: 13, fontWeight: 700, cursor: 'pointer',
                           display: 'flex', alignItems: 'center', gap: 7,
                           transition: 'all .2s', flexShrink: 0,
@@ -2929,8 +2929,8 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
                     />
                     <InstallationStatusCard project={selected} />
                     <ShippingTrackerCard project={selected} />
-                    <div style={{ padding: isMobile ? '20px 18px' : '24px 28px', background: '#fff', borderRadius: isMobile ? 24 : 20, border: isMobile ? 'none' : '1px solid #E8E6F5', boxShadow: isMobile ? '0 2px 16px rgba(0,0,0,.08)' : '0 4px 20px rgba(0,0,0,.05)' }}>
-                      <div style={{ fontSize: 15, fontWeight: 800, color: '#0D0B2E', marginBottom: 20 }}>Project Timeline</div>
+                    <div style={{ padding: isMobile ? '20px 18px' : '24px 28px', background: '#fff', borderRadius: isMobile ? 24 : 20, border: isMobile ? 'none' : '1px solid #E5E7EB', boxShadow: isMobile ? '0 2px 16px rgba(0,0,0,.08)' : '0 4px 20px rgba(0,0,0,.05)' }}>
+                      <div style={{ fontSize: 15, fontWeight: 800, color: '#111827', marginBottom: 20 }}>Project Timeline</div>
                       <StageTimeline
                         project={selected}
                         onRequestChange={() => setShowChangeRequest(true)}
@@ -2939,19 +2939,19 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
 
                       {/* Activity log */}
                       {(selected.stageHistory || []).length > 1 && (
-                        <div style={{ marginTop: 28, paddingTop: 24, borderTop: '1px solid #E8E6F5' }}>
-                          <div style={{ fontSize: 13, fontWeight: 800, color: '#0D0B2E', marginBottom: 16 }}>Activity Log</div>
+                        <div style={{ marginTop: 28, paddingTop: 24, borderTop: '1px solid #E5E7EB' }}>
+                          <div style={{ fontSize: 13, fontWeight: 800, color: '#111827', marginBottom: 16 }}>Activity Log</div>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                             {[...(selected.stageHistory || [])].reverse().map((h, idx) => {
                               const s = CLIENT_PROJECT_STAGES.find(st => st.id === h.stageId);
                               return (
-                                <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', background: '#F8F8FD', borderRadius: 12 }}>
+                                <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', background: '#F9FAFB', borderRadius: 12 }}>
                                   <div style={{ width: 32, height: 32, borderRadius: 10, background: `${s?.color || AC}15`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: s?.color || AC, flexShrink: 0 }}>
                                     {STAGE_ICONS[h.stageId] || <CheckCircle2 size={14} />}
                                   </div>
                                   <div style={{ flex: 1 }}>
-                                    <div style={{ fontSize: 13, fontWeight: 700, color: '#0D0B2E' }}>{s?.name || `Stage ${h.stageId}`}</div>
-                                    <div style={{ fontSize: 11, color: '#9B99C8' }}>
+                                    <div style={{ fontSize: 13, fontWeight: 700, color: '#111827' }}>{s?.name || `Stage ${h.stageId}`}</div>
+                                    <div style={{ fontSize: 11, color: '#6B7280' }}>
                                       {h.timestamp
                                         ? (() => {
                                             const d = h.timestamp?.toDate ? h.timestamp.toDate() : new Date(h.timestamp);
@@ -2959,7 +2959,7 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
                                           })()
                                         : ''}
                                     </div>
-                                    {h.note && <div style={{ fontSize: 11, color: '#5B5894', marginTop: 2, fontStyle: 'italic' }}>{h.note}</div>}
+                                    {h.note && <div style={{ fontSize: 11, color: '#4B5563', marginTop: 2, fontStyle: 'italic' }}>{h.note}</div>}
                                   </div>
                                 </div>
                               );
@@ -2973,8 +2973,8 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
 
                 {/* ── PHOTOS TAB ── */}
                 {activeTab === 'photos' && (
-                  <div style={{ padding: isMobile ? '20px 18px' : '24px 28px', background: '#fff', borderRadius: isMobile ? 24 : 20, border: isMobile ? 'none' : '1px solid #E8E6F5', boxShadow: isMobile ? '0 2px 16px rgba(0,0,0,.08)' : '0 4px 20px rgba(0,0,0,.05)' }}>
-                    <div style={{ fontSize: 15, fontWeight: 800, color: '#0D0B2E', marginBottom: 20 }}>Site Photos</div>
+                  <div style={{ padding: isMobile ? '20px 18px' : '24px 28px', background: '#fff', borderRadius: isMobile ? 24 : 20, border: isMobile ? 'none' : '1px solid #E5E7EB', boxShadow: isMobile ? '0 2px 16px rgba(0,0,0,.08)' : '0 4px 20px rgba(0,0,0,.05)' }}>
+                    <div style={{ fontSize: 15, fontWeight: 800, color: '#111827', marginBottom: 20 }}>Site Photos</div>
                     <PhotoFeed projectId={selected.id} />
                   </div>
                 )}
@@ -2994,8 +2994,8 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
 
                 {/* ── DOCUMENTS TAB ── */}
                 {activeTab === 'documents' && (
-                  <div style={{ padding: isMobile ? '20px 18px' : '24px 28px', background: '#fff', borderRadius: isMobile ? 24 : 20, border: isMobile ? 'none' : '1px solid #E8E6F5', boxShadow: isMobile ? '0 2px 16px rgba(0,0,0,.08)' : '0 4px 20px rgba(0,0,0,.05)' }}>
-                    <div style={{ fontSize: 15, fontWeight: 800, color: '#0D0B2E', marginBottom: 20 }}>Project Documents</div>
+                  <div style={{ padding: isMobile ? '20px 18px' : '24px 28px', background: '#fff', borderRadius: isMobile ? 24 : 20, border: isMobile ? 'none' : '1px solid #E5E7EB', boxShadow: isMobile ? '0 2px 16px rgba(0,0,0,.08)' : '0 4px 20px rgba(0,0,0,.05)' }}>
+                    <div style={{ fontSize: 15, fontWeight: 800, color: '#111827', marginBottom: 20 }}>Project Documents</div>
                     <DocumentsTab projectId={selected.id} project={selected} />
                   </div>
                 )}
@@ -3005,13 +3005,13 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
                   <div style={{
                     padding: isMobile ? '20px 18px' : '24px 28px', background: '#fff',
                     borderRadius: isMobile ? 24 : 20,
-                    border: isMobile ? 'none' : '1px solid #E8E6F5',
+                    border: isMobile ? 'none' : '1px solid #E5E7EB',
                     boxShadow: isMobile ? '0 2px 16px rgba(0,0,0,.08)' : '0 4px 20px rgba(0,0,0,.05)',
                     height: isMobile ? 'calc(100dvh - 320px)' : 560,
                     minHeight: isMobile ? 320 : undefined,
                     display: 'flex', flexDirection: 'column',
                   }}>
-                    <div style={{ fontSize: 15, fontWeight: 800, color: '#0D0B2E', marginBottom: 16, flexShrink: 0 }}>Messages</div>
+                    <div style={{ fontSize: 15, fontWeight: 800, color: '#111827', marginBottom: 16, flexShrink: 0 }}>Messages</div>
                     <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
                       <ProjectChat
                         project={selected}

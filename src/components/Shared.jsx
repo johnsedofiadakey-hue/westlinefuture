@@ -2,7 +2,7 @@ import React, { useState, useRef } from 'react';
 import { X, Check, DollarSign, SplitSquareHorizontal, Bell } from 'lucide-react';
 
 const PRINT_CSS = `body{font-family:'DM Sans',sans-serif;color:#111;background:white;}
-.ph{background:#0D0B2E;color:white;padding:36px 44px;display:flex;justify-content:space-between;align-items:flex-start;}
+.ph{background:#111827;color:white;padding:36px 44px;display:flex;justify-content:space-between;align-items:flex-start;}
 .ph-name{font-family:'Cormorant Garamond',serif;font-size:13px;letter-spacing:.2em;text-transform:uppercase;color:rgba(255,255,255,.38);margin-bottom:4px;}
 .ph-title{font-family:'Cormorant Garamond',serif;font-size:30px;font-weight:300;color:white;margin-top:6px;}
 .gold-bar{height:3px;background:linear-gradient(90deg,var(--ac),#EDD59A);}
@@ -13,7 +13,7 @@ table{width:100%;border-collapse:collapse;margin-bottom:28px;} th{background:#F5
 .foot{margin-top:40px;padding-top:20px;border-top:1px solid #E0E0E0;display:flex;justify-content:space-between;font-size:11px;color:#AAA;}
 .stamp{display:inline-block;border:3px solid #4ADE80;color:#16A34A;padding:5px 16px;border-radius:3px;font-size:18px;font-weight:800;transform:rotate(-8deg);opacity:.65;}`;
 
-export const Av = ({ i, s = 36, c = '#231F78' }) => (
+export const Av = ({ i, s = 36, c = '#0F766E' }) => (
   <div style={{
     width: s,
     height: s,
@@ -89,7 +89,7 @@ export function BA({ before, after, h = 340 }) {
 }
 
 export function printDoc(doc, type, brand) {
-  const ac = brand.color || '#231F78';
+  const ac = brand.color || '#0F766E';
   const co = brand.name || 'Westline Future Ltd.';
   const isPaid = doc.status === 'Paid' || doc.status === 'Completed';
   const isProposal = type === 'proposal';
@@ -100,7 +100,7 @@ export function printDoc(doc, type, brand) {
   const items = doc.items || [];
   const itemsHtml = items.length ? `
     <table style="width:100%;border-collapse:collapse;margin-bottom:32px;font-size:13px;">
-      <thead><tr style="background:#0D0B2E;color:#fff;">
+      <thead><tr style="background:#111827;color:#fff;">
         <th style="padding:12px 16px;text-align:left;font-size:10px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;">Description</th>
         <th style="padding:12px 16px;text-align:center;font-size:10px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;">Qty</th>
         <th style="padding:12px 16px;text-align:right;font-size:10px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;">Rate</th>
@@ -109,8 +109,8 @@ export function printDoc(doc, type, brand) {
       <tbody>${items.map((i, idx) => `
         <tr style="background:${idx % 2 === 0 ? '#FAFAF9' : '#fff'};">
           <td style="padding:14px 16px;font-weight:600;">${i.desc || i.description || '—'}</td>
-          <td style="padding:14px 16px;text-align:center;color:#5B5894;">${i.qty ?? 1}</td>
-          <td style="padding:14px 16px;text-align:right;color:#5B5894;">${i.rate || '—'}</td>
+          <td style="padding:14px 16px;text-align:center;color:#4B5563;">${i.qty ?? 1}</td>
+          <td style="padding:14px 16px;text-align:right;color:#4B5563;">${i.rate || '—'}</td>
           <td style="padding:14px 16px;text-align:right;font-weight:700;">${i.total || i.amount || '—'}</td>
         </tr>`).join('')}
       </tbody>
@@ -121,25 +121,25 @@ export function printDoc(doc, type, brand) {
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 <style>
   *,*::before,*::after{margin:0;padding:0;box-sizing:border-box;}
-  html,body{font-family:'Inter',-apple-system,sans-serif;color:#0D0B2E;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+  html,body{font-family:'Inter',-apple-system,sans-serif;color:#111827;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
   .page{width:210mm;min-height:297mm;margin:0 auto;padding:72px;position:relative;background:#fff;}
-  .wm{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) rotate(-40deg);font-size:100px;font-weight:900;opacity:.025;white-space:nowrap;pointer-events:none;color:#0D0B2E;z-index:0;}
+  .wm{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) rotate(-40deg);font-size:100px;font-weight:900;opacity:.025;white-space:nowrap;pointer-events:none;color:#111827;z-index:0;}
   .c{position:relative;z-index:1;}
   @page{size:A4;margin:0;}
   @media print{.page{box-shadow:none!important;}button{display:none!important;}}
-  @media screen{.page{box-shadow:0 0 60px rgba(0,0,0,.12);margin:40px auto;border-radius:4px;}body{background:#E8E6F5;}}
+  @media screen{.page{box-shadow:0 0 60px rgba(0,0,0,.12);margin:40px auto;border-radius:4px;}body{background:#E5E7EB;}}
 </style></head><body>
 <div class="page">
   <div style="height:6px;background:linear-gradient(90deg,${ac},${ac}aa);margin:-72px -72px 0 -72px;"></div>
   <div class="wm">${docLabel}</div>
   <div class="c">
-    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-top:40px;margin-bottom:48px;padding-bottom:32px;border-bottom:1.5px solid #E8E6F5;">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-top:40px;margin-bottom:48px;padding-bottom:32px;border-bottom:1.5px solid #E5E7EB;">
       <div style="display:flex;align-items:center;gap:18px;">
         ${logoHtml}
         <div>
           <div style="font-size:15px;font-weight:800;letter-spacing:-.3px;">${co}</div>
-          <div style="font-size:11px;color:#9B99C8;margin-top:2px;">${brand.address || brand.location || 'International'}</div>
-          <div style="font-size:11px;color:#9B99C8;">${brand.phone || ''}${brand.email ? ' · ' + brand.email : ''}</div>
+          <div style="font-size:11px;color:#6B7280;margin-top:2px;">${brand.address || brand.location || 'International'}</div>
+          <div style="font-size:11px;color:#6B7280;">${brand.phone || ''}${brand.email ? ' · ' + brand.email : ''}</div>
           ${brand.website ? `<div style="font-size:11px;color:${ac};">${brand.website}</div>` : ''}
         </div>
       </div>
@@ -151,29 +151,29 @@ export function printDoc(doc, type, brand) {
     </div>
 
     <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:20px;margin-bottom:36px;">
-      <div style="padding:16px 20px;background:#F8F8FD;border-radius:12px;">
+      <div style="padding:16px 20px;background:#F9FAFB;border-radius:12px;">
         <div style="font-size:9px;text-transform:uppercase;letter-spacing:.14em;color:${ac};font-weight:800;margin-bottom:6px;">Date Issued</div>
         <div style="font-size:14px;font-weight:700;">${doc.date || new Date().toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'})}</div>
       </div>
-      <div style="padding:16px 20px;background:#0D0B2E;border-radius:12px;">
+      <div style="padding:16px 20px;background:#111827;border-radius:12px;">
         <div style="font-size:9px;text-transform:uppercase;letter-spacing:.14em;color:${ac};font-weight:800;margin-bottom:6px;">Reference</div>
         <div style="font-size:13px;font-weight:700;color:#fff;font-family:monospace;">${doc.id || 'GT-DRAFT'}</div>
       </div>
     </div>
 
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:36px;">
-      <div style="padding:20px 24px;border:1.5px solid #E8E6F5;border-radius:14px;">
+      <div style="padding:20px 24px;border:1.5px solid #E5E7EB;border-radius:14px;">
         <div style="font-size:9px;text-transform:uppercase;letter-spacing:.14em;color:${ac};font-weight:800;margin-bottom:10px;">Prepared For</div>
         <div style="font-size:15px;font-weight:800;margin-bottom:4px;">${doc.client || doc.clientName || '—'}</div>
-        <div style="font-size:12px;color:#5B5894;">${doc.clientEmail || ''}</div>
-        <div style="font-size:12px;color:#5B5894;">${doc.clientPhone || ''}</div>
+        <div style="font-size:12px;color:#4B5563;">${doc.clientEmail || ''}</div>
+        <div style="font-size:12px;color:#4B5563;">${doc.clientPhone || ''}</div>
       </div>
-      <div style="padding:20px 24px;border:1.5px solid #E8E6F5;border-radius:14px;">
+      <div style="padding:20px 24px;border:1.5px solid #E5E7EB;border-radius:14px;">
         <div style="font-size:9px;text-transform:uppercase;letter-spacing:.14em;color:${ac};font-weight:800;margin-bottom:10px;">From</div>
         <div style="font-size:15px;font-weight:800;margin-bottom:4px;">${co}</div>
-        <div style="font-size:12px;color:#5B5894;">${brand.address || brand.location || 'International'}</div>
-        <div style="font-size:12px;color:#5B5894;">${brand.phone || ''}</div>
-        <div style="font-size:12px;color:#5B5894;">${brand.email || ''}</div>
+        <div style="font-size:12px;color:#4B5563;">${brand.address || brand.location || 'International'}</div>
+        <div style="font-size:12px;color:#4B5563;">${brand.phone || ''}</div>
+        <div style="font-size:12px;color:#4B5563;">${brand.email || ''}</div>
       </div>
     </div>
 
@@ -182,21 +182,21 @@ export function printDoc(doc, type, brand) {
     ${itemsHtml}
 
     <div style="display:flex;justify-content:flex-end;margin-bottom:32px;">
-      <div style="min-width:260px;background:#0D0B2E;border-radius:16px;padding:20px 24px;display:flex;justify-content:space-between;align-items:center;">
+      <div style="min-width:260px;background:#111827;border-radius:16px;padding:20px 24px;display:flex;justify-content:space-between;align-items:center;">
         <span style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.1em;color:rgba(255,255,255,0.5);">${isPaid ? 'TOTAL PAID' : 'TOTAL DUE'}</span>
         <span style="font-size:22px;font-weight:900;color:${ac};letter-spacing:-.5px;">${doc.amount || '—'}</span>
       </div>
     </div>
 
-    ${doc.notes ? `<div style="margin-bottom:24px;padding:16px 20px;background:#F8F8FD;border-radius:12px;border:1px solid #E8E6F5;"><div style="font-size:9px;text-transform:uppercase;letter-spacing:.14em;color:${ac};font-weight:800;margin-bottom:8px;">Notes</div><div style="font-size:12px;color:#5B5894;line-height:1.7;">${doc.notes}</div></div>` : ''}
-    ${brand.bankDetails ? `<div style="margin-bottom:24px;padding:16px 20px;background:#F8F8FD;border-radius:12px;border:1px solid #E8E6F5;"><div style="font-size:9px;text-transform:uppercase;letter-spacing:.14em;color:${ac};font-weight:800;margin-bottom:8px;">Payment Details</div><div style="font-size:12px;color:#5B5894;line-height:1.7;">${brand.bankDetails}</div></div>` : ''}
+    ${doc.notes ? `<div style="margin-bottom:24px;padding:16px 20px;background:#F9FAFB;border-radius:12px;border:1px solid #E5E7EB;"><div style="font-size:9px;text-transform:uppercase;letter-spacing:.14em;color:${ac};font-weight:800;margin-bottom:8px;">Notes</div><div style="font-size:12px;color:#4B5563;line-height:1.7;">${doc.notes}</div></div>` : ''}
+    ${brand.bankDetails ? `<div style="margin-bottom:24px;padding:16px 20px;background:#F9FAFB;border-radius:12px;border:1px solid #E5E7EB;"><div style="font-size:9px;text-transform:uppercase;letter-spacing:.14em;color:${ac};font-weight:800;margin-bottom:8px;">Payment Details</div><div style="font-size:12px;color:#4B5563;line-height:1.7;">${brand.bankDetails}</div></div>` : ''}
 
-    <div style="margin-top:40px;padding-top:20px;border-top:1.5px solid #E8E6F5;display:flex;justify-content:space-between;align-items:flex-end;">
-      <div style="font-size:11px;color:#9B99C8;line-height:1.7;">Thank you for your business.<br/>${co} — ${brand.website || 'www.westlinefuture.com'}</div>
+    <div style="margin-top:40px;padding-top:20px;border-top:1.5px solid #E5E7EB;display:flex;justify-content:space-between;align-items:flex-end;">
+      <div style="font-size:11px;color:#6B7280;line-height:1.7;">Thank you for your business.<br/>${co} — ${brand.website || 'www.westlinefuture.com'}</div>
       <div style="text-align:right;">
-        <div style="font-size:9px;text-transform:uppercase;letter-spacing:.14em;color:#9B99C8;font-weight:700;margin-bottom:28px;">Authorised Signature</div>
-        <div style="width:120px;height:1px;background:#9B99C8;margin-left:auto;"></div>
-        <div style="font-size:10px;color:#9B99C8;margin-top:4px;">${co}</div>
+        <div style="font-size:9px;text-transform:uppercase;letter-spacing:.14em;color:#6B7280;font-weight:700;margin-bottom:28px;">Authorised Signature</div>
+        <div style="width:120px;height:1px;background:#6B7280;margin-left:auto;"></div>
+        <div style="font-size:10px;color:#6B7280;margin-top:4px;">${co}</div>
       </div>
     </div>
   </div>
@@ -224,7 +224,7 @@ export function NotificationBell({ notifications = [], onMarkRead }) {
         className="glass-btn" 
         style={{ padding: '8px 12px', display: 'flex', alignItems: 'center', gap: 6, position: 'relative' }}
       >
-        <Bell size={18} color="#231F78" />
+        <Bell size={18} color="#0F766E" />
         {unread > 0 && (
           <span style={{ 
             position: 'absolute', top: 4, right: 4, background: '#EF4444', color: 'white', 
@@ -239,7 +239,7 @@ export function NotificationBell({ notifications = [], onMarkRead }) {
           zIndex: 1000, maxHeight: 400, overflowY: 'auto', padding: 12, border: '1px solid rgba(35,31,120,.2)' 
         }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-            <span style={{ fontSize: 12, fontWeight: 600, color: '#231F78', textTransform: 'uppercase', letterSpacing: '.05em' }}>Notifications</span>
+            <span style={{ fontSize: 12, fontWeight: 600, color: '#0F766E', textTransform: 'uppercase', letterSpacing: '.05em' }}>Notifications</span>
             <button onClick={() => setOpen(false)} style={{ background: 'none', border: 'none', color: '#666' }}><X size={14} /></button>
           </div>
           {notifications.length === 0 ? (

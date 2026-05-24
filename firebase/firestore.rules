@@ -90,6 +90,44 @@ service cloud.firestore {
       return isAdminOrStaff() || isAssignedClient(data) || (isAuthenticated() && data.clientEmail == authEmail());
     }
 
+    function canReadProjectLinkedRecord(data) {
+      return isAdminOrStaff() ||
+        isClient(data.clientId) ||
+        isClient(data.primaryClientId) ||
+        (data.clientIds is list && data.clientIds.hasAny([authPhoneId(), request.auth.uid]));
+    }
+
+    function isRenderingDocument(data) {
+      return data.documentType == "rendering" || data.category == "rendering" || data.stageId == 3;
+    }
+
+    function canReadProjectDocument(projectData, documentData) {
+      return isAdminOrStaff() ||
+        isAssignedWorker(projectData) ||
+        (
+          isAssignedClient(projectData) &&
+          documentData.clientVisible != false &&
+          (
+            !isRenderingDocument(documentData) ||
+            projectData.renderingUnlocked == true ||
+            projectData.renderingFeePaid == true
+          )
+        );
+    }
+
+    function canReadTopLevelDocument(data) {
+      return isAdminOrStaff() ||
+        (
+          canReadProjectLinkedRecord(data) &&
+          data.clientVisible != false &&
+          (
+            !isRenderingDocument(data) ||
+            get(/databases/$(database)/documents/projects/$(data.projectId)).data.renderingUnlocked == true ||
+            get(/databases/$(database)/documents/projects/$(data.projectId)).data.renderingFeePaid == true
+          )
+        );
+    }
+
     // --- USER PROFILES ---
     match /users/{userId} {
       allow get: if isAdminOrStaff() || isWorker() || (isAuthenticated() && (request.auth.uid == userId || isClient(userId)));
@@ -115,16 +153,29 @@ service cloud.firestore {
       allow create: if isAdminOrStaff();
       allow update, delete: if canWriteProject(resource.data);
 
+      match /documents/{docId} {
+        allow get, list: if canReadProjectDocument(get(/databases/$(database)/documents/projects/$(projectId)).data, resource.data);
+        allow create: if isAdminOrStaff() || isAssignedWorker(get(/databases/$(database)/documents/projects/$(projectId)).data);
+        allow update, delete: if isAdminOrStaff();
+      }
+
       match /{subcollection}/{docId} {
-        allow get, list: if canReadProject(get(/databases/$(database)/documents/projects/$(projectId)).data);
+        allow get, list: if subcollection != "documents" && canReadProject(get(/databases/$(database)/documents/projects/$(projectId)).data);
         allow create: if isAdminOrStaff() || (
           isAssignedWorker(get(/databases/$(database)/documents/projects/$(projectId)).data) &&
-          subcollection in ["messages", "documents", "media", "notes"]
+          subcollection in ["messages", "media", "notes"]
         ) || (
           isAssignedClient(get(/databases/$(database)/documents/projects/$(projectId)).data) &&
           subcollection in ["messages", "change_requests", "approvals"]
         );
-        allow update: if isAdminOrStaff();
+        allow update: if isAdminOrStaff() || (
+          subcollection == "messages" &&
+          isAssignedClient(get(/databases/$(database)/documents/projects/$(projectId)).data) &&
+          resource.data.senderId == request.auth.uid &&
+          request.resource.data.diff(resource.data).changedKeys().hasOnly([
+            "text", "editedAt", "editedBy", "editHistory", "updatedAt"
+          ])
+        );
         allow delete: if isAdmin();
       }
     }
@@ -166,7 +217,39 @@ service cloud.firestore {
     match /invoices/{id} { allow read: if canReadClientRecord(resource.data); allow write: if isAdminOrStaff(); }
     match /tasks/{id} { allow read: if canReadClientRecord(resource.data); allow write: if isAdminOrStaff(); }
     match /procurements/{id} { allow read: if canReadClientRecord(resource.data); allow write: if isAdminOrStaff(); }
-    match /activity_logs/{id} { allow read: if isAdmin(); allow write: if isAdmin(); }
+    match /renderingPackages/{id} {
+      allow read: if canReadProjectLinkedRecord(resource.data);
+      allow create: if isAdminOrStaff();
+      allow update: if isAdminOrStaff() || isClient(resource.data.clientId);
+      allow delete: if isAdmin();
+    }
+    match /quotes/{id} {
+      allow read: if canReadProjectLinkedRecord(resource.data);
+      allow create: if isAdminOrStaff();
+      allow update: if isAdminOrStaff() || isClient(resource.data.clientId);
+      allow delete: if isAdmin();
+    }
+    match /addOns/{id} {
+      allow read: if canReadProjectLinkedRecord(resource.data);
+      allow create: if isAdminOrStaff() || (isAuthenticated() && isClient(request.resource.data.clientId));
+      allow update: if isAdminOrStaff() || isClient(resource.data.clientId);
+      allow delete: if isAdmin();
+    }
+    match /documents/{id} {
+      allow read: if canReadTopLevelDocument(resource.data);
+      allow create: if isAdminOrStaff() || isWorker();
+      allow update, delete: if isAdminOrStaff();
+    }
+    match /activity_logs/{id} {
+      allow read: if isAdminOrStaff();
+      allow create: if isAuthenticated();
+      allow update, delete: if isAdmin();
+    }
+    match /activityLogs/{id} {
+      allow read: if isAdminOrStaff();
+      allow create: if isAuthenticated();
+      allow update, delete: if isAdmin();
+    }
     match /approvals/{id} { allow read: if canReadClientRecord(resource.data); allow write: if isAdminOrStaff(); }
     match /change_requests/{id} { allow read: if canReadClientRecord(resource.data); allow write: if isAdminOrStaff(); }
     match /notes/{id} { allow read: if canReadClientRecord(resource.data); allow write: if isAdminOrStaff(); }

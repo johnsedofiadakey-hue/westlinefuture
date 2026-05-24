@@ -23,6 +23,7 @@ const TWILIO_FROM_NUMBER = defineSecret("TWILIO_FROM_NUMBER");
 const ARKESEL_API_KEY    = defineSecret("ARKESEL_API_KEY");
 const WA_VERIFY_TOKEN    = defineSecret("WA_VERIFY_TOKEN");
 const PAYSTACK_SECRET_KEY = defineSecret("PAYSTACK_SECRET_KEY");
+const OPENAI_API_KEY = defineSecret("OPENAI_API_KEY");
 
 /**
  * PAYSTACK PAYMENT VERIFICATION (SERVER-SIDE)
@@ -177,6 +178,99 @@ exports.verifyPaystackPayment = onCall(
       channel: tx.channel,
       reference,
     };
+  }
+);
+
+exports.translateProjectMessage = onCall(
+  { secrets: [OPENAI_API_KEY] },
+  async (request) => {
+    if (!request.auth) throw new Error("Authentication required");
+
+    const uid = request.auth.uid;
+    const {
+      projectId,
+      messageId,
+      targetLanguage = "en",
+    } = request.data || {};
+
+    if (!projectId) throw new Error("projectId is required");
+    if (!messageId) throw new Error("messageId is required");
+    if (!["en", "zh"].includes(targetLanguage)) {
+      throw new Error("Unsupported target language");
+    }
+
+    await assertProjectAccess(request.auth, projectId);
+    await enforceRateLimit(`translateMessage:${uid}`, 60, 3600);
+
+    const db = getFirestore();
+    const msgRef = db.collection("projects").doc(projectId).collection("messages").doc(messageId);
+    const msgSnap = await msgRef.get();
+    if (!msgSnap.exists) throw new Error("Message not found");
+
+    const msg = msgSnap.data() || {};
+    const cached = msg.translations?.[targetLanguage]?.text;
+    if (cached) {
+      return { text: cached, cached: true, targetLanguage };
+    }
+
+    const sourceText = String(msg.transcript || msg.text || "").trim();
+    if (!sourceText) throw new Error("Message has no text to translate");
+
+    const apiKey = OPENAI_API_KEY.value();
+    if (!apiKey) {
+      throw new Error("Translation provider is not configured. Set OPENAI_API_KEY for Cloud Functions.");
+    }
+
+    const targetName = targetLanguage === "zh" ? "Simplified Chinese" : "English";
+    let translatedText = "";
+
+    try {
+      const resp = await axios.post(
+        "https://api.openai.com/v1/chat/completions",
+        {
+          model: "gpt-4o-mini",
+          temperature: 0,
+          messages: [
+            {
+              role: "system",
+              content: "You are a professional project communication translator for construction, logistics, procurement, and client service. Translate faithfully. Preserve numbers, dates, invoice references, project names, and tone. Return only the translation.",
+            },
+            {
+              role: "user",
+              content: `Translate this message to ${targetName}:\n\n${sourceText}`,
+            },
+          ],
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+            "Content-Type": "application/json",
+          },
+          timeout: 20000,
+        }
+      );
+      translatedText = String(resp.data?.choices?.[0]?.message?.content || "").trim();
+    } catch (err) {
+      logger.error("translateProjectMessage: provider error", err.response?.data || err.message);
+      throw new Error("Translation failed. Please try again.");
+    }
+
+    if (!translatedText) throw new Error("Translation returned empty text");
+
+    await msgRef.set({
+      originalLanguage: msg.originalLanguage || (targetLanguage === "zh" ? "en" : "zh"),
+      translations: {
+        [targetLanguage]: {
+          text: translatedText,
+          translatedAt: FieldValue.serverTimestamp(),
+          provider: "openai",
+          translatedBy: uid,
+        },
+      },
+      updatedAt: FieldValue.serverTimestamp(),
+    }, { merge: true });
+
+    return { text: translatedText, cached: false, targetLanguage };
   }
 );
 
@@ -607,7 +701,7 @@ exports.onLogisticsUpdate = onDocumentUpdated("containers/{containerId}", async 
  */
 exports.validateEscrowRelease = onDocumentUpdated("projects/{projectId}", async (event) => {
   const project = event.data.after.data();
-  if (project.stageId === 7) {
+  if (project.stageId === 10) {
     logger.info(`Project ${event.params.projectId} reached handover/final-settlement stage`);
   }
 });
@@ -701,6 +795,7 @@ async function assertProjectAccess(auth, projectId) {
 
   const project = snap.data() || {};
   const email = String(auth.token?.email || auth.email || "").toLowerCase();
+  const phoneId = normalizePhone(auth.token?.phone_number || auth.phone_number || "");
   const clientFromProxyEmail = email.endsWith("@clients.westlinefuture.com")
     ? email.replace("@clients.westlinefuture.com", "")
     : null;
@@ -712,6 +807,7 @@ async function assertProjectAccess(auth, projectId) {
 
   if (
     allowedClientIds.has(String(auth.uid)) ||
+    (phoneId && allowedClientIds.has(phoneId)) ||
     (clientFromProxyEmail && allowedClientIds.has(clientFromProxyEmail)) ||
     (project.clientEmail && email === String(project.clientEmail).toLowerCase()) ||
     (project.email && email === String(project.email).toLowerCase())
@@ -847,11 +943,11 @@ exports.receiveWhatsApp = onRequest(
         const clientName = userData.name || userData.displayName || normalizedPhone;
 
         // ── 2. Find their most recent active project ──────────────────────
-        // Active = stageId <= 7, ordered by most recent first
+        // Active = stageId <= 10, ordered by most recent first
         const projectsSnap = await db
           .collection("projects")
           .where("clientId", "==", normalizedPhone)
-          .where("stageId", "<=", 7)
+          .where("stageId", "<=", 10)
           .orderBy("stageId", "desc")
           .orderBy("createdAt", "desc")
           .limit(1)
@@ -923,17 +1019,20 @@ exports.receiveWhatsApp = onRequest(
 // ---------------------------------------------------------------------------
 
 // Stages where the client is the responsible party
-const CLIENT_ACTION_STAGES = new Set([2, 6, 7]);
+const CLIENT_ACTION_STAGES = new Set([2, 3, 4, 5, 9, 10]);
 
-// Human-readable stage names — mirrors the canonical 7-stage project pipeline
+// Human-readable stage names — mirrors the canonical 10-stage project pipeline
 const STAGE_NAMES = {
-  1: "Intake",
-  2: "Quote Approval And Deposit",
-  3: "Procurement And Production",
-  4: "Shipping And Delivery",
-  5: "Installation",
-  6: "Inspection And Sign-Off",
-  7: "Handover And Final Settlement",
+  1: "Client Intake And Site Brief",
+  2: "Rendering Fee Payment",
+  3: "Rendering Review And Approval",
+  4: "Final Quote And Kickoff Approval",
+  5: "Project Deposit Payment",
+  6: "Procurement And Production",
+  7: "Shipping And Delivery",
+  8: "Installation",
+  9: "Inspection And Sign-Off",
+  10: "Handover And Final Settlement",
 };
 
 exports.sendOverdueReminders = onSchedule(
@@ -948,12 +1047,12 @@ exports.sendOverdueReminders = onSchedule(
 
     logger.info("sendOverdueReminders: starting scan");
 
-    // Fetch all active projects in the canonical 7-stage pipeline
+    // Fetch all active projects in the canonical 10-stage pipeline
     let projectsSnap;
     try {
       projectsSnap = await db
         .collection("projects")
-        .where("stageId", "<=", 7)
+        .where("stageId", "<=", 10)
         .get();
     } catch (err) {
       logger.error("sendOverdueReminders: failed to fetch projects", err);

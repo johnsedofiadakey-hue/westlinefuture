@@ -6,13 +6,14 @@ import {
   Factory, Package, Wrench, Search, CreditCard,
   Users, UserCheck, MoreVertical, Clock,
   Globe, Upload, FileText, Download, ScanSearch, StickyNote, Anchor,
-  TrendingUp, Camera
+  TrendingUp, Camera, Languages, Mic, Square, Pencil, Save
 } from 'lucide-react';
 import { PAv, PSBadge } from '../../components/Shared';
 import { CLIENT_PROJECT_STAGES, PROJECT_TYPES } from '../../data';
-import { db } from '../../lib/firebase';
+import { db, functions, uploadFile } from '../../lib/firebase';
+import { httpsCallable } from 'firebase/functions';
 import {
-  collection, onSnapshot, query, orderBy, addDoc, serverTimestamp, doc, updateDoc
+  collection, onSnapshot, query, orderBy, addDoc, serverTimestamp, doc, updateDoc, arrayUnion
 } from 'firebase/firestore';
 
 const AC = '#231F78';
@@ -20,24 +21,25 @@ const AC = '#231F78';
 // ─── Stage Icon Map ───────────────────────────────────────────────────────────
 const STAGE_ICONS = {
   1: <Search size={15} />,
-  2: <ShoppingCart size={15} />,
-  3: <Factory size={15} />,
-  4: <Truck size={15} />,
-  5: <Wrench size={15} />,
-  6: <ScanSearch size={15} />,
-  7: <Star size={15} />,
+  2: <Lock size={15} />,
+  3: <ScanSearch size={15} />,
+  4: <FileText size={15} />,
+  5: <CreditCard size={15} />,
+  6: <Factory size={15} />,
+  7: <Truck size={15} />,
+  8: <Wrench size={15} />,
+  9: <ScanSearch size={15} />,
+  10: <Star size={15} />,
 };
 
 // ─── Payment Schedule Configs ─────────────────────────────────────────────────
 const SCHEDULE_CONFIGS = {
   standard: {
     label: 'Standard',
-    sub: '10% → 40% → 40% → 10%',
+    sub: '50% deposit → 50% final',
     milestones: [
-      { key: 'deposit',      label: '10% Deposit',         pct: 0.10, cumPct: 0.10 },
-      { key: 'pre-prod',     label: '40% Pre-production',  pct: 0.40, cumPct: 0.50 },
-      { key: 'pre-delivery', label: '40% Pre-delivery',    pct: 0.40, cumPct: 0.90 },
-      { key: 'completion',   label: '10% Completion',      pct: 0.10, cumPct: 1.00 },
+      { key: 'deposit', label: '50% Project Deposit', pct: 0.50, cumPct: 0.50, stageId: 5 },
+      { key: 'final', label: '50% Final Settlement', pct: 0.50, cumPct: 1.00, stageId: 10 },
     ],
   },
   '70-30': {
@@ -57,7 +59,7 @@ const SCHEDULE_CONFIGS = {
 
 // ─── Payment Schedule Card (admin) ───────────────────────────────────────────
 function PaymentScheduleCard({ project, createInvoice, notify }) {
-  const budget = Number(project.budget) || 0;
+  const budget = Number(String(project.projectTotal || project.budget || 0).replace(/[^0-9.]/g, '')) || 0;
   const scheduleType = project.paymentSchedule || 'standard';
   const config = SCHEDULE_CONFIGS[scheduleType] || SCHEDULE_CONFIGS.standard;
   const [changing, setChanging] = useState(false);
@@ -175,7 +177,7 @@ function PaymentScheduleCard({ project, createInvoice, notify }) {
                 background: scheduleType === key ? '#0D0B2E' : '#fff', cursor: 'pointer', textAlign: 'left', transition: 'all .15s',
               }}
             >
-              <div style={{ fontSize: 12, fontWeight: 800, color: scheduleType === key ? '#231F78' : '#0D0B2E', marginBottom: 3 }}>{cfg.label}</div>
+              <div style={{ fontSize: 12, fontWeight: 800, color: scheduleType === key ? '#fff' : '#0D0B2E', marginBottom: 3 }}>{cfg.label}</div>
               <div style={{ fontSize: 10, color: scheduleType === key ? 'rgba(255,255,255,.6)' : '#9B99C8', lineHeight: 1.4 }}>{cfg.sub}</div>
             </button>
           ))}
@@ -296,6 +298,85 @@ function PaymentScheduleCard({ project, createInvoice, notify }) {
   );
 }
 
+function ProjectOperatingSystemCard({ project, props }) {
+  const [renderingFee, setRenderingFee] = useState(project.renderingFee || '');
+  const [quoteTotal, setQuoteTotal] = useState(project.projectTotal || project.budget || '');
+  const [addOn, setAddOn] = useState({ description: '', amount: '', timelineImpactDays: '' });
+  const [saving, setSaving] = useState('');
+  const fmt = v => `GHS ${Number(v || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+  const projectTotal = Number(String(project.projectTotal || project.budget || 0).replace(/[^0-9.]/g, '')) || 0;
+  const addOnsTotal = Number(project.approvedAddOnsTotal || 0);
+
+  const run = async (key, fn) => {
+    if (saving) return;
+    setSaving(key);
+    try { await fn(); } finally { setSaving(''); }
+  };
+
+  return (
+    <div style={{ padding: '20px 24px', background: '#fff', borderRadius: 18, border: '1px solid #E8E6F5' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, marginBottom: 18 }}>
+        <div>
+          <div style={{ fontSize: 13, fontWeight: 900, color: '#0D0B2E' }}>Project Operating System</div>
+          <div style={{ fontSize: 11, color: '#9B99C8', marginTop: 4 }}>Rendering gate, quote versioning, add-ons, and audit-ready totals.</div>
+        </div>
+        <div style={{ padding: '7px 12px', borderRadius: 12, background: '#F8F8FD', border: '1px solid #E8E6F5', fontSize: 11, fontWeight: 800, color: '#5B5894', whiteSpace: 'nowrap' }}>
+          {project.nextAction || 'Review next action'}
+        </div>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 18 }}>
+        {[
+          { label: 'Rendering', value: project.renderingStatus || 'not started', color: project.renderingFeePaid ? '#16A34A' : '#2563EB' },
+          { label: 'Quote', value: project.quoteStatus || 'not started', color: project.quoteApproved ? '#16A34A' : '#0891B2' },
+          { label: 'Ledger', value: `${fmt(projectTotal)} total`, color: '#0D0B2E' },
+        ].map(item => (
+          <div key={item.label} style={{ padding: 14, borderRadius: 14, background: '#F8F8FD', border: '1px solid #E8E6F5' }}>
+            <div style={{ fontSize: 10, fontWeight: 800, color: '#9B99C8', textTransform: 'uppercase', letterSpacing: '.06em' }}>{item.label}</div>
+            <div style={{ fontSize: 13, fontWeight: 900, color: item.color, marginTop: 5, textTransform: 'capitalize' }}>{String(item.value).replace(/_/g, ' ')}</div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+        <div style={{ padding: 16, borderRadius: 16, background: '#FAFAF9', border: '1px solid #E8E6F5' }}>
+          <div style={{ fontSize: 12, fontWeight: 900, color: '#0D0B2E', marginBottom: 10 }}>Rendering Access Gate</div>
+          <input value={renderingFee} onChange={e => setRenderingFee(e.target.value)} type="number" placeholder="Rendering fee, e.g. 1500" style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: 10, border: '1px solid #E8E6F5', marginBottom: 8 }} />
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <button onClick={() => run('render-package', () => props.createRenderingPackage?.(project.id, { includedRevisions: 2 }))} style={{ padding: '9px 12px', borderRadius: 10, border: 'none', background: '#0D0B2E', color: '#fff', fontSize: 11, fontWeight: 800, cursor: 'pointer' }}>{saving === 'render-package' ? 'Saving...' : 'Create Package'}</button>
+            <button onClick={() => run('render-invoice', () => props.issueRenderingInvoice?.(project.id, renderingFee, 'paystack'))} style={{ padding: '9px 12px', borderRadius: 10, border: '1px solid #E8E6F5', background: '#fff', color: '#0D0B2E', fontSize: 11, fontWeight: 800, cursor: 'pointer' }}>{saving === 'render-invoice' ? 'Issuing...' : 'Issue Fee Invoice'}</button>
+          </div>
+        </div>
+
+        <div style={{ padding: 16, borderRadius: 16, background: '#FAFAF9', border: '1px solid #E8E6F5' }}>
+          <div style={{ fontSize: 12, fontWeight: 900, color: '#0D0B2E', marginBottom: 10 }}>Versioned Final Quote</div>
+          <input value={quoteTotal} onChange={e => setQuoteTotal(e.target.value)} type="number" placeholder="Final project quote" style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: 10, border: '1px solid #E8E6F5', marginBottom: 8 }} />
+          <button onClick={() => run('quote', () => props.createQuoteVersion?.(project.id, { total: quoteTotal, title: `${project.title} Final Quote` }))} style={{ padding: '9px 12px', borderRadius: 10, border: 'none', background: '#0891B2', color: '#fff', fontSize: 11, fontWeight: 800, cursor: 'pointer' }}>{saving === 'quote' ? 'Creating...' : 'Create Quote Version'}</button>
+        </div>
+      </div>
+
+      <div style={{ marginTop: 14, padding: 16, borderRadius: 16, background: '#FAFAF9', border: '1px solid #E8E6F5' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', marginBottom: 10 }}>
+          <div>
+            <div style={{ fontSize: 12, fontWeight: 900, color: '#0D0B2E' }}>Add-ons & Variations</div>
+            <div style={{ fontSize: 10, color: '#9B99C8', marginTop: 2 }}>Approved add-ons: {fmt(addOnsTotal)}</div>
+          </div>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 120px 120px auto', gap: 8 }}>
+          <input value={addOn.description} onChange={e => setAddOn(p => ({ ...p, description: e.target.value }))} placeholder="Add-on description" style={{ padding: '10px 12px', borderRadius: 10, border: '1px solid #E8E6F5' }} />
+          <input value={addOn.amount} onChange={e => setAddOn(p => ({ ...p, amount: e.target.value }))} type="number" placeholder="Amount" style={{ padding: '10px 12px', borderRadius: 10, border: '1px solid #E8E6F5' }} />
+          <input value={addOn.timelineImpactDays} onChange={e => setAddOn(p => ({ ...p, timelineImpactDays: e.target.value }))} type="number" placeholder="+ days" style={{ padding: '10px 12px', borderRadius: 10, border: '1px solid #E8E6F5' }} />
+          <button onClick={() => run('addon', async () => {
+            const id = await props.createAddOn?.(project.id, addOn);
+            setAddOn({ description: '', amount: '', timelineImpactDays: '' });
+            return id;
+          })} style={{ padding: '10px 14px', borderRadius: 10, border: 'none', background: '#16A34A', color: '#fff', fontSize: 11, fontWeight: 800, cursor: 'pointer' }}>{saving === 'addon' ? 'Adding...' : 'Add'}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── New Project Modal ────────────────────────────────────────────────────────
 const BD_ITEMS_CONFIG = [
   { key: 'product',      label: 'Product / Materials', color: '#7C3AED', icon: <Package size={13} /> },
@@ -304,7 +385,7 @@ const BD_ITEMS_CONFIG = [
 ];
 
 function NewProjectModal({ client, onClose, onCreate }) {
-  const [form, setForm] = useState({ title: '', projectType: 'full-service', budget: '', description: '', paymentSchedule: 'standard', projectDate: '' });
+  const [form, setForm] = useState({ title: '', projectType: 'full-service', budget: '', renderingFee: '', description: '', paymentSchedule: 'standard', projectDate: '' });
   const [showBackdate, setShowBackdate] = useState(false);
   const [showBreakdown, setShowBreakdown] = useState(false);
   const [bd, setBd] = useState({
@@ -439,13 +520,21 @@ function NewProjectModal({ client, onClose, onCreate }) {
             )}
           </div>
 
+          <div>
+            <label style={lS}>Separate Rendering / CAD 3D Fee (GHS)</label>
+            <input value={form.renderingFee} onChange={e => set('renderingFee', e.target.value)} placeholder="e.g. 1500" type="number" style={iS} />
+            <div style={{ fontSize: 11, color: '#9B99C8', marginTop: 6, lineHeight: 1.5 }}>
+              This is not part of the project sum. The client pays it to unlock the rendering package before quote discussion.
+            </div>
+          </div>
+
           {/* Payment Schedule */}
           <div>
             <label style={lS}>Payment Schedule</label>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
               {Object.entries(SCHEDULE_CONFIGS).map(([key, cfg]) => (
                 <button key={key} type="button" onClick={() => set('paymentSchedule', key)} style={{ padding: '12px 10px', borderRadius: 12, border: `2px solid ${form.paymentSchedule === key ? '#0D0B2E' : '#E8E6F5'}`, background: form.paymentSchedule === key ? '#0D0B2E' : '#fff', cursor: 'pointer', textAlign: 'left', transition: 'all .15s' }}>
-                  <div style={{ fontSize: 12, fontWeight: 800, color: form.paymentSchedule === key ? '#231F78' : '#0D0B2E', marginBottom: 3 }}>{cfg.label}</div>
+                  <div style={{ fontSize: 12, fontWeight: 800, color: form.paymentSchedule === key ? '#fff' : '#0D0B2E', marginBottom: 3 }}>{cfg.label}</div>
                   <div style={{ fontSize: 10, color: form.paymentSchedule === key ? 'rgba(255,255,255,.6)' : '#9B99C8', lineHeight: 1.4 }}>{cfg.sub}</div>
                 </button>
               ))}
@@ -1140,6 +1229,15 @@ function ProjectConversation({ project, user, addProjectMessage }) {
   const [tab, setTab] = useState('client');
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
+  const [translatingId, setTranslatingId] = useState(null);
+  const [editingId, setEditingId] = useState(null);
+  const [editText, setEditText] = useState('');
+  const [recording, setRecording] = useState(false);
+  const [recordingStartedAt, setRecordingStartedAt] = useState(null);
+  const [voiceSaving, setVoiceSaving] = useState(false);
+  const mediaRecorderRef = useRef(null);
+  const chunksRef = useRef([]);
+  const recordingStartedAtRef = useRef(null);
   const bottomRef = useRef(null);
 
   useEffect(() => {
@@ -1161,6 +1259,82 @@ function ProjectConversation({ project, user, addProjectMessage }) {
     await addProjectMessage(project.id, text.trim(), 'admin', isInternal);
     setText('');
     setSending(false);
+  };
+
+  const translate = async (messageId, targetLanguage = 'zh') => {
+    if (!functions || translatingId) return;
+    setTranslatingId(messageId);
+    try {
+      const fn = httpsCallable(functions, 'translateProjectMessage');
+      await fn({ projectId: project.id, messageId, targetLanguage });
+    } catch (err) {
+      alert(err.message || 'Translation failed');
+    } finally {
+      setTranslatingId(null);
+    }
+  };
+
+  const startEdit = (message) => {
+    setEditingId(message.id);
+    setEditText(message.text || '');
+  };
+
+  const saveEdit = async (message) => {
+    if (!db || !editText.trim()) return;
+    await updateDoc(doc(db, 'projects', project.id, 'messages', message.id), {
+      text: editText.trim(),
+      editedAt: serverTimestamp(),
+      editedBy: user?.uid || user?.id || 'admin',
+      updatedAt: serverTimestamp(),
+      editHistory: arrayUnion({
+        text: message.text || '',
+        editedAt: new Date().toISOString(),
+        editedBy: user?.uid || user?.id || 'admin',
+      }),
+    });
+    setEditingId(null);
+    setEditText('');
+  };
+
+  const startRecording = async () => {
+    if (!navigator.mediaDevices?.getUserMedia || recording) return;
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const recorder = new MediaRecorder(stream);
+    chunksRef.current = [];
+    recorder.ondataavailable = event => {
+      if (event.data?.size) chunksRef.current.push(event.data);
+    };
+    recorder.onstop = async () => {
+      setVoiceSaving(true);
+      try {
+        const blob = new Blob(chunksRef.current, { type: recorder.mimeType || 'audio/webm' });
+        const duration = recordingStartedAtRef.current ? Math.round((Date.now() - recordingStartedAtRef.current) / 1000) : null;
+        const file = new File([blob], `voice-${Date.now()}.webm`, { type: blob.type });
+        const audioUrl = await uploadFile('project-voice-notes', `${project.id}/${Date.now()}-admin.webm`, file);
+        await addProjectMessage(project.id, 'Voice note', 'admin', tab === 'internal', {
+          type: 'voice',
+          audioUrl,
+          duration,
+        });
+      } finally {
+        stream.getTracks().forEach(track => track.stop());
+        setRecording(false);
+        recordingStartedAtRef.current = null;
+        setRecordingStartedAt(null);
+        setVoiceSaving(false);
+      }
+    };
+    mediaRecorderRef.current = recorder;
+    recordingStartedAtRef.current = Date.now();
+    setRecordingStartedAt(Date.now());
+    setRecording(true);
+    recorder.start();
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current?.state === 'recording') {
+      mediaRecorderRef.current.stop();
+    }
   };
 
   const roleColor = (role) => {
@@ -1203,6 +1377,8 @@ function ProjectConversation({ project, user, addProjectMessage }) {
         {visible.map(m => {
           const isAdmin = m.senderRole === 'admin';
           const isSystem = m.senderRole === 'system';
+          const translated = m.translations?.zh?.text;
+          const canEdit = isAdmin && !isSystem && m.type !== 'voice';
           return (
             <div key={m.id} style={{ display: 'flex', flexDirection: 'column', alignItems: isAdmin ? 'flex-end' : 'flex-start' }}>
               {!isSystem && (
@@ -1220,8 +1396,42 @@ function ProjectConversation({ project, user, addProjectMessage }) {
                 fontStyle: isSystem ? 'italic' : 'normal',
                 lineHeight: 1.5,
               }}>
-                {m.text}
+                {editingId === m.id ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <textarea value={editText} onChange={e => setEditText(e.target.value)} rows={3} style={{ width: 260, border: '1px solid #E8E6F5', borderRadius: 10, padding: 10, fontFamily: 'inherit', fontSize: 13 }} />
+                    <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                      <button onClick={() => setEditingId(null)} style={{ border: 'none', background: '#F8F8FD', borderRadius: 8, padding: '6px 10px', fontSize: 11, fontWeight: 800, cursor: 'pointer' }}>Cancel</button>
+                      <button onClick={() => saveEdit(m)} style={{ border: 'none', background: '#16A34A', color: '#fff', borderRadius: 8, padding: '6px 10px', fontSize: 11, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}><Save size={12} /> Save</button>
+                    </div>
+                  </div>
+                ) : m.type === 'voice' && m.audioUrl ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <div style={{ fontWeight: 800 }}>{m.text || 'Voice note'}{m.duration ? ` · ${m.duration}s` : ''}</div>
+                    <audio controls src={m.audioUrl} style={{ width: 260, maxWidth: '100%' }} />
+                    {m.transcript && <div style={{ fontSize: 12, opacity: .8 }}>{m.transcript}</div>}
+                  </div>
+                ) : (
+                  m.text
+                )}
+                {m.editedAt && <span style={{ display: 'block', fontSize: 10, opacity: .55, marginTop: 6 }}>Edited</span>}
+                {translated && (
+                  <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px solid ${isAdmin ? 'rgba(255,255,255,.18)' : '#E8E6F5'}`, fontSize: 12, opacity: .9 }}>
+                    <strong>中文:</strong> {translated}
+                  </div>
+                )}
               </div>
+              {!isSystem && tab === 'client' && (
+                <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
+                  <button onClick={() => translate(m.id, 'zh')} disabled={translatingId === m.id} style={{ border: 'none', background: 'transparent', color: '#9B99C8', fontSize: 10, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <Languages size={11} /> {translatingId === m.id ? 'Translating...' : 'Translate 中文'}
+                  </button>
+                  {canEdit && (
+                    <button onClick={() => startEdit(m)} style={{ border: 'none', background: 'transparent', color: '#9B99C8', fontSize: 10, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <Pencil size={11} /> Edit
+                    </button>
+                  )}
+                </div>
+              )}
               <div style={{ fontSize: 10, color: '#DFD9D1', marginTop: 4 }}>
                 {m.createdAt?.seconds ? new Date(m.createdAt.seconds * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'now'}
               </div>
@@ -1241,6 +1451,14 @@ function ProjectConversation({ project, user, addProjectMessage }) {
           rows={2}
           style={{ flex: 1, padding: '10px 14px', borderRadius: 12, border: '1.5px solid #E8E6F5', fontSize: 13, outline: 'none', resize: 'none', boxSizing: 'border-box', fontFamily: 'inherit', lineHeight: 1.5, background: tab === 'internal' ? '#FEFDF5' : '#fff' }}
         />
+        <button
+          onClick={recording ? stopRecording : startRecording}
+          disabled={voiceSaving}
+          style={{ width: 44, height: 44, borderRadius: 12, background: recording ? '#EF4444' : '#F8F8FD', color: recording ? '#fff' : '#5B5894', border: '1px solid #E8E6F5', cursor: voiceSaving ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', alignSelf: 'flex-end', flexShrink: 0 }}
+          title={recording ? 'Stop recording' : 'Record voice note'}
+        >
+          {voiceSaving ? <Loader2 size={16} className="spin" /> : recording ? <Square size={15} /> : <Mic size={16} />}
+        </button>
         <button
           onClick={send}
           disabled={!text.trim() || sending}
@@ -1430,7 +1648,7 @@ export default function ClientHub({ clientId, dbClients = [], onBack, ...props }
                   {selected.budget && (
                     <div>
                       <div style={{ fontSize: 10, color: '#9B99C8', fontWeight: 700 }}>Budget</div>
-                      <div style={{ fontSize: 14, fontWeight: 800, color: '#0D0B2E' }}>${Number(selected.budget).toLocaleString()}</div>
+                      <div style={{ fontSize: 14, fontWeight: 800, color: '#0D0B2E' }}>GHS {Number(String(selected.projectTotal || selected.budget).replace(/[^0-9.]/g, '') || 0).toLocaleString()}</div>
                     </div>
                   )}
                   <div>
@@ -1507,8 +1725,10 @@ export default function ClientHub({ clientId, dbClients = [], onBack, ...props }
                 </div>
               )}
 
-              {/* ── Shipping Details Card (stages 7 & 8) ── */}
-              {selected.stageId === 4 && (
+              <ProjectOperatingSystemCard project={selected} props={props} />
+
+              {/* ── Shipping Details Card ── */}
+              {selected.stageId === 7 && (
                 <ShippingDetailsCard
                   project={selected}
                   updateShippingDetails={props.updateShippingDetails}

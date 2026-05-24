@@ -51,7 +51,7 @@ export default function AdminPortal({ user, onLogout, onPreview, content, setCon
   };
 
   const renderView = () => {
-    const STAFF_ALLOWED_VIEWS = ['dash', 'client-hub', 'operations', 'messages', 'projects'];
+    const STAFF_ALLOWED_VIEWS = ['dash', 'client-hub', 'operations', 'messages', 'projects', 'installations', 'logistics'];
     if (staffMode && !STAFF_ALLOWED_VIEWS.includes(view)) {
       setTimeout(() => handleSetView('dash'), 0);
       return null;

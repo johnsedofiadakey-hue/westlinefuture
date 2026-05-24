@@ -59,17 +59,34 @@ export function PubNav({ brand, setPage, activePage, onPortal, user, menuOpen, s
 
   const forceSolid = activePage !== 'home';
   const isScrolled = scrolled || forceSolid;
+  const mobileIconButton = {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    background: '#ffffff',
+    border: '1px solid rgba(13,11,46,0.10)',
+    color: DARK_TEXT,
+    zIndex: 1001,
+    padding: 0,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    cursor: 'pointer',
+    boxShadow: '0 8px 24px rgba(13,11,46,0.10)',
+    position: 'relative'
+  };
 
   return (
     <nav style={{
       position: 'fixed', top: 0, left: 0, right: 0, zIndex: 1000,
-      background: isScrolled ? 'rgba(35,31,120,0.97)' : 'rgba(35,31,120,0.15)',
-      backdropFilter: 'blur(24px) saturate(180%)',
-      WebkitBackdropFilter: 'blur(24px) saturate(180%)',
-      borderBottom: isScrolled ? '1px solid rgba(255,255,255,0.08)' : 'none',
+      background: mob ? '#ffffff' : (isScrolled ? 'rgba(35,31,120,0.97)' : 'rgba(35,31,120,0.15)'),
+      backdropFilter: mob ? 'none' : 'blur(24px) saturate(180%)',
+      WebkitBackdropFilter: mob ? 'none' : 'blur(24px) saturate(180%)',
+      borderBottom: mob ? '1px solid rgba(13,11,46,0.08)' : (isScrolled ? '1px solid rgba(255,255,255,0.08)' : 'none'),
       transition: 'all 0.5s cubic-bezier(0.16, 1, 0.3, 1)',
-      height: mob ? (scrolled ? 64 : 80) : (scrolled ? 80 : 120), 
-      display: 'flex', alignItems: 'center', padding: '0 5vw'
+      height: mob ? 72 : (scrolled ? 80 : 120),
+      display: 'flex', alignItems: 'center', padding: mob ? '0 20px' : '0 5vw',
+      boxShadow: mob ? '0 10px 32px rgba(13,11,46,0.08)' : 'none'
     }}>
       <div style={{ maxWidth: 1800, width: '100%', margin: '0 auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         
@@ -88,8 +105,8 @@ export function PubNav({ brand, setPage, activePage, onPortal, user, menuOpen, s
               />
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1, gap: 2 }}>
-                <div style={{ fontSize: mob ? 18 : 24, fontWeight: 900, color: '#ffffff', letterSpacing: '0.05em' }}>WESTLINE</div>
-                <div style={{ fontSize: mob ? 8 : 10, fontWeight: 400, color: 'rgba(255,255,255,0.6)', letterSpacing: '0.45em' }}>FUTURE</div>
+                <div style={{ fontSize: mob ? 18 : 24, fontWeight: 900, color: mob ? DARK_TEXT : '#ffffff', letterSpacing: '0.05em' }}>WESTLINE</div>
+                <div style={{ fontSize: mob ? 8 : 10, fontWeight: 400, color: mob ? 'rgba(13,11,46,0.55)' : 'rgba(255,255,255,0.6)', letterSpacing: '0.45em' }}>FUTURE</div>
               </div>
             )}
         </div>
@@ -164,12 +181,13 @@ export function PubNav({ brand, setPage, activePage, onPortal, user, menuOpen, s
           </div>
         )}
         {user && (
-          <button 
-            className="mob-only" 
-            onClick={() => setMenuOpen(true)} 
-            style={{ background: 'none', border: 'none', color: ac, zIndex: 1001, padding: 8, position: 'relative', marginRight: 8 }}
-          >
-            <Bell size={28} />
+            <button 
+              className="mob-only" 
+              onClick={() => setMenuOpen(true)} 
+              style={{ ...mobileIconButton, marginRight: 10 }}
+              aria-label="Open notifications"
+            >
+            <Bell size={20} />
             {userNotifications.filter(n => !n.read).length > 0 && (
               <span style={{ position: 'absolute', top: 4, right: 4, background: 'red', color: '#fff', borderRadius: '50%', width: 16, height: 16, fontSize: 10, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 {userNotifications.filter(n => !n.read).length}
@@ -181,22 +199,29 @@ export function PubNav({ brand, setPage, activePage, onPortal, user, menuOpen, s
         <button 
           className="mob-only" 
           onClick={() => setMenuOpen(!menuOpen)} 
-          style={{ background: 'none', border: 'none', color: ac, zIndex: 1001, padding: 8 }}
+          style={{
+            ...mobileIconButton,
+            background: menuOpen ? DARK_TEXT : '#ffffff',
+            borderColor: menuOpen ? DARK_TEXT : 'rgba(13,11,46,0.10)',
+            color: menuOpen ? '#ffffff' : DARK_TEXT
+          }}
+          aria-label={menuOpen ? 'Close menu' : 'Open menu'}
+          aria-expanded={menuOpen}
         >
-          {menuOpen ? <X size={32} /> : <Menu size={32} />}
+          {menuOpen ? <X size={22} /> : <Menu size={22} />}
         </button>
 
       </div>
 
-      {/* MOBILE DRAWER - Translucent Glass Effect */}
+      {/* MOBILE DRAWER */}
       <div style={{
         position: 'fixed', top: 0, right: 0, bottom: 0, left: 0,
-        background: '#ffffff', 
+        background: '#ffffff',
         transform: menuOpen ? 'translateX(0)' : 'translateX(100%)',
         transition: 'transform 0.5s cubic-bezier(0.16, 1, 0.3, 1)', zIndex: 1000,
-        padding: '120px 32px 48px', display: 'flex', flexDirection: 'column',
-        boxShadow: '-20px 0 60px rgba(0,0,0,0.1)',
-        borderLeft: '1px solid rgba(0,0,0,0.05)'
+        padding: '104px 28px 40px', display: 'flex', flexDirection: 'column',
+        boxShadow: '-20px 0 60px rgba(13,11,46,0.14)',
+        borderLeft: '1px solid rgba(13,11,46,0.08)'
       }}>
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: mob ? 0 : 8 }}>
           {links.map((l, i) => (

@@ -2,9 +2,9 @@ import React, { useState } from 'react';
 import { LogOut, Package, Truck, Wrench, CheckCircle, ChevronDown, ChevronUp, Camera, MessageSquare, AlertCircle } from 'lucide-react';
 import { CLIENT_PROJECT_STAGES } from '../data';
 
-const DELIVERY_STAGE = 4;
-const INSTALLATION_STAGE = 5;
-const COMPLETE_STAGE = 6;
+const DELIVERY_STAGE = 7;
+const INSTALLATION_STAGE = 8;
+const COMPLETE_STAGE = 9;
 
 function getStageName(stageId) {
   const s = CLIENT_PROJECT_STAGES.find(s => s.id === stageId);
@@ -28,7 +28,7 @@ function ProjectCard({ project, updateProjectStage, addProjectMessage, addProjec
     if (!updateProjectStage) return;
     setStageLoading(true);
     try {
-      const label = isDelivery ? 'Delivered by field team' : 'Installation complete';
+      const label = isDelivery ? 'Delivered by field team' : 'Installation complete; inspection requested';
       await updateProjectStage(project.id, isDelivery ? INSTALLATION_STAGE : COMPLETE_STAGE, label);
       setStageDone(true);
     } catch (e) {
@@ -111,7 +111,7 @@ function ProjectCard({ project, updateProjectStage, addProjectMessage, addProjec
         >
           {isDelivery && <Truck size={16} />}
           {isInstall && <Wrench size={16} />}
-          {stageLoading ? 'Updating...' : isDelivery ? 'Mark as Delivered' : 'Mark as Installed'}
+          {stageLoading ? 'Updating...' : isDelivery ? 'Mark as Delivered' : 'Request Inspection'}
         </button>
       )}
       {stageDone && (

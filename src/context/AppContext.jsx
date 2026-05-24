@@ -169,7 +169,7 @@ export const AppProvider = ({ children }) => {
     const unsubProject = onSnapshot(projectQuery, (snap) => {
       setClients(snap.docs.map(d => {
         const data = d.data();
-        // Normalize legacy 12-stage IDs → current 7-stage IDs at read time
+        // Normalize legacy stage IDs → current 10-stage IDs at read time
         const rawStageId = data.stageId ?? data.stage ?? 1;
         return { id: d.id, ...data, stageId: normalizeStageId(rawStageId), name: data.title || data.project };
       }));

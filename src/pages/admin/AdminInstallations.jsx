@@ -10,6 +10,7 @@ import AdminGovernance from './AdminGovernance';
 export default function AdminInstallations({ clients = [], updateProject, dbClients, brand, transactions = [], recordOfflinePayment, calculateProjectPulse, teamMembers = [], assignWorkerToProject, ...props }) {
   const ac = brand.color || '#231F78';
   const [search, setSearch] = useState('');
+  const [stageFilter, setStageFilter] = useState('active-field');
   const [sel, setSel] = useState(null);
   const [showManual, setShowManual] = useState(false);
   const [manData, setManData] = useState({ amount: '', method: 'Bank Transfer', ref: '' });
@@ -28,7 +29,24 @@ export default function AdminInstallations({ clients = [], updateProject, dbClie
       setManSaving(false);
     }
   };
-  const filtered = (clients || []).filter(c => (c.project || '').toLowerCase().includes(search.toLowerCase()));
+  const projectName = (project) => project.project || project.title || 'Untitled project';
+  const clientName = (project) => project.name || project.clientName || 'Unknown client';
+  const projectStageId = (project) => project.stageId || project.stage || 1;
+  const isFieldStage = (project) => [7, 8, 9].includes(projectStageId(project)) || (project.assignedWorkers || []).length > 0;
+  const filtered = (clients || []).filter(c => {
+    const haystack = [projectName(c), clientName(c), c.location, c.nextAction, c.status].filter(Boolean).join(' ').toLowerCase();
+    if (search && !haystack.includes(search.toLowerCase())) return false;
+    if (stageFilter === 'active-field') return isFieldStage(c);
+    if (stageFilter === 'delivery') return projectStageId(c) === 7;
+    if (stageFilter === 'installation') return projectStageId(c) === 8;
+    if (stageFilter === 'inspection') return projectStageId(c) === 9;
+    if (stageFilter === 'assigned') return (c.assignedWorkers || []).length > 0;
+    return true;
+  });
+  const deliveryCount = (clients || []).filter(c => projectStageId(c) === 7).length;
+  const installationCount = (clients || []).filter(c => projectStageId(c) === 8).length;
+  const inspectionCount = (clients || []).filter(c => projectStageId(c) === 9).length;
+  const crewAssignedCount = (clients || []).filter(c => (c.assignedWorkers || []).length > 0).length;
 
   if (sel) {
     const proj = clients.find(x => x.id === sel);
@@ -43,13 +61,13 @@ export default function AdminInstallations({ clients = [], updateProject, dbClie
           <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
             <button onClick={() => setSel(null)} className="p-btn-light" style={{ width: 40, height: 40, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><ArrowLeft size={18} /></button>
             <div>
-              <h2 className="lxfh" style={{ fontSize: 24, fontWeight: 400 }}>{proj.project}</h2>
-              <div className="lxf" style={{ fontSize: 13, color: '#9B99C8' }}>{proj.cat || 'Full Interior Finishing'} • {proj.name}</div>
+              <h2 className="lxfh" style={{ fontSize: 24, fontWeight: 400 }}>{projectName(proj)}</h2>
+              <div className="lxf" style={{ fontSize: 13, color: '#9B99C8' }}>{proj.cat || 'Full Interior Finishing'} • {clientName(proj)}</div>
             </div>
           </div>
           <div style={{ textAlign: 'right', display: 'flex', gap: 24 }}>
             <div>
-              <div className="lxf" style={{ fontSize: 10, color: '#9B99C8', textTransform: 'uppercase', letterSpacing: '.15em' }}>Fabrication Progress</div>
+              <div className="lxf" style={{ fontSize: 10, color: '#9B99C8', textTransform: 'uppercase', letterSpacing: '.15em' }}>Field Progress</div>
               <div className="lxfh" style={{ fontSize: 18, color: '#5B5894', textAlign: 'right' }}>{proj.progress || 0}%</div>
             </div>
             <div style={{ paddingLeft: 24, borderLeft: '1px solid #E8E6F5' }}>
@@ -64,13 +82,14 @@ export default function AdminInstallations({ clients = [], updateProject, dbClie
             
             {/* TIMELINE EDITOR */}
             <div className="p-card" style={{ padding: 24 }}>
-              <h3 className="lxfh" style={{ fontSize: 18, marginBottom: 24 }}>Project Journey</h3>
+              <h3 className="lxfh" style={{ fontSize: 18, marginBottom: 24 }}>Field Stage Control</h3>
               <div style={{ display: 'flex', flexDirection: 'column', position: 'relative' }}>
                 <div style={{ position: 'absolute', left: 15, top: 0, bottom: 0, width: 2, background: '#E8E6F5' }} />
                 
                 {PROJECT_STAGES.map((s, idx) => {
-                  const isCurrent = (proj.stage || 1) === s.id;
-                  const isPast = (proj.stage || 1) > s.id;
+                  const currentStageId = projectStageId(proj);
+                  const isCurrent = currentStageId === s.id;
+                  const isPast = currentStageId > s.id;
                   const isLast = idx === PROJECT_STAGES.length - 1;
                   
                   return (
@@ -245,11 +264,41 @@ export default function AdminInstallations({ clients = [], updateProject, dbClie
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <h2 className="lxfh" style={{ fontSize: 32, fontWeight: 400 }}>Fabrication & Installations</h2>
-        <div style={{ position: 'relative' }}>
-          <Search size={14} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#9B99C8' }} />
-          <input className="p-inp" placeholder="Search projects..." value={search} onChange={e => setSearch(e.target.value)} style={{ paddingLeft: 34, width: 240 }} />
+        <div>
+          <h2 className="lxfh" style={{ fontSize: 32, fontWeight: 400, margin: 0 }}>Field Operations Center</h2>
+          <div className="lxf" style={{ fontSize: 13, color: '#9B99C8', marginTop: 4 }}>Installer assignments, site progress, photos, checklists, and inspection readiness</div>
         </div>
+        <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+          <select value={stageFilter} onChange={e => setStageFilter(e.target.value)} className="p-inp" style={{ height: 40, width: 180, fontSize: 12, fontWeight: 700 }}>
+            <option value="active-field">Active field work</option>
+            <option value="delivery">Shipping & delivery</option>
+            <option value="installation">Installation only</option>
+            <option value="inspection">Inspection only</option>
+            <option value="assigned">Crew assigned</option>
+            <option value="all">All projects</option>
+          </select>
+          <div style={{ position: 'relative' }}>
+            <Search size={14} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#9B99C8' }} />
+            <input className="p-inp" placeholder="Search projects..." value={search} onChange={e => setSearch(e.target.value)} style={{ paddingLeft: 34, width: 240 }} />
+          </div>
+        </div>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 14 }}>
+        {[
+          { label: 'Delivery Ready', value: deliveryCount, color: '#607D8B' },
+          { label: 'Installing Now', value: installationCount, color: '#16A34A' },
+          { label: 'Inspection Queue', value: inspectionCount, color: '#4945BE' },
+          { label: 'Crew Assigned', value: crewAssignedCount, color: ac },
+        ].map(stat => (
+          <div key={stat.label} className="p-card" style={{ padding: 18, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              <div className="lxf" style={{ fontSize: 10, color: '#9B99C8', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '.08em' }}>{stat.label}</div>
+              <div className="lxfh" style={{ fontSize: 28, color: stat.color, marginTop: 4 }}>{stat.value}</div>
+            </div>
+            <HardHat size={22} color={stat.color} />
+          </div>
+        ))}
       </div>
       
       <div className="ops-grid" style={{ 
@@ -258,14 +307,14 @@ export default function AdminInstallations({ clients = [], updateProject, dbClie
         gap: 24 
       }}>
         {filtered.map(c => {
-          const currentStageObj = PROJECT_STAGES.find(s => s.id === (c.stage || 1));
+          const currentStageObj = PROJECT_STAGES.find(s => s.id === projectStageId(c));
           return (
             <div key={c.id} className="p-card fade-in" style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 20 }}>
                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                   <div style={{ flex: 1 }}>
                      <div className="lxf" style={{ fontSize: 10, color: ac, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.1em', marginBottom: 4 }}>{c.cat || 'Full Interior'}</div>
-                     <div className="lxfh" style={{ fontSize: 18, fontWeight: 700 }}>{c.project}</div>
-                     <div className="lxf" style={{ fontSize: 12, color: '#9B99C8', marginTop: 3 }}>{c.name}</div>
+                     <div className="lxfh" style={{ fontSize: 18, fontWeight: 700 }}>{projectName(c)}</div>
+                     <div className="lxf" style={{ fontSize: 12, color: '#9B99C8', marginTop: 3 }}>{clientName(c)}</div>
                   </div>
                   <div style={{ width: 44, height: 44, borderRadius: 12, background: '#F8F8FD', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                      <PSBadge s={currentStageObj?.name || 'Order Confirmed'} />
@@ -274,7 +323,7 @@ export default function AdminInstallations({ clients = [], updateProject, dbClie
 
                <div style={{ marginTop: 8 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8, fontSize: 11, fontWeight: 700 }}>
-                     <span style={{ color: '#5B5894' }}>PROGRESS</span>
+                     <span style={{ color: '#5B5894' }}>FIELD PROGRESS</span>
                      <span>{c.progress || 0}%</span>
                   </div>
                   <div className="prog" style={{ height: 6, width: '100%', background: '#E8E6F5' }}>
@@ -284,6 +333,9 @@ export default function AdminInstallations({ clients = [], updateProject, dbClie
 
                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 16, borderTop: '1px solid #F8F8FD' }}>
                   <div style={{ display: 'flex', gap: 8 }}>
+                     <div className="lxf" style={{ fontSize: 11, color: '#9B99C8', display: 'flex', alignItems: 'center', gap: 5 }}>
+                       <UserCheck size={13} /> {(c.assignedWorkers || []).length} crew
+                     </div>
                      <button 
                         onClick={() => props.sendWhatsAppUpdate(c.id, c.id, currentStageObj?.name || 'New Stage')}
                         className="p-btn-light" 
@@ -308,7 +360,7 @@ export default function AdminInstallations({ clients = [], updateProject, dbClie
                         gap: 4
                      }}
                   >
-                     Manage Operations <ArrowRight size={14} />
+                     Open Field File <ArrowRight size={14} />
                   </button>
                </div>
             </div>

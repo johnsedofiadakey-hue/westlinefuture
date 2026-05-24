@@ -3,19 +3,19 @@ import { createPortal } from 'react-dom';
 import {
   Search, X, Check, CheckCircle2,
   DollarSign, MessageCircle, FileText, Camera,
-  Clock, User, Grip, Activity, Calendar, ChevronRight, Trash2, AlertTriangle, Users, UserCheck
+  Clock, User, Grip, Activity, Calendar, ChevronRight, Trash2, AlertTriangle, Users, UserCheck, LayoutGrid, ListFilter
 } from 'lucide-react';
 import { CLIENT_PROJECT_STAGES, PROJECT_TYPES } from '../../data';
 
-// ─── Column definitions — 7-stage pipeline ───────────────────────────────────
+// ─── Column definitions — 10-stage production pipeline ───────────────────────
 const KANBAN_COLS = [
-  { id: 'intake',       label: 'Intake',       stages: [1], color: '#8B7355', bg: 'rgba(139,115,85,0.07)' },
-  { id: 'ordering',     label: 'Ordering',     stages: [2], color: '#2563EB', bg: 'rgba(37,99,235,0.07)' },
-  { id: 'production',   label: 'Production',   stages: [3], color: '#374151', bg: 'rgba(55,65,81,0.06)' },
-  { id: 'delivery',     label: 'Delivery',     stages: [4], color: '#0891B2', bg: 'rgba(8,145,178,0.07)' },
-  { id: 'installation', label: 'Installation', stages: [5], color: '#16A34A', bg: 'rgba(22,163,74,0.07)' },
-  { id: 'inspection',   label: 'Inspection',   stages: [6], color: '#7C3AED', bg: 'rgba(124,58,237,0.07)' },
-  { id: 'handover',     label: 'Handover',     stages: [7], color: '#231F78', bg: 'rgba(35,31,120,0.07)' },
+  { id: 'intake',       label: 'Intake',       stages: [1], color: '#231F78', bg: 'rgba(35,31,120,0.07)' },
+  { id: 'rendering',    label: 'Rendering',    stages: [2, 3], color: '#7C3AED', bg: 'rgba(124,58,237,0.07)' },
+  { id: 'quote',        label: 'Quote',        stages: [4, 5], color: '#0891B2', bg: 'rgba(8,145,178,0.07)' },
+  { id: 'production',   label: 'Production',   stages: [6], color: '#374151', bg: 'rgba(55,65,81,0.06)' },
+  { id: 'delivery',     label: 'Delivery',     stages: [7], color: '#607D8B', bg: 'rgba(96,125,139,0.07)' },
+  { id: 'installation', label: 'Installation', stages: [8], color: '#16A34A', bg: 'rgba(22,163,74,0.07)' },
+  { id: 'closeout',     label: 'Closeout',     stages: [9, 10], color: '#4945BE', bg: 'rgba(73,69,190,0.08)' },
 ];
 
 const STAGE_MAP = {};
@@ -43,6 +43,87 @@ function daysSince(val) {
   const d = val?.toDate ? val.toDate() : new Date(val);
   if (isNaN(d)) return null;
   return Math.max(0, Math.floor((Date.now() - d.getTime()) / 86400000));
+}
+
+function projectTitle(project) {
+  return project.project || project.title || 'Untitled project';
+}
+
+function clientName(project) {
+  return project.name || project.clientName || project.clientId || 'Unknown client';
+}
+
+function assignedIds(project) {
+  return [
+    ...(project.assignedStaff || []),
+    ...(project.assignedWorkers || []),
+    project.assignedTo,
+    project.projectManagerId,
+    project.managerId,
+  ].filter(Boolean);
+}
+
+function moneyLabel(value) {
+  if (!value) return '—';
+  const cleaned = String(value).trim();
+  if (/^(GHS|GH₵|\$|€|£)/i.test(cleaned)) return cleaned;
+  return cleaned;
+}
+
+function isProjectCompleted(project) {
+  return (project.stageId || 1) === 10 || project.status === 'Completed' || project.status === 'completed';
+}
+
+function isWaitingOnPayment(project) {
+  const status = [
+    project.nextAction,
+    project.paymentStatus,
+    project.renderingStatus,
+    project.depositStatus,
+    project.invoiceStatus,
+    project.stageGateStatus,
+  ].filter(Boolean).join(' ');
+  return /payment|invoice|deposit|unpaid|awaiting payment|locked/i.test(status);
+}
+
+function isWaitingOnClient(project) {
+  const stage = STAGE_MAP[project.stageId || 1];
+  const status = [project.nextAction, project.approvalStatus, project.renderingStatus, project.quoteStatus].filter(Boolean).join(' ');
+  return stage?.whoActs === 'client' || stage?.whoActs === 'both' || /client|approval|approve|sign.?off|changes requested/i.test(status);
+}
+
+function isFieldProject(project) {
+  const stageId = project.stageId || 1;
+  return [7, 8, 9].includes(stageId) || (project.assignedWorkers || []).length > 0;
+}
+
+function isBlocked(project) {
+  const status = [project.nextAction, project.health, project.riskStatus, project.timelineStatus, project.status].filter(Boolean).join(' ');
+  return /blocked|red|delayed|overdue|at risk|waiting|awaiting/i.test(status) || isWaitingOnPayment(project);
+}
+
+function projectManagerOptions(projects, teamMembers) {
+  const byId = new Map();
+  (teamMembers || []).forEach(m => {
+    const id = m.uid || m.id;
+    if (id) byId.set(id, m.name || m.email || id);
+  });
+  projects.forEach(p => {
+    assignedIds(p).forEach(id => {
+      if (id && !byId.has(id)) byId.set(id, id);
+    });
+  });
+  return [...byId.entries()].map(([id, name]) => ({ id, name }));
+}
+
+function ownerLabel(project, teamMembers) {
+  const ids = assignedIds(project);
+  if (!ids.length) return 'Unassigned';
+  const names = ids.map(id => {
+    const member = (teamMembers || []).find(m => m.id === id || m.uid === id);
+    return member?.name || id;
+  });
+  return names.slice(0, 2).join(', ') + (names.length > 2 ? ` +${names.length - 2}` : '');
 }
 
 // ─── ProjectCard ─────────────────────────────────────────────────────────────
@@ -465,6 +546,10 @@ function ProjectDrawer({ project, ac, onClose, updateProjectStage, updateProject
 export default function ProjectKanban({ clients = [], brand, updateProjectStage, updateProject, createInvoice, sendWhatsAppUpdate, notify, invoices = [], deleteProject, teamMembers = [], assignWorkerToProject, staffMode = false, ...props }) {
   const ac = brand?.color || '#231F78';
   const [search, setSearch] = useState('');
+  const [viewMode, setViewMode] = useState('board');
+  const [focusFilter, setFocusFilter] = useState('all');
+  const [stageFilter, setStageFilter] = useState('all');
+  const [ownerFilter, setOwnerFilter] = useState('all');
   const [dragProject, setDragProject] = useState(null);
   const [dragOverCol, setDragOverCol] = useState(null);
   const [openProject, setOpenProject] = useState(null);
@@ -483,11 +568,32 @@ export default function ProjectKanban({ clients = [], brand, updateProjectStage,
     setDragOverCol(null);
   };
 
-  const filtered = (clients || []).filter(p =>
-    !search ||
-    (p.project || p.title || '').toLowerCase().includes(search.toLowerCase()) ||
-    (p.name || '').toLowerCase().includes(search.toLowerCase())
-  );
+  const ownerOptions = projectManagerOptions(clients || [], teamMembers);
+  const normalizedSearch = search.trim().toLowerCase();
+
+  const filtered = (clients || []).filter(p => {
+    const searchable = [
+      projectTitle(p),
+      clientName(p),
+      p.nextAction,
+      p.status,
+      p.projectType,
+      p.location,
+    ].filter(Boolean).join(' ').toLowerCase();
+
+    if (normalizedSearch && !searchable.includes(normalizedSearch)) return false;
+    if (stageFilter !== 'all') {
+      const col = KANBAN_COLS.find(c => c.id === stageFilter);
+      if (col && !col.stages.includes(p.stageId || 1)) return false;
+    }
+    if (ownerFilter !== 'all' && !assignedIds(p).includes(ownerFilter)) return false;
+    if (focusFilter === 'blocked' && !isBlocked(p)) return false;
+    if (focusFilter === 'payment' && !isWaitingOnPayment(p)) return false;
+    if (focusFilter === 'client' && !isWaitingOnClient(p)) return false;
+    if (focusFilter === 'field' && !isFieldProject(p)) return false;
+    if (focusFilter === 'completed' && !isProjectCompleted(p)) return false;
+    return true;
+  });
 
   const projectsByCol = {};
   KANBAN_COLS.forEach(col => {
@@ -495,8 +601,21 @@ export default function ProjectKanban({ clients = [], brand, updateProjectStage,
   });
 
   const totalProjects = clients.length;
-  const activeProjects = clients.filter(p => (p.stageId || 1) < 7).length;
-  const completedProjects = clients.filter(p => (p.stageId || 1) === 7).length;
+  const activeProjects = clients.filter(p => !isProjectCompleted(p)).length;
+  const completedProjects = clients.filter(isProjectCompleted).length;
+  const blockedProjects = clients.filter(isBlocked).length;
+
+  const filterSelectStyle = {
+    height: 40,
+    border: '1px solid #E8E6F5',
+    borderRadius: 12,
+    padding: '0 12px',
+    background: '#fff',
+    color: '#0D0B2E',
+    fontSize: 12,
+    fontWeight: 700,
+    outline: 'none',
+  };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 28, minHeight: '100%' }}>
@@ -504,17 +623,27 @@ export default function ProjectKanban({ clients = [], brand, updateProjectStage,
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 16 }}>
         <div>
           <h2 style={{ fontSize: 32, fontWeight: 400, fontFamily: 'var(--font-heading)', margin: 0 }}>Project Board</h2>
-          <p style={{ color: '#9B99C8', fontSize: 13, margin: '4px 0 0' }}>Drag projects between columns — click to open detail and advance stages</p>
+          <p style={{ color: '#9B99C8', fontSize: 13, margin: '4px 0 0' }}>Portfolio control for stage gates, blockers, payments, field work, and project managers</p>
         </div>
-        <div style={{ position: 'relative' }}>
-          <Search size={14} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#9B99C8' }} />
-          <input
-            className="p-inp"
-            placeholder="Search projects..."
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            style={{ paddingLeft: 34, width: 220, height: 40 }}
-          />
+        <div style={{ display: 'flex', gap: 8, background: '#fff', border: '1px solid #E8E6F5', padding: 4, borderRadius: 14 }}>
+          {[
+            { id: 'board', label: 'Board', icon: <LayoutGrid size={14} /> },
+            { id: 'list', label: 'List', icon: <ListFilter size={14} /> },
+          ].map(mode => (
+            <button
+              key={mode.id}
+              onClick={() => setViewMode(mode.id)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 6,
+                height: 32, padding: '0 12px', borderRadius: 10, border: 'none',
+                background: viewMode === mode.id ? ac : 'transparent',
+                color: viewMode === mode.id ? '#fff' : '#5B5894',
+                fontSize: 12, fontWeight: 800, cursor: 'pointer',
+              }}
+            >
+              {mode.icon} {mode.label}
+            </button>
+          ))}
         </div>
       </div>
 
@@ -523,7 +652,9 @@ export default function ProjectKanban({ clients = [], brand, updateProjectStage,
         {[
           { label: 'Total', value: totalProjects, color: '#0D0B2E' },
           { label: 'Active', value: activeProjects, color: '#2196F3' },
+          { label: 'Blocked', value: blockedProjects, color: '#EF4444' },
           { label: 'Completed', value: completedProjects, color: '#16A34A' },
+          { label: 'Showing', value: filtered.length, color: ac },
         ].map(stat => (
           <div key={stat.label} style={{ padding: '12px 20px', background: '#fff', border: '1px solid #E8E6F5', borderRadius: 14, display: 'flex', alignItems: 'center', gap: 12 }}>
             <div style={{ width: 8, height: 8, borderRadius: '50%', background: stat.color }} />
@@ -533,23 +664,106 @@ export default function ProjectKanban({ clients = [], brand, updateProjectStage,
         ))}
       </div>
 
-      {/* Board */}
-      <div style={{ display: 'flex', gap: 16, overflowX: 'auto', paddingBottom: 16, minHeight: 400 }}>
-        {KANBAN_COLS.map(col => (
-          <KanbanColumn
-            key={col.id}
-            col={col}
-            projects={projectsByCol[col.id] || []}
-            ac={ac}
-            onOpen={setOpenProject}
-            onDragStart={setDragProject}
-            onDrop={handleDrop}
-            onDragOver={colId => setDragOverCol(colId)}
-            onDragLeave={() => setDragOverCol(null)}
-            isDragOver={dragOverCol === col.id}
+      {/* Controls */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(220px, 1.4fr) repeat(3, minmax(160px, .8fr))', gap: 12, alignItems: 'center' }}>
+        <div style={{ position: 'relative' }}>
+          <Search size={14} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#9B99C8' }} />
+          <input
+            className="p-inp"
+            placeholder="Search project, client, next action..."
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            style={{ paddingLeft: 34, width: '100%', height: 40 }}
           />
-        ))}
+        </div>
+        <select value={focusFilter} onChange={e => setFocusFilter(e.target.value)} style={filterSelectStyle}>
+          <option value="all">All focus areas</option>
+          <option value="blocked">Blocked or at risk</option>
+          <option value="payment">Waiting on payment</option>
+          <option value="client">Waiting on client</option>
+          <option value="field">Field ready / active</option>
+          <option value="completed">Completed</option>
+        </select>
+        <select value={stageFilter} onChange={e => setStageFilter(e.target.value)} style={filterSelectStyle}>
+          <option value="all">All stages</option>
+          {KANBAN_COLS.map(col => <option key={col.id} value={col.id}>{col.label}</option>)}
+        </select>
+        <select value={ownerFilter} onChange={e => setOwnerFilter(e.target.value)} style={filterSelectStyle}>
+          <option value="all">All managers / crews</option>
+          {ownerOptions.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
+        </select>
       </div>
+
+      {viewMode === 'board' ? (
+        <div style={{ display: 'flex', gap: 16, overflowX: 'auto', paddingBottom: 16, minHeight: 400 }}>
+          {KANBAN_COLS.map(col => (
+            <KanbanColumn
+              key={col.id}
+              col={col}
+              projects={projectsByCol[col.id] || []}
+              ac={ac}
+              onOpen={setOpenProject}
+              onDragStart={setDragProject}
+              onDrop={handleDrop}
+              onDragOver={colId => setDragOverCol(colId)}
+              onDragLeave={() => setDragOverCol(null)}
+              isDragOver={dragOverCol === col.id}
+            />
+          ))}
+        </div>
+      ) : (
+        <div style={{ background: '#fff', border: '1px solid #E8E6F5', borderRadius: 18, overflow: 'hidden' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(220px, 1.4fr) minmax(160px, .9fr) minmax(150px, .8fr) minmax(180px, 1fr) minmax(150px, .8fr) 90px', gap: 16, padding: '14px 18px', background: '#F8F8FD', color: '#9B99C8', fontSize: 10, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '.08em' }}>
+            <div>Project</div>
+            <div>Stage</div>
+            <div>Owner</div>
+            <div>Next Action</div>
+            <div>Budget</div>
+            <div></div>
+          </div>
+          {filtered.length === 0 ? (
+            <div style={{ padding: 36, textAlign: 'center', color: '#9B99C8', fontSize: 13 }}>No projects match the current filters.</div>
+          ) : filtered.map(project => {
+            const stage = STAGE_MAP[project.stageId || 1] || CLIENT_PROJECT_STAGES[0];
+            return (
+              <button
+                key={project.id}
+                onClick={() => setOpenProject(project)}
+                style={{
+                  width: '100%',
+                  display: 'grid',
+                  gridTemplateColumns: 'minmax(220px, 1.4fr) minmax(160px, .9fr) minmax(150px, .8fr) minmax(180px, 1fr) minmax(150px, .8fr) 90px',
+                  gap: 16,
+                  padding: '16px 18px',
+                  border: 'none',
+                  borderTop: '1px solid #E8E6F5',
+                  background: '#fff',
+                  cursor: 'pointer',
+                  alignItems: 'center',
+                  textAlign: 'left',
+                }}
+              >
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 14, fontWeight: 800, color: '#0D0B2E', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{projectTitle(project)}</div>
+                  <div style={{ fontSize: 11, color: '#9B99C8', marginTop: 3 }}>{clientName(project)}</div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: stage.color, flexShrink: 0 }} />
+                  <span style={{ fontSize: 12, fontWeight: 800, color: stage.color }}>{stage.short}</span>
+                </div>
+                <div style={{ fontSize: 12, color: '#5B5894', fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{ownerLabel(project, teamMembers)}</div>
+                <div style={{ fontSize: 12, color: isBlocked(project) ? '#EF4444' : '#5B5894', fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {project.nextAction || (isWaitingOnClient(project) ? 'Client action required' : 'Internal update due')}
+                </div>
+                <div style={{ fontSize: 12, color: '#0D0B2E', fontWeight: 800 }}>{moneyLabel(project.budget || project.totalAmount)}</div>
+                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: ac, fontSize: 11, fontWeight: 900 }}>Open <ChevronRight size={13} /></span>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {openProject && createPortal(
         <ProjectDrawer

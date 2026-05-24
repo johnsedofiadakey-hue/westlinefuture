@@ -7,13 +7,13 @@ import {
   Truck, Wrench, ShoppingCart, ArrowRight, Lock,
   Download, File, Image, Archive, Package, Camera,
   X, Copy, Check, RefreshCw, Gift, Edit3, ChevronDown,
-  ZoomIn, ScanSearch
+  ZoomIn, ScanSearch, Languages, Mic, Square, Save
 } from 'lucide-react';
 import { CLIENT_PROJECT_STAGES, PROJECT_TYPES } from '../data';
-import { db, functions } from '../lib/firebase';
+import { db, functions, uploadFile } from '../lib/firebase';
 import { httpsCallable } from 'firebase/functions';
 import {
-  collection, onSnapshot, query, where, orderBy, limit, addDoc, serverTimestamp
+  collection, onSnapshot, query, where, orderBy, limit, addDoc, serverTimestamp, doc, updateDoc, arrayUnion
 } from 'firebase/firestore';
 import { createPaystackPayment } from '../lib/paystack';
 
@@ -258,23 +258,24 @@ function downloadPaymentReceipt(txn, project, client, brand) {
 // ─── Stage Icon Map ───────────────────────────────────────────────────────────
 const STAGE_ICONS = {
   1: <Search size={16} />,
-  2: <ShoppingCart size={16} />,
-  3: <Factory size={16} />,
-  4: <Truck size={16} />,
-  5: <Wrench size={16} />,
-  6: <ScanSearch size={16} />,
-  7: <Star size={16} />,
+  2: <Lock size={16} />,
+  3: <ScanSearch size={16} />,
+  4: <FileText size={16} />,
+  5: <CreditCard size={16} />,
+  6: <Factory size={16} />,
+  7: <Truck size={16} />,
+  8: <Wrench size={16} />,
+  9: <ScanSearch size={16} />,
+  10: <Star size={16} />,
 };
 
 // ─── Payment Schedule Configs ─────────────────────────────────────────────────
 const SCHEDULE_CONFIGS = {
   standard: {
-    label: 'Standard (10/40/40/10)',
+    label: 'Standard (50/50)',
     milestones: [
-      { key: 'deposit',      label: '10% Deposit',         pct: 0.10, cumPct: 0.10 },
-      { key: 'pre-prod',     label: '40% Pre-production',  pct: 0.40, cumPct: 0.50 },
-      { key: 'pre-delivery', label: '40% Pre-delivery',    pct: 0.40, cumPct: 0.90 },
-      { key: 'completion',   label: '10% Completion',      pct: 0.10, cumPct: 1.00 },
+      { key: 'deposit', label: '50% Project Deposit', pct: 0.50, cumPct: 0.50, stageId: 5 },
+      { key: 'final', label: '50% Final Settlement', pct: 0.50, cumPct: 1.00, stageId: 10 },
     ],
   },
   '70-30': {
@@ -434,7 +435,7 @@ function PaymentButton({ label, amountGHS, email, projectId, invoiceId, paymentT
 }
 
 // ─── Stage Action Card ────────────────────────────────────────────────────────
-function StageActionCard({ project, user, approveQuote, payInvoice, updateProjectStage }) {
+function StageActionCard({ project, user, approveQuote, payInvoice, updateProjectStage, approveRenderingPackage }) {
   const applicableStages = CLIENT_PROJECT_STAGES.filter(s => {
     const typeStages = PROJECT_TYPES[project.projectType]?.stages || CLIENT_PROJECT_STAGES.map(x => x.id);
     return typeStages.includes(s.id);
@@ -446,11 +447,12 @@ function StageActionCard({ project, user, approveQuote, payInvoice, updateProjec
   if (!currentStage || !['client', 'both'].includes(currentStage.whoActs)) return null;
 
   const email = user?.proxyEmail || (user?.phone ? user.phone + '@clients.westlinefuture.com' : 'client@clients.westlinefuture.com');
-  const budget = Number(String(project.budget || 0).replace(/[^0-9.]/g, '')) || 0;
+  const budget = Number(String(project.projectTotal || project.budget || 0).replace(/[^0-9.]/g, '')) || 0;
   const halfBudget = budget * 0.5;
+  const renderingFee = Number(String(project.renderingFee || 0).replace(/[^0-9.]/g, '')) || 0;
 
   if (currentStage.id === 2) {
-    if (project.quoteApproved) {
+    if (project.renderingFeePaid || project.renderingUnlocked) {
       return (
         <div style={{
           padding: '24px 28px', borderRadius: 20,
@@ -462,23 +464,12 @@ function StageActionCard({ project, user, approveQuote, payInvoice, updateProjec
               <CheckCircle2 size={24} color="#16A34A" />
             </div>
             <div>
-              <div style={{ fontSize: 13, fontWeight: 800, color: '#16A34A', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 4 }}>Quote Approved</div>
+              <div style={{ fontSize: 13, fontWeight: 800, color: '#16A34A', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 4 }}>Rendering Unlocked</div>
               <div style={{ fontSize: 14, color: '#4B7A62', lineHeight: 1.5 }}>
-                You approved this quotation{project.quoteApprovedAt ? ` on ${fmtShort(project.quoteApprovedAt)}` : ''}. Pay the deposit to begin procurement and production.
+                Your rendering fee has been verified. You can now review the CAD/3D package and approve the final design.
               </div>
             </div>
           </div>
-          <PaymentButton
-            label={`Pay Deposit - GHS ${Number(halfBudget).toLocaleString(undefined, { minimumFractionDigits: 2 })}`}
-            amountGHS={halfBudget}
-            email={email}
-            projectId={project.id}
-            paymentType="deposit"
-            onSuccess={async (ref) => {
-              await payInvoice(ref?.reference || ref?.trans || 'deposit', project.id);
-              await updateProjectStage(project.id, 3, 'Deposit paid by client via Paystack');
-            }}
-          />
         </div>
       );
     }
@@ -494,36 +485,132 @@ function StageActionCard({ project, user, approveQuote, payInvoice, updateProjec
         </div>
         <div style={{ fontSize: 20, fontWeight: 900, color: '#0D0B2E', marginBottom: 6 }}>Your quote is ready for review</div>
         <div style={{ fontSize: 14, color: '#374151', lineHeight: 1.6, marginBottom: 20 }}>
-          We've prepared a detailed quotation for your project. Please review the document in the Documents tab, then approve it below to begin production.
+          Pay the separate rendering/design fee to unlock your CAD/3D drawing package. This is not part of the final project sum.
+        </div>
+        <PaymentButton
+          label={`Pay Rendering Fee - GHS ${Number(renderingFee).toLocaleString(undefined, { minimumFractionDigits: 2 })}`}
+          amountGHS={renderingFee}
+          email={email}
+          projectId={project.id}
+          invoiceId={project.renderingInvoiceId}
+          paymentType="rendering_fee"
+          disabled={!renderingFee}
+          onSuccess={async (ref) => {
+            await payInvoice(project.renderingInvoiceId || ref?.reference || ref?.trans || 'rendering_fee', project.id, 'Paystack');
+            await updateProjectStage(project.id, 3, 'Rendering fee paid and CAD/3D package unlocked', { adminOverride: true });
+          }}
+        />
+      </div>
+    );
+  }
+
+  if (currentStage.id === 3) {
+    const locked = !project.renderingFeePaid && !project.renderingUnlocked;
+    return (
+      <div style={{
+        padding: '24px 28px', borderRadius: 20,
+        background: locked ? '#F8F8FD' : 'linear-gradient(135deg, #F5F3FF, #EDE9FE)',
+        border: `1.5px solid ${locked ? '#E8E6F5' : '#7C3AED30'}`, marginBottom: 4,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+          {locked ? <Lock size={18} color="#9B99C8" /> : <ScanSearch size={18} color="#7C3AED" />}
+          <span style={{ fontSize: 12, fontWeight: 800, color: locked ? '#9B99C8' : '#7C3AED', textTransform: 'uppercase', letterSpacing: '.06em' }}>
+            {locked ? 'Rendering Locked' : 'Rendering Review'}
+          </span>
+        </div>
+        <div style={{ fontSize: 20, fontWeight: 900, color: '#0D0B2E', marginBottom: 6 }}>
+          {locked ? 'Pay the rendering fee to view drawings' : 'Review and approve your CAD/3D rendering'}
+        </div>
+        <div style={{ fontSize: 14, color: '#374151', lineHeight: 1.6, marginBottom: 20 }}>
+          {locked
+            ? 'Your rendering package is protected until payment verification is complete.'
+            : 'Open the Documents tab to review the latest rendering package. Request changes through chat, or approve the final design below.'}
+        </div>
+        {!locked && (
+          <button
+            onClick={async () => {
+              if (acting) return;
+              setActing(true);
+              await approveRenderingPackage?.(project.id, project.renderingPackageId);
+              await updateProjectStage(project.id, 4, 'Rendering approved by client');
+              setActing(false);
+            }}
+            disabled={acting}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 10, padding: '14px 32px', borderRadius: 14, border: 'none', background: acting ? '#E8E6F5' : '#7C3AED', color: acting ? '#9B99C8' : '#fff', fontSize: 15, fontWeight: 800, cursor: acting ? 'default' : 'pointer', boxShadow: acting ? 'none' : '0 4px 16px rgba(124,58,237,.35)' }}
+          >
+            {acting ? <><Loader2 size={18} style={{ animation: 'spin 1s linear infinite' }} /> Approving...</> : <>Approve Rendering <ArrowRight size={18} /></>}
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  if (currentStage.id === 4) {
+    if (project.quoteApproved) {
+      return (
+        <div style={{ padding: '24px 28px', borderRadius: 20, background: 'linear-gradient(135deg, #F0FDF4, #DCFCE7)', border: '1.5px solid #16A34A40', marginBottom: 4 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+            <CheckCircle2 size={24} color="#16A34A" />
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 800, color: '#16A34A', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 4 }}>Final Quote Approved</div>
+              <div style={{ fontSize: 14, color: '#4B7A62', lineHeight: 1.5 }}>
+                You approved quote version {project.approvedQuoteVersion || project.activeQuoteVersion || 'latest'}{project.quoteApprovedAt ? ` on ${fmtShort(project.quoteApprovedAt)}` : ''}. Deposit payment is next.
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+    return (
+      <div style={{ padding: '24px 28px', borderRadius: 20, background: 'linear-gradient(135deg, #EFF6FF, #DBEAFE)', border: '1.5px solid #2563EB30', marginBottom: 4 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+          <AlertCircle size={18} color="#2563EB" />
+          <span style={{ fontSize: 12, fontWeight: 800, color: '#2563EB', textTransform: 'uppercase', letterSpacing: '.06em' }}>Final Quote Approval</span>
+        </div>
+        <div style={{ fontSize: 20, fontWeight: 900, color: '#0D0B2E', marginBottom: 6 }}>Your final project quote is ready</div>
+        <div style={{ fontSize: 14, color: '#374151', lineHeight: 1.6, marginBottom: 20 }}>
+          This quote is based on your approved rendering. If anything changes, your account manager will issue a revised version before kickoff.
         </div>
         <button
           onClick={async () => {
             if (acting) return;
             setActing(true);
             await approveQuote(project.id);
+            await updateProjectStage(project.id, 5, 'Final quote approved by client');
             setActing(false);
           }}
           disabled={acting}
-          style={{
-            display: 'inline-flex', alignItems: 'center', gap: 10,
-            padding: '14px 32px', borderRadius: 14, border: 'none',
-            background: acting ? '#E8E6F5' : '#2563EB',
-            color: acting ? '#9B99C8' : '#fff',
-            fontSize: 15, fontWeight: 800, cursor: acting ? 'default' : 'pointer',
-            boxShadow: acting ? 'none' : '0 4px 16px rgba(37,99,235,.35)',
-            transition: 'all .2s',
-          }}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 10, padding: '14px 32px', borderRadius: 14, border: 'none', background: acting ? '#E8E6F5' : '#2563EB', color: acting ? '#9B99C8' : '#fff', fontSize: 15, fontWeight: 800, cursor: acting ? 'default' : 'pointer', boxShadow: acting ? 'none' : '0 4px 16px rgba(37,99,235,.35)' }}
         >
-          {acting
-            ? <><Loader2 size={18} style={{ animation: 'spin 1s linear infinite' }} /> Approving...</>
-            : <>Approve Quote <ArrowRight size={18} /></>
-          }
+          {acting ? <><Loader2 size={18} style={{ animation: 'spin 1s linear infinite' }} /> Approving...</> : <>Approve Final Quote <ArrowRight size={18} /></>}
         </button>
       </div>
     );
   }
 
-  if (currentStage.id === 6) {
+  if (currentStage.id === 5) {
+    return (
+      <div style={{ padding: '24px 28px', borderRadius: 20, background: 'linear-gradient(135deg, #F0FDF4, #DCFCE7)', border: '1.5px solid #16A34A40', marginBottom: 4 }}>
+        <div style={{ fontSize: 13, fontWeight: 800, color: '#16A34A', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 8 }}>Project Deposit</div>
+        <div style={{ fontSize: 20, fontWeight: 900, color: '#0D0B2E', marginBottom: 6 }}>Pay deposit to kick off the main project</div>
+        <div style={{ fontSize: 14, color: '#374151', lineHeight: 1.6, marginBottom: 20 }}>This payment counts toward the approved project sum. It is separate from the rendering fee already paid.</div>
+        <PaymentButton
+          label={`Pay Deposit - GHS ${Number(halfBudget).toLocaleString(undefined, { minimumFractionDigits: 2 })}`}
+          amountGHS={halfBudget}
+          email={email}
+          projectId={project.id}
+          invoiceId={project.depositInvoiceId}
+          paymentType="deposit"
+          onSuccess={async (ref) => {
+            await payInvoice(project.depositInvoiceId || ref?.reference || ref?.trans || 'deposit', project.id, 'Paystack');
+            await updateProjectStage(project.id, 6, 'Deposit paid by client via Paystack');
+          }}
+        />
+      </div>
+    );
+  }
+
+  if (currentStage.id === 9) {
     if (done) {
       return (
         <div style={{
@@ -554,7 +641,7 @@ function StageActionCard({ project, user, approveQuote, payInvoice, updateProjec
           onClick={async () => {
             if (acting) return;
             setActing(true);
-            await updateProjectStage(project.id, 7, 'Inspection signed off by client');
+            await updateProjectStage(project.id, 10, 'Inspection signed off by client');
             setActing(false);
             setDone(true);
           }}
@@ -578,7 +665,7 @@ function StageActionCard({ project, user, approveQuote, payInvoice, updateProjec
     );
   }
 
-  if (currentStage.id === 7) {
+  if (currentStage.id === 10) {
     return (
       <div style={{
         padding: '24px 28px', borderRadius: 20,
@@ -606,7 +693,7 @@ function StageActionCard({ project, user, approveQuote, payInvoice, updateProjec
           paymentType="final_balance"
           onSuccess={async (ref) => {
             await payInvoice(ref?.reference || ref?.trans || 'final', project.id);
-            await updateProjectStage(project.id, 7, 'Final payment received via Paystack');
+            await updateProjectStage(project.id, 10, 'Final payment received via Paystack');
           }}
         />
       </div>
@@ -639,7 +726,7 @@ function InstallationStatusCard({ project }) {
   const [zoom, setZoom] = useState(null);
 
   useEffect(() => {
-    if (!db || project.stageId !== 5) return;
+    if (!db || project.stageId !== 8) return;
     const q = query(
       collection(db, 'projects', project.id, 'documents'),
       where('docType', '==', 'progress_photo'),
@@ -649,9 +736,9 @@ function InstallationStatusCard({ project }) {
     return onSnapshot(q, snap => setRecentPhotos(snap.docs.map(d => ({ id: d.id, ...d.data() }))), () => setRecentPhotos([]));
   }, [project.id, project.stageId]);
 
-  if (project.stageId !== 5) return null;
+  if (project.stageId !== 8) return null;
 
-  const installEntry = (project.stageHistory || []).find(h => h.stageId === 5);
+  const installEntry = (project.stageHistory || []).find(h => h.stageId === 8);
   const startDate = installEntry?.timestamp
     ? (() => {
         const d = installEntry.timestamp?.toDate ? installEntry.timestamp.toDate() : new Date(installEntry.timestamp);
@@ -731,7 +818,7 @@ function InstallationStatusCard({ project }) {
 
 function ShippingTrackerCard({ project }) {
   const sd = project.shippingDetails;
-  if (!sd?.vesselName || (project.stageId || 0) < 4) return null;
+  if (!sd?.vesselName || (project.stageId || 0) < 7) return null;
 
   const eta = sd.eta
     ? (() => {
@@ -831,7 +918,7 @@ function DocViewer({ doc, onClose }) {
 }
 
 // ─── Documents Tab ────────────────────────────────────────────────────────────
-function DocumentsTab({ projectId }) {
+function DocumentsTab({ projectId, project }) {
   const [docs, setDocs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [viewingDoc, setViewingDoc] = useState(null);
@@ -840,6 +927,7 @@ function DocumentsTab({ projectId }) {
     if (!db || !projectId) { setLoading(false); return; }
     const q = query(
       collection(db, 'projects', projectId, 'documents'),
+      where('clientVisible', '==', true),
       orderBy('createdAt', 'desc')
     );
     const unsub = onSnapshot(q,
@@ -883,6 +971,8 @@ function DocumentsTab({ projectId }) {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {docs.map(doc => {
           const stageInfo = doc.stageId ? CLIENT_PROJECT_STAGES.find(s => s.id === doc.stageId) : null;
+          const isRenderingDoc = doc.documentType === 'rendering' || doc.category === 'rendering' || doc.stageId === 3 || /render|cad|3d|drawing/i.test(doc.name || '');
+          const isLockedRendering = isRenderingDoc && !project?.renderingFeePaid && !project?.renderingUnlocked;
           const uploadedDate = doc.createdAt?.seconds
             ? new Date(doc.createdAt.seconds * 1000).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
             : null;
@@ -912,7 +1002,11 @@ function DocumentsTab({ projectId }) {
                   {doc.uploadedBy && <span style={{ fontSize: 11, color: '#9B99C8' }}>by {doc.uploadedBy}</span>}
                 </div>
               </div>
-              {doc.url && (
+              {isLockedRendering ? (
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 12px', borderRadius: 10, background: '#F8F8FD', color: '#9B99C8', fontSize: 12, fontWeight: 800, border: '1px solid #E8E6F5' }}>
+                  <Lock size={13} /> Locked
+                </div>
+              ) : doc.url && (
                 <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
                   <button
                     onClick={() => setViewingDoc(doc)}
@@ -1535,6 +1629,15 @@ function ProjectChat({ project, user, addProjectMessage }) {
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
+  const [translatingId, setTranslatingId] = useState(null);
+  const [editingId, setEditingId] = useState(null);
+  const [editText, setEditText] = useState('');
+  const [recording, setRecording] = useState(false);
+  const [recordingStartedAt, setRecordingStartedAt] = useState(null);
+  const [voiceSaving, setVoiceSaving] = useState(false);
+  const mediaRecorderRef = useRef(null);
+  const chunksRef = useRef([]);
+  const recordingStartedAtRef = useRef(null);
   const bottomRef = useRef(null);
 
   useEffect(() => {
@@ -1561,6 +1664,82 @@ function ProjectChat({ project, user, addProjectMessage }) {
     setSending(false);
   };
 
+  const translate = async (messageId) => {
+    if (!functions || translatingId) return;
+    setTranslatingId(messageId);
+    try {
+      const fn = httpsCallable(functions, 'translateProjectMessage');
+      await fn({ projectId: project.id, messageId, targetLanguage: 'en' });
+    } catch (err) {
+      alert(err.message || 'Translation failed');
+    } finally {
+      setTranslatingId(null);
+    }
+  };
+
+  const startEdit = (message) => {
+    setEditingId(message.id);
+    setEditText(message.text || '');
+  };
+
+  const saveEdit = async (message) => {
+    if (!db || !editText.trim()) return;
+    await updateDoc(doc(db, 'projects', project.id, 'messages', message.id), {
+      text: editText.trim(),
+      editedAt: serverTimestamp(),
+      editedBy: user?.uid || user?.id || 'client',
+      updatedAt: serverTimestamp(),
+      editHistory: arrayUnion({
+        text: message.text || '',
+        editedAt: new Date().toISOString(),
+        editedBy: user?.uid || user?.id || 'client',
+      }),
+    });
+    setEditingId(null);
+    setEditText('');
+  };
+
+  const startRecording = async () => {
+    if (!navigator.mediaDevices?.getUserMedia || recording) return;
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const recorder = new MediaRecorder(stream);
+    chunksRef.current = [];
+    recorder.ondataavailable = event => {
+      if (event.data?.size) chunksRef.current.push(event.data);
+    };
+    recorder.onstop = async () => {
+      setVoiceSaving(true);
+      try {
+        const blob = new Blob(chunksRef.current, { type: recorder.mimeType || 'audio/webm' });
+        const duration = recordingStartedAtRef.current ? Math.round((Date.now() - recordingStartedAtRef.current) / 1000) : null;
+        const file = new File([blob], `voice-${Date.now()}.webm`, { type: blob.type });
+        const audioUrl = await uploadFile('project-voice-notes', `${project.id}/${Date.now()}-client.webm`, file);
+        await addProjectMessage(project.id, 'Voice note', 'client', false, {
+          type: 'voice',
+          audioUrl,
+          duration,
+        });
+      } finally {
+        stream.getTracks().forEach(track => track.stop());
+        setRecording(false);
+        recordingStartedAtRef.current = null;
+        setRecordingStartedAt(null);
+        setVoiceSaving(false);
+      }
+    };
+    mediaRecorderRef.current = recorder;
+    recordingStartedAtRef.current = Date.now();
+    setRecordingStartedAt(Date.now());
+    setRecording(true);
+    recorder.start();
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current?.state === 'recording') {
+      mediaRecorderRef.current.stop();
+    }
+  };
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 12, paddingRight: 2, marginBottom: 16 }}>
@@ -1574,6 +1753,8 @@ function ProjectChat({ project, user, addProjectMessage }) {
         {messages.map(m => {
           const isMe = m.senderRole === 'client';
           const isSystem = m.senderRole === 'system';
+          const translated = m.translations?.en?.text;
+          const canEdit = isMe && !isSystem && m.type !== 'voice';
           return (
             <div key={m.id} style={{ display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start' }}>
               {!isSystem && (
@@ -1590,8 +1771,42 @@ function ProjectChat({ project, user, addProjectMessage }) {
                 border: isSystem ? '1px dashed #E8E6F5' : isMe ? 'none' : '1px solid #E8E6F5',
                 lineHeight: 1.5,
               }}>
-                {m.text}
+                {editingId === m.id ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <textarea value={editText} onChange={e => setEditText(e.target.value)} rows={3} style={{ width: 260, border: '1px solid #E8E6F5', borderRadius: 10, padding: 10, fontFamily: 'inherit', fontSize: 13 }} />
+                    <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                      <button onClick={() => setEditingId(null)} style={{ border: 'none', background: '#F8F8FD', borderRadius: 8, padding: '6px 10px', fontSize: 11, fontWeight: 800, cursor: 'pointer' }}>Cancel</button>
+                      <button onClick={() => saveEdit(m)} style={{ border: 'none', background: '#16A34A', color: '#fff', borderRadius: 8, padding: '6px 10px', fontSize: 11, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}><Save size={12} /> Save</button>
+                    </div>
+                  </div>
+                ) : m.type === 'voice' && m.audioUrl ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <div style={{ fontWeight: 800 }}>{m.text || 'Voice note'}{m.duration ? ` · ${m.duration}s` : ''}</div>
+                    <audio controls src={m.audioUrl} style={{ width: 260, maxWidth: '100%' }} />
+                    {m.transcript && <div style={{ fontSize: 12, opacity: .8 }}>{m.transcript}</div>}
+                  </div>
+                ) : (
+                  m.text
+                )}
+                {m.editedAt && <span style={{ display: 'block', fontSize: 10, opacity: .55, marginTop: 6 }}>Edited</span>}
+                {translated && (
+                  <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px solid ${isMe ? 'rgba(255,255,255,.18)' : '#E8E6F5'}`, fontSize: 12, opacity: .9 }}>
+                    <strong>English:</strong> {translated}
+                  </div>
+                )}
               </div>
+              {!isSystem && (
+                <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
+                  <button onClick={() => translate(m.id)} disabled={translatingId === m.id} style={{ border: 'none', background: 'transparent', color: '#9B99C8', fontSize: 10, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <Languages size={11} /> {translatingId === m.id ? 'Translating...' : 'Translate English'}
+                  </button>
+                  {canEdit && (
+                    <button onClick={() => startEdit(m)} style={{ border: 'none', background: 'transparent', color: '#9B99C8', fontSize: 10, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <Edit3 size={11} /> Edit
+                    </button>
+                  )}
+                </div>
+              )}
               <div style={{ fontSize: 10, color: '#DFD9D1', marginTop: 4 }}>
                 {m.createdAt?.seconds ? new Date(m.createdAt.seconds * 1000).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : ''}
               </div>
@@ -1609,6 +1824,14 @@ function ProjectChat({ project, user, addProjectMessage }) {
           rows={2}
           style={{ flex: 1, padding: '12px 16px', borderRadius: 14, border: '1.5px solid #E8E6F5', fontSize: 16, outline: 'none', resize: 'none', boxSizing: 'border-box', fontFamily: 'inherit', lineHeight: 1.5 }}
         />
+        <button
+          onClick={recording ? stopRecording : startRecording}
+          disabled={voiceSaving}
+          style={{ width: 48, height: 48, borderRadius: 14, background: recording ? '#EF4444' : '#F8F8FD', color: recording ? '#fff' : '#5B5894', border: '1px solid #E8E6F5', cursor: voiceSaving ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', alignSelf: 'flex-end', flexShrink: 0 }}
+          title={recording ? 'Stop recording' : 'Record voice note'}
+        >
+          {voiceSaving ? <Loader2 size={18} style={{ animation: 'spin 1s linear infinite' }} /> : recording ? <Square size={15} /> : <Mic size={18} />}
+        </button>
         <button
           onClick={send}
           disabled={!text.trim() || sending}
@@ -2371,10 +2594,8 @@ function ProjectHeaderCard({ project, isMobile, ac, brand }) {
 
   // Use paidAmount from project doc if set (logged by admin), else fall back to stage-based estimate
   const paid = budget > 0 ? Math.min(budget, Number(project.paidAmount) || (() => {
-    if (project.stageId >= 7) return budget;
-    if (project.stageId >= 5) return budget * 0.75;
-    if (project.stageId >= 3) return budget * 0.50;
-    if (project.stageId >= 2) return budget * 0.25;
+    if (project.stageId >= 10) return budget;
+    if (project.stageId >= 6) return budget * 0.50;
     return 0;
   })()) : 0;
   const paidPct = budget > 0 ? Math.min(100, (paid / budget) * 100) : 0;
@@ -2612,7 +2833,7 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
   // Auto-show review modal for completed projects
   const showReviewModal =
     selected &&
-    selected.stageId === 7 &&
+    selected.stageId === 10 &&
     !reviewDismissed &&
     !reviewSubmitted;
 
@@ -2836,6 +3057,7 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
                       approveQuote={props.approveQuote}
                       payInvoice={props.payInvoice}
                       updateProjectStage={props.updateProjectStage}
+                      approveRenderingPackage={props.approveRenderingPackage}
                     />
                     <InstallationStatusCard project={selected} />
                     <ShippingTrackerCard project={selected} />
@@ -2906,7 +3128,7 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
                 {activeTab === 'documents' && (
                   <div style={{ padding: isMobile ? '20px 18px' : '24px 28px', background: '#fff', borderRadius: isMobile ? 24 : 20, border: isMobile ? 'none' : '1px solid #E8E6F5', boxShadow: isMobile ? '0 2px 16px rgba(0,0,0,.08)' : '0 4px 20px rgba(0,0,0,.05)' }}>
                     <div style={{ fontSize: 15, fontWeight: 800, color: '#0D0B2E', marginBottom: 20 }}>Project Documents</div>
-                    <DocumentsTab projectId={selected.id} />
+                    <DocumentsTab projectId={selected.id} project={selected} />
                   </div>
                 )}
 

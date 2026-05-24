@@ -231,7 +231,7 @@ export default function AdminDashboard({ clients, invoices, proposals, brand, ge
           return Math.floor((Date.now() - d.getTime()) / 86400000);
         };
         const stuckProjects = clients.filter(project => {
-          if (!project.stageId || project.stageId === 7) return false;
+          if (!project.stageId || project.stageId === 10) return false;
           const history = project.stageHistory || [];
           const entry = [...history].reverse().find(h => h.stageId === project.stageId);
           const ts = entry?.timestamp;
@@ -410,4 +410,3 @@ export default function AdminDashboard({ clients, invoices, proposals, brand, ge
     </div>
   );
 }
-

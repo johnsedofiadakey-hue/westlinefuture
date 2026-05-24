@@ -390,131 +390,49 @@ Do not rely on:
 
 `clientId` may remain temporarily for backward compatibility, but new code should use `clientIds`.
 
-## 7. Recommended 7-Stage Project Pipeline
+## 7. Recommended 10-Stage Project Pipeline
 
-Use a single 7-stage production pipeline.
+Use a single 10-stage production pipeline. Rendering access is a separate paid pre-quote gate, and the actual project invoice/quote comes after rendering review, revisions, and approval.
 
-The current codebase has remnants of 11/12-stage logic. That should be migrated out. A 7-stage pipeline is easier for clients, easier for admins, and still supports detailed operations through sub-statuses.
+### Stage 1: Client Intake And Site Brief
 
-### Stage 1: Intake
+Admin captures the client profile, site measurements, requirements, budget range, and initial scope.
 
-Purpose:
+### Stage 2: Rendering Fee Payment
 
-- Capture client requirements.
-- Confirm site details.
-- Prepare scope, measurements, quotation, and project setup.
+Client pays a separate rendering/CAD 3D fee. This fee is not part of the actual project sum. Rendering files remain locked until payment is verified.
 
-Primary actor:
+### Stage 3: Rendering Review And Approval
 
-- Admin or staff.
+Client reviews the unlocked rendering package, requests included revisions if needed, and approves the final design.
 
-Client-visible message:
+### Stage 4: Final Quote And Kickoff Approval
 
-- "Our team is reviewing your requirements and preparing your quotation."
+Admin prepares the versioned final quote from the approved rendering. Client approves the exact final quote version before deposit.
 
-### Stage 2: Quote Approval And Deposit
+### Stage 5: Project Deposit Payment
 
-Purpose:
+Client pays the project deposit against the approved quote. Procurement cannot begin before this payment is verified.
 
-- Client reviews quote.
-- Client approves quote.
-- Client pays deposit.
+### Stage 6: Procurement And Production
 
-Primary actor:
+Admin/staff order materials, manage sourcing, track supplier status, and monitor production.
 
-- Client, with admin support.
+### Stage 7: Shipping And Delivery
 
-Gate:
+Admin/logistics manage freight, customs, warehousing, local delivery, and site readiness.
 
-- Quote approval required.
-- Deposit required before moving to Stage 3.
+### Stage 8: Installation
 
-Client-visible message:
+Worker executes assigned installation work, uploads site photos, completes checklists, and requests inspection.
 
-- "Please review and approve your quotation, then make your deposit payment to begin procurement and production."
+### Stage 9: Inspection And Sign-Off
 
-### Stage 3: Procurement And Production
+Admin/worker/client complete quality review, snag list resolution, and formal sign-off.
 
-Purpose:
+### Stage 10: Handover And Final Settlement
 
-- Order materials.
-- Source from suppliers.
-- Fabricate or prepare components.
-- Track supplier/factory progress.
-
-Primary actor:
-
-- Admin or staff.
-
-Client-visible message:
-
-- "Your materials and components are being sourced and prepared."
-
-### Stage 4: Shipping And Delivery
-
-Purpose:
-
-- Manage freight, customs, local logistics, delivery scheduling, and site delivery.
-
-Primary actor:
-
-- Admin or logistics staff.
-
-Client-visible message:
-
-- "Your order is being shipped and delivered to your site."
-
-### Stage 5: Installation
-
-Purpose:
-
-- On-site installation, site updates, photos, field notes, work order completion.
-
-Primary actor:
-
-- Worker.
-
-Client-visible message:
-
-- "Our technical crew is on-site fitting and finishing your project."
-
-### Stage 6: Inspection And Sign-Off
-
-Purpose:
-
-- Quality inspection.
-- Snag list.
-- Client sign-off.
-- Final issue resolution.
-
-Primary actor:
-
-- Admin, worker, and client.
-
-Client-visible message:
-
-- "Quality check is in progress. Please sign off once you are satisfied with the work."
-
-### Stage 7: Handover And Final Settlement
-
-Purpose:
-
-- Final payment.
-- Handover documents.
-- Warranty documents.
-- Completion and review request.
-
-Primary actor:
-
-- Client and admin.
-
-Gate:
-
-- Final settlement required before completed handover.
-
-Client-visible message:
-
-- "Your project is ready for handover. Please settle the final balance to receive handover documents."
+Client pays final balance, then admin releases handover documents, warranty documents, completion report, and review request.
 
 ## 8. Project Stage vs Operational Sub-Status
 
@@ -644,8 +562,9 @@ projects/projectId/transactions/transactionId
 
 Default recommendation for Westline Future:
 
-- 50% deposit at Stage 2.
-- 50% final settlement at Stage 7.
+- Separate rendering/design fee at Stage 2.
+- 50% project deposit at Stage 5.
+- 50% final settlement at Stage 10.
 
 Project field:
 
@@ -693,44 +612,46 @@ Do not mark invoices paid from the browser without server verification.
 
 ## 10. Migration Plan From Legacy 11/12-Stage Data
 
-The codebase currently contains a mix of 7-stage and legacy 11/12-stage references. Migration should make Firestore data consistent without breaking existing projects.
+The codebase currently contains a mix of legacy 7-stage and 11/12-stage references. Migration should make Firestore data consistent with the 10-stage production model without breaking existing projects.
 
 ### Legacy mapping
 
 Recommended mapping:
 
 ```js
-const LEGACY_STAGE_TO_7_STAGE = {
+const LEGACY_STAGE_TO_10_STAGE = {
   1: 1,  // Inquiry/Intake
   2: 1,  // Survey/Scoping
-  3: 1,  // Quotation preparation
-  4: 2,  // Quote approval
-  5: 2,  // Deposit/payment gate
-  6: 3,  // Procurement
-  7: 3,  // Production
-  8: 4,  // Shipping
-  9: 4,  // Delivery
-  10: 5, // Installation
-  11: 6, // Inspection/final balance preparation
-  12: 7  // Completed/handover
+  3: 2,  // Rendering/design fee or pre-quote design
+  4: 3,  // Rendering/design review
+  5: 4,  // Quote approval
+  6: 5,  // Deposit/payment gate
+  7: 6,  // Procurement/production
+  8: 7,  // Shipping
+  9: 7,  // Delivery
+  10: 8, // Installation
+  11: 9, // Inspection/final balance preparation
+  12: 10 // Completed/handover
 };
 ```
 
 ### Migration steps
 
 1. Back up Firestore.
-2. Add `legacyStageId` to every project that currently has a stage above 7.
+2. Add `legacyStageId` to every project that came from the old 7-stage or 11/12-stage model.
 3. Write normalized `stageId` using the mapping.
 4. Preserve `stageHistory` by mapping legacy entries and adding `legacyStageId` on each history event.
-5. Replace milestone `stageId` values above 7 with valid 7-stage equivalents.
+5. Replace milestone `stageId` values with valid 10-stage equivalents.
 6. Convert payment gates:
-   - Legacy deposit-related stages to Stage 2.
-   - Legacy final/balance stages to Stage 7.
+   - Legacy rendering/design payments to Stage 2.
+   - Legacy quote approvals to Stage 4.
+   - Legacy deposit-related stages to Stage 5.
+   - Legacy final/balance stages to Stage 10.
 7. Add `clientIds` from existing `clientId`, `phone`, or user relationship.
 8. Add `primaryClientId`.
 9. Add `assignedWorkers` and `assignedStaff` arrays where missing.
 10. Recalculate project status:
-    - `stageId === 7` and final payment complete means `Completed`.
+    - `stageId === 10` and final payment complete means `Completed`.
     - Otherwise `Active` unless explicitly cancelled or on hold.
 11. Deploy read compatibility temporarily.
 12. Remove legacy stage reads after all active data is migrated and verified.
@@ -903,14 +824,17 @@ Use Firebase Emulator tests for rules and Cloud Functions where possible. Manual
 ### Project stages
 
 - New project starts at Stage 1.
-- Quote approval/deposit gate happens at Stage 2.
-- Project cannot move to Stage 3 until deposit conditions are satisfied.
+- Rendering fee gate happens at Stage 2.
+- Rendering review and approval happens at Stage 3.
+- Final quote approval happens at Stage 4.
+- Project deposit gate happens at Stage 5.
+- Project cannot move to Stage 6 until deposit conditions are satisfied.
 - Procurement/production sub-status changes do not incorrectly change `stageId`.
 - Logistics sub-status changes do not incorrectly change `stageId`.
-- Worker updates operate in Stage 5.
-- Inspection sign-off happens at Stage 6.
-- Handover/final settlement happens at Stage 7.
-- Legacy stage values above 7 are mapped correctly.
+- Worker updates operate in Stage 8.
+- Inspection sign-off happens at Stage 9.
+- Handover/final settlement happens at Stage 10.
+- Legacy stage values are mapped correctly.
 
 ### Finance and payments
 
@@ -952,12 +876,12 @@ Use Firebase Emulator tests for rules and Cloud Functions where possible. Manual
 
 ### Migration
 
-- Every migrated project has `stageId <= 7`.
+- Every migrated project has `stageId <= 10`.
 - Every migrated project has `clientIds`.
 - Every migrated project has `primaryClientId`.
 - Legacy stage is preserved in `legacyStageId`.
 - Stage history is preserved.
-- Payment milestones reference valid 7-stage IDs.
+- Payment milestones reference valid 10-stage IDs.
 - Existing active clients can still log in after migration.
 
 ## Implementation Guidance

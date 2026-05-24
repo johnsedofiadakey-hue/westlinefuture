@@ -38,6 +38,7 @@ import { httpsCallable } from 'firebase/functions';
 import { 
   collection, query, onSnapshot, getDocs, getDoc, doc, 
   updateDoc, addDoc, setDoc, deleteDoc, orderBy, limit, where, serverTimestamp,
+  writeBatch, increment,
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { uploadFile } from './lib/firebase';
@@ -749,18 +750,17 @@ export default function App() {
             }
          }
          
-         // AUTOMATED MILESTONE INVOICING (7-stage pipeline)
+         // AUTOMATED MILESTONE INVOICING (10-stage pipeline)
          const invoiceTriggers = {
-           1: { title: 'Initial Consultation & Design Deposit', percent: 10 },
-           2: { title: 'Fabrication Commencement Payment', percent: 40 },
-           4: { title: 'Pre-Installation Logistics Settlement', percent: 40 },
-           7: { title: 'Final Handover & Quality Settlement', percent: 10 }
+           2: { title: 'Rendering / CAD 3D Access Fee', percent: 0, type: 'rendering_fee' },
+           5: { title: 'Project Deposit Payment', percent: 50, type: 'deposit' },
+           10: { title: 'Final Handover & Quality Settlement', percent: 50, type: 'final_balance' }
          };
 
          if (invoiceTriggers[stageId] && project) {
-            const { title, percent } = invoiceTriggers[stageId];
-            const baseBudget = parseFloat(String(project.budget || '0').replace(/[^0-9.]/g, '')) || 0;
-            const amount = (baseBudget * percent) / 100;
+            const { title, percent, type } = invoiceTriggers[stageId];
+            const baseBudget = parseMoney(project.projectTotal || project.budget);
+            const amount = percent > 0 ? (baseBudget * percent) / 100 : parseMoney(project.renderingFee);
             
             if (amount > 0) {
               const existing = invoices.find(i => i.parentId === projectId && i.title === title);
@@ -775,21 +775,23 @@ export default function App() {
                   date: new Date().toISOString().split('T')[0],
                   due: new Date(Date.now() + 7*24*60*60*1000).toISOString().split('T')[0],
                   status: 'Pending',
-                  type: 'Milestone'
+                  type: type || 'Milestone',
+                  invoiceType: type || 'milestone',
+                  stageGate: stageId
                 });
                 createNotification(project.clientId, `New Invoice Generated: ${title}`, 'info', '/portal');
               }
             }
          }
 
-         // FEEDBACK LOOP: If stage is 7 (Handover), request feedback
-         if (stageId === 7 && project) {
+         // FEEDBACK LOOP: If stage is 10 (Handover), request feedback
+         if (stageId === 10 && project) {
            createNotification(project.clientId, "Project Complete! We'd love to hear your feedback on your Westline Future experience.", "success", "/portal?action=feedback");
          }
       }
       
       const stageObjForPct = CLIENT_PROJECT_STAGES.find(s => s.id === stageId);
-      await updateDoc(doc(db, 'projects', projectId), { stageId, progress: stageObjForPct?.pct ?? Math.round((stageId / 7) * 100) });
+      await updateDoc(doc(db, 'projects', projectId), { stageId, progress: stageObjForPct?.pct ?? Math.round((stageId / 10) * 100), nextAction: computeNextProjectAction(project, stageId) });
       logAction(projectId, 'Stage', `Moved to Stage ${stageId}`);
     } catch (e) { devErr(e); }
   };
@@ -813,12 +815,20 @@ export default function App() {
   const createInvoice = async (data) => {
     if (!db) return;
     try {
+      const amount = parseMoney(data.total ?? data.amount);
       const docRef = await addDoc(collection(db, 'invoices'), {
         ...data,
         clientIds: data.clientIds || (data.clientId ? [data.clientId] : []),
         primaryClientId: data.primaryClientId || data.clientId || null,
         projectId: data.projectId || data.parentId || null,
+        invoiceType: data.invoiceType || data.type || 'invoice',
+        stageGate: data.stageGate || null,
+        provider: data.provider || data.paymentProvider || null,
+        amount,
+        total: data.total ?? amount,
+        balanceDue: data.balanceDue ?? amount,
         createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
         status: data.status || 'Pending'
       });
       notify('success', 'Official Invoice Issued');
@@ -853,11 +863,299 @@ export default function App() {
     return clients.find(p => p.id === projectId)?.clientId || null;
   };
 
+  const recordProjectActivity = async (projectId, action, data = {}) => {
+    if (!db || !projectId) return;
+    const project = clients.find(p => p.id === projectId);
+    const clientId = data.clientId || project?.clientId || null;
+    const payload = {
+      projectId,
+      clientId,
+      action: sanitizeText(action || 'Project activity'),
+      actorId: user?.uid || user?.id || 'system',
+      actorName: user?.name || user?.displayName || user?.email || 'Westline Future',
+      actorRole: user?.role || 'admin',
+      created_at: new Date().toISOString(),
+      createdAt: serverTimestamp(),
+      ...data,
+    };
+    try {
+      await addDoc(collection(db, 'activity_logs'), payload);
+      await addDoc(collection(db, 'projects', projectId, 'activity_logs'), payload);
+    } catch (e) {
+      devWarn('[activityLog]', e);
+    }
+  };
+
+  const computeNextProjectAction = (project, targetStageId = project?.stageId || 1) => {
+    if (!project) return 'Review project setup';
+    if (targetStageId <= 1) return 'Create rendering fee invoice';
+    if (targetStageId === 2) return project.renderingFeePaid ? 'Unlock rendering package' : 'Awaiting rendering fee payment';
+    if (targetStageId === 3) {
+      if (!project.renderingUnlocked) return 'Rendering locked until payment is verified';
+      return project.renderingApproved ? 'Prepare final project quote' : 'Awaiting rendering review and approval';
+    }
+    if (targetStageId === 4) return project.quoteApproved ? 'Create project deposit invoice' : 'Awaiting final quote approval';
+    if (targetStageId === 5) return project.depositPaid ? 'Begin procurement and production' : 'Awaiting project deposit payment';
+    if (targetStageId === 8) return 'Field team installation updates required';
+    if (targetStageId === 9) return 'Awaiting inspection sign-off';
+    if (targetStageId === 10) return project.finalPaymentPaid ? 'Issue handover documents' : 'Awaiting final settlement';
+    return CLIENT_PROJECT_STAGES.find(s => s.id === targetStageId)?.adminPrompt || 'Monitor project progress';
+  };
+
+  const createRenderingPackage = async (projectId, data = {}) => {
+    if (!db || !projectId) return null;
+    try {
+      const projectSnap = await getDoc(doc(db, 'projects', projectId));
+      if (!projectSnap.exists()) throw new Error('Project not found');
+      const project = projectSnap.data();
+      const clientId = data.clientId || project.clientId || getProjectClientId(projectId);
+      const packageRef = await addDoc(collection(db, 'renderingPackages'), {
+        projectId,
+        clientId,
+        title: sanitizeText(data.title || `${project.title || 'Project'} Rendering Package`),
+        status: data.status || 'invoice_required',
+        accessStatus: data.accessStatus || 'locked',
+        includedRevisions: Number(data.includedRevisions ?? 2),
+        usedRevisions: Number(data.usedRevisions ?? 0),
+        extraRevisionFee: parseMoney(data.extraRevisionFee),
+        versions: data.versions || [],
+        comments: [],
+        approvedVersion: null,
+        invoiceId: data.invoiceId || null,
+        createdBy: user?.uid || user?.id || 'admin',
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+      await updateDoc(doc(db, 'projects', projectId), {
+        renderingPackageId: packageRef.id,
+        renderingStatus: 'invoice_required',
+        nextAction: 'Issue rendering fee invoice',
+        updatedAt: serverTimestamp(),
+      });
+      await recordProjectActivity(projectId, 'Rendering package created', { renderingPackageId: packageRef.id, clientId });
+      notify('success', 'Rendering package created');
+      return packageRef.id;
+    } catch (e) {
+      notify('error', 'Failed to create rendering package: ' + e.message);
+      return null;
+    }
+  };
+
+  const issueRenderingInvoice = async (projectId, amount, provider = 'paystack') => {
+    if (!db || !projectId) return null;
+    try {
+      const projectSnap = await getDoc(doc(db, 'projects', projectId));
+      if (!projectSnap.exists()) throw new Error('Project not found');
+      const project = projectSnap.data();
+      const fee = parseMoney(amount || project.renderingFee);
+      if (!fee) throw new Error('Rendering fee amount is required.');
+      const invoiceId = await createInvoice({
+        projectId,
+        parentId: projectId,
+        clientId: project.clientId,
+        clientName: project.clientName || project.name || '',
+        clientEmail: project.email || '',
+        clientPhone: project.phone || '',
+        title: `Rendering / CAD 3D Access Fee — ${project.title || 'Project'}`,
+        type: 'rendering_fee',
+        invoiceType: 'rendering_fee',
+        stageGate: 2,
+        provider,
+        amount: fee,
+        total: fee,
+        currency: 'GHS',
+        status: 'Pending',
+        due: new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0],
+      });
+      await updateDoc(doc(db, 'projects', projectId), {
+        renderingInvoiceId: invoiceId,
+        renderingFee: fee,
+        renderingStatus: 'invoice_sent',
+        nextAction: 'Awaiting rendering fee payment',
+        updatedAt: serverTimestamp(),
+      });
+      if (project.renderingPackageId) {
+        await updateDoc(doc(db, 'renderingPackages', project.renderingPackageId), {
+          invoiceId,
+          status: 'invoice_sent',
+          updatedAt: serverTimestamp(),
+        });
+      }
+      await recordProjectActivity(projectId, 'Rendering fee invoice issued', { invoiceId, amount: fee, clientId: project.clientId });
+      return invoiceId;
+    } catch (e) {
+      notify('error', 'Failed to issue rendering invoice: ' + e.message);
+      return null;
+    }
+  };
+
+  const approveRenderingPackage = async (projectId, packageId = null, comment = '') => {
+    if (!db || !projectId) return;
+    try {
+      const projectSnap = await getDoc(doc(db, 'projects', projectId));
+      if (!projectSnap.exists()) throw new Error('Project not found');
+      const project = projectSnap.data();
+      const targetPackageId = packageId || project.renderingPackageId;
+      if (targetPackageId) {
+        await updateDoc(doc(db, 'renderingPackages', targetPackageId), {
+          status: 'approved',
+          approvedAt: serverTimestamp(),
+          approvedBy: user?.uid || user?.id || project.clientId || 'client',
+          approvalComment: sanitizeText(comment || ''),
+          updatedAt: serverTimestamp(),
+        });
+      }
+      await updateDoc(doc(db, 'projects', projectId), {
+        renderingApproved: true,
+        renderingApprovedAt: serverTimestamp(),
+        renderingStatus: 'approved',
+        nextAction: 'Prepare final project quote',
+        updatedAt: serverTimestamp(),
+      });
+      await recordProjectActivity(projectId, 'Rendering approved', { renderingPackageId: targetPackageId, clientId: project.clientId });
+      notify('success', 'Rendering approved. Final quote can now be prepared.');
+    } catch (e) {
+      notify('error', 'Failed to approve rendering');
+    }
+  };
+
+  const createQuoteVersion = async (projectId, data = {}) => {
+    if (!db || !projectId) return null;
+    try {
+      const projectSnap = await getDoc(doc(db, 'projects', projectId));
+      if (!projectSnap.exists()) throw new Error('Project not found');
+      const project = projectSnap.data();
+      if (!project.renderingApproved && !data.adminOverride) {
+        notify('error', 'Final quote is locked until rendering is approved.');
+        return null;
+      }
+      const existing = await getDocs(query(collection(db, 'quotes'), where('projectId', '==', projectId)));
+      const version = Number(data.version || existing.size + 1);
+      const total = parseMoney(data.total || data.amount || project.budget || project.projectTotal);
+      const quoteRef = await addDoc(collection(db, 'quotes'), {
+        projectId,
+        clientId: project.clientId,
+        version,
+        title: sanitizeText(data.title || `${project.title || 'Project'} Quote v${version}`),
+        scopeItems: data.scopeItems || [],
+        exclusions: data.exclusions || [],
+        optionalItems: data.optionalItems || [],
+        addOns: data.addOns || [],
+        discounts: data.discounts || [],
+        total,
+        status: data.status || 'sent',
+        createdBy: user?.uid || user?.id || 'admin',
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+      await updateDoc(doc(db, 'projects', projectId), {
+        activeQuoteId: quoteRef.id,
+        activeQuoteVersion: version,
+        quoteStatus: 'sent',
+        projectTotal: total,
+        budget: total ? String(total) : project.budget || '',
+        nextAction: 'Awaiting final quote approval',
+        updatedAt: serverTimestamp(),
+      });
+      await recordProjectActivity(projectId, `Quote v${version} created`, { quoteId: quoteRef.id, amount: total, clientId: project.clientId });
+      notify('success', `Quote v${version} created`);
+      return quoteRef.id;
+    } catch (e) {
+      notify('error', 'Failed to create quote: ' + e.message);
+      return null;
+    }
+  };
+
+  const createAddOn = async (projectId, data = {}) => {
+    if (!db || !projectId) return null;
+    try {
+      const project = clients.find(p => p.id === projectId) || {};
+      const amount = parseMoney(data.amount || data.price);
+      const addOnRef = await addDoc(collection(db, 'addOns'), {
+        projectId,
+        clientId: data.clientId || project.clientId || getProjectClientId(projectId),
+        description: sanitizeText(data.description || data.title || 'Project add-on'),
+        reason: sanitizeText(data.reason || ''),
+        amount,
+        timelineImpactDays: Number(data.timelineImpactDays || 0),
+        approvalStatus: data.approvalStatus || 'pending',
+        invoiceStatus: 'not_invoiced',
+        paymentStatus: 'unpaid',
+        linkedFiles: data.linkedFiles || [],
+        createdBy: user?.uid || user?.id || 'admin',
+        approvedBy: null,
+        paidAt: null,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+      await recordProjectActivity(projectId, 'Add-on requested', { addOnId: addOnRef.id, amount });
+      notify('success', 'Add-on request created');
+      return addOnRef.id;
+    } catch (e) {
+      notify('error', 'Failed to create add-on: ' + e.message);
+      return null;
+    }
+  };
+
+  const approveAddOn = async (addOnId, projectId) => {
+    if (!db || !addOnId || !projectId) return;
+    try {
+      const addOnSnap = await getDoc(doc(db, 'addOns', addOnId));
+      if (!addOnSnap.exists()) throw new Error('Add-on not found');
+      const addOn = addOnSnap.data();
+      const amount = parseMoney(addOn.amount);
+      const batch = writeBatch(db);
+      batch.update(doc(db, 'addOns', addOnId), {
+        approvalStatus: 'approved',
+        approvedBy: user?.uid || user?.id || 'client',
+        approvedAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+      batch.update(doc(db, 'projects', projectId), {
+        approvedAddOnsTotal: increment(amount),
+        projectTotal: increment(amount),
+        updatedAt: serverTimestamp(),
+      });
+      await batch.commit();
+      await recordProjectActivity(projectId, 'Add-on approved', { addOnId, amount, clientId: addOn.clientId });
+      notify('success', 'Add-on approved and added to project total');
+    } catch (e) {
+      notify('error', 'Failed to approve add-on: ' + e.message);
+    }
+  };
+
+  const updateProjectTimeline = async (projectId, stageId, patch = {}) => {
+    if (!db || !projectId || !stageId) return;
+    try {
+      const snap = await getDoc(doc(db, 'projects', projectId));
+      if (!snap.exists()) throw new Error('Project not found');
+      const project = snap.data();
+      const previous = (project.stageTimeline || []).find(t => Number(t.stageId) === Number(stageId)) || {};
+      const stageTimeline = CLIENT_PROJECT_STAGES.map(stage => {
+        const current = (project.stageTimeline || []).find(t => Number(t.stageId) === stage.id) || { stageId: stage.id, owner: stage.whoActs };
+        return stage.id === Number(stageId)
+          ? { ...current, ...patch, stageId: stage.id, updatedAt: new Date().toISOString(), updatedBy: user?.uid || user?.id || 'admin' }
+          : current;
+      });
+      await updateDoc(doc(db, 'projects', projectId), { stageTimeline, updatedAt: serverTimestamp() });
+      await recordProjectActivity(projectId, `Timeline updated for stage ${stageId}`, {
+        stageId,
+        previousEstimatedEndDate: previous.estimatedEndDate || null,
+        newEstimatedEndDate: patch.estimatedEndDate || previous.estimatedEndDate || null,
+        delayReason: patch.delayReason || '',
+      });
+      notify('success', 'Timeline updated');
+    } catch (e) {
+      notify('error', 'Failed to update timeline');
+    }
+  };
+
   const createApproval = async (projectId, data) => {
     if (!db) return;
     try {
       const clientId = data.clientId || getProjectClientId(projectId);
-      await addDoc(collection(db, 'projects', projectId, 'approvals'), { ...data, clientId, projectId, status: 'pending', createdAt: new Date().toISOString() });
+      await addDoc(collection(db, 'approvals'), { ...data, clientId, projectId, status: data.status || 'pending', createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
+      await addDoc(collection(db, 'projects', projectId, 'approvals'), { ...data, clientId, projectId, status: data.status || 'pending', createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
       notifyUser(dbClients.find(c => c.id === clients.find(p => p.id === projectId)?.clientId)?.id, "New technical item requires your approval", "approval");
     } catch (e) { devErr(e); }
   };
@@ -874,7 +1172,8 @@ export default function App() {
     if (!db) return;
     try {
       const clientId = data.clientId || getProjectClientId(projectId);
-      await addDoc(collection(db, 'projects', projectId, 'change_requests'), { ...data, clientId, projectId, status: 'pending', createdAt: new Date().toISOString() });
+      await addDoc(collection(db, 'change_requests'), { ...data, clientId, projectId, status: 'pending', createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
+      await addDoc(collection(db, 'projects', projectId, 'change_requests'), { ...data, clientId, projectId, status: 'pending', createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
       // Notify Admin
       teamMembers.filter(m => m.role === 'admin').forEach(admin => {
         notifyUser(admin.id, "New change request submitted by client", "change_request");
@@ -893,26 +1192,83 @@ export default function App() {
   const payInvoice = async (id, projectId, method = 'Paystack') => {
     if (!db) return;
     try {
-      await updateDoc(doc(db, 'projects', projectId, 'payments', id), { status: 'Paid', paidAt: new Date().toISOString(), method });
-      try {
-        await updateDoc(doc(db, 'invoices', id), { status: 'Paid', paidAt: new Date().toISOString(), method });
-      } catch (_) {}
-      
       const inv = invoices.find(i => i.id === id);
+      const projectSnap = projectId ? await getDoc(doc(db, 'projects', projectId)) : null;
+      const project = projectSnap?.exists?.() ? projectSnap.data() : clients.find(p => p.id === projectId);
+      const amount = parseMoney(inv?.total ?? inv?.amount);
       const txId = `TX-${Date.now()}`;
       const newTx = {
         id: txId,
         projectId,
-        clientId: getProjectClientId(projectId),
+        clientId: inv?.clientId || getProjectClientId(projectId),
         invoiceId: id,
-        amount: inv?.amount?.toString().replace(/[$,]/g, '') || 0,
+        amount,
+        invoiceType: inv?.invoiceType || inv?.type || 'invoice',
+        stageGate: inv?.stageGate || null,
         date: new Date().toISOString().split('T')[0],
         method,
+        provider: method,
+        reference: id,
         status: 'verified'
       };
-      
-      await setDoc(doc(db, 'projects', projectId, 'transactions', txId), newTx);
-      notify('success', `Payment of ${inv?.amount || ''} confirmed via ${method}`);
+      const batch = writeBatch(db);
+      if (projectId) {
+        batch.set(doc(db, 'projects', projectId, 'transactions', txId), newTx);
+        batch.update(doc(db, 'projects', projectId), {
+          paidAmount: increment(amount),
+          updatedAt: serverTimestamp(),
+          ...(inv?.invoiceType === 'rendering_fee' || inv?.type === 'rendering_fee' ? {
+            renderingFeePaid: true,
+            renderingUnlocked: true,
+            renderingStatus: 'paid_unlocked',
+            nextAction: 'Client can review rendering',
+          } : {}),
+          ...(inv?.invoiceType === 'deposit' || inv?.type === 'deposit' ? {
+            depositPaid: true,
+            depositStatus: 'paid',
+            nextAction: 'Begin procurement and production',
+          } : {}),
+          ...(inv?.invoiceType === 'final_balance' || inv?.type === 'final_balance' ? {
+            finalPaymentPaid: true,
+            finalSettlementStatus: 'paid',
+            nextAction: 'Issue handover documents',
+          } : {}),
+        });
+      }
+      batch.set(doc(db, 'transactions', txId), newTx);
+      if (id && inv) {
+        batch.update(doc(db, 'invoices', id), {
+          status: 'Paid',
+          paidAt: serverTimestamp(),
+          method,
+          provider: method,
+          transactionId: txId,
+          balanceDue: 0,
+          updatedAt: serverTimestamp(),
+        });
+      }
+      await batch.commit();
+      if ((inv?.invoiceType === 'rendering_fee' || inv?.type === 'rendering_fee') && project?.renderingPackageId) {
+        await updateDoc(doc(db, 'renderingPackages', project.renderingPackageId), {
+          status: 'paid_unlocked',
+          accessStatus: 'unlocked',
+          paidAt: serverTimestamp(),
+          transactionId: txId,
+          updatedAt: serverTimestamp(),
+        });
+        try {
+          const projectDocs = await getDocs(query(collection(db, 'projects', projectId, 'documents'), where('documentType', '==', 'rendering')));
+          const topDocs = await getDocs(query(collection(db, 'documents'), where('projectId', '==', projectId), where('documentType', '==', 'rendering')));
+          const unlockBatch = writeBatch(db);
+          projectDocs.docs.forEach(d => unlockBatch.update(d.ref, { clientVisible: true, unlockedAt: serverTimestamp() }));
+          topDocs.docs.forEach(d => unlockBatch.update(d.ref, { clientVisible: true, unlockedAt: serverTimestamp() }));
+          await unlockBatch.commit();
+        } catch (unlockErr) {
+          devWarn('[rendering unlock docs]', unlockErr);
+        }
+      }
+      await recordProjectActivity(projectId, `Invoice paid via ${method}`, { invoiceId: id, transactionId: txId, amount, clientId: newTx.clientId });
+      notify('success', `Payment of ${amount ? `GHS ${amount.toLocaleString()}` : ''} confirmed via ${method}`);
     } catch (e) { devErr(e); }
   };
 
@@ -959,7 +1315,7 @@ export default function App() {
     if (!proj) return 0;
     
     // 1. Stage Progress (40%)
-    const stagePct = ((proj.stageId || 1) / 7) * 100;
+    const stagePct = ((proj.stageId || 1) / 10) * 100;
     
     // 2. Procurement Progress (40%)
     const myProcs = procurements.filter(p => p.parentId === pid);
@@ -1201,6 +1557,12 @@ export default function App() {
   };
 
 
+  const parseMoney = (value) => {
+    if (typeof value === 'number') return value;
+    const n = parseFloat(String(value || '').replace(/[^0-9.]/g, ''));
+    return Number.isFinite(n) ? n : 0;
+  };
+
   const createProject = async (data) => {
     if (!db) return;
     try {
@@ -1213,6 +1575,14 @@ export default function App() {
         primaryClientId: id,
         clientIds: [id],
         status: 'Initialized',
+        stageId: 1,
+        stageModel: 'westline-10-stage-v1',
+        renderingStatus: 'not_started',
+        quoteStatus: 'not_started',
+        depositStatus: 'not_started',
+        projectTotal: parseMoney(data.budget),
+        approvedAddOnsTotal: 0,
+        paidAmount: 0,
         progress: 0,
         createdAt: new Date().toISOString()
       });
@@ -1225,18 +1595,18 @@ export default function App() {
   };
 
   const buildDefaultMilestones = (budget, paymentSchedule = 'standard') => {
-    const num = parseFloat(String(budget).replace(/[^0-9.]/g, '')) || 0;
+    const num = parseMoney(budget);
     if (!num) return [];
     const fmt = (v) => `GHS ${v.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
     const ts = Date.now();
     const SCHEDULES = {
       standard: [
-        { name: '50% Deposit', pct: 0.50, stageId: 2 },
-        { name: '50% Final Settlement', pct: 0.50, stageId: 7 },
+        { name: '50% Project Deposit', pct: 0.50, stageId: 5, invoiceType: 'deposit' },
+        { name: '50% Final Settlement', pct: 0.50, stageId: 10, invoiceType: 'final_balance' },
       ],
       '70-30': [
-        { name: '70% Before Procurement', pct: 0.70, stageId: 2 },
-        { name: '30% Final Settlement',  pct: 0.30, stageId: 7 },
+        { name: '70% Before Procurement', pct: 0.70, stageId: 5, invoiceType: 'deposit' },
+        { name: '30% Final Settlement',  pct: 0.30, stageId: 10, invoiceType: 'final_balance' },
       ],
     };
     const template = SCHEDULES[paymentSchedule] || SCHEDULES.standard;
@@ -1246,6 +1616,7 @@ export default function App() {
       pct: m.pct,
       amount: fmt(num * m.pct),
       stageId: m.stageId,
+      invoiceType: m.invoiceType,
       status: 'Pending',
     }));
   };
@@ -1264,12 +1635,35 @@ export default function App() {
         clientIds: [clientId],
         projectType: data.projectType || 'full-service',
         stageId: 1,
+        stageModel: 'westline-10-stage-v1',
         status: 'Active',
         budget: data.budget || '',
+        projectTotal: parseMoney(data.budget),
+        approvedAddOnsTotal: 0,
+        paidAmount: 0,
         breakdown: data.breakdown || null,
         paymentSchedule: data.paymentSchedule || 'standard',
+        renderingFee: parseMoney(data.renderingFee),
+        renderingStatus: 'not_started',
+        quoteStatus: 'not_started',
+        depositStatus: 'not_started',
+        finalSettlementStatus: 'not_started',
+        nextAction: 'Create rendering fee invoice',
         description: sanitizeText(data.description || ''),
         milestones,
+        stageTimeline: CLIENT_PROJECT_STAGES.map((stage, index) => ({
+          stageId: stage.id,
+          status: stage.id === 1 ? 'on_track' : 'upcoming',
+          estimatedStartDate: null,
+          estimatedEndDate: null,
+          actualStartDate: stage.id === 1 ? effectiveDate : null,
+          actualEndDate: null,
+          delayReason: '',
+          owner: stage.whoActs,
+          clientNote: '',
+          internalNote: '',
+          order: index + 1,
+        })),
         assignedWorkers: [],
         assignedStaff: user?.uid || user?.id ? [user.uid || user.id] : [],
         stageHistory: [{ stageId: 1, note: data.projectDate ? `Project created (backdated to ${data.projectDate})` : 'Project created', timestamp: effectiveDate, byRole: 'admin' }],
@@ -1296,6 +1690,22 @@ export default function App() {
       const snap = await getDoc(doc(db, 'projects', projectId));
       if (!snap.exists()) throw new Error('Project not found');
       const data = snap.data();
+      if (newStageId >= 3 && !data.renderingFeePaid && !options.adminOverride) {
+        notify('error', 'Stage locked: rendering fee must be paid before the client can review drawings.');
+        return;
+      }
+      if (newStageId >= 4 && !data.renderingApproved && !options.adminOverride) {
+        notify('error', 'Stage locked: rendering must be approved before the final quote.');
+        return;
+      }
+      if (newStageId >= 5 && !data.quoteApproved && !options.adminOverride) {
+        notify('error', 'Stage locked: final quote approval is required before project deposit.');
+        return;
+      }
+      if (newStageId >= 6 && !data.depositPaid && !options.adminOverride) {
+        notify('error', 'Stage locked: project deposit must be paid before procurement.');
+        return;
+      }
       const effectiveTimestamp = options.overrideDate
         ? new Date(options.overrideDate).toISOString()
         : new Date().toISOString();
@@ -1304,12 +1714,15 @@ export default function App() {
         timestamp: effectiveTimestamp, byRole: 'admin',
         ...(options.overrideDate ? { backdated: true } : {}),
       }];
+      const stage = CLIENT_PROJECT_STAGES.find(s => s.id === newStageId);
       await updateDoc(doc(db, 'projects', projectId), {
         stageId: newStageId,
-        status: newStageId === 7 && /final payment|settlement|complete/i.test(note) ? 'Completed' : 'Active',
-        stageHistory, updatedAt: serverTimestamp(),
+        status: newStageId === 10 && /final payment|settlement|complete|handover/i.test(note) ? 'Completed' : 'Active',
+        progress: stage?.pct ?? Math.round((newStageId / 10) * 100),
+        nextAction: computeNextProjectAction({ ...data, stageId: newStageId }, newStageId),
+        stageHistory,
+        updatedAt: serverTimestamp(),
       });
-      const stage = CLIENT_PROJECT_STAGES.find(s => s.id === newStageId);
       await addDoc(collection(db, 'projects', projectId, 'messages'), {
         text: `Stage updated to: ${stage?.name || `Stage ${newStageId}`}. ${stage?.clientMsg || ''}`,
         senderRole: 'system', senderId: 'system', senderName: 'Westline Future',
@@ -1327,12 +1740,18 @@ export default function App() {
     }
   };
 
-  const addProjectMessage = async (projectId, text, senderRole = 'admin', isInternal = false) => {
+  const addProjectMessage = async (projectId, text, senderRole = 'admin', isInternal = false, meta = {}) => {
     if (!db || !text?.trim()) return;
     const senderName = user?.name || user?.displayName || 'Westline Future Team';
     try {
       await addDoc(collection(db, 'projects', projectId, 'messages'), {
         text: sanitizeText(text.trim()),
+        type: meta.type || 'text',
+        audioUrl: meta.audioUrl || null,
+        duration: meta.duration || null,
+        transcript: meta.transcript || null,
+        originalLanguage: meta.originalLanguage || null,
+        translations: meta.translations || {},
         senderRole,
         senderId: user?.uid || user?.id || 'admin',
         senderName,
@@ -1382,7 +1801,23 @@ export default function App() {
       await updateDoc(doc(db, 'projects', projectId), {
         quoteApproved: true,
         quoteApprovedAt: serverTimestamp(),
+        quoteStatus: 'approved',
+        approvedQuoteId: project?.activeQuoteId || null,
+        approvedQuoteVersion: project?.activeQuoteVersion || null,
+        nextAction: 'Create project deposit invoice',
+        updatedAt: serverTimestamp(),
       });
+      if (project?.activeQuoteId) {
+        try {
+          await updateDoc(doc(db, 'quotes', project.activeQuoteId), {
+            status: 'approved',
+            approvedBy: user?.uid || user?.id || project.clientId || 'client',
+            approvedAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          });
+        } catch (_) {}
+      }
+      await recordProjectActivity(projectId, 'Final quote approved', { quoteId: project?.activeQuoteId || null, clientId: project?.clientId || null });
       notify('success', 'Quote approved. Deposit payment is now available.');
     } catch (e) { notify('error', 'Failed to approve quote'); }
   };
@@ -1409,12 +1844,16 @@ export default function App() {
         fileType: file.type || 'application/octet-stream',
         size: file.size,
         stageId: meta.stageId || null,
+        documentType: meta.documentType || meta.category || (meta.stageId === 3 ? 'rendering' : 'project'),
+        category: meta.category || (meta.stageId === 3 ? 'rendering' : 'project'),
+        clientVisible: meta.clientVisible ?? !(meta.documentType === 'rendering' || meta.category === 'rendering' || meta.stageId === 3),
         projectId,
         clientId: meta.clientId || getProjectClientId(projectId),
         uploadedBy: meta.uploadedBy || 'admin',
         createdAt: serverTimestamp(),
       };
       await addDoc(collection(db, 'projects', projectId, 'documents'), docData);
+      await addDoc(collection(db, 'documents'), docData);
       logAction(projectId, 'Document', `Uploaded: ${file.name}`);
       notify('success', 'Document uploaded');
       const docProject = clients.find(p => p.id === projectId);
@@ -1783,6 +2222,8 @@ export default function App() {
     sendWhatsAppUpdate,
     jobs, createJob, updateJob,
     createClientProject, updateProjectStage, addProjectMessage, assignWorkerToProject, deleteProject,
+    createRenderingPackage, issueRenderingInvoice, approveRenderingPackage,
+    createQuoteVersion, createAddOn, approveAddOn, updateProjectTimeline,
     approveQuote, updateShippingDetails, addProjectDocument, createStaffAccount, deleteMember,
     workOrders, containers,
     updateWorkOrder: (id, d) => db && updateDoc(doc(db, 'work_orders', id), { ...d, updatedAt: serverTimestamp() }),

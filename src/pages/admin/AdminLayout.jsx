@@ -15,7 +15,7 @@ export default function AdminLayout({ user, onLogout, onPreview, brand, view, se
     setExpandedFolders(prev => ({ ...prev, [id]: !prev[id] }));
   };
 
-  const STAFF_ALLOWED_IDS = ['dash', 'projects', 'operations', 'client-hub', 'messages'];
+  const STAFF_ALLOWED_IDS = ['dash', 'projects', 'installations', 'logistics', 'operations', 'client-hub', 'messages'];
 
   const allMenuGroups = [
     {
@@ -29,8 +29,8 @@ export default function AdminLayout({ user, onLogout, onPreview, brand, view, se
       label: 'Projects',
       items: [
         { id: 'projects', label: 'Project Board', icon: <Kanban size={18} /> },
-        { id: 'installations', label: 'Installations', icon: <Activity size={18} /> },
-        { id: 'logistics', label: 'Logistics', icon: <Truck size={18} /> },
+        { id: 'installations', label: 'Field Operations', icon: <HardHat size={18} /> },
+        { id: 'logistics', label: 'Supply Chain', icon: <Truck size={18} /> },
       ]
     },
     {
@@ -320,4 +320,3 @@ export default function AdminLayout({ user, onLogout, onPreview, brand, view, se
     </div>
   );
 }
-

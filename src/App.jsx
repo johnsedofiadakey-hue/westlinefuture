@@ -1299,7 +1299,7 @@ export default function App() {
   const buildDefaultMilestones = (budget, paymentSchedule = 'standard') => {
     const num = parseFloat(String(budget).replace(/[^0-9.]/g, '')) || 0;
     if (!num) return [];
-    const fmt = (v) => `USD ${v.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+    const fmt = (v) => `GH₵ ${v.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
     const ts = Date.now();
     const SCHEDULES = {
       standard: [

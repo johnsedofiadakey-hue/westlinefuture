@@ -51,7 +51,7 @@ export const AppProvider = ({ children }) => {
   const [messageLimit, setMessageLimit] = useState(50);
   const [invoiceLimit, setInvoiceLimit] = useState(20);
   const [workOrderLimit, setWorkOrderLimit] = useState(20);
-  const [currency, setCurrency] = useState('USD');
+  const [currency, setCurrency] = useState('GHS');
   const [lang, setLang] = useState(localStorage.getItem('lx-lang') || 'en');
 
   useEffect(() => {

@@ -1,213 +1,465 @@
 import React from 'react';
-import { Landmark, Globe, QrCode } from 'lucide-react';
+import { Landmark } from 'lucide-react';
 
+/* ─── helpers ──────────────────────────────────────────────────── */
 const lineTotal = (item = {}) => {
-  const qty = parseFloat(item.qty) || 0;
-  const rate = parseFloat(item.rate) || 0;
-  const discount = parseFloat(item.discount) || 0;
-  return Math.max(0, (qty * rate) - discount);
+  const qty  = parseFloat(item.qty)      || 0;
+  const rate = parseFloat(item.rate)     || 0;
+  const disc = parseFloat(item.discount) || 0;
+  return Math.max(0, qty * rate - disc);
 };
 
-const calculateTotal = (items = []) =>
-  items.reduce((a, b) => a + lineTotal(b), 0);
-
-const formatMoney = (val, currency = 'GHS') => {
-  const symbol = currency === 'GHS' ? 'GH₵' : currency === 'EUR' ? '€' : currency === 'CNY' ? '¥' : currency === 'USD' ? '$' : currency;
-  return `${symbol}${parseFloat(val || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
+const fmtMoney = (val, currency = 'GHS') => {
+  const symbols = { GHS: 'GH₵', USD: '$', EUR: '€', CNY: '¥', GBP: '£' };
+  const sym = symbols[currency] || currency + ' ';
+  return `${sym}${parseFloat(val || 0).toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
 };
 
-export default function InvoiceDocument({ inv, isQuote = false, finSettings, brand }) {
-  const total = calculateTotal(inv.items || []);
-  const isReceipt = inv.documentKind === 'receipt' || inv.invoiceType === 'receipt' || inv.type === 'Receipt' || inv.status === 'Paid';
-  const documentLabel = isReceipt ? 'Sales Receipt' : isQuote ? 'Quotation' : 'Invoice';
+const fmtDate = (d) => {
+  if (!d) return '—';
+  try {
+    return new Date(d).toLocaleDateString('en-GB', {
+      day: '2-digit', month: 'short', year: 'numeric',
+    });
+  } catch { return d; }
+};
 
-  const isMinimal = finSettings.invoiceTheme === 'minimal';
-  const isCorporate = finSettings.invoiceTheme === 'corporate';
+/* ─── component ─────────────────────────────────────────────────── */
+export default function InvoiceDocument({ inv = {}, isQuote = false, finSettings = {}, brand = {} }) {
+  /* Document type */
+  const isReceipt   = inv.documentKind === 'receipt'   || inv.invoiceType === 'receipt'   || inv.type === 'Receipt' || inv.status === 'Paid';
+  const isQuotation = isQuote || inv.documentKind === 'quotation' || inv.type === 'Quotation';
+  const docLabel    = isReceipt ? 'Sales Receipt' : isQuotation ? 'Quotation' : 'Invoice';
 
-  // Brand-driven palette — falls back to rich warm brown if brand settings not set
-  const theme = {
-    primary:    brand?.accentSecondary || '#1A1410',
-    secondary:  brand?.textSecondary   || '#8C6C52',
-    accent:     brand?.accentPrimary   || '#C8A96E',
-    bg:         brand?.bgPrimary       || '#FDFCFB',
-    surface:    brand?.bgSecondary     || '#F4EFE6',
-    textMuted:  brand?.textSecondary   || '#716259',
-  };
+  /* Palette */
+  const accent  = brand?.color || '#C8A96E';
+  const dark    = '#1A1410';
+  const muted   = '#716259';
+  const soft    = '#EDE8E0';
+  const surface = '#F8F5F0';
+  const white   = '#FFFFFF';
+
+  /* Currency */
+  const cur = inv.currency || finSettings.baseCurrency || 'GHS';
+
+  /* Line items */
+  const items    = inv.items || [];
+  const hasDisc  = items.some(i => parseFloat(i.discount) > 0);
+  const subtotal = items.reduce((a, b) => a + lineTotal(b), 0);
+
+  /* Tax */
+  const taxEnabled   = finSettings.taxEnabled   ?? false;
+  const taxRate      = parseFloat(inv.taxRate   ?? finSettings.taxRate ?? 0);
+  const taxName      = finSettings.taxName      || 'Tax';
+  const taxInclusive = finSettings.taxInclusive ?? false;
+  const taxAmount    = taxEnabled
+    ? taxInclusive
+      ? subtotal - subtotal / (1 + taxRate / 100)
+      : subtotal * taxRate / 100
+    : 0;
+  const grandTotal = taxEnabled && !taxInclusive ? subtotal + taxAmount : subtotal;
+
+  /* Payment balance */
+  const amountPaid = parseFloat(inv.amountPaid || 0);
+  const balanceDue  = Math.max(0, grandTotal - amountPaid);
+
+  /* Text fields */
+  const bankDetails  = inv.bankDetails  || finSettings.bankDetails  || '';
+  const terms        = inv.terms        || finSettings.terms        || '';
+  const footerNote   = finSettings.footerNote   || 'Thank you for your business.';
+  const sigName      = finSettings.signatureName || 'Finance Director';
+  const sigTitle     = finSettings.signatureTitle || brand?.name || 'Westline Future Ltd.';
+
+  /* Company */
+  const companyName    = brand?.name    || 'Westline Future';
+  const companyTagline = brand?.tagline || finSettings.companyTagline || 'Global Trading Co, Ltd';
+  const companyAddr    = brand?.location || '';
+  const companyPhone   = brand?.phone   || '';
+  const companyEmail   = brand?.email   || '';
+  const companyWeb     = brand?.website || 'www.westlinefuture.com';
+
+  /* Logo: prefer Firebase Storage URL, then local public asset */
+  const logoSrc = brand?.logo || '/logo.png';
+
+  /* ── shared cell style ── */
+  const thStyle = (extra = {}) => ({
+    padding: '11px 16px',
+    textAlign: 'left',
+    fontSize: 9,
+    textTransform: 'uppercase',
+    letterSpacing: 1.5,
+    color: 'rgba(255,255,255,0.75)',
+    fontWeight: 700,
+    ...extra,
+  });
+  const tdStyle = (extra = {}) => ({
+    padding: '14px 16px',
+    fontSize: 12,
+    color: dark,
+    verticalAlign: 'top',
+    ...extra,
+  });
 
   return (
-    <div id="printable-financial" style={{
-      width: '100%', minHeight: '1120px', background: theme.bg,
-      padding: isMinimal ? '40px' : '80px', color: theme.primary,
-      fontFamily: isMinimal ? 'sans-serif' : 'serif',
-      position: 'relative', overflow: 'hidden',
-      border: isCorporate ? `12px solid ${theme.accent}` : 'none'
-    }}>
-      {/* WATERMARK */}
+    <div
+      id="printable-financial"
+      style={{
+        width: '100%',
+        minHeight: 1056,
+        background: white,
+        color: dark,
+        fontFamily: '"Inter", "Helvetica Neue", Arial, sans-serif',
+        fontSize: 13,
+        lineHeight: 1.6,
+      }}
+    >
+      {/* ══ HEADER ══════════════════════════════════════════════ */}
       <div style={{
-        position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%) rotate(-45deg)',
-        fontSize: '100px', fontWeight: 900, opacity: 0.02, pointerEvents: 'none', whiteSpace: 'nowrap', color: theme.primary
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'flex-start',
+        padding: '40px 48px 28px',
+        borderBottom: `3px solid ${accent}`,
       }}>
-        {isReceipt ? 'OFFICIAL RECEIPT' : isQuote ? 'OFFICIAL QUOTATION' : 'PAYMENT REQUEST'}
-      </div>
-
-      {/* TOP BAR (Corporate Theme) */}
-      {isCorporate && <div style={{ height: 24, background: theme.primary, margin: '-80px -80px 60px -80px' }} />}
-
-      {/* HEADER */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 50, borderBottom: isMinimal ? 'none' : `2px solid ${theme.accent}`, paddingBottom: 40 }}>
-        <div style={{ display: 'flex', gap: 24, alignItems: 'center' }}>
-          {brand.logo ? <img src={brand.logo} style={{ height: 72, objectFit: 'contain' }} alt="logo" /> : <div style={{ fontSize: 36, fontWeight: 900, color: theme.primary }}>W</div>}
+        {/* Left — logo + company */}
+        <div style={{ display: 'flex', gap: 18, alignItems: 'center' }}>
+          <img
+            src={logoSrc}
+            style={{ height: 60, maxWidth: 180, objectFit: 'contain', display: 'block' }}
+            alt={companyName}
+            onError={e => { e.target.style.display = 'none'; }}
+          />
           <div>
-            <h1 style={{ fontSize: 24, fontWeight: 800, textTransform: 'uppercase', letterSpacing: 2, margin: '0 0 4px 0', color: theme.primary }}>{brand.name || 'WESTLINE FUTURE'}</h1>
-            <p style={{ fontSize: 11, color: theme.secondary, textTransform: 'uppercase', letterSpacing: 1.5, margin: 0 }}>{brand.tagline}</p>
-          </div>
-        </div>
-        <div style={{ textAlign: 'right' }}>
-          <h2 style={{ fontSize: isMinimal ? 32 : 42, fontWeight: 400, margin: '0 0 12px 0', textTransform: 'uppercase', color: theme.primary, letterSpacing: 1 }}>{documentLabel}</h2>
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
-            <span style={{ fontSize: 13, background: theme.primary, color: theme.bg, padding: '4px 12px', borderRadius: 4, fontWeight: 600, letterSpacing: 1 }}>Ref: {inv.id || 'DRAFT-001'}</span>
-            <span style={{ fontSize: 13, fontWeight: 600, color: theme.textMuted }}>Date: {inv.date}</span>
-          </div>
-        </div>
-      </div>
-
-      {/* CLIENT & VENDOR */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: 60, marginBottom: 50 }}>
-        <div style={{ padding: isMinimal ? '24px' : '0', background: isMinimal ? theme.surface : 'none', borderRadius: 12 }}>
-          <div style={{ fontSize: 10, textTransform: 'uppercase', color: theme.accent, fontWeight: 900, marginBottom: 12, letterSpacing: 2 }}>Prepared For</div>
-          <p style={{ fontSize: 18, fontWeight: 800, margin: '0 0 8px 0', color: theme.primary }}>{inv.clientName || 'Valued Client'}</p>
-          {inv.clientCompany && <div style={{ fontSize: 13, fontWeight: 700, color: theme.secondary, marginBottom: 4 }}>{inv.clientCompany}</div>}
-          <div style={{ fontSize: 13, lineHeight: 1.7, color: theme.textMuted }}>
-            {inv.clientEmail}<br />
-            {inv.clientPhone || 'Commercial Division'}<br />
-            {inv.clientAddress || 'International Client'}
-            {inv.clientTaxId && <><br />Tax ID: {inv.clientTaxId}</>}
-          </div>
-        </div>
-        <div style={{ textAlign: 'right' }}>
-          <div style={{ fontSize: 10, textTransform: 'uppercase', color: theme.accent, fontWeight: 900, marginBottom: 12, letterSpacing: 2 }}>Issued By</div>
-          <p style={{ fontSize: 15, fontWeight: 800, margin: '0 0 6px 0', color: theme.primary }}>{brand.name}</p>
-          <div style={{ fontSize: 12, lineHeight: 1.7, color: theme.textMuted }}>
-            {brand.location}<br />
-            Tel: {brand.phone}<br />
-            Email: {brand.email}<br />
-            {brand.website && <span>Web: {brand.website}</span>}
-          </div>
-        </div>
-      </div>
-
-      {/* PROJECT INFO */}
-      <div style={{ marginBottom: 40, padding: '20px 28px', border: `1px solid ${theme.accent}`, borderRadius: 8, background: theme.surface }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div>
-            <div style={{ fontSize: 10, textTransform: 'uppercase', color: theme.secondary, fontWeight: 800, marginBottom: 6, letterSpacing: 1 }}>Subject / Project</div>
-            <div style={{ fontSize: 16, fontWeight: 800, textTransform: 'uppercase', color: theme.primary }}>{inv.title || 'General Finishing Works'}</div>
-          </div>
-          <div style={{ textAlign: 'right' }}>
-            <div style={{ fontSize: 10, textTransform: 'uppercase', color: theme.secondary, fontWeight: 800, marginBottom: 6, letterSpacing: 1 }}>Billable Type</div>
-            <div style={{ fontSize: 12, fontWeight: 800, background: theme.secondary, color: theme.bg, padding: '4px 12px', borderRadius: 20 }}>
-              {inv.invoiceType === 'unit' ? 'UNIT-ITEM BILLING' : 'PROJECT-BASED MILESTONE'}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* ITEMS TABLE */}
-      <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 40 }}>
-        <thead>
-          <tr style={{ background: theme.primary, color: theme.bg }}>
-            <th style={{ padding: '16px 24px', textAlign: 'left', fontSize: 11, textTransform: 'uppercase', letterSpacing: 1.5, fontWeight: 600 }}>Service Description</th>
-            <th style={{ padding: '16px 24px', textAlign: 'center', fontSize: 11, textTransform: 'uppercase', width: 100, letterSpacing: 1.5, fontWeight: 600 }}>{inv.invoiceType === 'unit' ? 'Qty' : 'Phase'}</th>
-            <th style={{ padding: '16px 24px', textAlign: 'right', fontSize: 11, textTransform: 'uppercase', width: 160, letterSpacing: 1.5, fontWeight: 600 }}>Unit Price</th>
-            <th style={{ padding: '16px 24px', textAlign: 'right', fontSize: 11, textTransform: 'uppercase', width: 130, letterSpacing: 1.5, fontWeight: 600 }}>Discount</th>
-            <th style={{ padding: '16px 24px', textAlign: 'right', fontSize: 11, textTransform: 'uppercase', width: 160, letterSpacing: 1.5, fontWeight: 600 }}>Line Total</th>
-          </tr>
-        </thead>
-        <tbody>
-          {(inv.items || []).map((it) => (
-            <tr key={it.id} style={{ borderBottom: `1px solid ${theme.accent}60` }}>
-              <td style={{ padding: '20px 24px' }}>
-                <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
-                  {it.img && <img src={it.img} style={{ width: 48, height: 48, borderRadius: 6, objectFit: 'cover', border: `1px solid ${theme.accent}40` }} alt="Item" />}
-                  <div>
-                    <div style={{ fontSize: 15, fontWeight: 700, color: theme.primary }}>{it.desc || 'Standard Work'}</div>
-                    <div style={{ fontSize: 12, color: theme.textMuted, marginTop: 4 }}>Precision manufacturing & site installation</div>
-                  </div>
-                </div>
-              </td>
-              <td style={{ padding: '20px 24px', textAlign: 'center', fontSize: 15, fontWeight: 600, color: theme.primary }}>{it.qty} {inv.invoiceType === 'unit' ? (it.unit || 'pcs') : ''}</td>
-              <td style={{ padding: '20px 24px', textAlign: 'right', fontSize: 15, color: theme.textMuted }}>{formatMoney(it.rate, inv.currency)}</td>
-              <td style={{ padding: '20px 24px', textAlign: 'right', fontSize: 15, color: theme.textMuted }}>{it.discount ? formatMoney(it.discount, inv.currency) : '—'}</td>
-              <td style={{ padding: '20px 24px', textAlign: 'right', fontSize: 15, fontWeight: 800, color: theme.primary }}>{formatMoney(lineTotal(it), inv.currency)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-
-      {/* TOTALS */}
-      <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'flex-start', marginBottom: 60 }}>
-        <div style={{ width: 360, background: theme.surface, padding: '24px 32px', borderRadius: 8, border: `1px solid ${theme.accent}60` }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: 16, borderBottom: `1px solid ${theme.accent}60` }}>
-            <span style={{ fontSize: 15, color: theme.textMuted, fontWeight: 600 }}>Subtotal</span>
-            <span style={{ fontSize: 15, fontWeight: 700, color: theme.primary }}>{formatMoney(total, inv.currency)}</span>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: 16, paddingBottom: (inv.amountPaid > 0) ? 16 : 0, borderBottom: (inv.amountPaid > 0) ? `1px solid ${theme.accent}60` : 'none' }}>
-            <span style={{ fontSize: 20, fontWeight: 900, textTransform: 'uppercase', color: theme.primary }}>Grand Total</span>
-            <span style={{ fontSize: 24, fontWeight: 900, color: theme.secondary }}>{formatMoney(total, inv.currency)}</span>
-          </div>
-          {inv.amountPaid > 0 && (
-            <>
-              <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: 16, paddingBottom: 16, borderBottom: `1px solid ${theme.accent}60` }}>
-                <span style={{ fontSize: 15, color: theme.textMuted, fontWeight: 600 }}>Amount Paid</span>
-                <span style={{ fontSize: 15, fontWeight: 700, color: '#16A34A' }}>{formatMoney(inv.amountPaid, inv.currency)}</span>
+            <div style={{ fontSize: 16, fontWeight: 800, color: dark, letterSpacing: 0.2 }}>{companyName}</div>
+            <div style={{ fontSize: 9, color: muted, textTransform: 'uppercase', letterSpacing: 2, marginTop: 3 }}>{companyTagline}</div>
+            {companyAddr && (
+              <div style={{ fontSize: 10, color: muted, marginTop: 5, lineHeight: 1.5 }}>{companyAddr}</div>
+            )}
+            {(companyPhone || companyEmail) && (
+              <div style={{ fontSize: 10, color: muted, marginTop: 3 }}>
+                {companyPhone}{companyPhone && companyEmail ? '  ·  ' : ''}{companyEmail}
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: 16 }}>
-                <span style={{ fontSize: 18, fontWeight: 900, textTransform: 'uppercase', color: theme.primary }}>Balance Due</span>
-                <span style={{ fontSize: 20, fontWeight: 900, color: '#DC2626' }}>{formatMoney(Math.max(0, total - inv.amountPaid), inv.currency)}</span>
+            )}
+          </div>
+        </div>
+
+        {/* Right — document type + meta */}
+        <div style={{ textAlign: 'right' }}>
+          <div style={{
+            fontSize: 30,
+            fontWeight: 900,
+            textTransform: 'uppercase',
+            color: dark,
+            letterSpacing: 1.5,
+            lineHeight: 1,
+          }}>
+            {docLabel}
+          </div>
+
+          <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 7, alignItems: 'flex-end' }}>
+            {/* Reference number */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span style={{ fontSize: 9, color: muted, textTransform: 'uppercase', letterSpacing: 1 }}>Number</span>
+              <span style={{
+                fontSize: 11, fontWeight: 800,
+                background: dark, color: white,
+                padding: '3px 12px', borderRadius: 4,
+              }}>
+                {inv.id || 'DRAFT'}
+              </span>
+            </div>
+            {/* Issue date */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span style={{ fontSize: 9, color: muted, textTransform: 'uppercase', letterSpacing: 1 }}>Date Issued</span>
+              <span style={{ fontSize: 12, fontWeight: 600, color: dark }}>{fmtDate(inv.date)}</span>
+            </div>
+            {/* Due date */}
+            {inv.due && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ fontSize: 9, color: muted, textTransform: 'uppercase', letterSpacing: 1 }}>Due Date</span>
+                <span style={{ fontSize: 12, fontWeight: 700, color: isReceipt ? '#16A34A' : '#C0392B' }}>
+                  {fmtDate(inv.due)}
+                </span>
+              </div>
+            )}
+            {/* Status badge */}
+            {inv.status && (
+              <div style={{
+                fontSize: 9, fontWeight: 900, textTransform: 'uppercase', letterSpacing: 1,
+                padding: '3px 10px', borderRadius: 20,
+                background:
+                  inv.status === 'Paid' ? 'rgba(22,163,74,0.12)' :
+                  inv.status === 'Pending' ? `${accent}20` : '#F1F5F9',
+                color:
+                  inv.status === 'Paid' ? '#16A34A' :
+                  inv.status === 'Pending' ? '#92632B' : muted,
+              }}>
+                {inv.status}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* ══ BILL TO / ISSUED BY ═════════════════════════════════ */}
+      <div style={{
+        display: 'grid', gridTemplateColumns: '1fr 1fr',
+        padding: '28px 48px',
+        borderBottom: `1px solid ${soft}`,
+        gap: 0,
+      }}>
+        {/* Bill To */}
+        <div>
+          <div style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: 2, color: accent, fontWeight: 900, marginBottom: 10 }}>
+            Bill To
+          </div>
+          <div style={{ fontSize: 16, fontWeight: 800, color: dark, marginBottom: 3 }}>
+            {inv.clientName || 'Valued Client'}
+          </div>
+          {inv.clientCompany && (
+            <div style={{ fontSize: 12, fontWeight: 700, color: muted, marginBottom: 2 }}>{inv.clientCompany}</div>
+          )}
+          {inv.clientAddress && <div style={{ fontSize: 12, color: muted }}>{inv.clientAddress}</div>}
+          {inv.clientEmail   && <div style={{ fontSize: 12, color: muted }}>{inv.clientEmail}</div>}
+          {inv.clientPhone   && <div style={{ fontSize: 12, color: muted }}>{inv.clientPhone}</div>}
+          {inv.clientTaxId   && (
+            <div style={{ fontSize: 11, color: muted, marginTop: 5 }}>Tax / VAT ID: {inv.clientTaxId}</div>
+          )}
+        </div>
+
+        {/* Issued By */}
+        <div style={{ borderLeft: `1px solid ${soft}`, paddingLeft: 32 }}>
+          <div style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: 2, color: accent, fontWeight: 900, marginBottom: 10 }}>
+            Issued By
+          </div>
+          <div style={{ fontSize: 14, fontWeight: 800, color: dark, marginBottom: 3 }}>{companyName}</div>
+          {companyAddr  && <div style={{ fontSize: 12, color: muted }}>{companyAddr}</div>}
+          {companyPhone && <div style={{ fontSize: 12, color: muted }}>T: {companyPhone}</div>}
+          {companyEmail && <div style={{ fontSize: 12, color: muted }}>E: {companyEmail}</div>}
+          {companyWeb   && <div style={{ fontSize: 12, color: muted }}>W: {companyWeb}</div>}
+        </div>
+      </div>
+
+      {/* ══ SUBJECT ═════════════════════════════════════════════ */}
+      {inv.title && (
+        <div style={{
+          padding: '14px 48px',
+          background: surface,
+          borderBottom: `1px solid ${soft}`,
+          display: 'flex', alignItems: 'center', gap: 14,
+        }}>
+          <span style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: 2, color: muted, fontWeight: 900 }}>
+            Subject
+          </span>
+          <span style={{ fontSize: 13, fontWeight: 700, color: dark }}>{inv.title}</span>
+        </div>
+      )}
+
+      {/* ══ ITEMS TABLE ═════════════════════════════════════════ */}
+      <div style={{ padding: '0 48px' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 28 }}>
+          <thead>
+            <tr style={{ background: dark }}>
+              <th style={thStyle({ width: 32, borderRadius: '6px 0 0 0' })}>#</th>
+              <th style={thStyle()}>Description</th>
+              <th style={thStyle({ textAlign: 'center', width: 70 })}>
+                {inv.invoiceType === 'unit' ? 'Qty' : 'Phase'}
+              </th>
+              <th style={thStyle({ textAlign: 'right', width: 130 })}>Unit Price</th>
+              {hasDisc && (
+                <th style={thStyle({ textAlign: 'right', width: 110 })}>Discount</th>
+              )}
+              <th style={thStyle({ textAlign: 'right', width: 140, borderRadius: '0 6px 0 0' })}>Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            {items.map((it, i) => (
+              <tr
+                key={it.id || i}
+                style={{
+                  borderBottom: `1px solid ${soft}`,
+                  background: i % 2 === 1 ? surface : white,
+                }}
+              >
+                <td style={tdStyle({ color: muted, fontSize: 11 })}>{i + 1}</td>
+                <td style={tdStyle()}>
+                  <div style={{ fontWeight: 700 }}>{it.desc || 'Service Item'}</div>
+                  {it.notes && (
+                    <div style={{ fontSize: 11, color: muted, marginTop: 3 }}>{it.notes}</div>
+                  )}
+                </td>
+                <td style={tdStyle({ textAlign: 'center' })}>
+                  {it.qty}
+                  {it.unit && it.unit !== 'pcs' ? ` ${it.unit}` : ''}
+                </td>
+                <td style={tdStyle({ textAlign: 'right', color: muted })}>{fmtMoney(it.rate, cur)}</td>
+                {hasDisc && (
+                  <td style={tdStyle({ textAlign: 'right', color: muted })}>
+                    {parseFloat(it.discount) > 0 ? `−${fmtMoney(it.discount, cur)}` : '—'}
+                  </td>
+                )}
+                <td style={tdStyle({ textAlign: 'right', fontWeight: 700 })}>
+                  {fmtMoney(lineTotal(it), cur)}
+                </td>
+              </tr>
+            ))}
+            {/* empty-state placeholder */}
+            {items.length === 0 && (
+              <tr>
+                <td colSpan={hasDisc ? 6 : 5} style={{ padding: '32px 16px', textAlign: 'center', color: muted, fontSize: 12 }}>
+                  No line items
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {/* ══ TOTALS ══════════════════════════════════════════════ */}
+      <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '0 48px', marginTop: 0 }}>
+        <div style={{ width: 310, borderTop: `3px solid ${accent}` }}>
+          {/* Subtotal */}
+          <div style={{
+            display: 'flex', justifyContent: 'space-between',
+            padding: '12px 0', borderBottom: `1px solid ${soft}`,
+          }}>
+            <span style={{ fontSize: 12, color: muted }}>Subtotal</span>
+            <span style={{ fontSize: 12, fontWeight: 700, color: dark }}>{fmtMoney(subtotal, cur)}</span>
+          </div>
+
+          {/* Tax row */}
+          {taxEnabled && (
+            <div style={{
+              display: 'flex', justifyContent: 'space-between',
+              padding: '10px 0', borderBottom: `1px solid ${soft}`,
+            }}>
+              <span style={{ fontSize: 12, color: muted }}>
+                {taxName} ({taxRate}%){taxInclusive ? ' · inclusive' : ''}
+              </span>
+              <span style={{ fontSize: 12, fontWeight: 600, color: muted }}>{fmtMoney(taxAmount, cur)}</span>
+            </div>
+          )}
+
+          {/* Grand total */}
+          <div style={{
+            display: 'flex', justifyContent: 'space-between',
+            padding: '16px 0',
+            borderBottom: amountPaid > 0 ? `1px solid ${soft}` : 'none',
+          }}>
+            <span style={{ fontSize: 15, fontWeight: 900, textTransform: 'uppercase', letterSpacing: 0.5, color: dark }}>
+              {isReceipt ? 'Total Paid' : 'Total Due'}
+            </span>
+            <span style={{ fontSize: 19, fontWeight: 900, color: dark }}>
+              {fmtMoney(grandTotal, cur)}
+            </span>
+          </div>
+
+          {/* Partial payment */}
+          {amountPaid > 0 && (
+            <>
+              <div style={{
+                display: 'flex', justifyContent: 'space-between',
+                padding: '10px 0', borderBottom: `1px solid ${soft}`,
+              }}>
+                <span style={{ fontSize: 12, color: muted }}>Amount Paid</span>
+                <span style={{ fontSize: 12, fontWeight: 700, color: '#16A34A' }}>{fmtMoney(amountPaid, cur)}</span>
+              </div>
+              <div style={{
+                display: 'flex', justifyContent: 'space-between',
+                padding: '14px 0 0',
+              }}>
+                <span style={{ fontSize: 14, fontWeight: 900, textTransform: 'uppercase', color: dark }}>
+                  Balance Due
+                </span>
+                <span style={{ fontSize: 17, fontWeight: 900, color: balanceDue > 0 ? '#C0392B' : '#16A34A' }}>
+                  {fmtMoney(balanceDue, cur)}
+                </span>
               </div>
             </>
           )}
         </div>
       </div>
 
-      {/* BANKING & SIGNATURE */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: 60, borderTop: `2px solid ${theme.accent}`, paddingTop: 40 }}>
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
-            <Landmark size={18} color={theme.secondary} />
-            <span style={{ fontSize: 11, textTransform: 'uppercase', color: theme.secondary, fontWeight: 900, letterSpacing: 1.5 }}>Electronic Fund Transfer</span>
-          </div>
-          <div style={{ padding: 24, background: theme.surface, borderRadius: 8, border: `1px solid ${theme.accent}40` }}>
-            <p style={{ fontSize: 13, fontWeight: 700, lineHeight: 1.8, whiteSpace: 'pre-line', margin: 0, color: theme.primary }}>{inv.bankDetails || finSettings.bankDetails}</p>
-          </div>
-          <div style={{ marginTop: 32 }}>
-            <div style={{ fontSize: 11, textTransform: 'uppercase', color: theme.secondary, fontWeight: 900, marginBottom: 8, letterSpacing: 1 }}>Contractual Conditions</div>
-            <p style={{ fontSize: 12, color: theme.textMuted, lineHeight: 1.7, whiteSpace: 'pre-line', margin: 0 }}>{inv.terms || finSettings.terms}</p>
-          </div>
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', justifyContent: 'flex-start' }}>
-          <div style={{ padding: 12, border: `1px solid ${theme.accent}40`, borderRadius: 8, marginBottom: 24, background: theme.surface }}>
-            <QrCode size={90} color={theme.secondary} style={{ opacity: 0.6 }} />
-          </div>
-          <div style={{ textAlign: 'right' }}>
-            <div style={{ fontSize: 9, color: theme.textMuted, textTransform: 'uppercase', marginBottom: 24, letterSpacing: 1 }}>System Generated Verification Code: GS-992-LX</div>
-            {finSettings.showStamp && (
-              <div style={{
-                width: 130, height: 130, borderRadius: '50%', border: `4px double ${theme.accent}`,
-                display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.secondary,
-                transform: 'rotate(-15deg)', margin: '0 0 24px auto', background: theme.bg
-              }}>
-                <div style={{ textAlign: 'center', padding: 10 }}>
-                  <div style={{ fontSize: 10, fontWeight: 900, letterSpacing: 1 }}>WESTLINE FUTURE</div>
-                  <div style={{ fontSize: 15, fontWeight: 900, borderTop: `2px solid ${theme.accent}`, borderBottom: `2px solid ${theme.accent}`, padding: '4px 0', margin: '4px 0', letterSpacing: 2 }}>CERTIFIED</div>
-                  <div style={{ fontSize: 8, letterSpacing: 1 }}>OFFICIAL RELEASE</div>
-                </div>
+      {/* ══ BANK DETAILS + TERMS ════════════════════════════════ */}
+      {(bankDetails || terms) && (
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: bankDetails && terms ? '1fr 1fr' : '1fr',
+          gap: 0,
+          margin: '44px 48px 0',
+          paddingTop: 28,
+          borderTop: `1px solid ${soft}`,
+        }}>
+          {bankDetails && (
+            <div style={{ paddingRight: terms ? 32 : 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+                <Landmark size={12} color={accent} />
+                <span style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: 2, fontWeight: 900, color: muted }}>
+                  Bank Details
+                </span>
               </div>
-            )}
-            <div style={{ width: 200, borderBottom: `2px solid ${theme.primary}`, marginBottom: 12 }} />
-            <div style={{ fontSize: 13, fontWeight: 800, color: theme.primary }}>Finance Director</div>
-            <div style={{ fontSize: 11, color: theme.textMuted, marginTop: 4 }}>Westline Future Ltd.</div>
-          </div>
+              <div style={{
+                fontSize: 12, color: dark, lineHeight: 1.9,
+                whiteSpace: 'pre-line',
+                background: surface,
+                padding: '14px 18px',
+                borderRadius: 8,
+                border: `1px solid ${soft}`,
+              }}>
+                {bankDetails}
+              </div>
+            </div>
+          )}
+
+          {terms && (
+            <div style={{
+              borderLeft: bankDetails ? `1px solid ${soft}` : 'none',
+              paddingLeft: bankDetails ? 32 : 0,
+            }}>
+              <div style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: 2, fontWeight: 900, color: muted, marginBottom: 12 }}>
+                Terms &amp; Conditions
+              </div>
+              <div style={{ fontSize: 11, color: muted, lineHeight: 1.85, whiteSpace: 'pre-line' }}>
+                {terms}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ══ SIGNATURE ════════════════════════════════════════════ */}
+      <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '36px 48px 0' }}>
+        <div style={{ textAlign: 'right' }}>
+          <div style={{ width: 190, borderBottom: `1.5px solid ${dark}`, marginBottom: 10 }} />
+          <div style={{ fontSize: 12, fontWeight: 800, color: dark }}>{sigName}</div>
+          <div style={{ fontSize: 10, color: muted, marginTop: 3 }}>{sigTitle}</div>
+        </div>
+      </div>
+
+      {/* ══ FOOTER ═══════════════════════════════════════════════ */}
+      <div style={{
+        marginTop: 44,
+        background: dark,
+        padding: '16px 48px',
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+      }}>
+        <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.45)', fontStyle: 'italic' }}>
+          {footerNote}
+        </span>
+        <div style={{ display: 'flex', gap: 24, alignItems: 'center' }}>
+          {companyWeb && (
+            <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.6)', fontWeight: 700, letterSpacing: 0.5 }}>
+              {companyWeb}
+            </span>
+          )}
+          <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)' }}>
+            {inv.id || 'DRAFT'}
+          </span>
         </div>
       </div>
     </div>

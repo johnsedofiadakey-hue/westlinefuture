@@ -28,15 +28,32 @@ export default function AdminFinancials({ invoices = [], transactions = [], clie
 
   // --- FINANCIAL SETTINGS ---
   const [finSettings, setFinSettings] = useState(brand.finSettings || {
-    baseCurrency: 'GHS',
-    secondaryCurrency: 'USD',
-    exchangeRate: 15.5,
-    invoiceTheme: 'classic',
-    taxRate: 0,
-    showStamp: true,
-    autoNumbering: true,
-    bankDetails: 'Bank Name | Account Number | Branch',
-    terms: '1. 50% deposit required for fabrication.\n2. Final payment due upon installation.\n3. This document is valid for 14 days.',
+    /* Currency */
+    baseCurrency:       'GHS',
+    secondaryCurrency:  'USD',
+    exchangeRate:       15.5,
+    /* Tax */
+    taxEnabled:         false,
+    taxRate:            0,
+    taxName:            'VAT',
+    taxInclusive:       false,
+    /* Discount */
+    discountEnabled:    true,
+    /* Document identity */
+    invoicePrefix:      'INV-',
+    quotePrefix:        'QUO-',
+    receiptPrefix:      'RCP-',
+    invoiceTheme:       'classic',
+    showStamp:          false,
+    autoNumbering:      true,
+    /* Document text */
+    bankDetails:        'Bank Name:\nAccount Name:\nAccount Number:\nSort Code / SWIFT:\nBranch:',
+    terms:              '1. 50% deposit required before fabrication commences.\n2. Balance due upon delivery or installation.\n3. This document is valid for 14 days from date of issue.\n4. Goods remain property of Westline Future until full payment is received.',
+    footerNote:         'Thank you for doing business with Westline Future.',
+    signatureName:      'Finance Director',
+    signatureTitle:     'Westline Future Global Trading Co, Ltd',
+    companyTagline:     'Global Trading Co, Ltd',
+    /* KPI targets */
     kpiTargets: { revenue: 500000, pending: 100000, quotes: 20, conversion: 90 }
   });
 
@@ -181,92 +198,226 @@ export default function AdminFinancials({ invoices = [], transactions = [], clie
     setShowAdd(kind === 'quotation' ? 'quotation' : kind === 'receipt' ? 'receipt' : 'invoice');
   };
 
+  // --- SETTINGS SECTION HELPER ---
+  const SectionHead = ({ title, sub }) => (
+    <div style={{ marginBottom: 4 }}>
+      <div className="lxfh" style={{ fontSize: 15, fontWeight: 800 }}>{title}</div>
+      {sub && <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 2 }}>{sub}</div>}
+    </div>
+  );
+
+  const ToggleRow = ({ label, sub, checked, onChange }) => (
+    <label style={{
+      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+      padding: '14px 18px', borderRadius: 10, border: '1px solid var(--border-color)',
+      background: checked ? `${ac}08` : 'var(--bg-primary)', cursor: 'pointer',
+      transition: 'all 0.2s',
+    }}>
+      <div>
+        <div style={{ fontSize: 13, fontWeight: 700 }}>{label}</div>
+        {sub && <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 2 }}>{sub}</div>}
+      </div>
+      <div style={{
+        width: 42, height: 24, borderRadius: 12, position: 'relative', transition: 'all 0.2s',
+        background: checked ? ac : '#D1D5DB', flexShrink: 0,
+      }}>
+        <div style={{
+          position: 'absolute', top: 3, left: checked ? 21 : 3,
+          width: 18, height: 18, borderRadius: '50%', background: '#fff',
+          transition: 'left 0.2s', boxShadow: '0 1px 4px rgba(0,0,0,0.2)',
+        }} />
+        <input type="checkbox" checked={checked} onChange={onChange} style={{ display: 'none' }} />
+      </div>
+    </label>
+  );
+
   // --- SUB-VIEWS ---
   const settingsView = (
-    <div className="p-card fade-in" style={{ padding: 40 }}>
-       <div style={{ display: 'flex', gap: 40 }}>
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 24 }}>
-             <h3 className="lxfh" style={{ fontSize: 24, marginBottom: 8 }}>Financial Environment</h3>
-             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-                <PFormField label="Base Currency">
-                   <select className="p-inp" value={finSettings.baseCurrency} onChange={e => setFinSettings({...finSettings, baseCurrency: e.target.value})}>
-                      <option value="GHS">GHS (GH₵)</option>
-                      <option value="USD">USD ($)</option>
-                   </select>
-                </PFormField>
-                <PFormField label="Secondary Currency">
-                   <select className="p-inp" value={finSettings.secondaryCurrency} onChange={e => setFinSettings({...finSettings, secondaryCurrency: e.target.value})}>
-                      <option value="GHS">GHS (GH₵)</option>
-                      <option value="USD">USD ($)</option>
-                   </select>
-                </PFormField>
-                <PFormField label="Exchange Rate (1 USD = X GHS)">
-                   <input className="p-inp" type="number" step="0.01" value={finSettings.exchangeRate} onChange={e => setFinSettings({...finSettings, exchangeRate: parseFloat(e.target.value)})} />
-                </PFormField>
-                <PFormField label="Default Tax Rate (%)">
-                   <input className="p-inp" type="number" value={finSettings.taxRate} onChange={e => setFinSettings({...finSettings, taxRate: parseInt(e.target.value)})} />
-                </PFormField>
-             </div>
+    <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+      {/* ── Row 1: Currency + Tax ── */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
 
-             <h3 className="lxfh" style={{ fontSize: 20, marginTop: 20 }}>Document Aesthetic</h3>
-             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
-                {[
-                  { id: 'classic', n: 'Classic Heritage', icon: <Briefcase size={20}/> },
-                  { id: 'minimal', n: 'Sharp Minimal', icon: <Layout size={20}/> },
-                  { id: 'corporate', n: 'Global Corporate', icon: <Globe size={20}/> }
-                ].map(t => (
-                  <button 
-                    key={t.id} 
-                    onClick={() => setFinSettings({...finSettings, invoiceTheme: t.id})}
-                    style={{ 
-                      padding: 20, borderRadius: 16, border: finSettings.invoiceTheme === t.id ? `2px solid ${ac}` : '1px solid #eee',
-                      background: finSettings.invoiceTheme === t.id ? `${ac}05` : '#fff', cursor: 'pointer', textAlign: 'center'
-                    }}
-                  >
-                     <div style={{ marginBottom: 12, color: finSettings.invoiceTheme === t.id ? ac : `var(--text-secondary)` }}>{t.icon}</div>
-                     <div style={{ fontSize: 13, fontWeight: 700 }}>{t.n}</div>
-                  </button>
-                ))}
-             </div>
-             
-             <h3 className="lxfh" style={{ fontSize: 20, marginTop: 20 }}>KPI Targets</h3>
-             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-                <PFormField label="Revenue Target (GHS)">
-                   <input className="p-inp" type="number" value={finSettings.kpiTargets?.revenue ?? 500000} onChange={e => setFinSettings(s => ({ ...s, kpiTargets: { ...s.kpiTargets, revenue: parseFloat(e.target.value) } }))} />
-                </PFormField>
-                <PFormField label="Pending Ceiling (GHS)">
-                   <input className="p-inp" type="number" value={finSettings.kpiTargets?.pending ?? 100000} onChange={e => setFinSettings(s => ({ ...s, kpiTargets: { ...s.kpiTargets, pending: parseFloat(e.target.value) } }))} />
-                </PFormField>
-                <PFormField label="Open Tenders Target">
-                   <input className="p-inp" type="number" value={finSettings.kpiTargets?.quotes ?? 20} onChange={e => setFinSettings(s => ({ ...s, kpiTargets: { ...s.kpiTargets, quotes: parseFloat(e.target.value) } }))} />
-                </PFormField>
-                <PFormField label="Conversion Rate Target (%)">
-                   <input className="p-inp" type="number" value={finSettings.kpiTargets?.conversion ?? 90} onChange={e => setFinSettings(s => ({ ...s, kpiTargets: { ...s.kpiTargets, conversion: parseFloat(e.target.value) } }))} />
-                </PFormField>
-             </div>
-             <button onClick={() => {
-                if (props.syncCMS) props.syncCMS('finSettings', finSettings);
-                if (typeof notify === 'function') notify('success', 'Financial settings optimized & synced');
-              }} className="p-btn-dark" style={{ alignSelf: 'flex-start', padding: '12px 32px', marginTop: 20 }}>Apply System Configuration</button>
+        {/* Currency */}
+        <div className="p-card" style={{ padding: 28, display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <SectionHead title="Currency & Exchange" sub="Set default currencies and live exchange rate" />
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <PFormField label="Base Currency">
+              <select className="p-inp" value={finSettings.baseCurrency} onChange={e => setFinSettings({...finSettings, baseCurrency: e.target.value})}>
+                <option value="GHS">GHS — GH₵</option>
+                <option value="USD">USD — $</option>
+                <option value="EUR">EUR — €</option>
+                <option value="CNY">CNY — ¥</option>
+                <option value="GBP">GBP — £</option>
+              </select>
+            </PFormField>
+            <PFormField label="Secondary Currency">
+              <select className="p-inp" value={finSettings.secondaryCurrency} onChange={e => setFinSettings({...finSettings, secondaryCurrency: e.target.value})}>
+                <option value="USD">USD — $</option>
+                <option value="GHS">GHS — GH₵</option>
+                <option value="EUR">EUR — €</option>
+                <option value="CNY">CNY — ¥</option>
+                <option value="GBP">GBP — £</option>
+              </select>
+            </PFormField>
           </div>
+          <PFormField label="Exchange Rate (1 USD = X base currency)">
+            <input className="p-inp" type="number" step="0.01" min="0" value={finSettings.exchangeRate}
+              onChange={e => setFinSettings({...finSettings, exchangeRate: parseFloat(e.target.value) || 0})} />
+          </PFormField>
+        </div>
 
-          <div style={{ width: 350, display: 'flex', flexDirection: 'column', gap: 20 }}>
-             <div className="p-card" style={{ padding: 24, background: `var(--accent-secondary)`, color: '#fff' }}>
-                <h4 style={{ fontSize: 14, fontWeight: 800, marginBottom: 16 }}>Settlement & Legal Defaults</h4>
-                <PFormField label="Banking Info (Invoice Footer)" nomargin>
-                   <textarea className="p-inp" style={{ background: 'rgba(255,255,255,0.05)', color: '#fff', border: '1px solid rgba(255,255,255,0.1)' }} rows={4} value={finSettings.bankDetails} onChange={e => setFinSettings({...finSettings, bankDetails: e.target.value})} />
+        {/* Tax */}
+        <div className="p-card" style={{ padding: 28, display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <SectionHead title="Tax Configuration" sub="VAT, GST, or any applicable tax on documents" />
+          <ToggleRow
+            label="Enable Tax on Documents"
+            sub="Applies tax row to all invoices, quotes and receipts"
+            checked={finSettings.taxEnabled ?? false}
+            onChange={e => setFinSettings({...finSettings, taxEnabled: e.target.checked})}
+          />
+          {finSettings.taxEnabled && (
+            <>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <PFormField label="Tax Label (e.g. VAT, GST)">
+                  <input className="p-inp" value={finSettings.taxName || 'VAT'}
+                    onChange={e => setFinSettings({...finSettings, taxName: e.target.value})} />
                 </PFormField>
-                <div style={{ height: 16 }} />
-                <PFormField label="Standard Terms" nomargin>
-                   <textarea className="p-inp" style={{ background: 'rgba(255,255,255,0.05)', color: '#fff', border: '1px solid rgba(255,255,255,0.1)' }} rows={6} value={finSettings.terms} onChange={e => setFinSettings({...finSettings, terms: e.target.value})} />
+                <PFormField label="Tax Rate (%)">
+                  <input className="p-inp" type="number" min="0" max="100" step="0.1"
+                    value={finSettings.taxRate || 0}
+                    onChange={e => setFinSettings({...finSettings, taxRate: parseFloat(e.target.value) || 0})} />
                 </PFormField>
-             </div>
-             <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '0 10px' }}>
-                <input type="checkbox" checked={finSettings.showStamp} onChange={e => setFinSettings({...finSettings, showStamp: e.target.checked})} />
-                <span style={{ fontSize: 12 }}>Include Digital Certification Stamp</span>
-             </div>
+              </div>
+              <ToggleRow
+                label="Tax Inclusive Pricing"
+                sub="Prices already include tax — extracted from subtotal"
+                checked={finSettings.taxInclusive ?? false}
+                onChange={e => setFinSettings({...finSettings, taxInclusive: e.target.checked})}
+              />
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* ── Row 2: Document Prefixes + Numbering ── */}
+      <div className="p-card" style={{ padding: 28, display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <SectionHead title="Document Numbering" sub="Prefix codes that appear before document reference numbers" />
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
+          <PFormField label="Invoice Prefix">
+            <input className="p-inp" value={finSettings.invoicePrefix || 'INV-'}
+              onChange={e => setFinSettings({...finSettings, invoicePrefix: e.target.value})} />
+          </PFormField>
+          <PFormField label="Quotation Prefix">
+            <input className="p-inp" value={finSettings.quotePrefix || 'QUO-'}
+              onChange={e => setFinSettings({...finSettings, quotePrefix: e.target.value})} />
+          </PFormField>
+          <PFormField label="Receipt Prefix">
+            <input className="p-inp" value={finSettings.receiptPrefix || 'RCP-'}
+              onChange={e => setFinSettings({...finSettings, receiptPrefix: e.target.value})} />
+          </PFormField>
+        </div>
+        <ToggleRow
+          label="Auto Document Numbering"
+          sub="Automatically increment reference numbers for each new document"
+          checked={finSettings.autoNumbering ?? true}
+          onChange={e => setFinSettings({...finSettings, autoNumbering: e.target.checked})}
+        />
+      </div>
+
+      {/* ── Row 3: Bank Details + Terms ── */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+        <div className="p-card" style={{ padding: 28, display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <SectionHead title="Bank Details" sub="Appears on every invoice, quote and receipt" />
+          <textarea
+            className="p-inp"
+            rows={7}
+            placeholder={"Bank Name:\nAccount Name:\nAccount Number:\nSort Code / SWIFT:\nBranch:"}
+            value={finSettings.bankDetails || ''}
+            onChange={e => setFinSettings({...finSettings, bankDetails: e.target.value})}
+            style={{ resize: 'vertical', fontFamily: 'monospace', fontSize: 12, lineHeight: 1.8 }}
+          />
+          <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
+            Each line appears as a separate row in the Bank Details block.
           </div>
-       </div>
+        </div>
+
+        <div className="p-card" style={{ padding: 28, display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <SectionHead title="Terms & Conditions" sub="Standard terms printed at the foot of every document" />
+          <textarea
+            className="p-inp"
+            rows={7}
+            placeholder={"1. 50% deposit required before fabrication.\n2. Balance due on delivery.\n3. Valid for 14 days."}
+            value={finSettings.terms || ''}
+            onChange={e => setFinSettings({...finSettings, terms: e.target.value})}
+            style={{ resize: 'vertical', fontSize: 12, lineHeight: 1.8 }}
+          />
+          <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
+            Use numbered lines for clarity. Each line break is preserved.
+          </div>
+        </div>
+      </div>
+
+      {/* ── Row 4: Document Footer Text + Signature ── */}
+      <div className="p-card" style={{ padding: 28, display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <SectionHead title="Document Footer & Signature" sub="Text and signatory name shown at the bottom of all documents" />
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+          <PFormField label="Footer Note">
+            <input className="p-inp"
+              placeholder="Thank you for your business."
+              value={finSettings.footerNote || ''}
+              onChange={e => setFinSettings({...finSettings, footerNote: e.target.value})} />
+          </PFormField>
+          <PFormField label="Signatory Name">
+            <input className="p-inp"
+              placeholder="Finance Director"
+              value={finSettings.signatureName || ''}
+              onChange={e => setFinSettings({...finSettings, signatureName: e.target.value})} />
+          </PFormField>
+          <PFormField label="Signatory Title / Company">
+            <input className="p-inp"
+              placeholder="Westline Future Ltd."
+              value={finSettings.signatureTitle || ''}
+              onChange={e => setFinSettings({...finSettings, signatureTitle: e.target.value})} />
+          </PFormField>
+        </div>
+      </div>
+
+      {/* ── Row 5: KPI Targets ── */}
+      <div className="p-card" style={{ padding: 28, display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <SectionHead title="Dashboard KPI Targets" sub="Benchmarks used for the financial overview pulse cards" />
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
+          <PFormField label="Revenue Target">
+            <input className="p-inp" type="number" value={finSettings.kpiTargets?.revenue ?? 500000}
+              onChange={e => setFinSettings(s => ({ ...s, kpiTargets: { ...s.kpiTargets, revenue: parseFloat(e.target.value) } }))} />
+          </PFormField>
+          <PFormField label="Pending Ceiling">
+            <input className="p-inp" type="number" value={finSettings.kpiTargets?.pending ?? 100000}
+              onChange={e => setFinSettings(s => ({ ...s, kpiTargets: { ...s.kpiTargets, pending: parseFloat(e.target.value) } }))} />
+          </PFormField>
+          <PFormField label="Open Tenders Target">
+            <input className="p-inp" type="number" value={finSettings.kpiTargets?.quotes ?? 20}
+              onChange={e => setFinSettings(s => ({ ...s, kpiTargets: { ...s.kpiTargets, quotes: parseFloat(e.target.value) } }))} />
+          </PFormField>
+          <PFormField label="Conversion Target (%)">
+            <input className="p-inp" type="number" value={finSettings.kpiTargets?.conversion ?? 90}
+              onChange={e => setFinSettings(s => ({ ...s, kpiTargets: { ...s.kpiTargets, conversion: parseFloat(e.target.value) } }))} />
+          </PFormField>
+        </div>
+      </div>
+
+      {/* ── Save button ── */}
+      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+        <button
+          onClick={() => {
+            if (props.syncCMS) props.syncCMS('finSettings', finSettings);
+            if (typeof notify === 'function') notify('success', 'Settings saved and synced to all documents');
+          }}
+          className="p-btn-dark"
+          style={{ padding: '14px 36px', display: 'flex', alignItems: 'center', gap: 10, fontSize: 14 }}
+        >
+          <Save size={16} /> Save Settings
+        </button>
+      </div>
     </div>
   );
 

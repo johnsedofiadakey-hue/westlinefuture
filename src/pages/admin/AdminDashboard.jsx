@@ -29,6 +29,12 @@ export default function AdminDashboard({ clients, invoices, proposals, brand, ge
   const totalRev = (invoices || []).filter(i => i?.status === 'Paid').reduce((a, i) => a + parseFloat(String(i?.amount || '0').replace(/[$,]/g, '') || 0), 0);
   const pendingInvs = (invoices || []).filter(i => i?.status === 'Pending' || i?.status === 'pending' || i?.status === 'Unpaid');
   const totalUnpaid = pendingInvs.reduce((a, i) => a + parseFloat(String(i?.amount || '0').replace(/[$,]/g, '') || 0), 0);
+  const oneTimeSales = (invoices || [])
+    .filter(i => i?.oneTimeClient || i?.customerType === 'one-time' || (!i?.parentId && !i?.projectId && (i?.type === 'Receipt' || i?.documentKind === 'receipt')))
+    .reduce((a, i) => a + parseFloat(String(i?.amount || '0').replace(/[$,]/g, '') || 0), 0);
+  const openQuoteValue = (proposals || [])
+    .filter(p => String(p?.status || '').toLowerCase() === 'pending')
+    .reduce((a, p) => a + parseFloat(String(p?.amount || '0').replace(/[$,]/g, '') || 0), 0);
   const pendingApprovals = (props.approvals || []).filter(a => a?.status === 'pending' || a?.status === 'Pending').length;
   const delayedProjects = (clients || []).filter(c => getSLA && c ? getSLA(c)?.delayed : false).length;
   const activeJobs = (props.jobs || []).filter(j => j?.stage !== 'ready' && j?.stage !== 'Completed').length;
@@ -38,7 +44,7 @@ export default function AdminDashboard({ clients, invoices, proposals, brand, ge
     { label: 'Settled Revenue', value: `GH₵${(totalRev / 1000).toFixed(1)}k`, icon: <DollarSign size={22} />, sub: 'Validated liquidity', color: '#16A34A', trend: 18 },
     { label: 'Awaiting Capital', value: `GH₵${(totalUnpaid / 1000).toFixed(1)}k`, icon: <Receipt size={22} />, sub: `${pendingInvs.length} active invoices`, color: '#B45309', trend: 2 },
     { label: 'Risk Exposure', value: delayedProjects, icon: <AlertTriangle size={22} />, sub: 'SLA priority alerts', color: '#EF4444', trend: -5 },
-    { label: 'Client Approvals', value: pendingApprovals, icon: <CheckCircle size={22} />, sub: 'Pending terminal sign-offs', color: ac, trend: 12 },
+    { label: 'Client Approvals', value: pendingApprovals, icon: <CheckCircle size={22} />, sub: 'Pending quote, rendering, or sign-off decisions', color: ac, trend: 12 },
   ];
 
   // --- DYNAMIC ANALYTICS ENGINE ---
@@ -146,12 +152,12 @@ export default function AdminDashboard({ clients, invoices, proposals, brand, ge
                <div style={{ width: 40, height: 40, borderRadius: 12, background: 'rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#EF4444' }}>
                   <AlertTriangle size={20} />
                </div>
-               <div className="lxf eyebrow" style={{ fontSize: 10, letterSpacing: '.1em', color: 'rgba(255,255,255,0.5)', fontWeight: 800 }}>Awaiting Release</div>
+               <div className="lxf eyebrow" style={{ fontSize: 10, letterSpacing: '.1em', color: 'rgba(255,255,255,0.5)', fontWeight: 800 }}>Open Quote Pipeline</div>
             </div>
             <div className="lxfh" style={{ fontSize: 32, letterSpacing: '-0.03em' }}>
-               GH₵{(( (clients || []).filter(c => c.stage >= 11).reduce((acc, c) => acc + (parseFloat(String(c.amount || 0).replace(/[₵,GH]/g, '')) || 0), 0) ) / 1000).toFixed(1)}k
+               GH₵{(openQuoteValue / 1000).toFixed(1)}k
             </div>
-            <div style={{ fontSize: 11, color: '#EF4444', fontWeight: 700 }}>Installation Escrow</div>
+            <div style={{ fontSize: 11, color: '#FBBF24', fontWeight: 700 }}>Quotes waiting for approval</div>
          </div>
 
          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, justifyContent: 'center' }}>
@@ -228,6 +234,18 @@ export default function AdminDashboard({ clients, invoices, proposals, brand, ge
             <p className="lxf" style={{ fontSize: 13, color: `var(--text-secondary)`, marginTop: 14 }}>{s.sub}</p>
           </div>
         ))}
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 20 }}>
+        <div className="p-card" style={{ padding: 24, borderRadius: 20, border: '1px solid var(--border-color)', background: '#fff' }}>
+          <div className="lxf eyebrow" style={{ fontSize: 10, color: `var(--text-secondary)`, marginBottom: 8, fontWeight: 800 }}>Retail / One-Time Sales</div>
+          <div className="lxfh" style={{ fontSize: 30, color: `var(--accent-secondary)`, marginBottom: 6 }}>GH₵{(oneTimeSales / 1000).toFixed(1)}k</div>
+          <div style={{ fontSize: 12, color: `var(--text-secondary)` }}>Revenue from walk-ins, direct purchases, and one-time client documents.</div>
+        </div>
+        <div className="p-card" style={{ padding: 24, borderRadius: 20, border: '1px solid var(--border-color)', background: '#fff' }}>
+          <div className="lxf eyebrow" style={{ fontSize: 10, color: `var(--text-secondary)`, marginBottom: 8, fontWeight: 800 }}>Project Board Capacity</div>
+          <div className="lxfh" style={{ fontSize: 30, color: `var(--accent-secondary)`, marginBottom: 6 }}>{(clients || []).filter(c => c.status !== 'Archived').length}/50</div>
+          <div style={{ fontSize: 12, color: `var(--text-secondary)` }}>Active visible projects against the current operating load target.</div>
+        </div>
       </div>
  
       {/* 3.5 NEEDS ATTENTION */}
@@ -459,4 +477,3 @@ export default function AdminDashboard({ clients, invoices, proposals, brand, ge
     </div>
   );
 }
-

@@ -31,6 +31,9 @@ export const AppProvider = ({ children }) => {
   const [testimonials, setTestimonials] = useState([]);
   const [tasks, setTasks] = useState([]);
   const [transactions, setTransactions] = useState([]);
+  const [renderingPackages, setRenderingPackages] = useState([]);
+  const [addOns, setAddOns] = useState([]);
+  const [notifications, setNotifications] = useState([]);
   const [changeRequests, setChangeRequests] = useState([]);
   const [userNotifications, setUserNotifications] = useState([]);
   const [procurements, setProcurements] = useState([]);
@@ -51,7 +54,34 @@ export const AppProvider = ({ children }) => {
   const [currency, setCurrency] = useState('GHS');
   const [lang, setLang] = useState(localStorage.getItem('lx-lang') || 'en');
 
-  const fetchUserProfile = async (email) => {
+  useEffect(() => {
+    localStorage.setItem('lx-lang', lang);
+    document.documentElement.lang = lang === 'zh' ? 'zh-CN' : 'en';
+  }, [lang]);
+
+  const normalizePhoneId = (value) => String(value || '').replace(/\D/g, '');
+
+  const fetchUserProfile = async (authUser) => {
+    if (!authUser || !db) return null;
+    const email = authUser.email || '';
+    const phoneId = normalizePhoneId(authUser.phoneNumber || authUser.phone_number);
+
+    if (phoneId) {
+      const direct = await getDoc(doc(db, 'users', phoneId));
+      if (direct.exists()) {
+        return { id: direct.id, uid: authUser.uid, ...direct.data() };
+      }
+
+      const qPhone = query(collection(db, 'users'), where('phone', '==', `+${phoneId}`), limit(1));
+      const phoneSnap = await getDocs(qPhone);
+      if (!phoneSnap.empty) {
+        const uData = phoneSnap.docs[0].data();
+        return { id: phoneSnap.docs[0].id, uid: authUser.uid, ...uData };
+      }
+
+      return { id: phoneId, uid: authUser.uid, phone: `+${phoneId}`, role: 'client' };
+    }
+
     if (!email || !db) return null;
     const q = query(collection(db, 'users'), where('email', '==', email), limit(1));
     const snap = await getDocs(q);
@@ -59,12 +89,12 @@ export const AppProvider = ({ children }) => {
       const uData = snap.docs[0].data();
       return { id: snap.docs[0].id, ...uData };
     }
-    return { id: currentUser?.uid, email: email, role: 'client' };
+    return { id: authUser.uid, email: email, role: 'client' };
   };
 
   const { data: userProfile } = useQuery({
-    queryKey: ['userProfile', currentUser?.email],
-    queryFn: () => fetchUserProfile(currentUser?.email),
+    queryKey: ['userProfile', currentUser?.uid, currentUser?.email, currentUser?.phoneNumber],
+    queryFn: () => fetchUserProfile(currentUser),
     enabled: !!currentUser && !!db,
     staleTime: 5 * 60 * 1000,
   });
@@ -110,20 +140,35 @@ export const AppProvider = ({ children }) => {
     const staffUid = user.uid || user.id;
 
     // Admin → all projects. Staff/Worker → only their assigned projects. Client → their own projects.
-    const projectQuery = user.role === 'admin'
-      ? collection(db, 'projects')
-      : (user.role === 'staff' || user.role === 'worker')
-        ? query(collection(db, 'projects'), where('assignedWorkers', 'array-contains', staffUid))
-        : query(collection(db, 'projects'), where('clientId', '==', user.id), limit(100));
-
-    const unsubProject = onSnapshot(projectQuery, (snap) => {
-      setClients(snap.docs.map(d => {
+    const normalizeProject = (d) => {
         const data = d.data();
-        // Normalize legacy 12-stage IDs → current 7-stage IDs at read time
         const rawStageId = data.stageId ?? data.stage ?? 1;
         return { id: d.id, ...data, stageId: normalizeStageId(rawStageId), name: data.title || data.project };
-      }));
-    }, (err) => devWarn("Project Sync Error:", err));
+    };
+
+    let unsubProject = () => {};
+    if (user.role === 'admin') {
+      unsubProject = onSnapshot(collection(db, 'projects'), (snap) => {
+        setClients(snap.docs.map(normalizeProject));
+      }, (err) => devWarn("Project Sync Error:", err));
+    } else if (user.role === 'staff' || user.role === 'worker') {
+      unsubProject = onSnapshot(query(collection(db, 'projects'), where('assignedWorkers', 'array-contains', staffUid)), (snap) => {
+        setClients(snap.docs.map(normalizeProject));
+      }, (err) => devWarn("Assigned Project Sync Error:", err));
+    } else {
+      const mergedProjects = new Map();
+      const publishClientProjects = () => setClients(Array.from(mergedProjects.values()));
+      const applyClientProjectSnap = (snap) => {
+        snap.docs.forEach(d => mergedProjects.set(d.id, normalizeProject(d)));
+        publishClientProjects();
+      };
+      const unsubByClientId = onSnapshot(query(collection(db, 'projects'), where('clientId', '==', user.id), limit(100)), applyClientProjectSnap, (err) => devWarn("Client projectId sync failed:", err));
+      const unsubByClientIds = onSnapshot(query(collection(db, 'projects'), where('clientIds', 'array-contains', user.id), limit(100)), applyClientProjectSnap, (err) => devWarn("Client projectIds sync failed:", err));
+      unsubProject = () => {
+        unsubByClientId();
+        unsubByClientIds();
+      };
+    }
 
     let unsubUser = () => {};
     if (user.role === 'admin' || user.role === 'staff') {
@@ -215,6 +260,14 @@ export const AppProvider = ({ children }) => {
       setTransactions(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     }, (err) => devWarn("Transactions listener failed:", err));
 
+    const unsubRenderingPackages = onSnapshot(user.role === 'admin' ? collection(db, 'renderingPackages') : query(collection(db, 'renderingPackages'), where('clientId', '==', user.id)), (snap) => {
+      setRenderingPackages(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    }, (err) => devWarn("Rendering Packages Sync Error:", err));
+
+    const unsubAddOns = onSnapshot(user.role === 'admin' ? collection(db, 'addOns') : query(collection(db, 'addOns'), where('clientId', '==', user.id)), (snap) => {
+      setAddOns(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    }, (err) => devWarn("Add-ons Sync Error:", err));
+
     const notifQuery = user.role === 'admin' || user.role === 'staff'
       ? query(collection(db, 'notifications'), where('userId', 'in', [user.id, 'admin']), limit(50))
       : query(collection(db, 'notifications'), where('userId', '==', user.id), limit(50));
@@ -260,6 +313,8 @@ export const AppProvider = ({ children }) => {
       unsubProposals();
       unsubBookings();
       unsubTrans();
+      unsubRenderingPackages();
+      unsubAddOns();
       unsubNotif();
       unsubMsg();
       unsubEmails();
@@ -302,7 +357,7 @@ export const AppProvider = ({ children }) => {
   return (
     <AppContext.Provider value={{
       user, setUser,
-      clients, proposals, invoices, bookings, emails, setEmails, dbClients, teamMembers, logs, shipments, messages, testimonials, tasks, transactions, changeRequests, userNotifications, procurements, jobs, notes, media, approvals, materials, assets, workOrders, containers,
+      clients, proposals, invoices, bookings, emails, setEmails, dbClients, teamMembers, logs, shipments, messages, testimonials, tasks, transactions, renderingPackages, addOns, changeRequests, userNotifications, notifications, procurements, jobs, notes, media, approvals, materials, assets, workOrders, containers,
       brand, content, currency, lang,
       setCurrency, setLang, setBrand, setContent,
       loadMoreMessages, hasMoreMessages: messages.length >= messageLimit,

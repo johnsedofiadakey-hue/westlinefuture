@@ -1,18 +1,249 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { AppContext } from '../context/AppContext';
 import {
-  Bell, Menu, X, Layers, AppWindow, ShowerHead, ChefHat, Shirt, LayoutGrid, DoorOpen, Zap, Droplets
+  Menu, X, Layers, AppWindow, ShowerHead, ChefHat, Shirt, LayoutGrid, DoorOpen, Zap, Droplets
 } from 'lucide-react';
-import { useWindowWidth, isMob, DARK_TEXT, AC } from '../pages/sharedHelpers';
+import { useWindowWidth, isMob, DARK_TEXT } from '../pages/sharedHelpers';
+import LanguageFlagSwitch from './LanguageFlagSwitch';
 
-export function PubNav({ brand, setPage, activePage, onPortal, user: propUser, menuOpen, setMenuOpen, navigate }) {
+const PUBLIC_ZH = {
+  'Home': '首页',
+  'Westline Future Ltd.': '西线未来有限公司',
+  'WESTLINE FUTURE': '西线未来',
+  'Westline Future': '西线未来',
+  'Services': '服务',
+  'Products': '产品',
+  'Showroom': '展厅',
+  'Portfolio': '案例',
+  'About': '关于',
+  'Contact': '联系',
+  'Client Portal': '客户门户',
+  'Client Portal Login': '客户门户登录',
+  'DESIGN • SOURCING • INSTALLATION': '设计 • 采购 • 安装',
+  'Design. Source. Install.': '设计。采购。安装。',
+  'From concept to handover.': '从概念到交付。',
+  'A managed project system for premium interiors, CAD/3D rendering, global sourcing, logistics, installation, and handover.': '为高端室内项目提供完整管理系统，涵盖施工图/三维效果图、全球采购、物流、安装与交付。',
+  'Clients approve drawings, quotes, payments, timelines, and completion records through a controlled Westline workflow.': '客户可通过西线未来受控流程审批图纸、报价、付款、时间计划和完工记录。',
+  'Start Project Brief': '提交项目需求',
+  'How We Work': '工作流程',
+  'Projects': '项目',
+  'Years': '年经验',
+  'Satisfaction': '满意度',
+  'Countries': '服务国家',
+  'THE WESTLINE METHOD': '西线未来方法',
+  'A project system, not just a contractor.': '不只是承包商，而是项目系统。',
+  'Every serious project moves through a controlled journey: intake, paid design access, design approval, quote approval, deposit, production, logistics, installation, inspection, and handover.': '每个正式项目都经过受控流程：需求收集、付费设计访问、设计审批、报价审批、定金、生产、物流、安装、验收和交付。',
+  'View Full Workflow': '查看完整流程',
+  'Project Brief': '项目需求',
+  'Share the site, scope, budget range, preferred finish, and timeline so the team can qualify the request properly.': '提交现场、范围、预算区间、偏好材质和时间计划，便于团队准确评估需求。',
+  'Paid CAD / 3D Design': '付费施工图/三维设计',
+  'A separate rendering invoice unlocks the private design package. The project quote comes after design approval.': '单独的效果图发票付款后，客户才能查看私人设计包。项目报价在设计审批后生成。',
+  'Final Quote Approval': '最终报价审批',
+  'Westline issues a versioned quote based on the approved drawing, with revisions and scope changes tracked.': '西线未来根据已批准图纸出具版本化报价，并记录修订和范围变化。',
+  'Procure, Deliver, Install': '采购、配送、安装',
+  'Materials, logistics, installation updates, documents, payments, and approvals move through the client portal.': '材料、物流、安装进度、文件、付款和审批都通过客户门户管理。',
+  'EVERYTHING INTERIOR': '全案室内服务',
+  'One company,': '一家公司，',
+  'every service.': '全套服务。',
+  'All Services': '全部服务',
+  'Glass & Glazing': '玻璃与幕墙',
+  'Aluminium Windows': '铝合金窗',
+  'Bathroom Installation': '浴室安装',
+  'Kitchen Renovation': '厨房翻新',
+  'Wardrobes & Storage': '衣柜与收纳',
+  'Tiles Supply & Fixing': '瓷砖供应与铺贴',
+  'Doors Installation': '门类安装',
+  'Electrical Works': '电气工程',
+  'Plumbing Works': '给排水工程',
+  'Tiles & Flooring': '瓷砖与地面',
+  'Doors': '门类',
+  'Frameless glass, balustrades, curtain walls, glass partitions & shopfronts.': '无框玻璃、栏杆、幕墙、玻璃隔断与店面系统。',
+  'Casement, sliding & louvre aluminium windows and doors — fabricated to spec.': '平开、推拉与百叶铝窗铝门，按规格加工。',
+  'Full bathroom fit-out — shower cubicles, vanities, WC, tiles & plumbing.': '完整浴室装修，包括淋浴房、洗手台、马桶、瓷砖和管道。',
+  'Custom kitchen cabinets, worktops, sinks — modular kitchen supply & install.': '定制橱柜、台面、水槽，模块化厨房供应与安装。',
+  'Sliding wardrobes, walk-in closets & fitted storage systems for every room.': '滑门衣柜、步入式衣帽间和全屋定制收纳系统。',
+  'Porcelain, ceramic & outdoor tiles — supply only or full supply-and-fix.': '瓷砖、陶瓷砖和户外砖，可单供货或包工包料。',
+  'Timber, WPC & security doors — frames, handles & complete door systems.': '木门、WPC门、防盗门，含门框、五金和整套门系统。',
+  'Full wiring, LED lighting, smart switches, DB boards & socket installations.': '完整布线、LED照明、智能开关、配电箱和插座安装。',
+  'Plumbing installations, sanitary fittings, water heaters & pipe systems.': '管道安装、卫浴五金、热水器和管路系统。',
+  'Learn more': '了解更多',
+  'DESIGN BEFORE QUOTATION': '报价前先设计',
+  'Rendering access is controlled and paid separately.': '效果图访问受控，并单独收费。',
+  'The CAD/3D design fee is not part of the final project sum. It unlocks the rendering package for review, comments, revisions, and approval before the final project quote is prepared.': '施工图/三维设计费不属于最终项目总价。付款后客户可查看效果图包，进行审核、评论、修改和批准，之后才准备最终项目报价。',
+  'Start With A Design Brief': '从设计需求开始',
+  'Private upload': '私密上传',
+  'Admin uploads rendering files into a locked package.': '管理员将效果图文件上传到锁定包中。',
+  'Separate invoice': '单独发票',
+  'Client pays the CAD/3D rendering fee before access.': '客户付款施工图/三维效果图费用后才能访问。',
+  'Review & revise': '审核与修改',
+  'Client comments, requests changes, or approves the final version.': '客户可评论、申请修改或批准最终版本。',
+  'Quote after approval': '审批后报价',
+  'The actual project quote is based on the approved design version.': '正式项目报价基于已批准的设计版本。',
+  'WHY WESTLINE FUTURE': '为什么选择西线未来',
+  'Built to a': '以更高',
+  'higher standard.': '标准建造。',
+  'Guaranteed Quality': '质量保证',
+  'Every installation backed by a 2-year workmanship warranty and certified materials from vetted manufacturers.': '每项安装均享有2年工艺质保，并使用经审核厂家认证材料。',
+  'On-Time Delivery': '准时交付',
+  'Our dedicated logistics team tracks every shipment. 94% of projects completed on or ahead of schedule.': '专属物流团队跟踪每批货物。94%的项目按时或提前完成。',
+  'Direct China Sourcing': '中国源头直采',
+  'We cut out middlemen. Factory-direct procurement means premium glass at 20–35% below market rates.': '减少中间环节。工厂直采让高端玻璃成本比市场价低20–35%。',
+  'Technical Expertise': '技术实力',
+  'CNC precision, sub-millimeter tolerances. Our engineers have handled façades, curtain walls, and interior systems for 12+ years.': '数控精度，毫米级误差控制。工程团队拥有12年以上幕墙、立面和室内系统经验。',
+  'Start Your Project': '开始项目',
+  'CLIENT PORTAL INCLUDED': '包含客户门户',
+  'Clients see progress, payments, documents, and approvals in one place.': '客户可在一个地方查看进度、付款、文件和审批。',
+  'The public promise matches the operating system behind the scenes: fewer loose chats, fewer missing approvals, and a clearer record of every decision.': '对外承诺与后台运营系统一致：减少零散沟通、避免遗漏审批，并清晰记录每项决策。',
+  'Locked design packages': '锁定设计包',
+  'Quote approvals': '报价审批',
+  'Invoices and receipts': '发票与收据',
+  'Procurement updates': '采购进度',
+  'Shipping and delivery': '运输与配送',
+  'Installation photos': '安装照片',
+  'Inspection sign-off': '验收签字',
+  'Handover documents': '交付文件',
+  'Begin Intake': '开始需求收集',
+  'CLIENT STORIES': '客户故事',
+  'Trusted by': '深受',
+  'decision-makers.': '决策者信赖。',
+  'GET STARTED': '开始',
+  'Ready to build something remarkable?': '准备打造卓越项目？',
+  'Ready to build': '准备打造',
+  'something remarkable?': '卓越项目？',
+  'Westline Future transformed our office with exceptional precision. The structural glazing exceeded every expectation — on time and on budget.': '西线未来以出色精度完成了我们的办公室项目。结构玻璃效果超出预期，并且按时按预算交付。',
+  'Airport Hills Commercial Tower': '机场山商业大楼',
+  'Kwame Asante': '夸梅·阿桑特',
+  'From concept to installation — our team handles every detail.': '从概念到安装，我们的团队处理每一个细节。',
+  'Request a Quote': '申请报价',
+  'View Portfolio': '查看案例',
+  'Loading...': '加载中...',
+  'Loading About Page...': '正在加载关于页面...',
+  'Loading Contact Page...': '正在加载联系页面...',
+  'Loading Workflow...': '正在加载流程...',
+  'Loading Products...': '正在加载产品...',
+  'Loading Gallery...': '正在加载案例...',
+  'Loading Showcase...': '正在加载展厅...',
+  'Page Under Construction': '页面建设中',
+  "Global precision meets local delivery. Premium structural glass, aluminum works, and interior finishing solutions for the world's most ambitious architectural projects.": '全球精度结合本地交付。为高标准建筑项目提供高端结构玻璃、铝合金工程和室内精装解决方案。',
+  'Navigation': '导航',
+  'Capabilities': '服务能力',
+  'Follow Us': '关注我们',
+  'All rights reserved.': '版权所有。',
+  'Management Portal': '管理门户',
+  'Submit Project Intake': '提交项目需求',
+  'Project Intake': '项目需求',
+  'Send To Project Intake': '发送到项目需求',
+  'PLAN SIMILAR PROJECT': '规划类似项目',
+  'SOURCE • APPROVE • INSTALL': '采购 • 审批 • 安装',
+  'Selected Case Studies.': '精选案例。',
+  'Products &': '产品与',
+  'Materials.': '材料。',
+  'Search products...': '搜索产品...',
+  'Inquire for Procurement': '咨询采购',
+  'Share WhatsApp': 'WhatsApp分享',
+  'Submit': '提交',
+  'Full name': '姓名',
+  'Phone / WhatsApp': '电话 / WhatsApp',
+  'Email': '邮箱',
+  'Project Location': '项目地点',
+  'Budget Range': '预算范围',
+  'Timeline': '时间计划',
+  'Rendering Need': '效果图需求',
+  'Measurements': '测量信息',
+  'Message': '留言',
+};
+
+const PUBLIC_ZH_ENTRIES = Object.entries(PUBLIC_ZH).sort((a, b) => b[0].length - a[0].length);
+const ORIGINAL_TEXT_NODES = new WeakMap();
+
+function translatePublicText(value, lang) {
+  if (lang !== 'zh') return value;
+  const trimmed = String(value || '').trim();
+  if (!trimmed) return value;
+  const normalized = trimmed.replace(/\s+/g, ' ');
+  if (PUBLIC_ZH[trimmed] || PUBLIC_ZH[normalized]) {
+    const start = value.match(/^\s*/)?.[0] || '';
+    const end = value.match(/\s*$/)?.[0] || '';
+    return `${start}${PUBLIC_ZH[trimmed] || PUBLIC_ZH[normalized]}${end}`;
+  }
+  let translated = value;
+  for (const [en, zh] of PUBLIC_ZH_ENTRIES) {
+    if (translated.includes(en)) translated = translated.split(en).join(zh);
+  }
+  return translated;
+}
+
+function translatePublicDom(lang) {
+  if (typeof document === 'undefined') return;
+  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
+    acceptNode(node) {
+      const parent = node.parentElement;
+      if (!parent) return NodeFilter.FILTER_REJECT;
+      const tag = parent.tagName;
+      if (['SCRIPT', 'STYLE', 'NOSCRIPT', 'SVG', 'PATH'].includes(tag)) return NodeFilter.FILTER_REJECT;
+      if (parent.closest('[data-no-public-translate]')) return NodeFilter.FILTER_REJECT;
+      if (!node.nodeValue.trim()) return NodeFilter.FILTER_REJECT;
+      return NodeFilter.FILTER_ACCEPT;
+    }
+  });
+
+  const nodes = [];
+  while (walker.nextNode()) nodes.push(walker.currentNode);
+  nodes.forEach(node => {
+    if (!ORIGINAL_TEXT_NODES.has(node)) ORIGINAL_TEXT_NODES.set(node, node.nodeValue);
+    const original = ORIGINAL_TEXT_NODES.get(node);
+    node.nodeValue = translatePublicText(original, lang);
+  });
+
+  document.querySelectorAll('[placeholder], [aria-label], [title]').forEach(el => {
+    ['placeholder', 'aria-label', 'title'].forEach(attr => {
+      if (!el.hasAttribute(attr)) return;
+      const key = `publicOriginal${attr.replace(/-([a-z])/g, (_, c) => c.toUpperCase())}`;
+      if (!el.dataset[key]) el.dataset[key] = el.getAttribute(attr);
+      el.setAttribute(attr, translatePublicText(el.dataset[key], lang));
+    });
+  });
+}
+
+export function PubNav({ brand, setPage, activePage, onPortal, menuOpen, setMenuOpen, navigate }) {
   const [scrolled, setScrolled] = useState(false);
-  const [showNotifDropdown, setShowNotifDropdown] = useState(false);
   const winW = useWindowWidth();
   const mob = isMob(winW);
-  const ac = brand.color || AC;
-  const { userNotifications, user: contextUser } = useContext(AppContext);
-  const user = propUser || contextUser;
+  const { lang } = useContext(AppContext);
+  const currentLang = lang === 'zh' ? 'zh' : 'en';
+  const copy = {
+    en: {
+      home: 'Home',
+      services: 'Services',
+      products: 'Products',
+      showcase: 'Showroom',
+      portfolio: 'Portfolio',
+      about: 'About',
+      contact: 'Contact',
+      portal: 'Client Portal',
+      portalLogin: 'Client Portal Login',
+      langLabel: '中文'
+    },
+    zh: {
+      home: '首页',
+      services: '服务',
+      products: '产品',
+      showcase: '展厅',
+      portfolio: '案例',
+      about: '关于',
+      contact: '联系',
+      portal: '客户门户',
+      portalLogin: '客户门户登录',
+      langLabel: 'EN'
+    }
+  }[currentLang];
+  useEffect(() => {
+    const apply = () => translatePublicDom(currentLang);
+    apply();
+    const observer = new MutationObserver(() => requestAnimationFrame(apply));
+    observer.observe(document.body, { childList: true, subtree: true, characterData: true });
+    return () => observer.disconnect();
+  }, [currentLang]);
 
   useEffect(() => {
     const h = () => setScrolled(window.scrollY > 20);
@@ -21,13 +252,13 @@ export function PubNav({ brand, setPage, activePage, onPortal, user: propUser, m
   }, []);
 
   const links = [
-    { n: 'Home', id: 'home' },
-    { n: 'Services', id: 'services' },
-    { n: 'Products', id: 'products' },
-    { n: 'Showroom', id: 'showcase', badge: 'LUXE' },
-    { n: 'Portfolio', id: 'portfolio' },
-    { n: 'About', id: 'about' },
-    { n: 'Contact', id: 'contact' }
+    { n: copy.home, id: 'home' },
+    { n: copy.services, id: 'services' },
+    { n: copy.products, id: 'products' },
+    { n: copy.showcase, id: 'showcase', badge: 'LUXE' },
+    { n: copy.portfolio, id: 'portfolio' },
+    { n: copy.about, id: 'about' },
+    { n: copy.contact, id: 'contact' }
   ];
 
   const forceSolid = activePage !== 'home';
@@ -117,36 +348,6 @@ export function PubNav({ brand, setPage, activePage, onPortal, user: propUser, m
                 </button>
               ))}
             </div>
-            {user && (
-              <div style={{ position: 'relative', marginRight: 16 }}>
-                <button 
-                  onClick={() => setShowNotifDropdown(!showNotifDropdown)}
-                  style={{ background: 'none', border: 'none', color: '#ffffff', cursor: 'pointer', padding: 8, display: 'flex', alignItems: 'center' }}
-                >
-                  <Bell size={20} />
-                  {userNotifications.filter(n => !n.read).length > 0 && (
-                    <span style={{ position: 'absolute', top: 0, right: 0, background: 'red', color: '#fff', borderRadius: '50%', width: 16, height: 16, fontSize: 10, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      {userNotifications.filter(n => !n.read).length}
-                    </span>
-                  )}
-                </button>
-                {showNotifDropdown && (
-                  <div style={{ position: 'absolute', top: 40, right: 0, width: 300, background: '#fff', border: '1px solid var(--border-color)', borderRadius: 12, boxShadow: '0 10px 30px rgba(0,0,0,0.1)', zIndex: 1002, padding: '16px' }}>
-                    <div style={{ fontSize: 12, fontWeight: 800, marginBottom: 12, textTransform: 'uppercase', color: DARK_TEXT }}>Notifications</div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12, maxHeight: 300, overflowY: 'auto' }}>
-                      {userNotifications.length > 0 ? userNotifications.map(n => (
-                        <div key={n.id} style={{ fontSize: 12, color: n.read ? 'rgba(24, 14, 6, 0.4)' : `var(--accent-secondary)`, borderBottom: '1px solid var(--bg-primary)', paddingBottom: 8 }}>
-                          {n.message}
-                          <div style={{ fontSize: 10, color: 'rgba(24, 14, 6, 0.5)', marginTop: 4 }}>{new Date(n.createdAt).toLocaleDateString()}</div>
-                        </div>
-                      )) : (
-                        <div style={{ fontSize: 12, color: 'rgba(24, 14, 6, 0.5)', textAlign: 'center' }}>No notifications</div>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
             {onPortal && (
               <button onClick={() => onPortal && onPortal('client')} style={{
                 padding: '12px 28px', fontSize: 10, fontWeight: 800,
@@ -154,46 +355,46 @@ export function PubNav({ brand, setPage, activePage, onPortal, user: propUser, m
                 borderRadius: 12, border: '1px solid rgba(255,255,255,0.25)',
                 textTransform: 'uppercase', letterSpacing: '0.12em', cursor: 'pointer',
                 backdropFilter: 'blur(8px)', transition: 'all 0.3s'
-              }}>Client Portal</button>
+              }}>{copy.portal}</button>
             )}
           </div>
         )}
-        {user && (
-          <button 
-            className="mob-only" 
-            onClick={() => setMenuOpen(true)} 
-            style={{ background: 'none', border: 'none', color: `var(--accent-primary)`, zIndex: 1001, padding: 8, position: 'relative', marginRight: 8 }}
-          >
-            <Bell size={28} />
-            {userNotifications.filter(n => !n.read).length > 0 && (
-              <span style={{ position: 'absolute', top: 4, right: 4, background: 'red', color: '#fff', borderRadius: '50%', width: 16, height: 16, fontSize: 10, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                {userNotifications.filter(n => !n.read).length}
-              </span>
-            )}
-          </button>
-        )}
+        {!mob && <LanguageFlagSwitch variant="floating" />}
+        <div
+          className="mob-only"
+          style={{ background: 'none', border: 'none', padding: 0, marginRight: 6, zIndex: 1001 }}
+        >
+          <LanguageFlagSwitch variant="mobile" />
+        </div>
         {/* MOBILE TOGGLE */}
         <button 
           className="mob-only" 
           onClick={() => setMenuOpen(!menuOpen)} 
-          style={{ background: 'none', border: 'none', color: `var(--accent-primary)`, zIndex: 1001, padding: 8 }}
+          aria-label={menuOpen ? 'Close menu' : 'Open menu'}
+          style={{ background: '#fff', border: '1px solid rgba(255,255,255,0.22)', color: DARK_TEXT, zIndex: 1001, padding: 10, borderRadius: 14, boxShadow: '0 10px 28px rgba(0,0,0,0.18)' }}
         >
           {menuOpen ? <X size={32} /> : <Menu size={32} />}
         </button>
 
       </div>
 
-      {/* MOBILE DRAWER - Translucent Glass Effect */}
+      {/* MOBILE DRAWER */}
       <div style={{
         position: 'fixed', top: 0, right: 0, bottom: 0, left: 0,
-        background: '#ffffff', 
+        background: '#FFFFFF',
         transform: menuOpen ? 'translateX(0)' : 'translateX(100%)',
         transition: 'transform 0.5s cubic-bezier(0.16, 1, 0.3, 1)', zIndex: 1000,
-        padding: '120px 32px 48px', display: 'flex', flexDirection: 'column',
-        boxShadow: '-20px 0 60px rgba(0,0,0,0.1)',
-        borderLeft: '1px solid rgba(0,0,0,0.05)'
+        padding: '104px 24px 36px', display: 'flex', flexDirection: 'column',
+        boxShadow: '-20px 0 60px rgba(0,0,0,0.18)',
+        borderLeft: '1px solid rgba(0,0,0,0.08)'
       }}>
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: mob ? 0 : 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 22, paddingBottom: 18, borderBottom: '1px solid rgba(24,14,6,0.08)' }}>
+          <div>
+            <div style={{ fontSize: 10, fontWeight: 900, letterSpacing: '0.18em', color: 'rgba(24,14,6,0.44)', textTransform: 'uppercase' }}>Westline Future</div>
+            <div style={{ fontSize: 18, fontWeight: 900, color: DARK_TEXT, marginTop: 4 }}>{currentLang === 'zh' ? '公共导航' : 'Public Menu'}</div>
+          </div>
+        </div>
+        <div style={{ flex: 1, display: 'grid', gridTemplateColumns: '1fr 1fr', alignContent: 'start', gap: 12 }}>
           {links.map((l, i) => (
             <button 
               key={l.id} 
@@ -209,34 +410,28 @@ export function PubNav({ brand, setPage, activePage, onPortal, user: propUser, m
                 }
               }} 
               style={{
-                background: 'none', border: 'none', textAlign: 'left',
-                fontSize: mob ? 24 : 32, fontWeight: activePage === l.id ? 800 : 300,
-                color: activePage === l.id ? `var(--accent-primary)` : DARK_TEXT,
-                padding: mob ? '8px 0' : '12px 0', cursor: 'pointer'
+                background: activePage === l.id ? 'rgba(24,14,6,0.08)' : '#F8F6F3',
+                border: '1px solid rgba(24,14,6,0.08)',
+                borderRadius: 18,
+                textAlign: 'left',
+                minHeight: 74,
+                fontSize: 18,
+                fontWeight: 900,
+                color: DARK_TEXT,
+                padding: '16px',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'flex-end'
               }}
             >
               {l.n}
             </button>
           ))}
-          
-          {user && userNotifications.length > 0 && (
-            <div style={{ marginTop: 'auto', paddingTop: 20, borderTop: '1px solid rgba(24, 14, 6, 0.08)' }}>
-              <div style={{ fontSize: 12, fontWeight: 800, marginBottom: 12, textTransform: 'uppercase', color: `var(--accent-primary)` }}>Notifications</div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 12, maxHeight: 200, overflowY: 'auto' }}>
-                {userNotifications.map(n => (
-                  <div key={n.id} style={{ fontSize: 13, color: n.read ? 'rgba(24, 14, 6, 0.4)' : DARK_TEXT, borderBottom: '1px solid rgba(24, 14, 6, 0.04)', paddingBottom: 8 }}>
-                    {n.message}
-                    <div style={{ fontSize: 10, color: 'rgba(24, 14, 6, 0.5)', marginTop: 4 }}>{new Date(n.createdAt).toLocaleDateString()}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
         <button onClick={() => { setMenuOpen(false); onPortal('client'); }} style={{
           padding: '20px', background: DARK_TEXT, color: '#fff', borderRadius: 16, border: 'none',
           fontSize: 14, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em'
-        }}>Client Portal Login</button>
+        }}>{copy.portalLogin}</button>
       </div>
     </nav>
   );
@@ -280,7 +475,7 @@ export function Footer({ brand, setPage, onPortal, navigate }) {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               {['Home', 'Services', 'Products', 'Showroom', 'Portfolio', 'About', 'Contact'].map(n => (
                 <button key={n} onClick={() => {
-                  const id = n.toLowerCase();
+                  const id = n === 'Showroom' ? 'showcase' : n.toLowerCase();
                   if (id === 'products') navigate('/products');
                   else if (id === 'showcase') navigate('/showcase');
                   else if (id === 'portfolio') navigate('/portfolio');

@@ -1,27 +1,28 @@
-# LuxeSpace Platform — Modular Edition
+# Westline Future Platform
 
-A production-ready, white-label interior design studio platform built for scale. Refactored from the ground up for performance, maintainability, and visual excellence.
+A production-ready project operating system for Westline Future: public site, client portal, admin console, worker portal, finance, approvals, rendering packages, sourcing, logistics, installation, and handover.
 
-## 🚀 Overview
-LuxeSpace is a comprehensive ERP/CRM and client portal solution specifically designed for high-end interior design firms. It manages everything from public-facing portfolio sites to background administrative workflows, proposals, invoicing, and real-time client communication.
+## Overview
+Westline Future manages the full project journey from initial intake to paid CAD/3D rendering access, final quote approval, project deposit, procurement, shipping, installation, inspection, and final settlement.
 
-## 🏗️ Architecture
-The platform has been refactored from a monolithic codebase into a modular React/Vite architecture:
+## Architecture
+The platform is built with React and Vite, backed by Firebase services:
 
-- **src/components/**: Shared UI elements (glassmorphic modals, spinners, sliders, etc.).
+- **src/components/**: Shared UI elements, payment components, rendering managers, documents, and reusable controls.
 - **src/pages/**: High-level page modules (Public Site, Admin Portal, Client Portal, Account Manager Portal).
-- **src/data.js**: Centralised source of truth for mock data, pricing, and services.
-- **src/index.css**: Premium design system and print-safe global styles.
+- **src/data.jsx**: Centralized source of truth for default data, project stages, services, and fallback content.
+- **src/index.css**: Design system and print-safe global styles.
+- **functions/**: Firebase Cloud Functions for server-side payment and operational workflows.
+- **firebase/**: Firestore and Storage rules.
 
-## ✨ Key Features
-- **Public Site**: Elegant Home, Portfolio, and Contact pages with glassmorphic design.
-- **Admin Command Centre**: Full studio management (CRM, Analytics, Proposals, Invoices).
-- **Client Portal**: Dedicated secure area for project tracking, approvals, and payments.
-- **Design Team Portal**: Task and schedule management for account managers.
-- **Stripe-Style Payments**: Secure, multi-step payment flow simulation.
-- **AI Proposal Generator**: (Logic ready for integration) Drafts high-end proposals automatically.
+## Key Features
+- **Public Site**: Service positioning, portfolio, catalog, and structured project intake.
+- **Admin Portal**: CRM, project board, client hub, invoices, quotes, staff, analytics, showcase, and system controls.
+- **Client Portal**: Project timeline, rendering access, approvals, payments, documents, add-ons, and messages.
+- **Worker Portal**: Assigned project execution, checklists, installation notes, and photo uploads.
+- **Finance**: Invoices, receipts, quotes, payment tracking, and payment verification hooks.
 
-## 🛠️ Getting Started
+## Getting Started
 
 ### Prerequisites
 - Node.js (v18+)
@@ -30,7 +31,7 @@ The platform has been refactored from a monolithic codebase into a modular React
 ### Installation
 1. Clone the repository:
    ```bash
-   git clone https://github.com/johnsedofiadakey-hue/glasstechfab.git
+   git clone <westline-future-repository-url>
    ```
 2. Install dependencies:
    ```bash
@@ -41,8 +42,13 @@ The platform has been refactored from a monolithic codebase into a modular React
    npm run dev
    ```
 
-## 📦 Deployment
-The project is configured for seamless deployment to Vercel, Netlify, or AWS Amplify. Simply connect your GitHub repository and build using `npm run build`.
+## Deployment
+The project is configured for Firebase Hosting.
 
-## 📄 License
-Commercial Use Only — LuxeSpace™
+```bash
+npm run build
+npx firebase-tools deploy --only hosting --project westlinefuture
+```
+
+## License
+Commercial Use Only — Westline Future.

@@ -6,6 +6,8 @@ import {
 } from 'lucide-react';
 import { NotificationBell } from '../../components/Shared';
 import { getAuth, updatePassword } from 'firebase/auth';
+import LanguageFlagSwitch from '../../components/LanguageFlagSwitch';
+import { translateAdminDom } from '../../lib/adminI18n';
 
 export default function AdminLayout({ user, onLogout, onPreview, brand, view, setView, userNotifications, markNotificationRead, onSearchChange, children, staffMode = false, ...props }) {
   const ac = brand.color || `var(--accent-secondary)`;
@@ -95,6 +97,7 @@ export default function AdminLayout({ user, onLogout, onPreview, brand, view, se
       label: 'System',
       items: [
         { id: 'system', label: 'Settings', icon: <Settings size={18} /> },
+        { id: 'product-sync', label: 'Product Sync Settings', icon: <Package size={18} /> },
       ]
     }
   ];
@@ -111,6 +114,16 @@ export default function AdminLayout({ user, onLogout, onPreview, brand, view, se
     window.addEventListener('resize', h);
     return () => window.removeEventListener('resize', h);
   }, []);
+
+  useEffect(() => {
+    const lang = props.lang === 'zh' ? 'zh' : 'en';
+    const apply = () => translateAdminDom(lang);
+    apply();
+    const observer = new MutationObserver(() => requestAnimationFrame(apply));
+    const root = document.querySelector('.lx-admin');
+    if (root) observer.observe(root, { childList: true, subtree: true, characterData: true });
+    return () => observer.disconnect();
+  }, [props.lang, view, isMobile]);
 
   return (
     <div className="lx-admin" style={{ display: 'flex', minHeight: '100vh', background: 'transparent', '--ac': ac }}>
@@ -264,17 +277,7 @@ export default function AdminLayout({ user, onLogout, onPreview, brand, view, se
                    </div>
                  )}
                                 <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-                   <div style={{ flex: 1, position: 'relative' }}>
-                      <select
-                        value={props.lang}
-                        onChange={e => props.setLang(e.target.value)}
-                        aria-label="Language"
-                        style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid var(--border-color)', background: '#fff', fontSize: 10, fontWeight: 800, cursor: 'pointer' }}
-                      >
-                        <option value="en">EN</option>
-                        <option value="fr">FR</option>
-                      </select>
-                   </div>
+                   <LanguageFlagSwitch variant="mobile" />
                    
                    <NotificationBell notifications={userNotifications} onMarkRead={markNotificationRead} />
                    
@@ -397,4 +400,3 @@ export default function AdminLayout({ user, onLogout, onPreview, brand, view, se
     </div>
   );
 }
-

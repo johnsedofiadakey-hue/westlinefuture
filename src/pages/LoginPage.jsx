@@ -118,12 +118,35 @@ export default function LoginPage({ onLogin, onBack, brand, type = 'client', ...
     return () => clearTimeout(t);
   }, [resendTimer]);
 
-  const sanitizePhone = (raw) => raw.replace(/\D/g, '').replace(/^0/, '');
-  const fullPhone = country.code + sanitizePhone(phone);
+  const sanitizePhone = (raw) => String(raw || '').replace(/\D/g, '');
+  const normalizePhone = (raw, selectedCountry) => {
+    const trimmed = String(raw || '').trim();
+    const countryDigits = String(selectedCountry?.code || '').replace(/\D/g, '');
+    let digits = sanitizePhone(trimmed);
+    if (!digits) return '';
+    if (trimmed.startsWith('+')) return `+${digits}`;
+    if (countryDigits && digits.startsWith(countryDigits)) return `+${digits}`;
+    if (digits.startsWith('00')) return `+${digits.slice(2)}`;
+    if (digits.startsWith('0')) digits = digits.slice(1);
+    return `${selectedCountry.code}${digits}`;
+  };
+  const localPhoneDigits = (() => {
+    const digits = sanitizePhone(phone);
+    const countryDigits = String(country.code || '').replace(/\D/g, '');
+    if (countryDigits && digits.startsWith(countryDigits)) return digits.slice(countryDigits.length);
+    if (digits.startsWith('0')) return digits.slice(1);
+    return digits;
+  })();
+  const fullPhone = normalizePhone(phone, country);
+  const otpButtonDisabled = otpLoading || localPhoneDigits.length < 6 || resendTimer > 0;
 
   const sendOtp = async () => {
-    const num = sanitizePhone(phone);
+    if (resendTimer > 0) {
+      return setClientErr(`Please wait ${resendTimer}s before requesting another code.`);
+    }
+    const num = localPhoneDigits;
     if (num.length < 6) return setClientErr('Enter a valid phone number.');
+    if (!fullPhone.startsWith('+') || fullPhone.length < 8) return setClientErr('Enter the number in international format, e.g. +233 24 000 0000.');
     setClientErr('');
     setOtpLoading(true);
     try {
@@ -131,7 +154,10 @@ export default function LoginPage({ onLogin, onBack, brand, type = 'client', ...
       setStep('otp');
       setResendTimer(60);
     } catch (e) {
-      setClientErr(mapFirebaseError(e));
+      setClientErr(e?.userMessage || mapFirebaseError(e));
+      if (e?.code === 'auth/too-many-requests') {
+        setResendTimer(300);
+      }
     }
     setOtpLoading(false);
   };
@@ -283,8 +309,8 @@ export default function LoginPage({ onLogin, onBack, brand, type = 'client', ...
                 inputMode="numeric"
                 placeholder="Phone number"
                 value={phone}
-                onChange={e => { setPhone(e.target.value.replace(/\D/g, '')); setClientErr(''); }}
-                onKeyDown={e => e.key === 'Enter' && sendOtp()}
+                onChange={e => { setPhone(e.target.value.replace(/[^\d+]/g, '')); setClientErr(''); }}
+                onKeyDown={e => e.key === 'Enter' && !otpButtonDisabled && sendOtp()}
                 autoFocus={!isMobile}
                 style={{
                   flex: 1, height: 52, padding: '0 16px',
@@ -297,18 +323,20 @@ export default function LoginPage({ onLogin, onBack, brand, type = 'client', ...
             </div>
             <button
               onClick={sendOtp}
-              disabled={otpLoading || sanitizePhone(phone).length < 6}
+              disabled={otpButtonDisabled}
               style={{
                 height: 56, borderRadius: 16,
-                background: sanitizePhone(phone).length >= 6 ? `var(--accent-secondary)` : `var(--border-color)`,
+                background: !otpButtonDisabled ? `var(--accent-secondary)` : `var(--border-color)`,
                 color: '#fff', border: 'none', fontSize: 16, fontWeight: 800,
-                cursor: sanitizePhone(phone).length >= 6 ? 'pointer' : 'default',
+                cursor: !otpButtonDisabled ? 'pointer' : 'default',
                 display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
                 transition: 'background .2s', touchAction: 'manipulation',
               }}
             >
               {otpLoading
                 ? <><Loader2 size={18} className="lp-spin" /> Sending code…</>
+                : resendTimer > 0
+                  ? <><RefreshCw size={18} /> Try again in {resendTimer}s</>
                 : <><Smartphone size={18} /> Send Verification Code</>}
             </button>
             {props.activeMagicCode && import.meta.env.DEV && (

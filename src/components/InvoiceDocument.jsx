@@ -1,15 +1,25 @@
 import React from 'react';
 import { Landmark, Globe, QrCode } from 'lucide-react';
 
-const calculateTotal = (items = []) =>
-  items.reduce((a, b) => a + (parseFloat(b.qty) * parseFloat(b.rate) || 0), 0);
+const lineTotal = (item = {}) => {
+  const qty = parseFloat(item.qty) || 0;
+  const rate = parseFloat(item.rate) || 0;
+  const discount = parseFloat(item.discount) || 0;
+  return Math.max(0, (qty * rate) - discount);
+};
 
-const formatMoney = (val) => {
-  return `GH₵${parseFloat(val).toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
+const calculateTotal = (items = []) =>
+  items.reduce((a, b) => a + lineTotal(b), 0);
+
+const formatMoney = (val, currency = 'GHS') => {
+  const symbol = currency === 'USD' ? '$' : 'GH₵';
+  return `${symbol}${parseFloat(val || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
 };
 
 export default function InvoiceDocument({ inv, isQuote = false, finSettings, brand }) {
   const total = calculateTotal(inv.items || []);
+  const isReceipt = inv.documentKind === 'receipt' || inv.invoiceType === 'receipt' || inv.type === 'Receipt' || inv.status === 'Paid';
+  const documentLabel = isReceipt ? 'Sales Receipt' : isQuote ? 'Quotation' : 'Invoice';
 
   const isMinimal = finSettings.invoiceTheme === 'minimal';
   const isCorporate = finSettings.invoiceTheme === 'corporate';
@@ -37,7 +47,7 @@ export default function InvoiceDocument({ inv, isQuote = false, finSettings, bra
         position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%) rotate(-45deg)',
         fontSize: '100px', fontWeight: 900, opacity: 0.02, pointerEvents: 'none', whiteSpace: 'nowrap', color: theme.primary
       }}>
-        {inv.status === 'Paid' ? 'OFFICIAL RECEIPT' : isQuote ? 'OFFICIAL QUOTATION' : 'PAYMENT REQUEST'}
+        {isReceipt ? 'OFFICIAL RECEIPT' : isQuote ? 'OFFICIAL QUOTATION' : 'PAYMENT REQUEST'}
       </div>
 
       {/* TOP BAR (Corporate Theme) */}
@@ -53,7 +63,7 @@ export default function InvoiceDocument({ inv, isQuote = false, finSettings, bra
           </div>
         </div>
         <div style={{ textAlign: 'right' }}>
-          <h2 style={{ fontSize: isMinimal ? 32 : 42, fontWeight: 400, margin: '0 0 12px 0', textTransform: 'uppercase', color: theme.primary, letterSpacing: 1 }}>{isQuote ? 'Quotation' : 'Invoice'}</h2>
+          <h2 style={{ fontSize: isMinimal ? 32 : 42, fontWeight: 400, margin: '0 0 12px 0', textTransform: 'uppercase', color: theme.primary, letterSpacing: 1 }}>{documentLabel}</h2>
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
             <span style={{ fontSize: 13, background: theme.primary, color: theme.bg, padding: '4px 12px', borderRadius: 4, fontWeight: 600, letterSpacing: 1 }}>Ref: {inv.id || 'DRAFT-001'}</span>
             <span style={{ fontSize: 13, fontWeight: 600, color: theme.textMuted }}>Date: {inv.date}</span>
@@ -66,10 +76,12 @@ export default function InvoiceDocument({ inv, isQuote = false, finSettings, bra
         <div style={{ padding: isMinimal ? '24px' : '0', background: isMinimal ? theme.surface : 'none', borderRadius: 12 }}>
           <div style={{ fontSize: 10, textTransform: 'uppercase', color: theme.accent, fontWeight: 900, marginBottom: 12, letterSpacing: 2 }}>Prepared For</div>
           <p style={{ fontSize: 18, fontWeight: 800, margin: '0 0 8px 0', color: theme.primary }}>{inv.clientName || 'Valued Client'}</p>
+          {inv.clientCompany && <div style={{ fontSize: 13, fontWeight: 700, color: theme.secondary, marginBottom: 4 }}>{inv.clientCompany}</div>}
           <div style={{ fontSize: 13, lineHeight: 1.7, color: theme.textMuted }}>
             {inv.clientEmail}<br />
             {inv.clientPhone || 'Commercial Division'}<br />
             {inv.clientAddress || 'International Client'}
+            {inv.clientTaxId && <><br />Tax ID: {inv.clientTaxId}</>}
           </div>
         </div>
         <div style={{ textAlign: 'right' }}>
@@ -107,6 +119,7 @@ export default function InvoiceDocument({ inv, isQuote = false, finSettings, bra
             <th style={{ padding: '16px 24px', textAlign: 'left', fontSize: 11, textTransform: 'uppercase', letterSpacing: 1.5, fontWeight: 600 }}>Service Description</th>
             <th style={{ padding: '16px 24px', textAlign: 'center', fontSize: 11, textTransform: 'uppercase', width: 100, letterSpacing: 1.5, fontWeight: 600 }}>{inv.invoiceType === 'unit' ? 'Qty' : 'Phase'}</th>
             <th style={{ padding: '16px 24px', textAlign: 'right', fontSize: 11, textTransform: 'uppercase', width: 160, letterSpacing: 1.5, fontWeight: 600 }}>Unit Price</th>
+            <th style={{ padding: '16px 24px', textAlign: 'right', fontSize: 11, textTransform: 'uppercase', width: 130, letterSpacing: 1.5, fontWeight: 600 }}>Discount</th>
             <th style={{ padding: '16px 24px', textAlign: 'right', fontSize: 11, textTransform: 'uppercase', width: 160, letterSpacing: 1.5, fontWeight: 600 }}>Line Total</th>
           </tr>
         </thead>
@@ -123,8 +136,9 @@ export default function InvoiceDocument({ inv, isQuote = false, finSettings, bra
                 </div>
               </td>
               <td style={{ padding: '20px 24px', textAlign: 'center', fontSize: 15, fontWeight: 600, color: theme.primary }}>{it.qty} {inv.invoiceType === 'unit' ? (it.unit || 'pcs') : ''}</td>
-              <td style={{ padding: '20px 24px', textAlign: 'right', fontSize: 15, color: theme.textMuted }}>{formatMoney(it.rate)}</td>
-              <td style={{ padding: '20px 24px', textAlign: 'right', fontSize: 15, fontWeight: 800, color: theme.primary }}>{formatMoney(it.qty * it.rate)}</td>
+              <td style={{ padding: '20px 24px', textAlign: 'right', fontSize: 15, color: theme.textMuted }}>{formatMoney(it.rate, inv.currency)}</td>
+              <td style={{ padding: '20px 24px', textAlign: 'right', fontSize: 15, color: theme.textMuted }}>{it.discount ? formatMoney(it.discount, inv.currency) : '—'}</td>
+              <td style={{ padding: '20px 24px', textAlign: 'right', fontSize: 15, fontWeight: 800, color: theme.primary }}>{formatMoney(lineTotal(it), inv.currency)}</td>
             </tr>
           ))}
         </tbody>
@@ -135,21 +149,21 @@ export default function InvoiceDocument({ inv, isQuote = false, finSettings, bra
         <div style={{ width: 360, background: theme.surface, padding: '24px 32px', borderRadius: 8, border: `1px solid ${theme.accent}60` }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: 16, borderBottom: `1px solid ${theme.accent}60` }}>
             <span style={{ fontSize: 15, color: theme.textMuted, fontWeight: 600 }}>Subtotal</span>
-            <span style={{ fontSize: 15, fontWeight: 700, color: theme.primary }}>{formatMoney(total)}</span>
+            <span style={{ fontSize: 15, fontWeight: 700, color: theme.primary }}>{formatMoney(total, inv.currency)}</span>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: 16, paddingBottom: (inv.amountPaid > 0) ? 16 : 0, borderBottom: (inv.amountPaid > 0) ? `1px solid ${theme.accent}60` : 'none' }}>
             <span style={{ fontSize: 20, fontWeight: 900, textTransform: 'uppercase', color: theme.primary }}>Grand Total</span>
-            <span style={{ fontSize: 24, fontWeight: 900, color: theme.secondary }}>{formatMoney(total)}</span>
+            <span style={{ fontSize: 24, fontWeight: 900, color: theme.secondary }}>{formatMoney(total, inv.currency)}</span>
           </div>
           {inv.amountPaid > 0 && (
             <>
               <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: 16, paddingBottom: 16, borderBottom: `1px solid ${theme.accent}60` }}>
                 <span style={{ fontSize: 15, color: theme.textMuted, fontWeight: 600 }}>Amount Paid</span>
-                <span style={{ fontSize: 15, fontWeight: 700, color: '#16A34A' }}>{formatMoney(inv.amountPaid)}</span>
+                <span style={{ fontSize: 15, fontWeight: 700, color: '#16A34A' }}>{formatMoney(inv.amountPaid, inv.currency)}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: 16 }}>
                 <span style={{ fontSize: 18, fontWeight: 900, textTransform: 'uppercase', color: theme.primary }}>Balance Due</span>
-                <span style={{ fontSize: 20, fontWeight: 900, color: '#DC2626' }}>{formatMoney(Math.max(0, total - inv.amountPaid))}</span>
+                <span style={{ fontSize: 20, fontWeight: 900, color: '#DC2626' }}>{formatMoney(Math.max(0, total - inv.amountPaid), inv.currency)}</span>
               </div>
             </>
           )}

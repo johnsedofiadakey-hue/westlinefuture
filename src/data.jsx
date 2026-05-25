@@ -101,8 +101,8 @@ export const PORTFOLIO_DATA = [
 ];
 
 export const HERO_SLIDES = [
-  { img: '/hero_seo.png', title: 'Complete Interior\nSolutions.', sub: 'Industrial precision for the world\'s most ambitious architectural projects.' },
-  { img: 'https://images.unsplash.com/photo-1600607687920-4e2a09cf159d?q=80&w=2070&auto=format&fit=crop', title: 'Architectural\nPrecision.', sub: 'Premier structural glass and luxury aluminum finishing systems.' }
+  { img: '/hero_seo.png', title: 'Design. Source.\nInstall.', sub: 'A managed project system for premium interiors, CAD/3D rendering, global sourcing, logistics, installation, and handover.' },
+  { img: 'https://images.unsplash.com/photo-1600607687920-4e2a09cf159d?q=80&w=2070&auto=format&fit=crop', title: 'From concept\nto handover.', sub: 'Clients approve drawings, quotes, payments, timelines, and completion records through a controlled Westline workflow.' }
 ];
 
 export const ALL_SERVICES = [
@@ -255,51 +255,58 @@ export const NOTIFS_DATA = [
   { id: 2, title: 'Payment Verified', body: 'Airport Hills Kitchen deposit confirmed.', time: '5h ago', type: 'payment' }
 ];
 
-export const CLIENT_NAMES = ['LuxeSpace Ghana', 'AFCFTA Secretariat', 'Airport Hills Dev'];
+export const CLIENT_NAMES = ['Westline Future Client', 'AFCFTA Secretariat', 'Airport Hills Dev'];
 
-// ─── 12-Stage Client Project Pipeline ────────────────────────────────────────
+// ─── Client Project Pipeline ─────────────────────────────────────────────────
 export const CLIENT_PROJECT_STAGES = [
   {
-    id: 1, name: 'Intake', short: 'Survey', emoji: '🔍', color: `var(--text-secondary)`, pct: 10, days: 5,
+    id: 1, name: 'Intake & Survey', short: 'Survey', emoji: '🔍', color: `var(--text-secondary)`, pct: 5, days: 5,
     whoActs: 'admin',
     clientMsg: 'Reviewing requirements and scheduling technical site survey.',
     adminPrompt: 'Reviewing requirements and scheduling technical site survey.',
   },
   {
-    id: 2, name: 'Quote Approval & Deposit', short: 'Quote', emoji: '💳', color: `var(--accent-primary)`, pct: 25, days: 7,
+    id: 2, name: 'Design & Rendering', short: 'Design', emoji: '🎨', color: '#9333EA', pct: 15, days: 7,
     whoActs: 'client',
-    clientMsg: 'Reviewing the quotation, signing off, and securing deposit.',
+    clientMsg: 'Reviewing the 3D rendering and design intent. Rendering fee must be paid before access.',
+    adminPrompt: 'Waiting for client to pay rendering fee, and approve design.',
+    requiresDesignApproval: true,
+  },
+  {
+    id: 3, name: 'Quote Approval & Deposit', short: 'Quote', emoji: '💳', color: `var(--accent-primary)`, pct: 25, days: 7,
+    whoActs: 'client',
+    clientMsg: 'Reviewing the final quotation, signing off, and securing project deposit.',
     adminPrompt: 'Reviewing the quotation, signing off, and securing deposit.',
     needsClientApproval: true, requiresPayment: true, paymentPct: 50,
   },
   {
-    id: 3, name: 'Procurement & Production', short: 'Production', emoji: '🏭', color: '#3E2414', pct: 45, days: 30,
+    id: 4, name: 'Procurement & Production', short: 'Production', emoji: '🏭', color: '#3E2414', pct: 45, days: 30,
     whoActs: 'admin',
     clientMsg: 'Procuring materials and fabricating your custom components at our facility.',
     adminPrompt: 'Procuring materials and fabricating your custom components at our facility.',
   },
   {
-    id: 4, name: 'Shipping & Delivery', short: 'Shipping', emoji: '🚛', color: '#A69282', pct: 60, days: 35,
+    id: 5, name: 'Shipping & Delivery', short: 'Shipping', emoji: '🚛', color: '#A69282', pct: 60, days: 35,
     whoActs: 'admin',
     clientMsg: 'Cargo is in transit from the factory to your site via ocean freight.',
     adminPrompt: 'Cargo is in transit from the factory to your site via ocean freight.',
   },
   {
-    id: 5, name: 'Installation', short: 'Install', emoji: '🔧', color: '#3E2414', pct: 80, days: 7,
+    id: 6, name: 'Installation', short: 'Install', emoji: '🔧', color: '#3E2414', pct: 80, days: 7,
     whoActs: 'worker',
     clientMsg: 'Our technical crew is on-site fitting and finishing all components.',
     adminPrompt: 'Our technical crew is on-site fitting and finishing all components.',
     fullServiceOnly: true,
   },
   {
-    id: 6, name: 'Inspection & Sign-off', short: 'Inspect', emoji: '🔎', color: `var(--accent-primary)`, pct: 90, days: 3,
+    id: 7, name: 'Inspection & Sign-off', short: 'Inspect', emoji: '🔎', color: `var(--accent-primary)`, pct: 90, days: 3,
     whoActs: 'both',
     clientMsg: 'Conducting final quality checks. Please review the work and sign off.',
     adminPrompt: 'Conducting final quality checks. Please review the work and sign off.',
     needsClientApproval: true,
   },
   {
-    id: 7, name: 'Handover & Final Settlement', short: 'Completion', emoji: '🌟', color: `var(--accent-secondary)`, pct: 100, days: 1,
+    id: 8, name: 'Handover & Final Settlement', short: 'Completion', emoji: '🌟', color: `var(--accent-secondary)`, pct: 100, days: 1,
     whoActs: 'client',
     clientMsg: 'Project complete. Final balance cleared and handover documents issued.',
     adminPrompt: 'Project complete. Final balance cleared and handover documents issued.',
@@ -307,7 +314,7 @@ export const CLIENT_PROJECT_STAGES = [
   },
 ];
 
-// Maps legacy 12-stage and 8-stage IDs to the current 7-stage pipeline.
+// Maps legacy 12-stage records to the current client pipeline.
 const LEGACY_STAGE_MAP = { 
   1:1, 2:1, 3:2, 4:2, 5:3, 6:3, 7:3, 8:4, 9:4, 10:5, 11:6, 12:7 
 };
@@ -319,8 +326,8 @@ export function normalizeStageId(id) {
 }
 
 export const PROJECT_TYPES = {
-  'full-service': { label: 'Full Service',  desc: 'We source, ship, clear, deliver, and install.',        stages: [1,2,3,4,5,6,7], color: `var(--accent-secondary)` },
-  'buy-only':     { label: 'Buy & Deliver', desc: 'We source, ship, clear, and deliver. No installation.', stages: [1,2,3,4,6,7],   color: `var(--accent-primary)` },
+  'full-service': { label: 'Full Service',  desc: 'We source, ship, clear, deliver, install, inspect, and hand over.', stages: [1,2,3,4,5,6,7,8], color: `var(--accent-secondary)` },
+  'buy-only':     { label: 'Buy & Deliver', desc: 'We design, quote, source, ship, deliver, inspect, and close out.',  stages: [1,2,3,4,5,7,8],   color: `var(--accent-primary)` },
 };
 export const AWARDS = [
   { id: 1, name: 'Excellence in Structural Glass', year: '2023', body: 'Ghana Property Awards' }

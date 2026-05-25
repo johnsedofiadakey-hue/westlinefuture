@@ -27,6 +27,26 @@ const BUDGETS = [
   'Prefer not to say',
 ];
 
+const PROPERTY_TYPES = [
+  'Private Residence',
+  'Apartment / Rental Unit',
+  'Commercial Space',
+  'Hotel / Hospitality',
+  'Office / Corporate',
+  'Developer / Multi-unit Project',
+  'Other',
+];
+
+const TIMELINES = [
+  'Urgent — within 2 weeks',
+  '1 month',
+  '2–3 months',
+  '3–6 months',
+  'Flexible / planning stage',
+];
+
+const YES_NO = ['Yes', 'No', 'Not sure yet'];
+
 export default function ContactPage({ brand, submitContact }) {
   const [searchParams] = useSearchParams();
   const initialSubject = searchParams.get('subject') || '';
@@ -42,7 +62,14 @@ export default function ContactPage({ brand, submitContact }) {
     firstName: '', lastName: '',
     phone: '', email: '',
     service: initialSubject || '',
+    propertyType: '',
+    projectLocation: '',
     budget: '',
+    timeline: '',
+    hasMeasurements: '',
+    needsRendering: initialSubject.toLowerCase().includes('rendering') ? 'Yes' : '',
+    visitPreference: '',
+    inspirationLinks: '',
     message: '',
   });
   const [errors, setErrors] = useState({});
@@ -58,6 +85,8 @@ export default function ContactPage({ brand, submitContact }) {
     if (!form.phone.trim()) errs.phone = 'Phone number is required';
     else if (!PHONE_RE.test(form.phone.trim())) errs.phone = 'Enter a valid phone number';
     if (form.email.trim() && !EMAIL_RE.test(form.email.trim())) errs.email = 'Enter a valid email address';
+    if (!form.service.trim()) errs.service = 'Select the main service or project type';
+    if (!form.projectLocation.trim()) errs.projectLocation = 'Project location is required';
     if (!form.message.trim()) errs.message = 'Tell us about your project';
     if (form.message.trim().length > 2000) errs.message = 'Message too long (max 2000 characters)';
     return errs;
@@ -70,15 +99,45 @@ export default function ContactPage({ brand, submitContact }) {
     if (Object.keys(errs).length) return;
     setLoading(true);
     try {
+      const intakeSummary = [
+        `Service: ${form.service || 'N/A'}`,
+        `Property Type: ${form.propertyType || 'N/A'}`,
+        `Location: ${form.projectLocation || 'N/A'}`,
+        `Budget: ${form.budget || 'N/A'}`,
+        `Timeline: ${form.timeline || 'N/A'}`,
+        `Measurements Available: ${form.hasMeasurements || 'N/A'}`,
+        `CAD/3D Rendering Needed: ${form.needsRendering || 'N/A'}`,
+        `Visit Preference: ${form.visitPreference || 'N/A'}`,
+        `Inspiration / Links: ${form.inspirationLinks || 'N/A'}`,
+      ].join('\n');
+
       await submitContact({
+        inquiryType: 'Project Intake',
+        stageIntent: form.needsRendering === 'Yes' ? 'Rendering-first consultation' : 'Project consultation',
         firstName: sanitizeText(form.firstName),
         lastName: sanitizeText(form.lastName),
         phone: form.phone.trim(),
         email: form.email.trim().toLowerCase(),
         subject: sanitizeText(form.service || 'General Enquiry'),
-        message: sanitizeText(`[Service: ${form.service || 'N/A'}] [Budget: ${form.budget || 'N/A'}]\n\n${form.message}`),
+        projectLocation: sanitizeText(form.projectLocation),
+        propertyType: sanitizeText(form.propertyType),
+        budget: sanitizeText(form.budget),
+        timeline: sanitizeText(form.timeline),
+        hasMeasurements: sanitizeText(form.hasMeasurements),
+        needsRendering: sanitizeText(form.needsRendering),
+        visitPreference: sanitizeText(form.visitPreference),
+        inspirationLinks: sanitizeText(form.inspirationLinks),
+        message: sanitizeText(`${intakeSummary}\n\nProject Brief:\n${form.message}`),
       });
-      setForm({ firstName: '', lastName: '', phone: '', email: '', service: '', budget: '', message: '' });
+      setForm({
+        firstName: '', lastName: '',
+        phone: '', email: '',
+        service: '', propertyType: '', projectLocation: '',
+        budget: '', timeline: '',
+        hasMeasurements: '', needsRendering: '',
+        visitPreference: '', inspirationLinks: '',
+        message: ''
+      });
       setErrors({});
       setSubmitted(true);
       setTimeout(() => setSubmitted(false), 8000);
@@ -92,8 +151,10 @@ export default function ContactPage({ brand, submitContact }) {
   const handleWhatsApp = () => {
     const name = form.firstName ? `Hi, I'm ${form.firstName}` : 'Hi';
     const svc = form.service ? ` I'm interested in ${form.service}.` : '';
-    const msg = form.message ? ` ${form.message}` : ' I would like to discuss a project with you.';
-    window.open(`https://wa.me/${wa}?text=${encodeURIComponent(name + svc + msg)}`, '_blank');
+    const locationText = form.projectLocation ? ` Location: ${form.projectLocation}.` : '';
+    const renderingText = form.needsRendering ? ` CAD/3D rendering needed: ${form.needsRendering}.` : '';
+    const msg = form.message ? ` Brief: ${form.message}` : ' I would like to discuss a project with you.';
+    window.open(`https://wa.me/${wa}?text=${encodeURIComponent(name + svc + locationText + renderingText + msg)}`, '_blank');
   };
 
   const inp = (field) => ({
@@ -140,7 +201,7 @@ export default function ContactPage({ brand, submitContact }) {
             <em style={{ fontStyle: 'italic', fontWeight: 400, color: `var(--accent-primary)` }}>exceptional together.</em>
           </h1>
           <p style={{ fontSize: mob ? 15 : 18, color: 'rgba(255,255,255,0.75)', maxWidth: 560, lineHeight: 1.7, margin: 0 }}>
-            Describe your project and a technical specialist will respond within 24 hours — or reach us instantly on WhatsApp.
+            Submit a structured brief for design, sourcing, installation, or full project delivery. A technical specialist will qualify the next step within 24 hours.
           </p>
 
           {/* Quick contact strip */}
@@ -194,7 +255,7 @@ export default function ContactPage({ brand, submitContact }) {
                 Project Enquiry
               </h2>
               <p style={{ fontSize: 14, color: 'rgba(24, 14, 6, 0.72)', margin: 0 }}>
-                Fill in the details and we'll get back to you with a personalised quote.
+                Complete the intake so we can assess scope, rendering needs, timeline, and budget before issuing any formal quote.
               </p>
             </div>
 
@@ -275,10 +336,10 @@ export default function ContactPage({ brand, submitContact }) {
                   </div>
                 </div>
 
-                {/* Service + Budget row */}
+                {/* Service + Property row */}
                 <div style={{ display: 'grid', gridTemplateColumns: mob ? '1fr' : '1fr 1fr', gap: 12 }}>
                   <div>
-                    <label style={labelStyle}>Service Interested In</label>
+                    <label style={labelStyle}>Main Service / Project Type *</label>
                     <select
                       value={form.service} onChange={set('service')}
                       style={{ ...inp('service'), color: form.service ? DARK_TEXT : 'rgba(24, 14, 6, 0.4)', appearance: 'none', backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%231A1410' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 14px center', paddingRight: 36 }}
@@ -287,6 +348,31 @@ export default function ContactPage({ brand, submitContact }) {
                       <option value="">Select a service…</option>
                       {SERVICES.map(s => <option key={s} value={s}>{s}</option>)}
                     </select>
+                    <Err field="service" />
+                  </div>
+                  <div>
+                    <label style={labelStyle}>Property Type</label>
+                    <select
+                      value={form.propertyType} onChange={set('propertyType')}
+                      style={{ ...inp('propertyType'), color: form.propertyType ? DARK_TEXT : 'rgba(24, 14, 6, 0.4)', appearance: 'none', backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%231A1410' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 14px center', paddingRight: 36 }}
+                      onFocus={() => setFocused('propertyType')} onBlur={() => setFocused(null)}
+                    >
+                      <option value="">Select property type…</option>
+                      {PROPERTY_TYPES.map(p => <option key={p} value={p}>{p}</option>)}
+                    </select>
+                  </div>
+                </div>
+
+                {/* Location + Budget row */}
+                <div style={{ display: 'grid', gridTemplateColumns: mob ? '1fr' : '1fr 1fr', gap: 12 }}>
+                  <div>
+                    <label style={labelStyle}>Project Location *</label>
+                    <input
+                      value={form.projectLocation} onChange={set('projectLocation')} maxLength={160}
+                      style={inp('projectLocation')} placeholder="East Legon, Accra"
+                      onFocus={() => setFocused('projectLocation')} onBlur={() => setFocused(null)}
+                    />
+                    <Err field="projectLocation" />
                   </div>
                   <div>
                     <label style={labelStyle}>Approximate Budget</label>
@@ -299,6 +385,68 @@ export default function ContactPage({ brand, submitContact }) {
                       {BUDGETS.map(b => <option key={b} value={b}>{b}</option>)}
                     </select>
                   </div>
+                </div>
+
+                {/* Timeline + Rendering row */}
+                <div style={{ display: 'grid', gridTemplateColumns: mob ? '1fr' : '1fr 1fr', gap: 12 }}>
+                  <div>
+                    <label style={labelStyle}>Target Timeline</label>
+                    <select
+                      value={form.timeline} onChange={set('timeline')}
+                      style={{ ...inp('timeline'), color: form.timeline ? DARK_TEXT : 'rgba(24, 14, 6, 0.4)', appearance: 'none', backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%231A1410' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 14px center', paddingRight: 36 }}
+                      onFocus={() => setFocused('timeline')} onBlur={() => setFocused(null)}
+                    >
+                      <option value="">Select timeline…</option>
+                      {TIMELINES.map(t => <option key={t} value={t}>{t}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={labelStyle}>Need CAD / 3D Rendering?</label>
+                    <select
+                      value={form.needsRendering} onChange={set('needsRendering')}
+                      style={{ ...inp('needsRendering'), color: form.needsRendering ? DARK_TEXT : 'rgba(24, 14, 6, 0.4)', appearance: 'none', backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%231A1410' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 14px center', paddingRight: 36 }}
+                      onFocus={() => setFocused('needsRendering')} onBlur={() => setFocused(null)}
+                    >
+                      <option value="">Select option…</option>
+                      {YES_NO.map(v => <option key={v} value={v}>{v}</option>)}
+                    </select>
+                  </div>
+                </div>
+
+                {/* Measurements + Visit row */}
+                <div style={{ display: 'grid', gridTemplateColumns: mob ? '1fr' : '1fr 1fr', gap: 12 }}>
+                  <div>
+                    <label style={labelStyle}>Measurements Available?</label>
+                    <select
+                      value={form.hasMeasurements} onChange={set('hasMeasurements')}
+                      style={{ ...inp('hasMeasurements'), color: form.hasMeasurements ? DARK_TEXT : 'rgba(24, 14, 6, 0.4)', appearance: 'none', backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%231A1410' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 14px center', paddingRight: 36 }}
+                      onFocus={() => setFocused('hasMeasurements')} onBlur={() => setFocused(null)}
+                    >
+                      <option value="">Select option…</option>
+                      {YES_NO.map(v => <option key={v} value={v}>{v}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={labelStyle}>Preferred Next Step</label>
+                    <select
+                      value={form.visitPreference} onChange={set('visitPreference')}
+                      style={{ ...inp('visitPreference'), color: form.visitPreference ? DARK_TEXT : 'rgba(24, 14, 6, 0.4)', appearance: 'none', backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%231A1410' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 14px center', paddingRight: 36 }}
+                      onFocus={() => setFocused('visitPreference')} onBlur={() => setFocused(null)}
+                    >
+                      <option value="">Select preference…</option>
+                      {['Phone consultation', 'WhatsApp follow-up', 'Site visit', 'Showroom appointment'].map(v => <option key={v} value={v}>{v}</option>)}
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label style={labelStyle}>Inspiration Links / References</label>
+                  <textarea
+                    rows={3} value={form.inspirationLinks} onChange={set('inspirationLinks')} maxLength={1200}
+                    style={{ ...inp('inspirationLinks'), resize: 'none' }}
+                    placeholder="Paste Pinterest, Instagram, product links, or notes about the style you want."
+                    onFocus={() => setFocused('inspirationLinks')} onBlur={() => setFocused(null)}
+                  />
                 </div>
 
                 {/* Message */}
@@ -331,7 +479,7 @@ export default function ContactPage({ brand, submitContact }) {
                       fontFamily: 'inherit', transition: 'opacity 0.2s',
                     }}
                   >
-                    {loading ? 'Sending…' : <><span>Send Enquiry</span><ArrowRight size={15} /></>}
+                    {loading ? 'Sending…' : <><span>Submit Project Intake</span><ArrowRight size={15} /></>}
                   </button>
                   <button
                     type="button"

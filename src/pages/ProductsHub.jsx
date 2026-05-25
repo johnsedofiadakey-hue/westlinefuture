@@ -258,7 +258,7 @@ const DetailModal = ({ product, onClose, ac, navigate, mob }) => {
                 }}
                 style={{ width: '100%', padding: '18px', background: DARK_TEXT, color: '#fff', borderRadius: 16, border: 'none', fontWeight: 800, fontSize: 14, cursor: 'pointer' }}
               >
-                Inquire for Procurement
+                Send To Project Intake
               </button>
             </div>
           </div>
@@ -499,20 +499,20 @@ export default function ProductsHub({ brand, user, onPortal, setPage, content })
 
       <main style={{ padding: mob ? '100px 20px 100px' : '160px 5vw 100px', maxWidth: 1400, margin: '0 auto' }}>
         <div style={{ marginBottom: mob ? 32 : 48 }}>
-          <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.3em', textTransform: 'uppercase', color: ac }}>SUPPLY & INSTALLATION</span>
+          <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.3em', textTransform: 'uppercase', color: ac }}>SOURCE • APPROVE • INSTALL</span>
           <h1 style={{ fontSize: mob ? 32 : 56, fontWeight: 800, letterSpacing: '-0.04em', margin: '12px 0 16px', lineHeight: 1.05 }}>
             Products & <span style={{ color: ac }}>Materials.</span>
           </h1>
           <p style={{ color: 'rgba(24, 14, 6, 0.5)', fontSize: mob ? 14 : 17, maxWidth: 700, lineHeight: 1.7 }}>
-            Glass, tiles, bathrooms, kitchens, wardrobes, doors, electrical and plumbing materials — all sourced directly and available for supply or full installation worldwide.
+            Save materials, compare specifications, and send a curated sourcing brief into Westline's admin workflow for pricing, procurement, logistics, and installation planning.
           </p>
         </div>
 
         {/* Top CTA strip */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, padding: '16px 24px', background: `var(--accent-secondary)`, borderRadius: 16, marginBottom: 40 }}>
           <div>
-            <div style={{ fontSize: 13, fontWeight: 800, color: '#fff' }}>Don't see what you need?</div>
-            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', marginTop: 2 }}>We source any material from China — just tell us what you need.</div>
+            <div style={{ fontSize: 13, fontWeight: 800, color: '#fff' }}>Building a full package?</div>
+            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', marginTop: 2 }}>Save items as favorites, then push the curated list to admin for a structured sourcing response.</div>
           </div>
           <a
             href={`https://wa.me/${waNumber}?text=${encodeURIComponent('Hi Westline Future, I need a custom material sourced. Can you help?')}`}
@@ -908,4 +908,3 @@ export default function ProductsHub({ brand, user, onPortal, setPage, content })
     </div>
   );
 }
-

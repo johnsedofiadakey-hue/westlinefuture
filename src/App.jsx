@@ -84,7 +84,7 @@ export default function App() {
   const clearRateLimit = (id) => { delete loginAttempts.current[id]; };
 
   const {
-    user, setUser, clients, proposals, invoices, bookings, emails, setEmails, dbClients, teamMembers, logs, shipments, messages, testimonials, tasks, transactions, changeRequests, userNotifications, procurements, jobs, notes, media, approvals, materials, assets, workOrders, containers,
+    user, setUser, clients, proposals, invoices, bookings, emails, setEmails, dbClients, teamMembers, logs, shipments, messages, testimonials, tasks, transactions, changeRequests, userNotifications, procurements, jobs, notes, media, approvals, materials, assets, workOrders, containers, renderingPackages, addOns,
     brand, content, currency, lang,
     setCurrency, setLang, setBrand, setContent,
     loadMoreMessages, hasMoreMessages,
@@ -257,8 +257,8 @@ export default function App() {
         throw new Error('VITE_ADMIN_UID_1 and VITE_ADMIN_UID_2 must be set in .env before seeding.');
       }
       const DEMO_ACCOUNTS = [
-        { email: 'admin@stormglide.com', role: 'admin', name: 'Super Admin', uid: _adminUid1 },
-        { email: 'admin@westlinefuture.com', role: 'admin', name: 'Factory Admin', uid: _adminUid2 },
+        { email: 'admin@westlinefuture.com', role: 'admin', name: 'Super Admin', uid: _adminUid1 },
+        { email: 'operations@westlinefuture.com', role: 'admin', name: 'Operations Admin', uid: _adminUid2 },
         ...(_clientUid1 ? [{ email: 'client@westlinefuture.com', role: 'client', name: 'Elite Client', username: 'elite_finish', uid: _clientUid1 }] : []),
       ];
 
@@ -854,6 +854,17 @@ export default function App() {
     }
   };
 
+  const updateProposal = async (id, data) => {
+    if (!db) return;
+    try {
+      await updateDoc(doc(db, 'proposals', id), { ...data, updatedAt: new Date().toISOString() });
+      notify('success', 'Quote Updated');
+    } catch (err) {
+      devErr(err);
+      notify('error', 'Update failed');
+    }
+  };
+
   const createInvoice = async (data) => {
     if (!db) return;
     try {
@@ -1070,20 +1081,29 @@ export default function App() {
     catch(e) { devErr(e); }
   };
 
-  const deleteProject = async (projectId) => {
+  const deleteProject = async (projectId, reason = '') => {
     if (!db) return;
     try {
-      // Delete subcollections first (messages, documents, notes)
-      const subcols = ['messages', 'documents', 'notes', 'procurements'];
-      await Promise.all(subcols.map(async sub => {
-        const snap = await getDocs(collection(db, 'projects', projectId, sub));
-        return Promise.all(snap.docs.map(d => deleteDoc(d.ref)));
-      }));
-      await deleteDoc(doc(db, 'projects', projectId));
-      notify('success', 'Project deleted');
+      await updateDoc(doc(db, 'projects', projectId), {
+        status: 'Archived',
+        projectLifecycleStatus: 'Archived',
+        archivedAt: serverTimestamp(),
+        archivedBy: user?.uid || user?.id || 'admin',
+        archiveReason: sanitizeText(reason || 'Archived from project board'),
+        updatedAt: serverTimestamp(),
+      });
+      await addDoc(collection(db, 'projects', projectId, 'messages'), {
+        text: `Project archived. Reason: ${sanitizeText(reason || 'Archived from project board')}`,
+        senderRole: 'system',
+        senderId: 'system',
+        senderName: 'Westline Future',
+        isInternal: true,
+        createdAt: serverTimestamp(),
+      });
+      notify('success', 'Project archived. Audit trail preserved.');
     } catch (e) {
       devErr(e);
-      notify('error', 'Failed to delete project');
+      notify('error', 'Failed to archive project');
     }
   };
   // uploadMedia moved to useFileUpload hook
@@ -1168,7 +1188,7 @@ export default function App() {
       fromEmail: data.email,
       subject: `Inquiry: ${data.subject || 'General Consultation'}`,
       status: 'pending',
-      type: 'General Inquiry',
+      type: data.inquiryType || 'General Inquiry',
       sentAt: new Date().toLocaleDateString(),
       details: data
     };
@@ -1313,6 +1333,21 @@ export default function App() {
       if (!clientId) throw new Error('Client ID is required.');
       const milestones = data.milestones?.length ? data.milestones : buildDefaultMilestones(data.budget, data.paymentSchedule);
       const effectiveDate = data.projectDate ? new Date(data.projectDate).toISOString() : new Date().toISOString();
+      const selectedWorkerIds = [data.assignedWorker].filter(Boolean);
+      const selectedStaffIds = [data.assignedStaff].filter(Boolean);
+      const stageTimelines = (CLIENT_PROJECT_STAGES || []).map(stage => ({
+        stageId: stage.id,
+        name: stage.name,
+        estimatedStartDate: stage.id === 1 ? (data.estimatedStartDate || data.projectDate || null) : null,
+        estimatedEndDate: stage.id === 8 ? (data.targetCompletionDate || null) : null,
+        actualStartDate: stage.id === 1 ? effectiveDate : null,
+        actualEndDate: null,
+        status: stage.id === 1 ? 'On track' : 'Not started',
+        owner: stage.whoActs || 'admin',
+        delayReason: '',
+        clientVisibleNote: '',
+        internalNote: '',
+      }));
       const docRef = await addDoc(collection(db, 'projects'), {
         title: sanitizeText(data.title || 'New Project'),
         clientId,
@@ -1320,12 +1355,29 @@ export default function App() {
         projectType: data.projectType || 'full-service',
         stageId: 1,
         status: 'Active',
+        projectLifecycleStatus: 'Active',
         budget: data.budget || '',
+        projectTotal: data.budget || '',
+        renderingFee: data.renderingFee || '',
+        renderingStatus: 'not_started',
+        renderingFeePaid: false,
+        renderingUnlocked: false,
+        renderingApproved: false,
+        quoteStatus: 'not_started',
+        quoteApproved: false,
+        depositPaid: false,
+        nextAction: data.renderingFee ? 'Create and send rendering fee invoice' : 'Confirm rendering fee and upload design package',
         breakdown: data.breakdown || null,
         paymentSchedule: data.paymentSchedule || 'standard',
+        kickoffMode: data.kickoffMode || 'rendering-first',
         description: sanitizeText(data.description || ''),
         milestones,
-        assignedWorkers: [],
+        assignedWorkers: selectedWorkerIds,
+        assignedStaff: selectedStaffIds,
+        projectManagerId: data.assignedStaff || null,
+        estimatedStartDate: data.estimatedStartDate || data.projectDate || null,
+        targetCompletionDate: data.targetCompletionDate || null,
+        stageTimelines,
         stageHistory: [{ stageId: 1, note: data.projectDate ? `Project created (backdated to ${data.projectDate})` : 'Project created', timestamp: effectiveDate, byRole: 'admin' }],
         createdAt: data.projectDate ? effectiveDate : serverTimestamp(),
         updatedAt: serverTimestamp(),
@@ -1356,11 +1408,20 @@ export default function App() {
       const stageHistory = [...(data.stageHistory || []), {
         stageId: newStageId, note: sanitizeText(note) || 'Stage advanced',
         timestamp: effectiveTimestamp, byRole: 'admin',
+        gateOverride: !!options.gateOverride,
+        gateChecks: options.gateChecks || [],
+        clientVisibleNote: sanitizeText(options.clientVisibleNote || ''),
         ...(options.overrideDate ? { backdated: true } : {}),
       }];
       await updateDoc(doc(db, 'projects', projectId), {
         stageId: newStageId,
         status: newStageId === 8 ? 'Completed' : 'Active',
+        previousStageId: data.stageId || null,
+        lastStageAdvancedAt: serverTimestamp(),
+        lastStageAdvancedBy: user?.uid || user?.id || 'admin',
+        lastGateOverride: !!options.gateOverride,
+        timelineStatus: options.timelineStatus || data.timelineStatus || 'On track',
+        clientVisibleStageNote: sanitizeText(options.clientVisibleNote || ''),
         stageHistory, updatedAt: serverTimestamp(),
       });
       const stage = CLIENT_PROJECT_STAGES.find(s => s.id === newStageId);
@@ -1635,6 +1696,12 @@ export default function App() {
   const sendOTP = async (phone) => {
     try {
       if (!auth) throw new Error("Service unavailable. Please try again.");
+      const normalizedPhone = String(phone || '').trim();
+      if (!/^\+[1-9]\d{7,14}$/.test(normalizedPhone)) {
+        const e = new Error('Enter a valid phone number in international format, e.g. +233 24 000 0000.');
+        e.code = 'auth/invalid-phone-number';
+        throw e;
+      }
 
       notify('pending', 'Sending verification code...');
 
@@ -1652,19 +1719,41 @@ export default function App() {
         'expired-callback': () => { window._gtRecaptcha = null; }
       });
 
-      const result = await signInWithPhoneNumber(auth, phone, window._gtRecaptcha);
+      await window._gtRecaptcha.render();
+      const result = await signInWithPhoneNumber(auth, normalizedPhone, window._gtRecaptcha);
       confirmationResultRef.current = result;
 
-      notify('success', `Code sent to ${phone}`);
+      notify('success', `Code sent to ${normalizedPhone}`);
       return true;
     } catch (err) {
+      devErr('[sendOTP] Firebase phone auth failed', {
+        code: err?.code,
+        message: err?.message,
+        customData: err?.customData,
+        url: window.location.href,
+        host: window.location.host
+      });
       if (window._gtRecaptcha) {
         try { window._gtRecaptcha.clear(); } catch (_) {}
         window._gtRecaptcha = null;
       }
       const container = document.getElementById('recaptcha-container');
       if (container) container.innerHTML = '';
-      setNotification({ msg: err.message, type: 'error' });
+      const msg = (() => {
+        if (err?.code === 'auth/invalid-app-credential' || err?.code === 'auth/unauthorized-domain') {
+          return `Phone login reCAPTCHA was rejected for ${window.location.host}. This is not an SMS region issue. Check Firebase Auth authorized domains and Google Cloud API key HTTP referrers for this host.`;
+        }
+        if (err?.code === 'auth/app-not-authorized') return 'This Firebase API key is not authorized for this app/domain. Check the API key app restrictions and authorized referrers.';
+        if (err?.code === 'auth/captcha-check-failed') return 'reCAPTCHA verification failed. Refresh the page and try again.';
+        if (err?.code === 'auth/missing-phone-number') return 'Enter a valid phone number before requesting an OTP.';
+        if (err?.code === 'auth/too-many-requests') return 'Too many OTP attempts. Please wait a few minutes and try again.';
+        if (err?.code === 'auth/invalid-phone-number') return 'That phone number is not valid. Please check the country code and number.';
+        if (err?.message?.includes('400')) return `Firebase rejected the OTP request for ${window.location.host}. Check Phone Auth is enabled, Firebase Auth authorized domains include this host, and the API key allows this HTTP referrer.`;
+        return err.message || 'Could not send verification code.';
+      })();
+      err.userMessage = msg;
+      setNotification({ msg, type: 'error' });
+      notify?.('error', msg);
       throw err;
     }
   };
@@ -1730,7 +1819,20 @@ export default function App() {
     }
   };
 
-  const createStaffAccount = async ({ name, username, role, password }) => {
+  const createStaffAccount = async ({
+    name,
+    username,
+    role,
+    password,
+    phone = '',
+    department = 'Operations',
+    accessScope = 'assigned',
+    accessModules = [],
+    onboardingChecklist = [],
+    requiresPasswordReset = true,
+    notes = '',
+    systemRole
+  }) => {
     if (!username?.trim()) throw new Error('Username is required');
     let secondaryApp;
     try {
@@ -1742,15 +1844,24 @@ export default function App() {
       const userCredential = await createUserWithEmailAndPassword(secondaryAuth, pseudoEmail, password);
       const uid = userCredential.user.uid;
       
-      const staffRole = role === "Field Worker" ? "worker" : "staff";
+      const staffRole = systemRole || (["Field Worker", "Technician", "Senior Technician"].includes(role) ? "worker" : "staff");
       
       const staffDoc = {
         name: name.trim(),
         username: username.trim(),
         email: pseudoEmail,
+        phone,
         role: staffRole,
         jobRole: role,
+        department,
+        accessScope,
+        accessModules,
+        onboardingChecklist,
+        requiresPasswordReset,
+        staffNotes: notes,
         assignedClients: [],
+        assignedProjects: [],
+        assignedWorkers: [],
         status: "Active",
         certs: [],
         tempPassword: password,          // stored so admin can view/copy it anytime
@@ -1800,6 +1911,20 @@ export default function App() {
     }
   };
 
+  const updateMember = async (uid, fields) => {
+    if (!uid || !db) return;
+    const clean = Object.fromEntries(Object.entries(fields || {}).filter(([_, v]) => v !== undefined));
+    try {
+      await updateDoc(doc(db, 'users', uid), { ...clean, updatedAt: serverTimestamp() });
+      await updateDoc(doc(db, 'team', uid), { ...clean, updatedAt: serverTimestamp() }).catch(() => {});
+      notify('success', 'Staff account updated.');
+      logAction(null, 'Staff', `Updated staff account uid: ${uid}`);
+    } catch (err) {
+      notify('error', err.message || 'Failed to update staff account');
+      throw err;
+    }
+  };
+
   const uniqueDbClients = React.useMemo(() => {
     const registry = {};
     dbClients.forEach(c => {
@@ -1833,13 +1958,16 @@ export default function App() {
     teamMembers,
     logs, logAction, 
     invoices,
+    renderingPackages,
+    addOns,
     payInvoice,
     createInvoice,
     updateInvoice,
     deleteInvoice,
+    createProposal,
+    updateProposal,
     deleteProposal,
     uploadMedia,
-    createProposal,
     transactions, recordOfflinePayment,
     materials, updateMaterial,
     assets, updateAsset,
@@ -1866,7 +1994,7 @@ export default function App() {
     sendWhatsAppUpdate,
     jobs, createJob, updateJob,
     createClientProject, updateProjectStage, addProjectMessage, assignWorkerToProject, deleteProject,
-    approveQuote, updateShippingDetails, addProjectDocument, createStaffAccount, deleteMember,
+    approveQuote, updateShippingDetails, addProjectDocument, createStaffAccount, deleteMember, updateMember,
     workOrders, containers,
     updateWorkOrder: (id, d) => db && updateDoc(doc(db, 'work_orders', id), { ...d, updatedAt: serverTimestamp() }),
     createWorkOrder,
@@ -1894,7 +2022,7 @@ export default function App() {
     try {
       notify('pending', `Authenticating with Westline Future Hub...`);
 
-      const isAdminEmail = (e === 'admin@stormglide.com' || e === 'admin@westlinefuture.com');
+      const isAdminEmail = (e === 'admin@westlinefuture.com' || e === 'operations@westlinefuture.com');
       const isActualAdminMode = mode === 'admin' || isAdminEmail;
 
       if (isActualAdminMode) {
@@ -2050,4 +2178,3 @@ export default function App() {
     </div>
   );
 }
-

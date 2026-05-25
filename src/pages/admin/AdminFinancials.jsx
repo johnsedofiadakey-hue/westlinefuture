@@ -21,7 +21,7 @@ import { GLASS_CATALOG_DATA } from '../../data.jsx';
 
 export default function AdminFinancials({ invoices = [], transactions = [], clients = [], dbClients = [], brand, deleteInvoice, deleteProposal, ...props }) {
   const [tab, setTab] = useState('overview'); // overview, sales, quotations, banking, settings
-  const [showAdd, setShowAdd] = useState(null); // 'invoice', 'quotation'
+  const [showAdd, setShowAdd] = useState(null); // 'invoice', 'quotation', 'receipt'
   const [viewInvoice, setViewInvoice] = useState(null); // the invoice to view in modal
   const ac = brand.color || `var(--accent-secondary)`;
   const notify = props.notify || ((type, msg) => { if (import.meta.env.DEV) console.warn(`[Financials] ${type}: ${msg}`); });
@@ -43,12 +43,15 @@ export default function AdminFinancials({ invoices = [], transactions = [], clie
   // --- DRAFT STATE ---
   const blankDraft = (invoiceType = 'unit') => ({
     projectId: '', clientId: '',
+    customerType: invoiceType === 'project' ? 'existing' : 'one-time',
     clientName: '', clientEmail: '', clientPhone: '',
+    clientCompany: '', clientAddress: '', clientTaxId: '',
     title: '', currency: 'GHS',
     date: new Date().toISOString().split('T')[0],
     due: '',
     invoiceType,
-    items: [{ id: Date.now(), desc: '', qty: 1, rate: 0, unit: 'pcs', total: 0 }],
+    documentKind: 'invoice',
+    items: [{ id: Date.now(), desc: '', qty: 1, rate: 0, unit: 'pcs', discount: 0, total: 0 }],
     bankDetails: finSettings.bankDetails,
     terms: finSettings.terms,
     status: 'Pending'
@@ -60,28 +63,32 @@ export default function AdminFinancials({ invoices = [], transactions = [], clie
       if (!draft.clientName.trim()) { notify('error', 'Client name is required'); return; }
       if (draft.invoiceType === 'project' && !draft.projectId) { notify('error', 'Please select a project'); return; }
       if (!draft.items.some(i => i.desc && i.rate > 0)) { notify('error', 'Add at least one line item with a description and rate'); return; }
-      const isQuote = showAdd === 'quotation';
-      const isReceipt = draft.invoiceType === 'receipt';
+      const isQuote = showAdd === 'quotation' || draft.documentKind === 'quotation';
+      const isReceipt = showAdd === 'receipt' || draft.invoiceType === 'receipt' || draft.documentKind === 'receipt';
       const total = calculateTotal(draft.items);
       const docType = isQuote ? 'Quotation' : isReceipt ? 'Receipt' : 'Invoice';
       const payload = {
         ...draft,
         clientId: draft.clientId,
+        customerType: draft.customerType || (draft.clientId ? 'existing' : 'one-time'),
+        oneTimeClient: (draft.customerType || '') === 'one-time' || !draft.clientId,
+        documentKind: isQuote ? 'quotation' : isReceipt ? 'receipt' : 'invoice',
+        items: draft.items.map(item => ({ ...item, total: lineTotal(item) })),
         amount: formatMoney(total, draft.currency),
         total,
         client: draft.clientName,
         status: isQuote ? 'pending' : isReceipt ? 'Paid' : 'Pending',
         type: docType,
         parentId: draft.projectId || null,
+        version: draft.version || 1,
+        previousVersionId: draft.previousVersionId || null,
       };
 
-      notify('pending', `Processing ${showAdd}...`);
+      notify('pending', `Processing ${docType.toLowerCase()}...`);
       
-      let docId;
-      if (isQuote) {
-        docId = await props.createProposal(payload);
-      } else {
-        docId = await props.createInvoice(payload);
+      const docId = await props.createInvoice(payload);
+      if (isQuote && props.createProposal) {
+        Promise.resolve(props.createProposal({ ...payload, invoiceId: docId })).catch(() => {});
       }
 
       if (docId) {
@@ -122,8 +129,15 @@ export default function AdminFinancials({ invoices = [], transactions = [], clie
   };
 
   // --- CALCULATIONS ---
+  const lineTotal = (item) => {
+    const qty = parseFloat(item.qty) || 0;
+    const rate = parseFloat(item.rate) || 0;
+    const discount = parseFloat(item.discount) || 0;
+    return Math.max(0, (qty * rate) - discount);
+  };
+
   const calculateTotal = (items, currency) => {
-    const sum = items.reduce((a, b) => a + (parseFloat(b.qty) * parseFloat(b.rate) || 0), 0);
+    const sum = items.reduce((a, b) => a + lineTotal(b), 0);
     return sum;
   };
 
@@ -141,8 +155,30 @@ export default function AdminFinancials({ invoices = [], transactions = [], clie
   const stats = {
     revenue: (invoices || []).filter(i => i.status === 'Paid').reduce((a, b) => a + parseAmount(b.amount), 0),
     pending: (invoices || []).filter(i => i.status === 'Pending').reduce((a, b) => a + parseAmount(b.amount), 0),
-    quotes: (props.proposals || []).filter(p => p.status === 'Pending').length,
-    conversions: 84
+    quotes: 0,
+    conversions: 84,
+    oneTimeSales: (invoices || []).filter(i => i.oneTimeClient || i.customerType === 'one-time').reduce((a, b) => a + parseAmount(b.amount), 0),
+    receipts: (invoices || []).filter(i => i.type === 'Receipt' || i.documentKind === 'receipt').length
+  };
+  const quoteInvoices = (invoices || [])
+    .filter(i => i.documentKind === 'quotation' || i.type === 'Quotation' || i.type === 'quote')
+    .map(i => ({ ...i, _sourceCollection: 'invoices' }));
+  const quoteProposals = (props.proposals || [])
+    .filter(p => !quoteInvoices.some(i => i.invoiceId === p.id || i.id === p.invoiceId))
+    .map(p => ({ ...p, _sourceCollection: 'proposals' }));
+  const quoteRows = [...quoteInvoices, ...quoteProposals]
+    .sort((a, b) => new Date(b.createdAt || b.date || 0) - new Date(a.createdAt || a.date || 0));
+  stats.quotes = quoteRows.filter(p => ['pending', 'Pending'].includes(p.status)).length;
+
+  const startDocument = (kind, invoiceType = 'unit') => {
+    const nextDraft = {
+      ...blankDraft(kind === 'receipt' ? 'receipt' : invoiceType),
+      documentKind: kind,
+      invoiceType: kind === 'receipt' ? 'receipt' : invoiceType,
+      status: kind === 'receipt' ? 'Paid' : 'Pending'
+    };
+    setDraft(nextDraft);
+    setShowAdd(kind === 'quotation' ? 'quotation' : kind === 'receipt' ? 'receipt' : 'invoice');
   };
 
   // --- SUB-VIEWS ---
@@ -244,7 +280,9 @@ export default function AdminFinancials({ invoices = [], transactions = [], clie
           </div>
           <div style={{ display: 'flex', gap: 12 }}>
              <button onClick={() => setTab('settings')} className="p-btn-light" style={{ gap: 8, display: 'flex', alignItems: 'center' }}><Settings size={16}/> Config</button>
-             <button onClick={() => { setDraft(blankDraft('unit')); setShowAdd('invoice'); }} className="p-btn-gold" style={{ gap: 8, display: 'flex', alignItems: 'center' }}><Plus size={16}/> New Document</button>
+             <button onClick={() => startDocument('quotation')} className="p-btn-light" style={{ gap: 8, display: 'flex', alignItems: 'center' }}><FileText size={16}/> Quote</button>
+             <button onClick={() => startDocument('receipt')} className="p-btn-light" style={{ gap: 8, display: 'flex', alignItems: 'center' }}><Receipt size={16}/> Sales Receipt</button>
+             <button onClick={() => startDocument('invoice')} className="p-btn-gold" style={{ gap: 8, display: 'flex', alignItems: 'center' }}><Plus size={16}/> Invoice</button>
           </div>
        </div>
 
@@ -278,8 +316,8 @@ export default function AdminFinancials({ invoices = [], transactions = [], clie
              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14 }}>
                 <PulseTargetCard label="VERIFIED CASH" value={formatMoney(stats.revenue, 'GHS')} target={finSettings.kpiTargets?.revenue ?? 500000} icon={<TrendingUp size={20}/>} color="#16A34A" trend={18} sub="Settled payments" />
                 <PulseTargetCard label="UNSETTLED CAPITAL" value={formatMoney(stats.pending, 'GHS')} target={finSettings.kpiTargets?.pending ?? 100000} icon={<Wallet size={20}/>} color={ac} trend={-5} sub="Active invoices" />
-                <PulseTargetCard label="OPEN TENDERS" value={stats.quotes} target={finSettings.kpiTargets?.quotes ?? 20} icon={<FileText size={20}/>} color="var(--accent-secondary)" trend={12} sub={`Value: ${formatMoney((props.proposals||[]).filter(p=>p.status==='Pending').reduce((a,b)=>a+(parseAmount(b.amount)||0),0),'GHS')}`} />
-                <PulseTargetCard label="CONVERSION RATE" value={`${stats.conversions}%`} target={finSettings.kpiTargets?.conversion ?? 90} icon={<ShieldCheck size={20}/>} color={ac} trend={4} sub="Quotation to Invoice" />
+                <PulseTargetCard label="OPEN TENDERS" value={stats.quotes} target={finSettings.kpiTargets?.quotes ?? 20} icon={<FileText size={20}/>} color="var(--accent-secondary)" trend={12} sub={`Value: ${formatMoney(quoteRows.filter(p=>['Pending','pending'].includes(p.status)).reduce((a,b)=>a+(parseAmount(b.amount)||0),0),'GHS')}`} />
+                <PulseTargetCard label="ONE-TIME SALES" value={formatMoney(stats.oneTimeSales, 'GHS')} target={finSettings.kpiTargets?.conversion ?? 90} icon={<ShieldCheck size={20}/>} color={ac} trend={4} sub={`${stats.receipts} receipts issued`} />
              </div>
 
              <div style={{ display: 'grid', gridTemplateColumns: '2fr 1.2fr', gap: 24 }}>
@@ -312,25 +350,32 @@ export default function AdminFinancials({ invoices = [], transactions = [], clie
                 <div className="p-card" style={{ padding: 24, background: `var(--accent-secondary)`, color: '#fff' }}>
                    <h3 className="lxfh" style={{ fontSize: 18, marginBottom: 20 }}>Document Generation</h3>
                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                      <button onClick={() => { setDraft(blankDraft('unit')); setShowAdd('invoice'); }} className="p-btn-gold" style={{ width: '100%', padding: 20, borderRadius: 20, display: 'flex', alignItems: 'center', gap: 14 }}>
+                      <button onClick={() => startDocument('invoice')} className="p-btn-gold" style={{ width: '100%', padding: 20, borderRadius: 20, display: 'flex', alignItems: 'center', gap: 14 }}>
                          <div style={{ width: 40, height: 40, borderRadius: 12, background: 'rgba(92, 58, 33, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Package size={20}/></div>
                          <div style={{ textAlign: 'left' }}>
                             <div style={{ fontSize: 14, fontWeight: 800 }}>Unit Item Invoice</div>
                             <div style={{ fontSize: 11, opacity: 0.7 }}>Products, glass units, accessories</div>
                          </div>
                       </button>
-                      <button onClick={() => { setDraft(blankDraft('project')); setShowAdd('invoice'); }} style={{ width: '100%', padding: 20, borderRadius: 20, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', display: 'flex', alignItems: 'center', gap: 14, cursor: 'pointer', transition: 'background 0.2s' }}>
+                      <button onClick={() => startDocument('invoice', 'project')} style={{ width: '100%', padding: 20, borderRadius: 20, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', display: 'flex', alignItems: 'center', gap: 14, cursor: 'pointer', transition: 'background 0.2s' }}>
                          <div style={{ width: 40, height: 40, borderRadius: 12, background: 'rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Briefcase size={20}/></div>
                          <div style={{ textAlign: 'left' }}>
                             <div style={{ fontSize: 14, fontWeight: 800 }}>Project Milestone</div>
                             <div style={{ fontSize: 11, opacity: 0.7 }}>Facade, interior finishing phases</div>
                          </div>
                       </button>
-                      <button onClick={() => { setDraft({...blankDraft('unit'), clientId: ''}); setShowAdd('quotation'); }} style={{ width: '100%', padding: 20, borderRadius: 20, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', display: 'flex', alignItems: 'center', gap: 14, cursor: 'pointer', transition: 'background 0.2s' }}>
+                      <button onClick={() => startDocument('quotation')} style={{ width: '100%', padding: 20, borderRadius: 20, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', display: 'flex', alignItems: 'center', gap: 14, cursor: 'pointer', transition: 'background 0.2s' }}>
                          <div style={{ width: 40, height: 40, borderRadius: 12, background: 'rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><FileText size={20}/></div>
                          <div style={{ textAlign: 'left' }}>
-                            <div style={{ fontSize: 14, fontWeight: 800 }}>Independent Quote / Receipt</div>
+                            <div style={{ fontSize: 14, fontWeight: 800 }}>One-Time Customer Quote</div>
                             <div style={{ fontSize: 11, opacity: 0.7 }}>For walk-ins and non-account holders</div>
+                         </div>
+                      </button>
+                      <button onClick={() => startDocument('receipt')} style={{ width: '100%', padding: 20, borderRadius: 20, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', display: 'flex', alignItems: 'center', gap: 14, cursor: 'pointer', transition: 'background 0.2s' }}>
+                         <div style={{ width: 40, height: 40, borderRadius: 12, background: 'rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Receipt size={20}/></div>
+                         <div style={{ textAlign: 'left' }}>
+                            <div style={{ fontSize: 14, fontWeight: 800 }}>Sales Receipt</div>
+                            <div style={{ fontSize: 11, opacity: 0.7 }}>Paid counter sale or direct purchase</div>
                          </div>
                       </button>
                       <div style={{ marginTop: 24, padding: 24, borderRadius: 20, background: `${ac}15`, textAlign: 'center', border: `1px solid ${ac}30` }}>
@@ -355,7 +400,7 @@ export default function AdminFinancials({ invoices = [], transactions = [], clie
                   </div>
                   <button
                     onClick={() => {
-                      const rows = (tab === 'sales' ? invoices : (props.proposals || []));
+                      const rows = (tab === 'sales' ? invoices : quoteRows);
                       if (!rows.length) return;
                       const data = rows.map(r => ({ id: r.id||'', client: r.client||'', date: r.date||'', currency: r.currency||'GHS', amount: r.amount||'', status: r.status||'' }));
                       const header = Object.keys(data[0]).join(',');
@@ -369,7 +414,7 @@ export default function AdminFinancials({ invoices = [], transactions = [], clie
                   >
                     <Download size={14} /> CSV
                   </button>
-                  <button onClick={() => { setDraft(blankDraft('unit')); setShowAdd(tab === 'sales' ? 'invoice' : 'quotation'); }} className="p-btn-dark" style={{ height: 40, padding: '0 20px', fontSize: 12 }}>+ Create New</button>
+                  <button onClick={() => startDocument(tab === 'sales' ? 'invoice' : 'quotation')} className="p-btn-dark" style={{ height: 40, padding: '0 20px', fontSize: 12 }}>+ Create New</button>
                </div>
             </div>
             <div className="p-scroll" style={{ overflowX: 'auto' }}>
@@ -380,21 +425,24 @@ export default function AdminFinancials({ invoices = [], transactions = [], clie
                      </tr>
                   </thead>
                   <tbody>
-                     {(tab === 'sales' ? invoices : (props.proposals || [])).length === 0 && (
+                     {(tab === 'sales' ? invoices : quoteRows).length === 0 && (
                        <tr><td colSpan={7}>
                          <EmptyState
                            icon={<Receipt size={28} />}
                            title={tab === 'sales' ? 'No invoices yet' : 'No quotations yet'}
                            description={tab === 'sales' ? 'Create your first invoice to start tracking revenue.' : 'Send a quotation to a client to begin a project.'}
-                           action={{ label: `+ Create ${tab === 'sales' ? 'Invoice' : 'Quotation'}`, onClick: () => { setDraft(blankDraft('unit')); setShowAdd(tab === 'sales' ? 'invoice' : 'quotation'); } }}
+                           action={{ label: `+ Create ${tab === 'sales' ? 'Invoice' : 'Quotation'}`, onClick: () => startDocument(tab === 'sales' ? 'invoice' : 'quotation') }}
                          />
                        </td></tr>
                      )}
-                     {(tab === 'sales' ? invoices : (props.proposals || [])).map(item => (
+                     {(tab === 'sales' ? invoices : quoteRows).map(item => (
                        <tr key={item.id} style={{ borderBottom: '1px solid var(--border)' }}>
                           <td style={{ padding: '20px 24px', fontSize: 11, fontWeight: 800, fontFamily: 'monospace', color: `var(--text-secondary)` }}>{(item.id || '').slice(0, 12).toUpperCase()}</td>
                           <td style={{ padding: '20px 24px' }}>
-                             <div style={{ fontSize: 14, fontWeight: 700 }}>{item.client || item.clientName}</div>
+                             <div style={{ fontSize: 14, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6 }}>
+                               {item.client || item.clientName}
+                               {item.version > 1 && <span style={{ fontSize: 10, background: 'var(--accent-secondary)', color: '#fff', padding: '2px 6px', borderRadius: 10 }}>v{item.version}</span>}
+                             </div>
                              <div style={{ fontSize: 11, color: `var(--text-secondary)` }}>{item.clientEmail || item.title || '—'}</div>
                           </td>
                           <td style={{ padding: '20px 24px', fontSize: 13 }}>{item.date}</td>
@@ -406,6 +454,18 @@ export default function AdminFinancials({ invoices = [], transactions = [], clie
                           <td style={{ padding: '20px 24px' }}>
                              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                                 <button onClick={() => setViewInvoice(item)} className="p-btn-light" style={{ width: 36, height: 36, padding: 0 }} title="View"><Eye size={16}/></button>
+                                {tab !== 'sales' && (
+                                   <button
+                                     onClick={() => {
+                                       const newDraft = { ...item, id: undefined, version: (item.version || 1) + 1, previousVersionId: item.id, date: new Date().toISOString().slice(0, 10), status: 'pending' };
+                                       setDraft(newDraft);
+                                       setShowAdd('quotation');
+                                     }}
+                                     className="p-btn-light" style={{ width: 36, height: 36, padding: 0 }} title="Create New Version"
+                                   >
+                                     <Layers size={15}/>
+                                   </button>
+                                )}
                                 {tab === 'sales' && props.updateInvoice && (
                                    <button
                                      onClick={() => {
@@ -432,6 +492,7 @@ export default function AdminFinancials({ invoices = [], transactions = [], clie
                                   onClick={() => {
                                     if (!window.confirm(`Delete this ${tab === 'sales' ? 'invoice' : 'quotation'}? This cannot be undone.`)) return;
                                     if (tab === 'sales') deleteInvoice?.(item.id);
+                                    else if (item._sourceCollection === 'invoices') deleteInvoice?.(item.id);
                                     else deleteProposal?.(item.id);
                                   }}
                                   title="Delete"
@@ -597,7 +658,7 @@ export default function AdminFinancials({ invoices = [], transactions = [], clie
 
        {/* INVOICE PREVIEW MODAL */}
        {showAdd && (
-         <Modal title={`New ${showAdd === 'invoice' ? 'Invoice / Receipt' : 'Quotation'}`} onClose={() => setShowAdd(null)}>
+         <Modal title={`New ${showAdd === 'receipt' ? 'Sales Receipt' : showAdd === 'invoice' ? 'Invoice' : 'Quotation'}`} onClose={() => setShowAdd(null)}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 450px', gap: 40 }}>
                <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
                   {/* Document type tabs */}
@@ -607,11 +668,29 @@ export default function AdminFinancials({ invoices = [], transactions = [], clie
                        { id: 'unit', label: 'Ad-hoc / Sales', icon: <Package size={15} /> },
                        { id: 'receipt', label: 'Sales Receipt', icon: <Receipt size={15} /> },
                      ].map(t => (
-                       <button key={t.id} onClick={() => setDraft({ ...draft, invoiceType: t.id })}
+                       <button key={t.id} onClick={() => setDraft({ ...draft, invoiceType: t.id, documentKind: t.id === 'receipt' ? 'receipt' : draft.documentKind, status: t.id === 'receipt' ? 'Paid' : draft.status, customerType: t.id === 'project' ? 'existing' : draft.customerType })}
                          style={{ flex: 1, minWidth: 120, padding: '12px 16px', borderRadius: 12, border: draft.invoiceType === t.id ? `2px solid ${ac}` : '1px solid var(--border-color)', background: draft.invoiceType === t.id ? `${ac}10` : '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 700 }}>
                          {t.icon} {t.label}
                        </button>
                      ))}
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
+                    {[
+                      { id: 'invoice', label: 'Invoice', icon: <Receipt size={14} /> },
+                      { id: 'receipt', label: 'Sales Receipt', icon: <CheckCircle size={14} /> },
+                      { id: 'quotation', label: 'Quote', icon: <FileText size={14} /> },
+                    ].map(kind => (
+                      <button
+                        key={kind.id}
+                        onClick={() => {
+                          setDraft({ ...draft, documentKind: kind.id, invoiceType: kind.id === 'receipt' ? 'receipt' : draft.invoiceType === 'receipt' ? 'unit' : draft.invoiceType, status: kind.id === 'receipt' ? 'Paid' : 'Pending' });
+                          setShowAdd(kind.id === 'quotation' ? 'quotation' : kind.id === 'receipt' ? 'receipt' : 'invoice');
+                        }}
+                        style={{ padding: '10px 12px', borderRadius: 12, border: draft.documentKind === kind.id ? `2px solid ${ac}` : '1px solid var(--border-color)', background: draft.documentKind === kind.id ? `${ac}10` : '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontSize: 12, fontWeight: 800 }}
+                      >
+                        {kind.icon} {kind.label}
+                      </button>
+                    ))}
                   </div>
 
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
@@ -631,8 +710,8 @@ export default function AdminFinancials({ invoices = [], transactions = [], clie
                             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                               <select className="p-inp" value={draft.clientId} onChange={e => {
                                 const c = dbClients.find(x => x.id === e.target.value);
-                                if (c) setDraft({ ...draft, clientId: c.id, clientName: c.name || c.title || '', clientEmail: c.email || '', clientPhone: c.phone || '' });
-                                else setDraft({ ...draft, clientId: '' });
+                                if (c) setDraft({ ...draft, customerType: 'existing', clientId: c.id, clientName: c.name || c.title || '', clientEmail: c.email || '', clientPhone: c.phone || '', clientCompany: c.company || '' });
+                                else setDraft({ ...draft, customerType: 'one-time', clientId: '' });
                               }}>
                                 <option value="">Walk-in / New client</option>
                                 {(dbClients || []).map(c => <option key={c.id} value={c.id}>{c.name || c.title}</option>)}
@@ -644,6 +723,11 @@ export default function AdminFinancials({ invoices = [], transactions = [], clie
                             <input className="p-inp" placeholder="Phone / WhatsApp" value={draft.clientPhone} onChange={e => setDraft({ ...draft, clientPhone: e.target.value })} />
                             <input className="p-inp" placeholder="Email (optional)" value={draft.clientEmail} onChange={e => setDraft({ ...draft, clientEmail: e.target.value })} />
                           </div>
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                            <input className="p-inp" placeholder="Company / project site (optional)" value={draft.clientCompany} onChange={e => setDraft({ ...draft, clientCompany: e.target.value })} />
+                            <input className="p-inp" placeholder="Tax ID / VAT (optional)" value={draft.clientTaxId} onChange={e => setDraft({ ...draft, clientTaxId: e.target.value })} />
+                          </div>
+                          <input className="p-inp" placeholder="Billing address (optional)" value={draft.clientAddress} onChange={e => setDraft({ ...draft, clientAddress: e.target.value })} />
                         </div>
                       )}
                       <PFormField label="Currency Selection">
@@ -659,7 +743,7 @@ export default function AdminFinancials({ invoices = [], transactions = [], clie
                   <div style={{ border: '1px solid var(--border-color)', borderRadius: 20, padding: 24, background: `var(--bg-primary)` }}>
                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
                         <h4 className="lxf" style={{ fontSize: 11, textTransform: 'uppercase', color: `var(--text-secondary)`, letterSpacing: 1 }}>Line Item Breakdown</h4>
-                        <button onClick={() => setDraft({...draft, items: [...draft.items, {id: Date.now(), desc:'', qty:1, rate:0, unit: draft.invoiceType === 'unit' ? 'pcs' : 'job'}]})} style={{ background: ac, border: 'none', color: '#fff', fontSize: 10, fontWeight: 800, cursor: 'pointer', padding: '6px 14px', borderRadius: 20 }}>+ ADD BLANK</button>
+                        <button onClick={() => setDraft({...draft, items: [...draft.items, {id: Date.now(), desc:'', qty:1, rate:0, unit: draft.invoiceType === 'unit' ? 'pcs' : 'job', discount: 0, total: 0}]})} style={{ background: ac, border: 'none', color: '#fff', fontSize: 10, fontWeight: 800, cursor: 'pointer', padding: '6px 14px', borderRadius: 20 }}>+ ADD LINE</button>
                      </div>
                      
                      {draft.invoiceType === 'unit' && (
@@ -676,7 +760,9 @@ export default function AdminFinancials({ invoices = [], transactions = [], clie
                                       img: p.img,
                                       qty: 1,
                                       rate: p.price || 0,
-                                      unit: 'pcs'
+                                      unit: 'pcs',
+                                      discount: 0,
+                                      total: p.price || 0
                                    };
                                    // If first item is empty, replace it
                                    if (draft.items.length === 1 && !draft.items[0].desc) {
@@ -701,11 +787,13 @@ export default function AdminFinancials({ invoices = [], transactions = [], clie
                      )}
 
                      {draft.items.map((it, idx) => (
-                       <div key={it.id} style={{ display: 'grid', gridTemplateColumns: `1fr 70px ${draft.invoiceType === 'unit' ? '70px' : ''} 120px 40px`, gap: 12, marginBottom: 12 }}>
+                       <div key={it.id} style={{ display: 'grid', gridTemplateColumns: `1fr 70px ${draft.invoiceType === 'unit' ? '70px' : ''} 110px 90px 100px 40px`, gap: 12, marginBottom: 12, alignItems: 'center' }}>
                           <input className="p-inp" placeholder="Description" value={it.desc} onChange={e => { const ni = [...draft.items]; ni[idx].desc = e.target.value; setDraft({...draft, items: ni}); }} />
                           <input className="p-inp" type="number" placeholder="Qty" value={it.qty} onChange={e => { const ni = [...draft.items]; ni[idx].qty = parseFloat(e.target.value); setDraft({...draft, items: ni}); }} />
                           {draft.invoiceType === 'unit' && <input className="p-inp" placeholder="Unit" value={it.unit} onChange={e => { const ni = [...draft.items]; ni[idx].unit = e.target.value; setDraft({...draft, items: ni}); }} />}
                           <input className="p-inp" type="number" placeholder="Rate" value={it.rate} onChange={e => { const ni = [...draft.items]; ni[idx].rate = parseFloat(e.target.value); setDraft({...draft, items: ni}); }} />
+                          <input className="p-inp" type="number" placeholder="Discount" value={it.discount || 0} onChange={e => { const ni = [...draft.items]; ni[idx].discount = parseFloat(e.target.value) || 0; setDraft({...draft, items: ni}); }} />
+                          <div style={{ fontSize: 12, fontWeight: 900, color: `var(--accent-secondary)`, textAlign: 'right' }}>{formatMoney(lineTotal(it), draft.currency)}</div>
                           <button onClick={() => setDraft({...draft, items: draft.items.filter(x => x.id !== it.id)})} style={{ background: 'none', border: 'none', color: '#ff4444', cursor: 'pointer', opacity: draft.items.length > 1 ? 1 : 0.2 }} disabled={draft.items.length <= 1}><Trash2 size={16}/></button>
                        </div>
                      ))}
@@ -797,7 +885,7 @@ export default function AdminFinancials({ invoices = [], transactions = [], clie
                             <Download size={16} /> Premium PDF Export
                          </button>
                         <button onClick={issueDocument} className="p-btn-dark" style={{ width: '100%', padding: 18, background: '#16A34A', border: 'none', borderRadius: 16, fontSize: 14, fontWeight: 800 }}>
-          Confirm & Issue — {draft.invoiceType === 'receipt' ? 'Sales Receipt' : showAdd === 'quotation' ? 'Quotation' : 'Invoice'}
+          Confirm & Issue — {draft.documentKind === 'receipt' ? 'Sales Receipt' : draft.documentKind === 'quotation' ? 'Quotation' : 'Invoice'}
         </button>
                       </div>
                   </div>

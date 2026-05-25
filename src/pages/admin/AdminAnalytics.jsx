@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
-import { Download, TrendingUp, Users, DollarSign, Activity } from 'lucide-react';
+import { Download, TrendingUp, Users, DollarSign, Activity, Receipt, FileText } from 'lucide-react';
 import { CLIENT_PROJECT_STAGES } from '../../data';
 
 function exportCSV(rows, filename) {
@@ -13,7 +13,7 @@ function exportCSV(rows, filename) {
   URL.revokeObjectURL(url);
 }
 
-export default function AdminAnalytics({ invoices = [], transactions = [], clients = [], brand }) {
+export default function AdminAnalytics({ invoices = [], transactions = [], clients = [], proposals = [], teamMembers = [], brand }) {
   const ac = brand?.color || `var(--accent-secondary)`;
 
   const currentYear = new Date().getFullYear();
@@ -81,6 +81,23 @@ export default function AdminAnalytics({ invoices = [], transactions = [], clien
       return a + Math.max(0, budget - paid);
     }, 0);
 
+  const moneyValue = (row) => parseFloat(String(row?.total ?? row?.amount ?? '0').replace(/[^0-9.]/g, '')) || 0;
+  const oneTimeRevenue = invoices
+    .filter(i => i.oneTimeClient || i.customerType === 'one-time' || (!i.projectId && !i.parentId && (i.type === 'Receipt' || i.documentKind === 'receipt')))
+    .reduce((a, b) => a + moneyValue(b), 0);
+  const projectRevenue = Math.max(0, totalRevenue - oneTimeRevenue);
+  const openQuoteValue = proposals
+    .filter(p => String(p.status || '').toLowerCase() === 'pending')
+    .reduce((a, b) => a + moneyValue(b), 0);
+  const paidInvoices = invoices.filter(i => String(i.status || '').toLowerCase() === 'paid').length;
+  const quoteConversion = proposals.length ? Math.round((paidInvoices / Math.max(1, proposals.length)) * 100) : 0;
+  const activeStaff = teamMembers.filter(m => m.status !== 'Inactive').length;
+  const workers = teamMembers.filter(m => m.role === 'worker' || ['Field Worker', 'Technician', 'Senior Technician'].includes(m.jobRole)).length;
+  const revenueMix = [
+    { name: 'Project Revenue', value: projectRevenue },
+    { name: 'One-Time Sales', value: oneTimeRevenue },
+  ].filter(row => row.value > 0);
+
   const COLORS = [ac, `var(--accent-secondary)`, `var(--text-secondary)`, `var(--text-secondary)`, '#607D8B', '#16A34A'];
 
   const handleExportRevenue = () => {
@@ -139,7 +156,10 @@ export default function AdminAnalytics({ invoices = [], transactions = [], clien
           { label: 'Total Revenue', value: `GH₵${totalRevenue.toLocaleString(undefined, { maximumFractionDigits: 0 })}`, icon: <DollarSign size={20} />, dark: true },
           { label: 'Outstanding', value: `GH₵${pendingRevenue.toLocaleString(undefined, { maximumFractionDigits: 0 })}`, icon: <TrendingUp size={20} /> },
           { label: 'Active Projects', value: clients.filter(c => (c.stageId || 0) < 7).length, icon: <Users size={20} /> },
-          { label: 'Total Projects', value: clients.length, icon: <Activity size={20} /> },
+          { label: 'Open Quotes', value: `GH₵${openQuoteValue.toLocaleString(undefined, { maximumFractionDigits: 0 })}`, icon: <FileText size={20} /> },
+          { label: 'One-Time Sales', value: `GH₵${oneTimeRevenue.toLocaleString(undefined, { maximumFractionDigits: 0 })}`, icon: <Receipt size={20} /> },
+          { label: 'Active Staff', value: activeStaff, icon: <Users size={20} /> },
+          { label: 'Field Workers', value: workers, icon: <Activity size={20} /> },
         ].map(card => (
           <div key={card.label} className="p-card" style={{ padding: 20, border: '1px solid var(--border-color)', background: card.dark ? `var(--accent-secondary)` : '#fff', color: card.dark ? '#fff' : `var(--accent-secondary)` }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
@@ -176,6 +196,38 @@ export default function AdminAnalytics({ invoices = [], transactions = [], clien
           <div style={{ display: 'flex', gap: 20, marginTop: 12, fontSize: 11, color: `var(--text-secondary)` }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><div style={{ width: 12, height: 2, background: ac }} /> Total Invoiced</div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><div style={{ width: 12, height: 2, background: '#16A34A', borderTop: '2px dashed #16A34A' }} /> Paid</div>
+          </div>
+        </div>
+
+        {/* REVENUE MIX */}
+        <div className="p-card" style={{ padding: 24, border: '1px solid var(--border-color)', background: '#fff' }}>
+          <h3 className="lxfh" style={{ fontSize: 16, marginBottom: 20 }}>Revenue Mix</h3>
+          {revenueMix.length > 0 ? (
+            <div style={{ width: '100%', height: 280 }}>
+              <ResponsiveContainer>
+                <PieChart>
+                  <Pie data={revenueMix} cx="50%" cy="50%" innerRadius={65} outerRadius={105} paddingAngle={5} dataKey="value" label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`} labelLine={false}>
+                    {revenueMix.map((_, index) => <Cell key={index} fill={index === 0 ? ac : '#16A34A'} />)}
+                  </Pie>
+                  <Tooltip formatter={(v) => `GH₵${Number(v).toLocaleString()}`} />
+                  <Legend />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          ) : (
+            <div style={{ height: 280, display: 'flex', alignItems: 'center', justifyContent: 'center', color: `var(--text-secondary)`, fontSize: 13 }}>
+              No paid revenue mix yet
+            </div>
+          )}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginTop: 12 }}>
+            <div style={{ padding: 14, background: `var(--bg-secondary)`, borderRadius: 12 }}>
+              <div style={{ fontSize: 10, fontWeight: 800, color: `var(--text-secondary)`, textTransform: 'uppercase' }}>Quote Conversion</div>
+              <div style={{ fontSize: 22, fontWeight: 900, color: `var(--accent-secondary)`, marginTop: 4 }}>{quoteConversion}%</div>
+            </div>
+            <div style={{ padding: 14, background: `var(--bg-secondary)`, borderRadius: 12 }}>
+              <div style={{ fontSize: 10, fontWeight: 800, color: `var(--text-secondary)`, textTransform: 'uppercase' }}>Open Quote Value</div>
+              <div style={{ fontSize: 22, fontWeight: 900, color: `var(--accent-secondary)`, marginTop: 4 }}>GH₵{openQuoteValue.toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>
+            </div>
           </div>
         </div>
 

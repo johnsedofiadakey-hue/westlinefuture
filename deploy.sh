@@ -18,7 +18,7 @@ if [ ! -f "dist$INDEX_SCRIPT" ]; then
 fi
 echo "    index.html references: $INDEX_SCRIPT ✓"
 
-echo "==> Deploying Firestore rules + Hosting..."
-firebase deploy --only hosting,firestore
+echo "==> Deploying Hosting + Firestore rules + Storage rules + Functions..."
+firebase deploy --only hosting,firestore:rules,storage,functions
 
 echo "==> Done."

@@ -5,6 +5,7 @@ import { getStorage } from "firebase/storage";
 import { getFunctions } from "firebase/functions";
 
 const env = import.meta.env;
+const isDevPhoneAuthTestMode = env.DEV && env.VITE_FIREBASE_PHONE_AUTH_TEST_MODE === 'true';
 const hasKeys = !!(
   env.VITE_FIREBASE_API_KEY &&
   env.VITE_FIREBASE_API_KEY !== 'undefined' &&
@@ -28,6 +29,11 @@ try {
   if (hasKeys) {
     app = initializeApp(firebaseConfig);
     auth = getAuth(app);
+    auth.useDeviceLanguage();
+    if (isDevPhoneAuthTestMode) {
+      auth.settings.appVerificationDisabledForTesting = true;
+      console.warn("Firebase Phone Auth test mode is enabled. Use only Firebase console test phone numbers locally.");
+    }
     db = getFirestore(app);
     storage = getStorage(app);
     functions = getFunctions(app);

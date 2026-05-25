@@ -13,6 +13,7 @@ import { FF as PFormField } from '../../components/Shared';
 import { uploadFile } from '../../lib/firebase';
 import { compressImage } from '../../lib/image-utils';
 import AdminShowcase from './AdminShowcase';
+import AdminProductSync from './AdminProductSync';
 import { DEFAULT_WORKFLOW, ABOUT_DATA, DEFAULT_HOME_SERVICES, DEFAULT_WHY_US, DEFAULT_STATS, ALL_SERVICES } from '../../data';
 
 function CMSBranding({ brand, onSave, ac, notify }) {
@@ -335,6 +336,18 @@ function CMSProducts({ ac, notify }) {
               </>
             )}
          </div>
+       </div>
+
+       <div style={{ padding: 18, background: 'linear-gradient(135deg, rgba(24,14,6,0.04), rgba(197,168,128,0.12))', border: '1px solid var(--border-color)', borderRadius: 18, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+         <div>
+           <div className="lxfh" style={{ fontSize: 16, color: `var(--accent-secondary)`, marginBottom: 4 }}>Supplier Website Scraping</div>
+           <div style={{ fontSize: 12, color: `var(--text-secondary)`, lineHeight: 1.6 }}>
+             Add Meijia VIP or future supplier links in Product Sync, then run the Cloud Run worker to populate this catalog.
+           </div>
+         </div>
+         <button onClick={() => window.location.assign('/admin/product-sync')} className="p-btn-gold lxf" style={{ padding: '11px 18px', borderRadius: 12, fontSize: 12, fontWeight: 900 }}>
+           Open Product Sync Settings
+         </button>
        </div>
 
        {view === 'cats' && (
@@ -1093,6 +1106,7 @@ export default function AdminCMS({ content, syncCMS, brand, onPreview, notify, .
     { id: 'whyus',        label: 'Why Us',       icon: <Star size={16} /> },
     { id: 'services',     label: 'Services',     icon: <Activity size={16} /> },
     { id: 'products',     label: 'Products',     icon: <Smartphone size={16} /> },
+    { id: 'productSync',  label: 'Product Sync', icon: <Layers size={16} /> },
     { id: 'gallery',      label: 'Portfolio',    icon: <ImgIcon size={16} /> },
     { id: 'showroom',     label: 'Showroom',     icon: <Sparkles size={16} /> },
     { id: 'workflow',     label: 'How We Work',  icon: <ClipboardList size={16} /> },
@@ -1110,6 +1124,7 @@ export default function AdminCMS({ content, syncCMS, brand, onPreview, notify, .
       case 'whyus':        return <CMSWhyUs whyUs={content?.whyUs} onSave={val => syncCMS('whyUs', val)} ac={ac} />;
       case 'services':     return <CMSServices services={content?.services} onSave={val => syncCMS('services', val)} ac={ac} notify={notify} />;
       case 'products':     return <CMSProducts products={content?.products} categories={content?.categories} onSave={val => syncCMS('products', val)} ac={ac} syncCMS={syncCMS} notify={notify} />;
+      case 'productSync':  return <AdminProductSync brand={brand} notify={notify} user={props.user} />;
       case 'gallery':      return <CMSGallery portfolio={content?.portfolio} onSave={val => syncCMS('portfolio', val)} ac={ac} notify={notify} />;
       case 'showroom':     return <CMSShowroom showcase={content?.showcase} onSave={val => syncCMS('showcase', val)} ac={ac} notify={notify} />;
       case 'about':        return <CMSAbout about={content?.about} onSave={val => syncCMS('about', val)} ac={ac} notify={notify} />;

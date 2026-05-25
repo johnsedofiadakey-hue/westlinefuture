@@ -19,6 +19,7 @@ import AdminFinancials from './admin/AdminFinancials';
 import AdminAnalytics from './admin/AdminAnalytics';
 import ProjectKanban from './admin/ProjectKanban';
 import AdminInstallations from './admin/AdminInstallations';
+import AdminProductSync from './admin/AdminProductSync';
 
 export default function AdminPortal({ user, onLogout, onPreview, content, setContent, staffMode = false, ...props }) {
   const location = useLocation();
@@ -123,6 +124,7 @@ export default function AdminPortal({ user, onLogout, onPreview, content, setCon
       case 'system': return <AdminSystem onReset={props.migrateToFirebase} syncCatalog={props.syncCatalog} {...common} />;
       case 'email': return <AdminEmailCenter {...common} convertInquiry={props.convertInquiryToProject} updateEmailStatus={props.updateEmailStatus} />;
       case 'analytics': return <AdminAnalytics {...common} />;
+      case 'product-sync': return <AdminProductSync {...common} />;
       default: return <AdminDashboard {...common} />;
     }
   };

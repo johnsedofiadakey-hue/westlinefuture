@@ -1,0 +1,19 @@
+{
+  "name": "westline-product-sync-worker",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Cloud Run Playwright worker for Westline Future product synchronization.",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node src/index.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "firebase-admin": "^13.10.0",
+    "playwright": "1.49.1"
+  },
+  "engines": {
+    "node": "20"
+  }
+}

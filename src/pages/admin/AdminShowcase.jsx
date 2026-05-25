@@ -1,21 +1,28 @@
 import React, { useState, useEffect } from 'react';
 import { db, storage } from '../../lib/firebase';
-import { collection, addDoc, getDocs, deleteDoc, doc, onSnapshot, serverTimestamp } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
-import { Trash2, Plus, Image as ImageIcon, MapPin, Type, Save, X, PlusCircle } from 'lucide-react';
+import { collection, addDoc, deleteDoc, doc, onSnapshot, serverTimestamp } from 'firebase/firestore';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { Trash2, Image as ImageIcon, MapPin, X, PlusCircle, Search, Copy, Eye, Star, ShieldCheck } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { DEFAULT_SCENES } from '../../data.jsx';
 
 export default function AdminShowcase({ brand, notify }) {
   const [scenes, setScenes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
-  const [newScene, setNewScene] = useState({ title: '', location: '', description: '', img: '', hotspots: [] });
+  const [newScene, setNewScene] = useState({ title: '', location: '', description: '', img: '', hotspots: [], category: 'Residential', audience: 'Client Presentation', status: 'Published', featured: false, clientVisible: true });
   const [uploading, setUploading] = useState(false);
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
 
   const ac = brand?.color || `var(--accent-secondary)`;
 
   useEffect(() => {
-    if (!db) return;
+    if (!db) {
+      setScenes(DEFAULT_SCENES.map(s => ({ ...s, status: 'Published', clientVisible: true, category: 'Demo Scene', audience: 'Client Presentation' })));
+      setLoading(false);
+      return;
+    }
     const unsub = onSnapshot(collection(db, 'showcase'), (snap) => {
       setScenes(snap.docs.map(d => ({ id: d.id, ...d.data() })));
       setLoading(false);
@@ -44,9 +51,13 @@ export default function AdminShowcase({ brand, notify }) {
   const saveScene = async () => {
     if (!newScene.img || !newScene.title) return notify('error', 'Title and Image required');
     try {
-      await addDoc(collection(db, 'showcase'), { ...newScene, createdAt: serverTimestamp() });
+      if (!db) {
+        setScenes(prev => [{ ...newScene, id: `local-${Date.now()}`, createdAt: new Date().toISOString() }, ...prev]);
+      } else {
+        await addDoc(collection(db, 'showcase'), { ...newScene, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
+      }
       setShowAdd(false);
-      setNewScene({ title: '', location: '', description: '', img: '', hotspots: [] });
+      setNewScene({ title: '', location: '', description: '', img: '', hotspots: [], category: 'Residential', audience: 'Client Presentation', status: 'Published', featured: false, clientVisible: true });
       notify('success', 'Scene added to showroom');
     } catch (err) {
       notify('error', 'Save failed');
@@ -56,7 +67,11 @@ export default function AdminShowcase({ brand, notify }) {
   const deleteScene = async (scene) => {
     if (!window.confirm("Delete this scene from the showroom?")) return;
     try {
-      await deleteDoc(doc(db, 'showcase', scene.id));
+      if (!db || String(scene.id || '').startsWith('local-') || String(scene.id || '').startsWith('def-')) {
+        setScenes(prev => prev.filter(s => s.id !== scene.id));
+      } else {
+        await deleteDoc(doc(db, 'showcase', scene.id));
+      }
       // Optionally delete from storage if we have the path, but URL is enough for now
       notify('success', 'Scene removed');
     } catch (err) {
@@ -74,12 +89,33 @@ export default function AdminShowcase({ brand, notify }) {
     setNewScene(prev => ({ ...prev, hotspots: [...prev.hotspots, h] }));
   };
 
+  const filteredScenes = scenes.filter(scene => {
+    if (statusFilter !== 'all' && (scene.status || 'Published') !== statusFilter) return false;
+    if (!search.trim()) return true;
+    const q = search.toLowerCase();
+    return [scene.title, scene.location, scene.description, scene.category, scene.audience]
+      .some(v => String(v || '').toLowerCase().includes(q));
+  });
+
+  const stats = {
+    total: scenes.length,
+    published: scenes.filter(s => (s.status || 'Published') === 'Published').length,
+    featured: scenes.filter(s => s.featured).length,
+    hotspots: scenes.reduce((acc, s) => acc + (s.hotspots?.length || 0), 0),
+  };
+
+  const copyShowcaseLink = async (scene) => {
+    const url = `${window.location.origin}/showcase${scene.id ? `?scene=${scene.id}` : ''}`;
+    await navigator.clipboard.writeText(url);
+    notify?.('success', 'Showcase link copied');
+  };
+
   return (
-    <div style={{ padding: 32, maxWidth: 1200, margin: '0 auto' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 40 }}>
+    <div style={{ padding: 32, maxWidth: 1280, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 24 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
           <h1 style={{ fontSize: 32, fontWeight: 800, margin: '0 0 8px' }}>Showroom Manager</h1>
-          <p style={{ color: '#888' }}>Upload and manage immersive scenes for the client showcase.</p>
+          <p style={{ color: '#888', margin: 0 }}>Manage immersive sales scenes, technical hotspots, and client-ready presentation assets.</p>
         </div>
         <button 
           onClick={() => setShowAdd(true)} 
@@ -90,14 +126,49 @@ export default function AdminShowcase({ brand, notify }) {
         </button>
       </div>
 
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14 }}>
+        {[
+          { label: 'Scenes', value: stats.total, icon: <ImageIcon size={18} />, color: `var(--accent-secondary)` },
+          { label: 'Published', value: stats.published, icon: <ShieldCheck size={18} />, color: '#16A34A' },
+          { label: 'Featured', value: stats.featured, icon: <Star size={18} />, color: ac },
+          { label: 'Hotspots', value: stats.hotspots, icon: <MapPin size={18} />, color: '#7C3AED' },
+        ].map(stat => (
+          <div key={stat.label} className="p-card" style={{ padding: 18, display: 'flex', alignItems: 'center', gap: 14, border: '1px solid var(--border-color)' }}>
+            <div style={{ width: 40, height: 40, borderRadius: 12, background: `${stat.color}12`, color: stat.color, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{stat.icon}</div>
+            <div>
+              <div style={{ fontSize: 22, fontWeight: 900, color: stat.color }}>{stat.value}</div>
+              <div style={{ fontSize: 10, fontWeight: 900, color: `var(--text-secondary)`, textTransform: 'uppercase', letterSpacing: '.08em' }}>{stat.label}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ background: '#fff', border: '1px solid var(--border-color)', borderRadius: 18, padding: 16, display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+        <div style={{ position: 'relative', flex: '1 1 280px' }}>
+          <Search size={14} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: `var(--text-secondary)` }} />
+          <input className="p-inp" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search scenes, location, category..." style={{ width: '100%', height: 40, paddingLeft: 36, boxSizing: 'border-box' }} />
+        </div>
+        <select className="p-inp" value={statusFilter} onChange={e => setStatusFilter(e.target.value)} style={{ width: 170, height: 40, fontSize: 12 }}>
+          <option value="all">All statuses</option>
+          <option value="Published">Published</option>
+          <option value="Draft">Draft</option>
+          <option value="Internal">Internal</option>
+        </select>
+        <div style={{ fontSize: 11, color: `var(--text-secondary)`, fontWeight: 800 }}>{filteredScenes.length} visible assets</div>
+      </div>
+
       {loading ? (
         <div style={{ textAlign: 'center', padding: 100, color: '#888' }}>Loading showroom data...</div>
-      ) : scenes.length > 0 ? (
+      ) : filteredScenes.length > 0 ? (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))', gap: 24 }}>
-          {scenes.map(s => (
+          {filteredScenes.map(s => (
             <div key={s.id} className="p-card" style={{ overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
               <div style={{ height: 200, position: 'relative' }}>
                 <img src={s.img} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt={s.title} />
+                <div style={{ position: 'absolute', left: 12, top: 12, display: 'flex', gap: 6 }}>
+                  <span style={{ background: (s.status || 'Published') === 'Published' ? '#16A34A' : (s.status || '') === 'Internal' ? '#7C3AED' : '#D97706', color: '#fff', padding: '4px 8px', borderRadius: 999, fontSize: 10, fontWeight: 900 }}>{s.status || 'Published'}</span>
+                  {s.featured && <span style={{ background: ac, color: `var(--accent-secondary)`, padding: '4px 8px', borderRadius: 999, fontSize: 10, fontWeight: 900 }}>Featured</span>}
+                </div>
                 <button 
                   onClick={() => deleteScene(s)}
                   style={{ position: 'absolute', top: 12, right: 12, background: 'rgba(239, 68, 68, 0.9)', color: '#fff', border: 'none', padding: 8, borderRadius: 8, cursor: 'pointer' }}
@@ -106,13 +177,24 @@ export default function AdminShowcase({ brand, notify }) {
                 </button>
               </div>
               <div style={{ padding: 20 }}>
-                <div style={{ color: ac, fontSize: 10, fontWeight: 900, textTransform: 'uppercase', marginBottom: 4 }}>{s.location}</div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', marginBottom: 4 }}>
+                  <div style={{ color: ac, fontSize: 10, fontWeight: 900, textTransform: 'uppercase' }}>{s.location}</div>
+                  <div style={{ fontSize: 10, color: `var(--text-secondary)`, fontWeight: 800 }}>{s.category || 'Scene'}</div>
+                </div>
                 <h3 style={{ margin: '0 0 8px', fontSize: 18, fontWeight: 800 }}>{s.title}</h3>
                 <p style={{ fontSize: 12, color: '#666', lineHeight: 1.5, marginBottom: 16 }}>{s.description}</p>
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                   {s.hotspots?.map((h, i) => (
                     <span key={i} style={{ background: '#F5F5F5', padding: '4px 8px', borderRadius: 6, fontSize: 10, fontWeight: 700 }}>{h.title}</span>
                   ))}
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 18 }}>
+                  <button onClick={() => window.open(`/showcase?scene=${s.id}`, '_blank')} style={{ height: 38, borderRadius: 10, border: '1px solid var(--border-color)', background: '#fff', fontSize: 11, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                    <Eye size={13} /> Preview
+                  </button>
+                  <button onClick={() => copyShowcaseLink(s)} style={{ height: 38, borderRadius: 10, border: '1px solid var(--border-color)', background: `var(--bg-secondary)`, fontSize: 11, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                    <Copy size={13} /> Copy Link
+                  </button>
                 </div>
               </div>
             </div>
@@ -154,6 +236,23 @@ export default function AdminShowcase({ brand, notify }) {
                       <input value={newScene.title} onChange={e => setNewScene({...newScene, title: e.target.value})} placeholder="Project Title" className="p-inp" style={{ marginBottom: 12 }} />
                       <input value={newScene.location} onChange={e => setNewScene({...newScene, location: e.target.value})} placeholder="Location" className="p-inp" style={{ marginBottom: 12 }} />
                       <textarea value={newScene.description} onChange={e => setNewScene({...newScene, description: e.target.value})} rows={4} className="p-inp" placeholder="Describe the architectural intent and material excellence..." style={{ resize: 'none' }} />
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 12 }}>
+                        <select className="p-inp" value={newScene.category} onChange={e => setNewScene({ ...newScene, category: e.target.value })}>
+                          {['Residential', 'Commercial', 'Hospitality', 'Factory', 'Showroom', 'Demo Scene'].map(v => <option key={v}>{v}</option>)}
+                        </select>
+                        <select className="p-inp" value={newScene.status} onChange={e => setNewScene({ ...newScene, status: e.target.value })}>
+                          {['Published', 'Draft', 'Internal'].map(v => <option key={v}>{v}</option>)}
+                        </select>
+                      </div>
+                      <input value={newScene.audience} onChange={e => setNewScene({...newScene, audience: e.target.value})} placeholder="Audience, e.g. Client Presentation" className="p-inp" style={{ marginTop: 12 }} />
+                      <div style={{ display: 'flex', gap: 16, marginTop: 14, flexWrap: 'wrap' }}>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, fontWeight: 800, color: `var(--text-secondary)` }}>
+                          <input type="checkbox" checked={newScene.clientVisible} onChange={e => setNewScene({ ...newScene, clientVisible: e.target.checked })} /> Client visible
+                        </label>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, fontWeight: 800, color: `var(--text-secondary)` }}>
+                          <input type="checkbox" checked={newScene.featured} onChange={e => setNewScene({ ...newScene, featured: e.target.checked })} /> Featured
+                        </label>
+                      </div>
                    </div>
 
                    <div>

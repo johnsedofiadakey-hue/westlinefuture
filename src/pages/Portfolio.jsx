@@ -87,7 +87,7 @@ const ProjectDetail = ({ project, onClose, ac, navigate, mob }) => {
           <ArrowLeft size={18} /> BACK TO MASTERPIECES
         </button>
         <div style={{ display: 'flex', gap: 12 }}>
-           <button onClick={() => navigate('/?page=contact')} style={{ padding: '8px 20px', background: ac, color: '#fff', border: 'none', borderRadius: 100, fontSize: 11, fontWeight: 800, cursor: 'pointer' }}>REQUEST ESTIMATE</button>
+           <button onClick={() => navigate('/?page=contact&subject=Case Study Consultation')} style={{ padding: '8px 20px', background: ac, color: '#fff', border: 'none', borderRadius: 100, fontSize: 11, fontWeight: 800, cursor: 'pointer' }}>PLAN SIMILAR PROJECT</button>
            <button onClick={onClose} style={{ padding: 8, background: '#F5F5F5', borderRadius: '50%', border: 'none', cursor: 'pointer' }}><X size={18} /></button>
         </div>
       </nav>
@@ -177,12 +177,12 @@ const ProjectDetail = ({ project, onClose, ac, navigate, mob }) => {
                     ))}
                  </div>
                  <button 
-                   onClick={() => navigate('/?page=contact')}
+                   onClick={() => navigate(`/?page=contact&subject=Similar Project: ${project.title}`)}
                    style={{ width: '100%', marginTop: 32, padding: '20px', background: DARK_TEXT, color: '#fff', border: 'none', borderRadius: 16, fontWeight: 800, cursor: 'pointer', fontSize: 13, transition: 'transform 0.2s' }}
                    onMouseEnter={e => e.target.style.transform = 'scale(1.02)'}
                    onMouseLeave={e => e.target.style.transform = 'scale(1)'}
                  >
-                    PROCURE SIMILAR SYSTEM
+                    PLAN SIMILAR PROJECT
                  </button>
               </div>
            </div>
@@ -232,8 +232,8 @@ export default function Portfolio({ brand, user, onPortal, setPage, content }) {
         
         {/* Intro */}
         <div style={{ marginBottom: mob ? 40 : 80 }}>
-           <h1 style={{ fontSize: mob ? 40 : 96, fontWeight: 800, letterSpacing: '-0.05em', margin: '0 0 24px', lineHeight: 1 }}>Selected <br/><span style={{ color: ac }}>Masterpieces.</span></h1>
-           <p style={{ fontSize: mob ? 16 : 20, color: 'rgba(92, 58, 33,0.5)', maxWidth: 600 }}>A collection of our most ambitious structural glass and interior finishing projects worldwide.</p>
+           <h1 style={{ fontSize: mob ? 40 : 96, fontWeight: 800, letterSpacing: '-0.05em', margin: '0 0 24px', lineHeight: 1 }}>Selected <br/><span style={{ color: ac }}>Case Studies.</span></h1>
+           <p style={{ fontSize: mob ? 16 : 20, color: 'rgba(92, 58, 33,0.5)', maxWidth: 660 }}>Review completed work, then start a structured brief so Westline can price the design, sourcing, logistics, and installation path properly.</p>
         </div>
 
         {/* Filter */}

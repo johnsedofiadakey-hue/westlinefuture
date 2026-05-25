@@ -15,6 +15,10 @@ import { HERO_SLIDES, ABOUT_DATA } from '../data';
 const ContactPage = lazy(() => import('./ContactPage'));
 const AboutPage = lazy(() => import('./AboutPage'));
 const ServicesPage = lazy(() => import('./ServicesPage'));
+const ProductsHub = lazy(() => import('./ProductsHub'));
+const Portfolio = lazy(() => import('./Portfolio'));
+const Showcase = lazy(() => import('./Showcase'));
+const WorkflowManualPage = lazy(() => import('./WorkflowManualPage'));
 
 import { useWindowWidth, isMob, LIGHT_BG, DARK_TEXT, AC } from './sharedHelpers';
 
@@ -42,7 +46,7 @@ export function Hero({ slides, brand, navigate, setPage }) {
   }, []);
 
   return (
-    <section style={{ height: '100vh', position: 'relative', background: LIGHT_BG, overflow: 'hidden' }}>
+    <section style={{ minHeight: mob ? '92vh' : '94vh', position: 'relative', background: LIGHT_BG, overflow: 'hidden' }}>
       
       {/* Background Video */}
       <video
@@ -68,7 +72,7 @@ export function Hero({ slides, brand, navigate, setPage }) {
           }}>
             <div style={{ maxWidth: 1400, margin: '0 auto', width: '100%' }}>
               <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.8 }}>
-                <span style={{ fontSize: 10, fontWeight: 800, color: ac, letterSpacing: '0.4em', textTransform: 'uppercase', marginBottom: 24, display: 'block' }}>ESTABLISHED PRECISION</span>
+                <span style={{ fontSize: 10, fontWeight: 800, color: ac, letterSpacing: '0.4em', textTransform: 'uppercase', marginBottom: 24, display: 'block' }}>DESIGN • SOURCING • INSTALLATION</span>
                 <h1 style={{ 
                   fontSize: mob ? 'clamp(28px, 8vw, 40px)' : 'clamp(64px, 8vw, 120px)', 
                   fontWeight: 800, color: DARK_TEXT, lineHeight: 1, marginBottom: mob ? 12 : 40, letterSpacing: '-0.04em', maxWidth: 1000,
@@ -89,7 +93,7 @@ export function Hero({ slides, brand, navigate, setPage }) {
                   </p>
                 )}
                 <div style={{ display: 'flex', gap: mob ? 10 : 16, flexWrap: 'nowrap', marginTop: 8 }}>
-                  <button onClick={() => navigate('/products')} style={{ flex: mob ? 1 : 'initial', padding: mob ? '14px 12px' : '18px 36px', background: DARK_TEXT, color: '#fff', borderRadius: 12, border: 'none', fontWeight: 800, cursor: 'pointer', boxShadow: '0 10px 30px rgba(0,0,0,0.1)', fontSize: mob ? 10 : 14, textTransform: 'uppercase', letterSpacing: '0.1em', transition: 'all 0.3s', whiteSpace: 'nowrap' }} className="hover-lift">Browse Catalog</button>
+                  <button onClick={() => navigate('/?page=contact')} style={{ flex: mob ? 1 : 'initial', padding: mob ? '14px 12px' : '18px 36px', background: DARK_TEXT, color: '#fff', borderRadius: 12, border: 'none', fontWeight: 800, cursor: 'pointer', boxShadow: '0 10px 30px rgba(0,0,0,0.1)', fontSize: mob ? 10 : 14, textTransform: 'uppercase', letterSpacing: '0.1em', transition: 'all 0.3s', whiteSpace: 'nowrap' }} className="hover-lift">Start Project Brief</button>
                   <button onClick={() => navigate('/workflow')} style={{ flex: mob ? 1 : 'initial', padding: mob ? '14px 12px' : '18px 36px', background: 'rgba(255,255,255,0.95)', color: DARK_TEXT, borderRadius: 12, border: '1px solid rgba(0,0,0,0.1)', backdropFilter: 'blur(10px)', fontWeight: 700, cursor: 'pointer', fontSize: mob ? 10 : 14, textTransform: 'uppercase', letterSpacing: '0.1em', transition: 'all 0.3s', whiteSpace: 'nowrap' }} className="hover-lift">How We Work</button>
                 </div>
 
@@ -100,6 +104,133 @@ export function Hero({ slides, brand, navigate, setPage }) {
           </div>
         </div>
       ))}
+    </section>
+  );
+}
+
+const CLIENT_JOURNEY = [
+  { n: '01', title: 'Project Brief', body: 'Share the site, scope, budget range, preferred finish, and timeline so the team can qualify the request properly.', icon: <Send size={18} /> },
+  { n: '02', title: 'Paid CAD / 3D Design', body: 'A separate rendering invoice unlocks the private design package. The project quote comes after design approval.', icon: <Palette size={18} /> },
+  { n: '03', title: 'Final Quote Approval', body: 'Westline issues a versioned quote based on the approved drawing, with revisions and scope changes tracked.', icon: <CreditCard size={18} /> },
+  { n: '04', title: 'Procure, Deliver, Install', body: 'Materials, logistics, installation updates, documents, payments, and approvals move through the client portal.', icon: <Truck size={18} /> },
+];
+
+function ProcessSnapshot({ brand, navigate }) {
+  const ac = brand.color || AC;
+  const winW = useWindowWidth();
+  const mob = isMob(winW);
+
+  return (
+    <section style={{ padding: mob ? '72px 24px' : '110px 5vw', background: '#fff' }}>
+      <div style={{ maxWidth: 1400, margin: '0 auto' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: mob ? '1fr' : '0.8fr 1.2fr', gap: mob ? 40 : 72, alignItems: 'start' }}>
+          <div>
+            <span style={{ color: ac, fontSize: 10, fontWeight: 800, letterSpacing: '0.3em', textTransform: 'uppercase' }}>THE WESTLINE METHOD</span>
+            <h2 style={{ fontSize: mob ? 34 : 58, fontWeight: 800, letterSpacing: '-0.04em', margin: '16px 0 20px', color: DARK_TEXT, lineHeight: 1.05 }}>
+              A project system, not just a contractor.
+            </h2>
+            <p style={{ fontSize: 15, lineHeight: 1.8, color: 'rgba(24,14,6,0.62)', margin: '0 0 28px' }}>
+              Every serious project moves through a controlled journey: intake, paid design access, design approval, quote approval, deposit, production, logistics, installation, inspection, and handover.
+            </p>
+            <button
+              onClick={() => navigate('/workflow')}
+              style={{ padding: '15px 26px', background: DARK_TEXT, color: '#fff', border: 'none', borderRadius: 12, fontWeight: 800, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 8 }}
+            >
+              View Full Workflow <ChevronRight size={15} />
+            </button>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: mob ? '1fr' : '1fr 1fr', gap: 16 }}>
+            {CLIENT_JOURNEY.map(step => (
+              <div key={step.n} style={{ padding: mob ? 24 : 30, background: `var(--bg-secondary)`, border: '1px solid rgba(0,0,0,0.05)', borderRadius: 18 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 22 }}>
+                  <span style={{ color: ac, fontWeight: 900, fontSize: 11, letterSpacing: '0.12em' }}>{step.n}</span>
+                  <div style={{ width: 42, height: 42, borderRadius: 12, background: '#fff', color: ac, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{step.icon}</div>
+                </div>
+                <h3 style={{ margin: '0 0 10px', fontSize: 18, color: DARK_TEXT, fontWeight: 800 }}>{step.title}</h3>
+                <p style={{ margin: 0, fontSize: 13, lineHeight: 1.7, color: 'rgba(24,14,6,0.58)' }}>{step.body}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function RenderingAccessSection({ brand, navigate }) {
+  const ac = brand.color || AC;
+  const winW = useWindowWidth();
+  const mob = isMob(winW);
+
+  return (
+    <section style={{ padding: mob ? '76px 24px' : '120px 5vw', background: `var(--accent-secondary)`, color: '#fff' }}>
+      <div style={{ maxWidth: 1320, margin: '0 auto', display: 'grid', gridTemplateColumns: mob ? '1fr' : '1fr 1fr', gap: mob ? 36 : 72, alignItems: 'center' }}>
+        <div>
+          <span style={{ color: `var(--accent-primary)`, fontSize: 10, fontWeight: 800, letterSpacing: '0.3em', textTransform: 'uppercase' }}>DESIGN BEFORE QUOTATION</span>
+          <h2 style={{ fontSize: mob ? 34 : 58, lineHeight: 1.05, margin: '16px 0 20px', letterSpacing: '-0.04em' }}>
+            Rendering access is controlled and paid separately.
+          </h2>
+          <p style={{ fontSize: 15, lineHeight: 1.8, color: 'rgba(255,255,255,0.68)', margin: '0 0 28px' }}>
+            The CAD/3D design fee is not part of the final project sum. It unlocks the rendering package for review, comments, revisions, and approval before the final project quote is prepared.
+          </p>
+          <button
+            onClick={() => navigate('/?page=contact&subject=Rendering Consultation')}
+            style={{ padding: '16px 28px', background: `var(--accent-primary)`, color: DARK_TEXT, border: 'none', borderRadius: 12, fontWeight: 900, cursor: 'pointer' }}
+          >
+            Start With A Design Brief
+          </button>
+        </div>
+        <div style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 24, padding: mob ? 24 : 34 }}>
+          {[
+            ['Private upload', 'Admin uploads rendering files into a locked package.'],
+            ['Separate invoice', 'Client pays the CAD/3D rendering fee before access.'],
+            ['Review & revise', 'Client comments, requests changes, or approves the final version.'],
+            ['Quote after approval', 'The actual project quote is based on the approved design version.'],
+          ].map(([title, body]) => (
+            <div key={title} style={{ display: 'flex', gap: 16, padding: '18px 0', borderBottom: title === 'Quote after approval' ? 'none' : '1px solid rgba(255,255,255,0.08)' }}>
+              <CheckCircle size={18} color={ac} style={{ marginTop: 2, flexShrink: 0 }} />
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 800, marginBottom: 4 }}>{title}</div>
+                <div style={{ fontSize: 13, lineHeight: 1.6, color: 'rgba(255,255,255,0.58)' }}>{body}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function PortalPromise({ brand, navigate }) {
+  const ac = brand.color || AC;
+  const winW = useWindowWidth();
+  const mob = isMob(winW);
+  const items = ['Locked design packages', 'Quote approvals', 'Invoices and receipts', 'Procurement updates', 'Shipping and delivery', 'Installation photos', 'Inspection sign-off', 'Handover documents'];
+
+  return (
+    <section style={{ padding: mob ? '76px 24px' : '120px 5vw', background: `var(--bg-primary)` }}>
+      <div style={{ maxWidth: 1200, margin: '0 auto', textAlign: 'center' }}>
+        <span style={{ color: ac, fontSize: 10, fontWeight: 800, letterSpacing: '0.3em', textTransform: 'uppercase' }}>CLIENT PORTAL INCLUDED</span>
+        <h2 style={{ fontSize: mob ? 34 : 56, lineHeight: 1.08, margin: '16px auto 18px', color: DARK_TEXT, letterSpacing: '-0.04em', maxWidth: 760 }}>
+          Clients see progress, payments, documents, and approvals in one place.
+        </h2>
+        <p style={{ fontSize: 15, color: 'rgba(24,14,6,0.6)', lineHeight: 1.8, maxWidth: 680, margin: '0 auto 40px' }}>
+          The public promise matches the operating system behind the scenes: fewer loose chats, fewer missing approvals, and a clearer record of every decision.
+        </p>
+        <div style={{ display: 'grid', gridTemplateColumns: mob ? '1fr 1fr' : 'repeat(4, 1fr)', gap: 12, textAlign: 'left' }}>
+          {items.map(item => (
+            <div key={item} style={{ padding: '16px 18px', borderRadius: 14, background: '#fff', border: '1px solid rgba(0,0,0,0.05)', fontSize: 13, fontWeight: 800, color: DARK_TEXT }}>
+              <Check size={14} color={ac} style={{ marginRight: 8, verticalAlign: '-2px' }} />{item}
+            </div>
+          ))}
+        </div>
+        <button
+          onClick={() => navigate('/?page=contact')}
+          style={{ marginTop: 36, padding: '16px 34px', background: DARK_TEXT, color: '#fff', border: 'none', borderRadius: 14, fontWeight: 900, cursor: 'pointer' }}
+        >
+          Begin Intake
+        </button>
+      </div>
     </section>
   );
 }
@@ -352,17 +483,19 @@ function TestimonialsSection({ brand, testimonials: propTestimonials, cmsTestimo
 export default function PublicSite({ brand, setPage, page, onPortal, user, content, navigate, submitContact, testimonials = [] }) {
   const [searchParams] = useSearchParams();
   const urlPage = searchParams.get('page');
-  const p = urlPage || page || 'home';
+  const rawPage = urlPage || page || 'home';
+  const p = rawPage === 'showroom' ? 'showcase' : rawPage;
   const [menuOpen, setMenuOpen] = useState(false);
   const winW = useWindowWidth();
   const mob = isMob(winW);
 
   useEffect(() => {
     if (urlPage) {
-      if (['products', 'showcase', 'portfolio'].includes(urlPage)) {
-        navigate('/' + urlPage);
+      const normalizedUrlPage = urlPage === 'showroom' ? 'showcase' : urlPage;
+      if (['products', 'showcase', 'portfolio'].includes(normalizedUrlPage)) {
+        navigate('/' + normalizedUrlPage);
       } else if (setPage) {
-        setPage(urlPage);
+        setPage(normalizedUrlPage);
       }
     }
   }, [urlPage, navigate, setPage]);
@@ -382,8 +515,11 @@ export default function PublicSite({ brand, setPage, page, onPortal, user, conte
         {mob
           ? <StatsBarMobile brand={brand} stats={content?.stats} />
           : <StatsBar brand={brand} stats={content?.stats} />}
+        <ProcessSnapshot brand={brand} navigate={navigate} />
         <ServicesPreview brand={brand} navigate={navigate} services={content?.homeServices || content?.services} />
+        <RenderingAccessSection brand={brand} navigate={navigate} />
         <WhyWestline brand={brand} navigate={navigate} reasons={content?.whyUs} />
+        <PortalPromise brand={brand} navigate={navigate} />
         <TestimonialsSection brand={brand} testimonials={testimonials} cmsTestimonials={content?.testimonials} />
         <section style={{ padding: mob ? '80px 24px' : '120px 5vw', background: `var(--bg-secondary)`, color: `var(--text-primary)`, textAlign: 'center' }}>
           <div style={{ maxWidth: 700, margin: '0 auto' }}>
@@ -454,6 +590,12 @@ export default function PublicSite({ brand, setPage, page, onPortal, user, conte
     if (p === 'workflow') return (
       <Suspense fallback={<div style={{ padding: 100, textAlign: 'center' }}>Loading Workflow...</div>}>
         <WorkflowManualPage brand={brand} setPage={setPage} onPortal={onPortal} user={user} navigate={navigate} context={{ content }} />
+      </Suspense>
+    );
+
+    if (p === 'products') return (
+      <Suspense fallback={<div style={{ padding: 100, textAlign: 'center' }}>Loading Products...</div>}>
+        <ProductsHub brand={brand} user={user} onPortal={onPortal} setPage={setPage} content={content} />
       </Suspense>
     );
 

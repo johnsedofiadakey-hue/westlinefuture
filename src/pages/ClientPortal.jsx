@@ -16,6 +16,8 @@ import {
   collection, onSnapshot, query, where, orderBy, limit, addDoc, serverTimestamp
 } from 'firebase/firestore';
 import { usePaystackPayment } from 'react-paystack';
+import ClientRenderingVault from '../components/ClientRenderingVault';
+import UnifiedPaymentGateway from '../components/UnifiedPaymentGateway';
 
 const AC = `var(--accent-secondary)`;
 
@@ -378,6 +380,197 @@ function downloadInvoicePDF(invoice, project, client, brand) {
   }, brand);
 }
 
+function printSignedContractDoc(project, user, brand) {
+  const theme = {
+    primary: '#4A3B32',     // Dark espresso brown
+    secondary: '#8C6C52',   // Mid-tone warm brown
+    accent: '#C5A880',      // Rich beige gold
+    bg: '#FDFBF7',          // Pristine cream base
+    surface: '#F4EFE6',     // Light beige for table headers / blocks
+    textMuted: '#716259'    // Muted brown for subtext
+  };
+
+  const co = brand?.name || 'Westline Future Ltd.';
+  const addr = brand?.address || 'International';
+  const phone = brand?.phone || '';
+  const email = brand?.email || 'info@westlinefuture.com';
+  const logoUrl = brand?.logo || '';
+  const logoHtml = logoUrl
+    ? `<img src="${logoUrl}" style="height:60px;object-fit:contain;display:block;" alt="${co}" />`
+    : `<div style="display:flex;flex-direction:column;line-height:1;gap:2px;">
+         <div style="font-size:28px;font-weight:900;color:${theme.primary};letter-spacing:0.05em;">WESTLINE</div>
+         <div style="font-size:12px;font-weight:600;color:${theme.secondary};letter-spacing:0.45em;">FUTURE</div>
+       </div>`;
+
+  const clientName = user?.name || project?.clientName || project?.client || 'Valued Client';
+  const clientPhone = project?.quoteSignedByPhone || user?.phone || '';
+  const clientEmail = user?.email || user?.proxyEmail || '';
+  
+  const budget = Number(project.budget || 0);
+  const budgetStr = budget ? `GH₵ ${budget.toLocaleString(undefined, { minimumFractionDigits: 2 })}` : '—';
+  
+  const signedDate = project.quoteSignedAt
+    ? (project.quoteSignedAt.toDate ? project.quoteSignedAt.toDate() : new Date(project.quoteSignedAt)).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+    : new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+
+  const estCompletion = project.estimatedCompletion
+    ? (project.estimatedCompletion.toDate ? project.estimatedCompletion.toDate() : new Date(project.estimatedCompletion)).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
+    : 'Pending Scheduling';
+
+  const signatureHtml = project.quoteSignature
+    ? `<img src="${project.quoteSignature}" style="max-height:80px; max-width:250px; object-fit:contain; display:block; border-bottom:1px solid ${theme.accent}; padding-bottom:8px; margin-bottom:8px;" alt="Client Signature" />`
+    : `<div style="height:80px; border-bottom:1px solid ${theme.accent}; margin-bottom:8px; display:flex; align-items:center; color:${theme.textMuted}; font-style:italic;">No signature on file</div>`;
+
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>CONTRACT AGREEMENT — ${project.title || 'Project'}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { background: ${theme.bg}; font-family: 'Inter', -apple-system, sans-serif; color: ${theme.primary}; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    body { padding: 0; }
+    .page { width: 210mm; min-height: 297mm; margin: 0 auto; padding: 60px 72px; position: relative; overflow: hidden; background: ${theme.bg}; border: 12px solid ${theme.accent}; }
+    .watermark { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(-40deg); font-size: 80px; font-weight: 900; opacity: 0.02; white-space: nowrap; pointer-events: none; color: ${theme.primary}; z-index: 0; text-transform: uppercase; }
+    .content { position: relative; z-index: 1; }
+    h2 { font-size: 16px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; color: ${theme.primary}; margin-bottom: 12px; margin-top: 24px; border-bottom: 1px solid ${theme.accent}60; padding-bottom: 6px; }
+    p, li { font-size: 12px; color: ${theme.textMuted}; line-height: 1.6; margin-bottom: 10px; }
+    ol { margin-left: 20px; }
+    @page { size: A4; margin: 0; }
+    @media print { html, body { width: 210mm; } .page { box-shadow: none !important; border: none; } button { display: none !important; } }
+    @media screen { .page { box-shadow: 0 0 60px rgba(0,0,0,0.12); margin: 40px auto; border-radius: 4px; } body { background: #e5e5e5; } }
+  </style>
+</head>
+<body>
+<div class="page">
+  <div style="height:12px;background:${theme.primary};margin:-60px -72px 0 -72px;"></div>
+  <div class="watermark">CONTRACT SIGNED</div>
+  <div class="content">
+
+    <!-- HEADER -->
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-top:20px;margin-bottom:32px;padding-bottom:20px;border-bottom:2px solid ${theme.accent};">
+      <div style="display:flex;align-items:center;gap:20px;">
+        ${logoHtml}
+        <div>
+          <div style="font-size:18px;font-weight:800;color:${theme.primary};letter-spacing:1px;text-transform:uppercase;">${co}</div>
+          <div style="font-size:10px;color:${theme.secondary};margin-top:2px;letter-spacing:1px;text-transform:uppercase;">${addr}</div>
+        </div>
+      </div>
+      <div style="text-align:right;">
+        <div style="font-size:24px;font-weight:400;letter-spacing:1px;text-transform:uppercase;color:${theme.primary};margin-bottom:6px;">CONTRACT AGREEMENT</div>
+        <div style="display:inline-block;background:#16A34A;color:${theme.bg};padding:3px 10px;border-radius:4px;font-size:11px;font-weight:700;letter-spacing:1px;">STATUS: SIGNED & SECURED</div>
+      </div>
+    </div>
+
+    <!-- CONTRACT METADATA -->
+    <div style="display:grid;grid-template-columns:repeat(3, 1fr);gap:16px;margin-bottom:24px;">
+      <div style="padding:12px 16px;background:${theme.surface};border-radius:6px;">
+        <div style="font-size:9px;text-transform:uppercase;letter-spacing:1px;color:${theme.secondary};font-weight:800;margin-bottom:4px;">Contract Reference</div>
+        <div style="font-size:13px;font-weight:800;color:${theme.primary};">WF-${(project.id || '').slice(-8).toUpperCase()}</div>
+      </div>
+      <div style="padding:12px 16px;background:${theme.surface};border-radius:6px;">
+        <div style="font-size:9px;text-transform:uppercase;letter-spacing:1px;color:${theme.secondary};font-weight:800;margin-bottom:4px;">Date Executed</div>
+        <div style="font-size:13px;font-weight:800;color:${theme.primary};">${signedDate}</div>
+      </div>
+      <div style="padding:12px 16px;background:${theme.surface};border-radius:6px;">
+        <div style="font-size:9px;text-transform:uppercase;letter-spacing:1px;color:${theme.secondary};font-weight:800;margin-bottom:4px;">Contract Value</div>
+        <div style="font-size:13px;font-weight:800;color:${theme.primary};">${budgetStr}</div>
+      </div>
+    </div>
+
+    <!-- PARTIES -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:24px;padding:16px 20px;border:1px solid ${theme.accent}60;border-radius:6px;background:${theme.surface}50;">
+      <div>
+        <div style="font-size:9px;text-transform:uppercase;letter-spacing:1px;color:${theme.accent};font-weight:900;margin-bottom:4px;">Contractor (First Party)</div>
+        <div style="font-size:14px;font-weight:800;color:${theme.primary};">${co}</div>
+        <div style="font-size:11px;color:${theme.textMuted};">${addr}</div>
+        <div style="font-size:11px;color:${theme.textMuted};">${phone} | ${email}</div>
+      </div>
+      <div>
+        <div style="font-size:9px;text-transform:uppercase;letter-spacing:1px;color:${theme.accent};font-weight:900;margin-bottom:4px;">Client (Second Party)</div>
+        <div style="font-size:14px;font-weight:800;color:${theme.primary};">${clientName}</div>
+        <div style="font-size:11px;color:${theme.textMuted};">${clientPhone}</div>
+        <div style="font-size:11px;color:${theme.textMuted};">${clientEmail}</div>
+      </div>
+    </div>
+
+    <div style="padding:14px 18px;border:1px solid ${theme.accent};border-radius:6px;background:${theme.surface};margin-bottom:24px;">
+      <div style="font-size:9px;text-transform:uppercase;letter-spacing:1px;color:${theme.secondary};font-weight:800;margin-bottom:4px;">Scope of Project</div>
+      <div style="font-size:14px;font-weight:800;color:${theme.primary};text-transform:uppercase;">${project.title || 'Premium Architectural Glass Project'}</div>
+      <div style="font-size:12px;color:${theme.textMuted};margin-top:4px;">Target Completion Date: <strong>${estCompletion}</strong></div>
+    </div>
+
+    <h2>Standard Contractual Conditions</h2>
+    <ol>
+      <li><strong>Scope of Work:</strong> Contractor agrees to manufacture, fabricate, supply, and install custom high-end premium structural glass fittings, frameless balustrades, or specialized glass components in accordance with final approved technical designs in the design vault.</li>
+      <li><strong>Payment Terms:</strong> Works shall commence upon execution of this contract and clearing of the 50% mobilization deposit (GHS ${(budget * 0.5).toLocaleString(undefined, { minimumFractionDigits: 2 })}). The remaining 50% balance (GHS ${(budget * 0.5).toLocaleString(undefined, { minimumFractionDigits: 2 })}) is due upon completion of site installation and final inspection.</li>
+      <li><strong>Installation and Access:</strong> The Client shall provide adequate, safe, and clean working space for the Contractor's installers on the site. All field inspections are geo-fenced and locked to site coordinates for absolute quality assurance.</li>
+      <li><strong>Warranty Policy:</strong> Contractor provides a 12-month limited warranty on the structural alignment and architectural grade silicone sealant components. Glass breakage due to external physical impact, force majeure, or site modifications after handover is excluded.</li>
+      <li><strong>Governing Law:</strong> This agreement and all subsequent performance evaluations are governed by the laws of the Republic of Ghana.</li>
+    </ol>
+
+    <h2>Electronic Execution & Verification Log</h2>
+    <div style="display:grid;grid-template-columns:1.5fr 1fr;gap:32px;margin-top:16px;">
+      <div style="padding:16px;border:1.5px dashed ${theme.accent};border-radius:8px;background:${theme.surface}30;">
+        <div style="font-size:9px;text-transform:uppercase;letter-spacing:1px;color:${theme.secondary};font-weight:800;margin-bottom:12px;">Electronic Signature Verification</div>
+        ${signatureHtml}
+        <div style="font-size:13px;font-weight:800;color:${theme.primary};">${clientName}</div>
+        <div style="font-size:11px;color:${theme.textMuted};margin-top:2px;">Phone Authenticated: <strong>${clientPhone}</strong></div>
+        <div style="font-size:11px;color:${theme.textMuted};margin-top:2px;">Authentication Protocol: <strong>Dual-Factor Carrier SMS OTP</strong></div>
+        <div style="font-size:11px;color:${theme.textMuted};margin-top:2px;">IP Reference Log: <strong>${project.quoteVerificationStamp?.ipAddress || 'client-portal-secure'}</strong></div>
+      </div>
+      <div style="display:flex;flex-direction:column;justify-content:space-between;padding:16px;border:1px solid ${theme.accent}60;border-radius:8px;">
+        <div>
+          <div style="font-size:9px;text-transform:uppercase;letter-spacing:1px;color:${theme.secondary};font-weight:800;margin-bottom:12px;">Contractor Sign-off</div>
+          <div style="height:60px;margin-top:8px;margin-bottom:8px;display:flex;align-items:center;justify-content:center;">
+            <div style="font-family:'Georgia',serif;font-size:24px;font-style:italic;color:${theme.secondary};letter-spacing:2px;font-weight:bold;text-decoration:underline;">Westline Future</div>
+          </div>
+        </div>
+        <div>
+          <div style="font-size:13px;font-weight:800;color:${theme.primary};">Authorized Representative</div>
+          <div style="font-size:11px;color:${theme.textMuted};margin-top:2px;">Westline Future Ltd.</div>
+          <div style="font-size:10px;color:${theme.textMuted};margin-top:2px;">Date: ${signedDate}</div>
+        </div>
+      </div>
+    </div>
+
+    <div style="padding-top:20px;margin-top:32px;border-top:1.5px solid ${theme.accent};display:flex;justify-content:space-between;align-items:center;">
+      <div style="font-size:10px;color:${theme.textMuted};line-height:1.5;font-weight:500;">This document serves as the legally binding contract between the parties.<br/>Verified securely via Westline Future Premium SaaS CRM Suite.</div>
+      <div style="text-align:right;font-size:10px;color:${theme.textMuted};">Ref: WF-CONTRACT-${(project.id || '').slice(-8).toUpperCase()}</div>
+    </div>
+
+  </div>
+</div>
+<script>
+  window.onload = () => { setTimeout(() => { window.print(); }, 500); };
+</script>
+</body>
+</html>`;
+
+  const iframe = document.createElement('iframe');
+  iframe.style.position = 'fixed';
+  iframe.style.right = '0';
+  iframe.style.bottom = '0';
+  iframe.style.width = '0';
+  iframe.style.height = '0';
+  iframe.style.border = '0';
+  document.body.appendChild(iframe);
+  
+  iframe.contentWindow.document.open();
+  iframe.contentWindow.document.write(html);
+  iframe.contentWindow.document.close();
+  
+  iframe.onload = () => {
+    setTimeout(() => {
+      iframe.contentWindow.focus();
+      iframe.contentWindow.print();
+      setTimeout(() => document.body.removeChild(iframe), 1000);
+    }, 500);
+  };
+}
+
 // ─── FileType Icon Helper ─────────────────────────────────────────────────────
 function FileTypeIcon({ fileType }) {
   const ft = (fileType || '').toLowerCase();
@@ -485,7 +678,7 @@ function StageActionCard({ project, user, approveQuote, payInvoice, updateProjec
   const halfBudget = budget * 0.5;
 
   if (currentStage.needsClientApproval) {
-    if (currentStage.id === 2 && project.quoteApproved) return null;
+    if (currentStage.id === 3 && project.quoteApproved) return null;
 
     return (
       <div style={{
@@ -499,16 +692,16 @@ function StageActionCard({ project, user, approveQuote, payInvoice, updateProjec
         </div>
         <div style={{ fontSize: 20, fontWeight: 900, color: `var(--accent-secondary)`, marginBottom: 6 }}>Approval Required</div>
         <div style={{ fontSize: 14, color: '#374151', lineHeight: 1.6, marginBottom: 20 }}>
-          {currentStage.id === 2 ? "We've prepared a detailed quotation. Please review the document, then approve it below." : "Please review the work and confirm your approval."}
+          {currentStage.id === 3 ? "We've prepared your final quotation. Please review the document, then approve it below." : "Please review the work and confirm your approval."}
         </div>
         <button
           onClick={async () => {
             if (acting) return;
             setActing(true);
-            if (currentStage.id === 2) {
+            if (currentStage.id === 3) {
               await approveQuote(project.id);
-            } else if (currentStage.id === 6) {
-              await updateProjectStage(project.id, 7);
+            } else if (currentStage.id === 7) {
+              await updateProjectStage(project.id, 8);
             }
             setActing(false);
           }}
@@ -533,7 +726,7 @@ function StageActionCard({ project, user, approveQuote, payInvoice, updateProjec
   }
 
   if (currentStage.requiresPayment) {
-    const isDeposit = currentStage.id === 2;
+    const isDeposit = currentStage.id === 3;
     return (
       <div style={{
         padding: '24px 28px', borderRadius: 20,
@@ -555,7 +748,7 @@ function StageActionCard({ project, user, approveQuote, payInvoice, updateProjec
         <div style={{ fontSize: 14, color: '#374151', lineHeight: 1.6, marginBottom: 20 }}>
           {isDeposit ? "A 50% deposit is required to initiate production and material procurement." : "Your project is nearly complete. Please settle the remaining 50% balance."}
         </div>
-        <PaymentButton
+        <UnifiedPaymentGateway
           label={`Pay ${isDeposit ? 'Deposit' : 'Balance'} — GHS ${Number(halfBudget).toLocaleString(undefined, { minimumFractionDigits: 2 })}`}
           amountGHS={halfBudget}
           email={email}
@@ -588,6 +781,137 @@ function StageActionCard({ project, user, approveQuote, payInvoice, updateProjec
   );
 }
 
+// ─── Client Next Action / Approval Surfaces ──────────────────────────────────
+function ClientNextActionCard({ project, invoices = [], renderingPackages = [], addOns = [], setActiveTab, isMobile }) {
+  if (!project) return null;
+  const parseAmount = value => parseFloat(String(value || '0').replace(/[^0-9.]/g, '')) || 0;
+  const projectInvoices = invoices.filter(i => i.projectId === project.id || i.parentId === project.id);
+  const projectPackages = renderingPackages.filter(pkg => pkg.projectId === project.id);
+  const projectAddOns = addOns.filter(a => a.projectId === project.id);
+  const lockedRendering = projectPackages.find(pkg => {
+    const linkedInv = projectInvoices.find(i => i.id === pkg.linkedInvoiceId || i.renderingPackageId === pkg.id);
+    return linkedInv && linkedInv.status !== 'Paid' && !pkg.unlocked;
+  });
+  const reviewRendering = projectPackages.find(pkg => {
+    const linkedInv = projectInvoices.find(i => i.id === pkg.linkedInvoiceId || i.renderingPackageId === pkg.id);
+    const unlocked = pkg.unlocked || pkg.status === 'Paid / Unlocked' || linkedInv?.status === 'Paid';
+    return unlocked && pkg.status !== 'Approved';
+  });
+  const pendingAddOn = projectAddOns.find(a => ['Pending', 'Pending Approval', 'Priced'].includes(a.status || a.approvalStatus));
+  const unpaidInvoice = projectInvoices.find(i => !['Paid', 'paid'].includes(i.status) && i.type !== 'Quotation' && i.documentKind !== 'quotation');
+  const pendingQuote = projectInvoices.find(i => ['Quotation', 'quote', 'quotation'].includes(i.type || i.documentKind) && !['Approved', 'Paid'].includes(i.status));
+
+  let action;
+  if (lockedRendering) {
+    action = { tone: '#D97706', bg: '#FFF7ED', icon: <Lock size={18} />, title: 'Rendering fee required', body: 'Pay the separate design/rendering invoice to unlock your CAD or 3D package.', button: 'Open Design Vault', tab: 'design' };
+  } else if (reviewRendering) {
+    action = { tone: '#7C3AED', bg: '#F5F3FF', icon: <PenTool size={18} />, title: 'Review your rendering', body: 'Your design package is unlocked. Review it, leave pins, request changes, or approve the final version.', button: 'Review Design', tab: 'design' };
+  } else if (pendingQuote) {
+    action = { tone: 'var(--accent-primary)', bg: '#EFF6FF', icon: <FileText size={18} />, title: 'Quote awaiting your review', body: 'Review the latest quote or quotation before kickoff approval.', button: 'View Quotes', tab: 'approvals' };
+  } else if (pendingAddOn) {
+    action = { tone: '#B45309', bg: '#FFFBEB', icon: <Gift size={18} />, title: 'Add-on needs decision', body: `${pendingAddOn.title || pendingAddOn.description || 'A project variation'} is waiting for your approval.`, button: 'Review Add-ons', tab: 'addons' };
+  } else if (unpaidInvoice) {
+    const amount = parseAmount(unpaidInvoice.amount || unpaidInvoice.total);
+    action = { tone: '#16A34A', bg: '#F0FDF4', icon: <CreditCard size={18} />, title: 'Payment pending', body: `${unpaidInvoice.title || 'An invoice'} is outstanding${amount ? `: GHS ${amount.toLocaleString()}` : ''}.`, button: 'Open Payments', tab: 'payments' };
+  } else {
+    const currentStage = CLIENT_PROJECT_STAGES.find(s => s.id === project.stageId);
+    action = { tone: '#16A34A', bg: '#F0FDF4', icon: <CheckCircle2 size={18} />, title: project.nextAction || 'Everything is on track', body: currentStage?.clientMsg || 'Your project is moving. We will notify you when your next action is required.', button: 'View Timeline', tab: 'timeline' };
+  }
+
+  return (
+    <div style={{ padding: isMobile ? '18px 18px' : '22px 26px', borderRadius: isMobile ? 24 : 20, border: `1.5px solid ${action.tone}30`, background: action.bg, display: 'flex', flexDirection: isMobile ? 'column' : 'row', alignItems: isMobile ? 'stretch' : 'center', justifyContent: 'space-between', gap: 16, boxShadow: isMobile ? '0 2px 16px rgba(0,0,0,.06)' : '0 4px 18px rgba(0,0,0,.04)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+        <div style={{ width: 44, height: 44, borderRadius: 14, background: '#fff', color: action.tone, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{action.icon}</div>
+        <div>
+          <div style={{ fontSize: 11, fontWeight: 900, color: action.tone, textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 4 }}>Next Action</div>
+          <div style={{ fontSize: 17, fontWeight: 900, color: `var(--accent-secondary)`, marginBottom: 3 }}>{action.title}</div>
+          <div style={{ fontSize: 13, color: `var(--text-secondary)`, lineHeight: 1.5 }}>{action.body}</div>
+        </div>
+      </div>
+      <button onClick={() => setActiveTab(action.tab)} style={{ padding: '11px 18px', borderRadius: 12, border: 'none', background: action.tone, color: '#fff', fontSize: 12, fontWeight: 900, cursor: 'pointer', alignSelf: isMobile ? 'stretch' : 'auto', whiteSpace: 'nowrap' }}>
+        {action.button}
+      </button>
+    </div>
+  );
+}
+
+function ClientApprovalsTab({ project, invoices = [], approveQuote, brand, user, isMobile }) {
+  const quoteDocs = invoices.filter(i => (i.projectId === project.id || i.parentId === project.id) && ['Quotation', 'quote', 'quotation'].includes(i.type || i.documentKind));
+  const cardStyle = { padding: isMobile ? '20px 18px' : '24px 28px', background: '#fff', borderRadius: isMobile ? 24 : 20, border: isMobile ? 'none' : '1px solid var(--border-color)', boxShadow: isMobile ? '0 2px 16px rgba(0,0,0,.08)' : '0 4px 20px rgba(0,0,0,.05)' };
+
+  return (
+    <div style={{ ...cardStyle, display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <div>
+        <div style={{ fontSize: 15, fontWeight: 900, color: `var(--accent-secondary)` }}>Quotes & Approvals</div>
+        <div style={{ fontSize: 12, color: `var(--text-secondary)`, marginTop: 4 }}>Review official quote versions and approval records.</div>
+      </div>
+      {quoteDocs.length === 0 ? (
+        <div style={{ padding: '32px 0', textAlign: 'center', color: `var(--text-secondary)`, fontSize: 13 }}>No quote has been issued for this project yet.</div>
+      ) : quoteDocs.map(inv => (
+        <div key={inv.id} style={{ padding: 16, borderRadius: 16, background: `var(--bg-secondary)`, border: '1px solid var(--border-color)', display: 'flex', gap: 14, alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}>
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 900, color: `var(--accent-secondary)` }}>{inv.title || `Quote v${inv.version || 1}`}</div>
+            <div style={{ fontSize: 11, color: `var(--text-secondary)`, marginTop: 3 }}>{inv.amount || `GHS ${Number(inv.total || 0).toLocaleString()}`} · {inv.status || 'Pending'}</div>
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={() => downloadInvoicePDF(inv, project, user, brand)} style={{ padding: '9px 13px', borderRadius: 10, border: '1px solid var(--border-color)', background: '#fff', fontSize: 11, fontWeight: 800, cursor: 'pointer' }}>Download</button>
+            {approveQuote && !project.quoteApproved && (
+              <button onClick={() => approveQuote(project.id)} style={{ padding: '9px 13px', borderRadius: 10, border: 'none', background: `var(--accent-primary)`, color: '#fff', fontSize: 11, fontWeight: 900, cursor: 'pointer' }}>Approve Quote</button>
+            )}
+          </div>
+        </div>
+      ))}
+      {project.quoteApproved && (
+        <div style={{ padding: 14, borderRadius: 14, background: '#F0FDF4', color: '#16A34A', fontSize: 12, fontWeight: 800, display: 'flex', alignItems: 'center', gap: 8 }}>
+          <CheckCircle2 size={15} /> Final quote approved and contract record available in Progress.
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ClientAddOnsTab({ project, addOns = [], invoices = [], user, isMobile }) {
+  const projectAddOns = addOns.filter(a => a.projectId === project.id);
+  const email = user?.proxyEmail || (user?.phone ? user.phone + '@clients.westlinefuture.com' : 'client@clients.westlinefuture.com');
+  const parseAmount = value => parseFloat(String(value || '0').replace(/[^0-9.]/g, '')) || 0;
+  const cardStyle = { padding: isMobile ? '20px 18px' : '24px 28px', background: '#fff', borderRadius: isMobile ? 24 : 20, border: isMobile ? 'none' : '1px solid var(--border-color)', boxShadow: isMobile ? '0 2px 16px rgba(0,0,0,.08)' : '0 4px 20px rgba(0,0,0,.05)' };
+
+  return (
+    <div style={{ ...cardStyle, display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <div>
+        <div style={{ fontSize: 15, fontWeight: 900, color: `var(--accent-secondary)` }}>Add-ons & Variations</div>
+        <div style={{ fontSize: 12, color: `var(--text-secondary)`, marginTop: 4 }}>Every approved scope change stays visible with cost, status, and linked payment.</div>
+      </div>
+      {projectAddOns.length === 0 ? (
+        <div style={{ padding: '32px 0', textAlign: 'center', color: `var(--text-secondary)`, fontSize: 13 }}>No add-ons or variations have been added to this project.</div>
+      ) : projectAddOns.map(addOn => {
+        const linkedInv = invoices.find(i => i.id === addOn.invoiceId || i.addOnId === addOn.id);
+        const amount = parseAmount(addOn.price || addOn.amount || linkedInv?.amount || linkedInv?.total);
+        const unpaid = linkedInv && linkedInv.status !== 'Paid';
+        return (
+          <div key={addOn.id} style={{ padding: 16, borderRadius: 16, border: '1px solid var(--border-color)', background: `var(--bg-secondary)` }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, marginBottom: 8 }}>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 900, color: `var(--accent-secondary)` }}>{addOn.title || addOn.description || 'Project Add-on'}</div>
+                <div style={{ fontSize: 11, color: `var(--text-secondary)`, marginTop: 3 }}>{addOn.reason || addOn.timelineImpact || 'Scope variation'}</div>
+              </div>
+              <span style={{ fontSize: 11, fontWeight: 900, color: addOn.status === 'Approved' ? '#16A34A' : '#D97706', background: addOn.status === 'Approved' ? '#F0FDF4' : '#FFF7ED', padding: '4px 9px', borderRadius: 999, height: 24 }}>{addOn.status || addOn.approvalStatus || 'Pending'}</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+              <div style={{ fontSize: 14, fontWeight: 900, color: `var(--accent-secondary)` }}>{amount ? `GHS ${amount.toLocaleString()}` : 'Pricing pending'}</div>
+              {unpaid && amount > 0 && (
+                <div style={{ width: 240, maxWidth: '100%' }}>
+                  <UnifiedPaymentGateway label="Pay Add-on" amountGHS={amount} email={email} projectId={project.id} invoiceId={linkedInv.id} paymentType="addon" />
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // ─── Shipping Tracker Card ────────────────────────────────────────────────────
 // ─── Installation Status Card ─────────────────────────────────────────────────
 function InstallationStatusCard({ project }) {
@@ -595,7 +919,7 @@ function InstallationStatusCard({ project }) {
   const [zoom, setZoom] = useState(null);
 
   useEffect(() => {
-    if (!db || project.stageId !== 5) return;
+    if (!db || project.stageId !== 6) return;
     const q = query(
       collection(db, 'projects', project.id, 'documents'),
       where('docType', '==', 'progress_photo'),
@@ -605,9 +929,9 @@ function InstallationStatusCard({ project }) {
     return onSnapshot(q, snap => setRecentPhotos(snap.docs.map(d => ({ id: d.id, ...d.data() }))), () => setRecentPhotos([]));
   }, [project.id, project.stageId]);
 
-  if (project.stageId !== 5) return null;
+  if (project.stageId !== 6) return null;
 
-  const installEntry = (project.stageHistory || []).find(h => h.stageId === 5);
+  const installEntry = (project.stageHistory || []).find(h => h.stageId === 6);
   const startDate = installEntry?.timestamp
     ? (() => {
         const d = installEntry.timestamp?.toDate ? installEntry.timestamp.toDate() : new Date(installEntry.timestamp);
@@ -1184,9 +1508,10 @@ function PaymentsTab({ project, user, transactions: propTxns, invoices: propInvs
   const allPayments = livePayments
     ?? (propTxns || []).filter(t => t.projectId === project.id || t.clientId === uid);
   const allInvoices = liveInvoices
-    ?? (propInvs || []).filter(i => i.projectId === project.id || i.clientId === uid);
+    ?? (propInvs || []).filter(i => i.projectId === project.id || i.parentId === project.id || i.clientId === uid);
 
-  const totalPaid = allPayments.reduce((s, t) => s + (Number(t.amount) || 0), 0);
+  const parseAmount = value => parseFloat(String(value || '0').replace(/[^0-9.]/g, '')) || 0;
+  const totalPaid = allPayments.reduce((s, t) => s + parseAmount(t.amount), 0);
   const paidPct = budget > 0 ? Math.min(100, (totalPaid / budget) * 100) : 0;
 
   const fmt = (ghsAmount) => {
@@ -1356,7 +1681,7 @@ function PaymentsTab({ project, user, transactions: propTxns, invoices: propInvs
                 <div style={{ fontSize: 13, color: `var(--text-secondary)`, marginBottom: 12 }}>
                   Ready to pay your <strong>{currentDueMilestone.label}</strong>?
                 </div>
-                <PaymentButton
+                <UnifiedPaymentGateway
                   label={`Pay ${fmt(budget * currentDueMilestone.pct)} Now`}
                   amountGHS={budget * currentDueMilestone.pct}
                   email={email}
@@ -1453,9 +1778,9 @@ function PaymentsTab({ project, user, transactions: propTxns, invoices: propInvs
                       {fmtDate(inv.createdAt || inv.date)}
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                      <span style={{ fontSize: 15, fontWeight: 800, color: `var(--accent-secondary)` }}>{fmt(inv.amount || 0)}</span>
+                      <span style={{ fontSize: 15, fontWeight: 800, color: `var(--accent-secondary)` }}>{fmt(parseAmount(inv.amount || inv.total))}</span>
                       {showUSD && inv.amount && (
-                        <span style={{ fontSize: 10, color: `var(--text-secondary)` }}>≈ GHS {Number(inv.amount).toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+                        <span style={{ fontSize: 10, color: `var(--text-secondary)` }}>≈ GHS {parseAmount(inv.amount || inv.total).toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
                       )}
                       <span style={{
                         fontSize: 10, fontWeight: 800, padding: '3px 10px', borderRadius: 20,
@@ -1468,7 +1793,19 @@ function PaymentsTab({ project, user, transactions: propTxns, invoices: propInvs
                     {inv.title && <div style={{ fontSize: 12, color: `var(--text-secondary)`, marginTop: 4 }}>{inv.title}</div>}
                   </div>
                 </div>
-                <div style={{ borderTop: '1px solid var(--border-color)', padding: isMobile ? '9px 14px' : '9px 18px', display: 'flex', justifyContent: 'flex-end' }}>
+                <div style={{ borderTop: '1px solid var(--border-color)', padding: isMobile ? '9px 14px' : '9px 18px', display: 'flex', justifyContent: 'flex-end', gap: 8, flexWrap: 'wrap' }}>
+                  {inv.status !== 'Paid' && parseAmount(inv.amount || inv.total) > 0 && (
+                    <div style={{ width: 180 }}>
+                      <UnifiedPaymentGateway
+                        label="Pay Invoice"
+                        amountGHS={parseAmount(inv.amount || inv.total)}
+                        email={email}
+                        projectId={project.id}
+                        invoiceId={inv.id}
+                        paymentType={inv.documentKind === 'receipt' ? 'receipt' : 'invoice'}
+                      />
+                    </div>
+                  )}
                   <button
                     onClick={() => downloadInvoicePDF(inv, project, user, brand)}
                     style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 10, background: `var(--accent-secondary)`, border: 'none', fontSize: 11, fontWeight: 700, color: '#fff', cursor: 'pointer', touchAction: 'manipulation', minHeight: 34 }}
@@ -2341,8 +2678,8 @@ function ProjectHeaderCard({ project, isMobile, ac, brand }) {
 
   // Use paidAmount from project doc if set (logged by admin), else fall back to stage-based estimate
   const paid = budget > 0 ? Math.min(budget, Number(project.paidAmount) || (() => {
-    if (project.stageId >= 7) return budget;
-    if (project.stageId >= 5) return budget * 0.75;
+    if (project.stageId >= 8) return budget;
+    if (project.stageId >= 6) return budget * 0.75;
     if (project.stageId >= 3) return budget * 0.50;
     if (project.stageId >= 2) return budget * 0.25;
     return 0;
@@ -2582,14 +2919,17 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
   // Auto-show review modal for completed projects
   const showReviewModal =
     selected &&
-    selected.stageId === 7 &&
+    selected.stageId === 8 &&
     !reviewDismissed &&
     !reviewSubmitted;
 
   const tabs = [
     { id: 'timeline',  label: 'Progress',  icon: <CheckCircle2 size={14} /> },
+    { id: 'design',    label: 'Design Vault', icon: <PenTool size={14} /> },
+    { id: 'approvals', label: 'Approvals', icon: <FileText size={14} /> },
     { id: 'photos',    label: 'Photos',    icon: <Camera size={14} /> },
     { id: 'payments',  label: 'Payments',  icon: <CreditCard size={14} /> },
+    { id: 'addons',    label: 'Add-ons', icon: <Gift size={14} /> },
     { id: 'documents', label: 'Documents', icon: <FileText size={14} /> },
     { id: 'messages',  label: 'Messages',  icon: <MessageSquare size={14} /> },
   ];
@@ -2772,6 +3112,15 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
                 {/* Project header card */}
                 <ProjectHeaderCard project={selected} isMobile={isMobile} ac={ac} brand={props.brand} />
 
+                <ClientNextActionCard
+                  project={selected}
+                  invoices={props.invoices || []}
+                  renderingPackages={props.renderingPackages || []}
+                  addOns={props.addOns || []}
+                  setActiveTab={setActiveTab}
+                  isMobile={isMobile}
+                />
+
                 {/* Tabs — desktop only; mobile uses bottom dock */}
                 {!isMobile && (
                   <div style={{ display: 'flex', gap: 4, background: '#fff', padding: 5, borderRadius: 16, border: '1px solid var(--border-color)', overflowX: 'auto', scrollbarWidth: 'none' }}>
@@ -2798,6 +3147,50 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
                 {/* ── TIMELINE TAB ── */}
                 {activeTab === 'timeline' && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                    {selected.quoteApproved && (
+                      <div style={{
+                        padding: '20px 24px', borderRadius: 20,
+                        background: 'linear-gradient(135deg, #FDFBF7, #F4EFE6)',
+                        border: '1.5px solid #C5A88060', marginBottom: 4,
+                        display: 'flex', flexDirection: isMobile ? 'column' : 'row',
+                        alignItems: isMobile ? 'flex-start' : 'center',
+                        justifyContent: 'space-between', gap: 16
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                          <div style={{ width: 44, height: 44, borderRadius: 14, background: '#C5A88020', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                            <FileText size={20} color="#8C6C52" />
+                          </div>
+                          <div>
+                            <div style={{ fontSize: 12, fontWeight: 800, color: '#8C6C52', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 2 }}>Contract Executed</div>
+                            <div style={{ fontSize: 16, fontWeight: 900, color: '#4A3B32' }}>Fabrication & Installation Agreement</div>
+                            <div style={{ fontSize: 11, color: '#716259', marginTop: 2 }}>
+                              Signed electronically via SMS OTP on {selected.quoteSignedAt
+                                ? (() => {
+                                    const d = selected.quoteSignedAt?.toDate ? selected.quoteSignedAt.toDate() : new Date(selected.quoteSignedAt);
+                                    return isNaN(d) ? '—' : d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+                                  })()
+                                : '—'}
+                            </div>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => printSignedContractDoc(selected, user, props.brand)}
+                          style={{
+                            display: 'inline-flex', alignItems: 'center', gap: 8,
+                            padding: '10px 20px', borderRadius: 10, border: '1px solid #8C6C52',
+                            background: 'transparent', color: '#4A3B32',
+                            fontSize: 13, fontWeight: 800, cursor: 'pointer',
+                            transition: 'all .2s',
+                            alignSelf: isMobile ? 'stretch' : 'auto',
+                            textAlign: 'center', justifyContent: 'center'
+                          }}
+                          onMouseOver={(e) => { e.currentTarget.style.background = '#8C6C52'; e.currentTarget.style.color = '#fff'; }}
+                          onMouseOut={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#4A3B32'; }}
+                        >
+                          <Download size={14} /> Download Contract (PDF)
+                        </button>
+                      </div>
+                    )}
                     <StageActionCard
                       project={selected}
                       user={user}
@@ -2849,6 +3242,28 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
                   </div>
                 )}
 
+                {/* ── DESIGN VAULT TAB ── */}
+                {activeTab === 'design' && (
+                  <ClientRenderingVault
+                    project={selected}
+                    brand={props.brand}
+                    renderingPackages={props.renderingPackages || []}
+                    invoices={props.invoices || []}
+                  />
+                )}
+
+                {/* ── APPROVALS TAB ── */}
+                {activeTab === 'approvals' && (
+                  <ClientApprovalsTab
+                    project={selected}
+                    invoices={props.invoices || []}
+                    approveQuote={props.approveQuote}
+                    brand={props.brand}
+                    user={user}
+                    isMobile={isMobile}
+                  />
+                )}
+
                 {/* ── PHOTOS TAB ── */}
                 {activeTab === 'photos' && (
                   <div style={{ padding: isMobile ? '20px 18px' : '24px 28px', background: '#fff', borderRadius: isMobile ? 24 : 20, border: isMobile ? 'none' : '1px solid var(--border-color)', boxShadow: isMobile ? '0 2px 16px rgba(0,0,0,.08)' : '0 4px 20px rgba(0,0,0,.05)' }}>
@@ -2866,6 +3281,17 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
                     invoices={props.invoices}
                     formatPrice={props.formatPrice}
                     brand={props.brand}
+                    isMobile={isMobile}
+                  />
+                )}
+
+                {/* ── ADD-ONS TAB ── */}
+                {activeTab === 'addons' && (
+                  <ClientAddOnsTab
+                    project={selected}
+                    addOns={props.addOns || []}
+                    invoices={props.invoices || []}
+                    user={user}
                     isMobile={isMobile}
                   />
                 )}
@@ -2920,9 +3346,10 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
         }}>
           {[
             { id: 'timeline',  label: 'Progress',  icon: CheckCircle2 },
-            { id: 'photos',    label: 'Photos',    icon: Camera },
+            { id: 'design',    label: 'Design',    icon: PenTool },
+            { id: 'approvals', label: 'Approve',   icon: FileText },
             { id: 'payments',  label: 'Payments',  icon: CreditCard },
-            { id: 'documents', label: 'Docs',      icon: FileText },
+            { id: 'addons',    label: 'Add-ons',   icon: Gift },
             { id: 'messages',  label: 'Messages',  icon: MessageSquare },
           ].map(t => {
             const active = activeTab === t.id;

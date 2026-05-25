@@ -132,9 +132,11 @@ export default function AdminClients({ dbClients, createClient, updateClient, de
                    {selectedIds.length === filtered.length ? <CheckSquare size={20} /> : <Square size={20} />}
                 </button>
               </th>
-              <th style={{ padding: '16px 24px', fontSize: 10, textTransform: 'uppercase', letterSpacing: 1, color: `var(--text-secondary)` }}>Stakeholder</th>
-              <th style={{ padding: '16px 24px', fontSize: 10, textTransform: 'uppercase', letterSpacing: 1, color: `var(--text-secondary)` }}>Entity / Company</th>
+              <th style={{ padding: '16px 24px', fontSize: 10, textTransform: 'uppercase', letterSpacing: 1, color: `var(--text-secondary)` }}>Stakeholder / Entity</th>
+              <th style={{ padding: '16px 24px', fontSize: 10, textTransform: 'uppercase', letterSpacing: 1, color: `var(--text-secondary)` }}>Health</th>
               <th style={{ padding: '16px 24px', fontSize: 10, textTransform: 'uppercase', letterSpacing: 1, color: `var(--text-secondary)` }}>Operational Pulse</th>
+              <th style={{ padding: '16px 24px', fontSize: 10, textTransform: 'uppercase', letterSpacing: 1, color: `var(--text-secondary)` }}>Next Action</th>
+              <th style={{ padding: '16px 24px', fontSize: 10, textTransform: 'uppercase', letterSpacing: 1, color: `var(--text-secondary)` }}>Outstanding</th>
               <th style={{ padding: '16px 24px', fontSize: 10, textTransform: 'uppercase', letterSpacing: 1, color: `var(--text-secondary)`, textAlign: 'right' }}>Actions</th>
             </tr>
           </thead>
@@ -152,7 +154,43 @@ export default function AdminClients({ dbClients, createClient, updateClient, de
             {filtered.map(client => {
               const myProjects = (workOrders || []).filter(wo => wo.clientId === client.id);
               const latestProject = myProjects[myProjects.length - 1];
+              const clientInvoices = invoices.filter(inv => inv.clientId === client.id);
+              const totalOwed = clientInvoices.reduce((sum, inv) => {
+                if (inv.status === 'Paid') return sum;
+                return sum + ((inv.amount || 0) - (inv.amountPaid || 0));
+              }, 0);
+              
+              const unpaidCount = clientInvoices.filter(i => i.status !== 'Paid').length;
+              let healthScore = 'Green'; // Green, Yellow, Red
+              let healthText = 'On Track';
+              let nextAction = 'Ready for Intake';
+              let healthColor = '#10B981';
+
+              if (unpaidCount > 0) {
+                 healthScore = 'Yellow';
+                 healthText = 'Awaiting Payment';
+                 healthColor = '#F59E0B';
+                 nextAction = 'Client Payment Required';
+              }
+              
+              if (latestProject) {
+                 if (latestProject.status === 'Installation') nextAction = 'Awaiting Worker Photos';
+                 else if (latestProject.status === 'Inspection') nextAction = 'Awaiting Inspection Sign-off';
+                 else if (latestProject.status === 'Completed') {
+                    nextAction = 'Project Closed';
+                    healthScore = 'Green';
+                    healthText = 'Completed';
+                 } else nextAction = `Advance ${latestProject.title}`;
+              }
+
+              if (totalOwed > 10000) {
+                 healthScore = 'Red';
+                 healthText = 'High Outstanding Balance';
+                 healthColor = '#EF4444';
+              }
+
               const isSelected = selectedIds.includes(client.id);
+
               return (
                 <tr key={client.id} style={{ borderBottom: '1px solid var(--bg-secondary)', background: isSelected ? `${ac}08` : 'transparent' }} className="table-row-hover">
                   <td style={{ padding: '20px 24px' }}>
@@ -165,23 +203,33 @@ export default function AdminClients({ dbClients, createClient, updateClient, de
                       <PAv i={client.name?.[0]} s={40} c={ac} />
                       <div>
                         <div className="lxfh" style={{ fontSize: 15, fontWeight: 700 }}>{client.name}</div>
-                        <div style={{ fontSize: 11, color: `var(--text-secondary)` }}>{client.phone}</div>
+                        <div style={{ fontSize: 12, color: `var(--text-secondary)` }}>{client.company || 'Private Portfolio'} • {client.phone}</div>
                       </div>
                     </div>
                   </td>
                   <td style={{ padding: '20px 24px' }}>
-                     <div style={{ fontSize: 14, fontWeight: 600 }}>{client.company || 'Private Portfolio'}</div>
-
+                     <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: `${healthColor}15`, color: healthColor, padding: '4px 10px', borderRadius: 12, fontSize: 11, fontWeight: 700 }}>
+                        <div style={{ width: 6, height: 6, borderRadius: '50%', background: healthColor }} />
+                        {healthText}
+                     </div>
                   </td>
                   <td style={{ padding: '20px 24px' }}>
                     {latestProject ? (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <div style={{ width: 6, height: 6, borderRadius: '50%', background: ac }} />
-                        <span className="lxf" style={{ fontSize: 13 }}>{latestProject.title}</span>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        <span className="lxfh" style={{ fontSize: 14 }}>{latestProject.title}</span>
+                        <span style={{ fontSize: 11, color: `var(--text-secondary)` }}>Stage: {latestProject.status || 'Initiation'}</span>
                       </div>
                     ) : (
                       <span className="lxf" style={{ fontSize: 12, color: `var(--text-secondary)` }}>Standby</span>
                     )}
+                  </td>
+                  <td style={{ padding: '20px 24px' }}>
+                     <div style={{ fontSize: 13, fontWeight: 600, color: `var(--text-secondary)` }}>{nextAction}</div>
+                  </td>
+                  <td style={{ padding: '20px 24px' }}>
+                     <div style={{ fontSize: 14, fontWeight: 700, color: totalOwed > 0 ? '#EF4444' : `var(--text-secondary)` }}>
+                        {totalOwed > 0 ? `${props.currency === 'USD' ? '$' : '₵'}${totalOwed.toLocaleString()}` : '-'}
+                     </div>
                   </td>
                   <td style={{ padding: '20px 24px', textAlign: 'right' }}>
                     <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>

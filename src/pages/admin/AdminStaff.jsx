@@ -14,7 +14,66 @@ const BADGES = [
   { id: 'firstaid', label: 'First Aid', icon: <Heart size={12} />, color: '#EF4444' }
 ];
 
-const STAFF_ROLES = ['Project Manager', 'Senior Technician', 'Technician', 'Field Worker', 'Site Supervisor'];
+const STAFF_ROLES = ['Project Manager', 'Site Supervisor', 'Senior Technician', 'Technician', 'Field Worker', 'Finance Officer', 'Procurement Lead', 'Admin Assistant'];
+
+const ROLE_PROFILES = {
+  'Project Manager': {
+    description: 'Owns client communication, approvals, stage movement, timelines, and delivery health.',
+    accessScope: 'Assigned projects and assigned clients',
+    modules: ['Client Hubs', 'Projects', 'Approvals', 'Timeline', 'Messages', 'Documents'],
+    onboarding: ['Assign active projects', 'Confirm escalation phone', 'Review stage gate policy'],
+    systemRole: 'staff'
+  },
+  'Site Supervisor': {
+    description: 'Coordinates site execution, installation readiness, worker photos, and inspection prep.',
+    accessScope: 'Assigned installation projects',
+    modules: ['Installations', 'Work Orders', 'Checklists', 'Photos', 'Messages'],
+    onboarding: ['Assign work orders', 'Attach field crew', 'Review photo evidence rules'],
+    systemRole: 'staff'
+  },
+  'Senior Technician': {
+    description: 'Handles advanced technical work, measurements, quality checks, and field notes.',
+    accessScope: 'Assigned projects and work orders',
+    modules: ['Installations', 'Work Orders', 'Technical Notes', 'Photos'],
+    onboarding: ['Assign certifications', 'Assign supervisor', 'Review checklist standards'],
+    systemRole: 'worker'
+  },
+  Technician: {
+    description: 'Completes field tasks, uploads progress evidence, and updates assigned work orders.',
+    accessScope: 'Assigned work orders only',
+    modules: ['Work Orders', 'Checklists', 'Photo Uploads'],
+    onboarding: ['Assign supervisor', 'Confirm site safety badge', 'Review mobile upload flow'],
+    systemRole: 'worker'
+  },
+  'Field Worker': {
+    description: 'Limited installer account for task input, field photos, notes, and completion status.',
+    accessScope: 'Assigned tasks and assigned projects only',
+    modules: ['Assigned Tasks', 'Installation Notes', 'Photo Uploads'],
+    onboarding: ['Assign first work order', 'Confirm phone number', 'Explain restricted permissions'],
+    systemRole: 'worker'
+  },
+  'Finance Officer': {
+    description: 'Manages invoices, receipts, quotes, payment status, and finance exports.',
+    accessScope: 'Financial records and client billing context',
+    modules: ['Financials', 'Invoices', 'Receipts', 'Quotes', 'Reports'],
+    onboarding: ['Review invoice numbering', 'Confirm bank/payment settings', 'Test receipt creation'],
+    systemRole: 'staff'
+  },
+  'Procurement Lead': {
+    description: 'Tracks supplier orders, procurement status, logistics milestones, and delivery blockers.',
+    accessScope: 'Procurement and logistics records',
+    modules: ['Procurement', 'Logistics', 'Supplier Notes', 'Documents'],
+    onboarding: ['Assign supplier list', 'Review delivery statuses', 'Confirm escalation process'],
+    systemRole: 'staff'
+  },
+  'Admin Assistant': {
+    description: 'Supports intake, document uploads, client records, and internal admin coordination.',
+    accessScope: 'CRM and assigned admin tasks',
+    modules: ['Clients', 'Documents', 'Messages', 'Activity Logs'],
+    onboarding: ['Review intake checklist', 'Assign manager', 'Confirm client data rules'],
+    systemRole: 'staff'
+  }
+};
 
 function genPassword() {
   const chars = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789@#';
@@ -134,7 +193,16 @@ export default function AdminStaff({ team = [], brand, createStaffAccount, clien
   const ac = brand.color || `var(--accent-secondary)`;
   const [showModal, setShowModal] = useState(false);
   const defaultCountry = COUNTRIES.find(c => c.code === '+233') || COUNTRIES[0];
-  const [form, setForm] = useState({ name: '', username: '', role: 'Technician' });
+  const [form, setForm] = useState({
+    name: '',
+    username: '',
+    role: 'Project Manager',
+    countryCode: defaultCountry.code,
+    phone: '',
+    department: 'Operations',
+    accessScope: 'assigned',
+    notes: ''
+  });
   const [creating, setCreating] = useState(false);
   const [created, setCreated] = useState(null);
   const [showPw, setShowPw] = useState(false);
@@ -156,10 +224,15 @@ export default function AdminStaff({ team = [], brand, createStaffAccount, clien
     else if (props.onUpdateMember) props.onUpdateMember(id, fields);
   };
 
-  const deleteM = (id) => {
-    if (window.confirm('Remove this staff member?')) {
-      if (props.deleteMember) props.deleteMember(id);
-      else if (props.onDeleteMember) props.onDeleteMember(id);
+  const deleteM = (member) => {
+    if (!member?.id) return;
+    if (window.confirm(`Deactivate ${member.name || 'this staff member'}? Their account history remains, but they should no longer receive new assignments.`)) {
+      updateM(member.id, {
+        status: 'Inactive',
+        deactivatedAt: new Date().toISOString(),
+        deactivationReason: 'Deactivated from Staff Governance'
+      });
+      notify?.('success', `${member.name || 'Staff member'} deactivated`);
     }
   };
 
@@ -174,10 +247,23 @@ export default function AdminStaff({ team = [], brand, createStaffAccount, clien
     setCreating(true);
     const tempPw = genPassword();
     const cleanUsername = form.username.toLowerCase().replace(/\s+/g, '');
+    const roleProfile = ROLE_PROFILES[form.role] || ROLE_PROFILES.Technician;
+    const phoneDigits = String(form.phone || '').replace(/\D/g, '');
+    const normalizedPhone = phoneDigits ? `${form.countryCode}${phoneDigits}` : '';
     try {
-      await createStaffAccount?.({ ...form, username: cleanUsername, password: tempPw });
-      setCreated({ name: form.name, username: cleanUsername, password: tempPw });
-      setForm({ name: '', username: '', role: 'Technician' });
+      await createStaffAccount?.({
+        ...form,
+        username: cleanUsername,
+        phone: normalizedPhone,
+        password: tempPw,
+        systemRole: roleProfile.systemRole,
+        accessModules: roleProfile.modules,
+        onboardingChecklist: roleProfile.onboarding.map(item => ({ item, done: false })),
+        requiresPasswordReset: true,
+        accessScope: form.accessScope
+      });
+      setCreated({ name: form.name, username: cleanUsername, password: tempPw, role: form.role, modules: roleProfile.modules });
+      setForm({ name: '', username: '', role: 'Project Manager', countryCode: defaultCountry.code, phone: '', department: 'Operations', accessScope: 'assigned', notes: '' });
     } catch (e) {
       notify?.('error', e.message || 'Failed to create account');
     }
@@ -262,10 +348,11 @@ export default function AdminStaff({ team = [], brand, createStaffAccount, clien
       </div>
 
       {/* Stats */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16 }}>
         {[
           { label: 'Total Staff', value: team.length, color: `var(--accent-secondary)` },
           { label: 'Active', value: team.filter(m => m.status !== 'Inactive').length, color: '#16A34A' },
+          { label: 'Project Managers', value: team.filter(m => (m.jobRole || m.role) === 'Project Manager').length, color: '#2563EB' },
           { label: 'Assigned Clients', value: team.reduce((acc, m) => acc + (m.assignedClients?.length || 0), 0), color: ac },
         ].map(s => (
           <div key={s.label} className="p-card" style={{ padding: 20, textAlign: 'center' }}>
@@ -348,7 +435,7 @@ export default function AdminStaff({ team = [], brand, createStaffAccount, clien
                       Password
                     </button>
                     {/* Delete */}
-                    <button onClick={() => deleteM(m.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: `var(--text-secondary)`, padding: 6 }}>
+                    <button onClick={() => deleteM(m)} title="Deactivate staff account" style={{ background: 'none', border: 'none', cursor: 'pointer', color: `var(--text-secondary)`, padding: 6 }}>
                       <Trash2 size={16} />
                     </button>
                   </div>
@@ -387,7 +474,7 @@ export default function AdminStaff({ team = [], brand, createStaffAccount, clien
                 <h3 className="lxfh" style={{ fontSize: 22, marginBottom: 4 }}>Recover Staff Account</h3>
                 <p className="lxf" style={{ color: `var(--text-secondary)`, fontSize: 13 }}>Re-links a Firebase Auth account that's missing from the staff register. Use this for accounts created before the system update.</p>
               </div>
-              <button onClick={() => setShowRepair(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: `var(--text-secondary)`, flexShrink: 0 }}><X size={20} /></button>
+                  <button onClick={() => setShowRepair(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: `var(--text-secondary)`, flexShrink: 0 }}><X size={20} /></button>
             </div>
 
             {repairResult ? (
@@ -468,11 +555,55 @@ export default function AdminStaff({ team = [], brand, createStaffAccount, clien
                     <label className="lxf" style={{ fontSize: 11, fontWeight: 800, color: `var(--text-secondary)`, textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>Username *</label>
                     <input className="p-inp" type="text" value={form.username} onChange={e => setForm(f => ({ ...f, username: e.target.value }))} placeholder="e.g. johnsmith" style={{ width: '100%', boxSizing: 'border-box' }} />
                   </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                    <div>
+                      <label className="lxf" style={{ fontSize: 11, fontWeight: 800, color: `var(--text-secondary)`, textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>Role</label>
+                      <select className="p-inp" value={form.role} onChange={e => setForm(f => ({ ...f, role: e.target.value }))} style={{ width: '100%', boxSizing: 'border-box' }}>
+                        {STAFF_ROLES.map(r => <option key={r}>{r}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="lxf" style={{ fontSize: 11, fontWeight: 800, color: `var(--text-secondary)`, textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>Department</label>
+                      <select className="p-inp" value={form.department} onChange={e => setForm(f => ({ ...f, department: e.target.value }))} style={{ width: '100%', boxSizing: 'border-box' }}>
+                        {['Operations', 'Finance', 'Procurement', 'Installations', 'Admin'].map(d => <option key={d}>{d}</option>)}
+                      </select>
+                    </div>
+                  </div>
                   <div>
-                    <label className="lxf" style={{ fontSize: 11, fontWeight: 800, color: `var(--text-secondary)`, textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>Role</label>
-                    <select className="p-inp" value={form.role} onChange={e => setForm(f => ({ ...f, role: e.target.value }))} style={{ width: '100%', boxSizing: 'border-box' }}>
-                      {STAFF_ROLES.map(r => <option key={r}>{r}</option>)}
+                    <label className="lxf" style={{ fontSize: 11, fontWeight: 800, color: `var(--text-secondary)`, textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>Phone</label>
+                    <div style={{ display: 'grid', gridTemplateColumns: '150px 1fr', gap: 8 }}>
+                      <select className="p-inp" value={form.countryCode} onChange={e => setForm(f => ({ ...f, countryCode: e.target.value }))} style={{ width: '100%', boxSizing: 'border-box' }}>
+                        {COUNTRIES.map(c => <option key={`${c.code}-${c.name}`} value={c.code}>{c.flag} {c.code}</option>)}
+                      </select>
+                      <input className="p-inp" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="24 000 0000" style={{ width: '100%', boxSizing: 'border-box' }} />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="lxf" style={{ fontSize: 11, fontWeight: 800, color: `var(--text-secondary)`, textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>Access Scope</label>
+                    <select className="p-inp" value={form.accessScope} onChange={e => setForm(f => ({ ...f, accessScope: e.target.value }))} style={{ width: '100%', boxSizing: 'border-box' }}>
+                      <option value="assigned">Assigned projects and clients only</option>
+                      <option value="department">Department workspace</option>
+                      <option value="finance">Finance workspace</option>
+                      <option value="operations">Operations workspace</option>
                     </select>
+                  </div>
+                  {(() => {
+                    const profile = ROLE_PROFILES[form.role] || ROLE_PROFILES.Technician;
+                    return (
+                      <div style={{ padding: 16, background: `var(--bg-secondary)`, borderRadius: 14, border: '1px solid var(--border-color)' }}>
+                        <div style={{ fontSize: 11, fontWeight: 900, color: `var(--accent-secondary)`, textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 8 }}>Permission Preview</div>
+                        <div style={{ fontSize: 13, color: `var(--text-secondary)`, lineHeight: 1.5, marginBottom: 12 }}>{profile.description}</div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                          {profile.modules.map(module => (
+                            <span key={module} style={{ padding: '5px 9px', borderRadius: 999, background: '#fff', border: '1px solid var(--border-color)', color: `var(--accent-secondary)`, fontSize: 10, fontWeight: 800 }}>{module}</span>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })()}
+                  <div>
+                    <label className="lxf" style={{ fontSize: 11, fontWeight: 800, color: `var(--text-secondary)`, textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>Internal Notes</label>
+                    <textarea className="p-inp" rows={3} value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} placeholder="Onboarding notes, supervisor, branch, or access constraints..." style={{ width: '100%', boxSizing: 'border-box', resize: 'vertical' }} />
                   </div>
                 </div>
                 <button
@@ -497,6 +628,7 @@ export default function AdminStaff({ team = [], brand, createStaffAccount, clien
                   {[
                     { label: 'Name', value: created.name },
                     { label: 'Username', value: created.username },
+                    { label: 'Role', value: created.role },
                   ].map(row => (
                     <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: 10, marginBottom: 10, borderBottom: '1px solid var(--border-color)' }}>
                       <span className="lxf" style={{ fontSize: 12, color: `var(--text-secondary)`, fontWeight: 700 }}>{row.label}</span>
@@ -513,6 +645,14 @@ export default function AdminStaff({ team = [], brand, createStaffAccount, clien
                         {showPw ? <EyeOff size={14} /> : <Eye size={14} />}
                       </button>
                     </div>
+                  </div>
+                </div>
+                <div style={{ background: '#F8FAFC', border: '1px solid var(--border-color)', borderRadius: 14, padding: 16, marginBottom: 20 }}>
+                  <div style={{ fontSize: 11, fontWeight: 900, color: `var(--text-secondary)`, textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 10 }}>Initial Access Modules</div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                    {(created.modules || []).map(module => (
+                      <span key={module} style={{ padding: '5px 9px', borderRadius: 999, background: '#fff', border: '1px solid var(--border-color)', fontSize: 10, fontWeight: 800, color: `var(--accent-secondary)` }}>{module}</span>
+                    ))}
                   </div>
                 </div>
                 <div style={{ display: 'flex', gap: 10 }}>

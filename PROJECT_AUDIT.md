@@ -20,10 +20,11 @@ This document presents a comprehensive technical audit of the **Westline Future*
 - **Synchronization Status**: Up to date with `origin/main` (`westlinefuture` repository). Diverged from legacy `glasstechfab/main`.
 - **Latest Commit Hash**: `758b1d1` (and `cf0b04d` before it).
 - **Recent Commit Breakdown**:
-  1. `758b1d1` — **Client Portal & Financials Update**: Fixed partial payment tracking on invoices (added "Update Payment" button), enabled dynamic "Amount Paid" and "Balance Due" lines on PDFs, and fixed `<base href>` injections for absolute path logo rendering on print windows.
-  2. `cf0b04d` — Sync full platform features and complete Westline Future rebrand (indigo theme, purge of regional tags).
-  3. `4b80ddb` — Full color purge: replaced gold/sand palette with Westline deep indigo (`#231F78`, `#0D0B2E`, `#4945BE`).
-  4. `d407caf` — Globalized content: neutralized local currency settings, mock contact data, and country selection vectors.
+  1. `[LOCAL UNCOMMITTED]` — **Timeline & Payments Hardening**: Replaced separate payment buttons with an atomic `UnifiedPaymentGateway` supporting Mobile Money & Cards. Updated Timeline schema to 8 stages, enforcing Rendering Fee payment gates. Fixed Cloud Function `verifyPaystackPayment` bug to properly handle partial invoice payments and log `amountPaid`.
+  2. `758b1d1` — **Client Portal & Financials Update**: Fixed partial payment tracking on invoices (added "Update Payment" button), enabled dynamic "Amount Paid" and "Balance Due" lines on PDFs, and fixed `<base href>` injections for absolute path logo rendering on print windows.
+  3. `cf0b04d` — Sync full platform features and complete Westline Future rebrand (indigo theme, purge of regional tags).
+  4. `4b80ddb` — Full color purge: replaced gold/sand palette with Westline deep indigo (`#231F78`, `#0D0B2E`, `#4945BE`).
+  5. `d407caf` — Globalized content: neutralized local currency settings, mock contact data, and country selection vectors.
 
 ---
 

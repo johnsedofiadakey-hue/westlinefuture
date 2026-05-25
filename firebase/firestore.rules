@@ -83,6 +83,11 @@ service cloud.firestore {
     }    
     match /cms_content/{docId} { allow read: if true; allow write: if isAdmin(); }
     match /settings/{docId} { allow read: if true; allow write: if isAdmin(); }
+    match /system_settings/{docId} { allow read, write: if isAdmin(); }
+    match /product_sync_sources/{sourceId} { allow read, write: if isAdmin(); }
+    match /scraped_products/{productId} { allow read, write: if isAdmin(); }
+    match /price_history_log/{logId} { allow read, write: if isAdmin(); }
+    match /sync_runs/{runId} { allow read, write: if isAdmin(); }
     
     match /notifications/{notifId} {
       allow read: if isAdmin() || (isAuthenticated() && (request.auth.uid == resource.data.userId || isClient(resource.data.userId)));
@@ -124,6 +129,8 @@ service cloud.firestore {
     match /notes/{id} { allow read: if isAdmin() || isClient(resource.data.clientId) || (isAuthenticated() && resource.data.clientEmail == request.auth.token.email); allow write: if isAdmin(); }
     match /media/{id} { allow read: if isAdmin() || isClient(resource.data.clientId) || (isAuthenticated() && resource.data.clientEmail == request.auth.token.email); allow write: if isAdmin(); }
     match /shipments/{id} { allow read: if isAdmin() || isClient(resource.data.clientId) || (isAuthenticated() && resource.data.clientEmail == request.auth.token.email); allow write: if isAdmin(); }
+    match /renderingPackages/{id} { allow read: if isAdmin() || isClient(resource.data.clientId) || (isAuthenticated() && resource.data.clientEmail == request.auth.token.email); allow write: if isAdmin() || isClient(resource.data.clientId); }
+    match /addOns/{id} { allow read: if isAdmin() || isClient(resource.data.clientId) || (isAuthenticated() && resource.data.clientEmail == request.auth.token.email); allow write: if isAdmin(); }
 
     // Logs written by Cloud Functions (Admin SDK bypasses rules, but good to have for reads)
     match /whatsapp_log/{id} { allow read: if isAdmin(); allow write: if false; }

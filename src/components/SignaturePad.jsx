@@ -1,7 +1,7 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { Trash2, CheckCircle, PenTool } from 'lucide-react';
 
-export default function SignaturePad({ onSave, onClear, ac = `var(--accent-secondary)` }) {
+export default function SignaturePad({ onSave, onClear, saveLabel = "Save & Verify", disabled = false, ac = `var(--accent-secondary)` }) {
   const canvasRef = useRef(null);
   const [isDrawing, setIsDrawing] = useState(false);
   const [ctx, setCtx] = useState(null);
@@ -30,6 +30,7 @@ export default function SignaturePad({ onSave, onClear, ac = `var(--accent-secon
   };
 
   const startDrawing = (e) => {
+    if (disabled) return;
     const { x, y } = getPos(e);
     ctx.beginPath();
     ctx.moveTo(x, y);
@@ -38,7 +39,7 @@ export default function SignaturePad({ onSave, onClear, ac = `var(--accent-secon
   };
 
   const draw = (e) => {
-    if (!isDrawing) return;
+    if (!isDrawing || disabled) return;
     const { x, y } = getPos(e);
     ctx.lineTo(x, y);
     ctx.stroke();
@@ -51,12 +52,23 @@ export default function SignaturePad({ onSave, onClear, ac = `var(--accent-secon
   };
 
   const clear = () => {
+    if (disabled) return;
     ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
     onClear && onClear();
   };
 
   const save = () => {
-    const image = canvasRef.current.toDataURL('image/png');
+    if (disabled) return;
+    // Check if the canvas is blank
+    const canvas = canvasRef.current;
+    const blank = document.createElement('canvas');
+    blank.width = canvas.width;
+    blank.height = canvas.height;
+    if (canvas.toDataURL() === blank.toDataURL()) {
+      alert("Please provide your signature before saving.");
+      return;
+    }
+    const image = canvas.toDataURL('image/png');
     onSave && onSave(image);
   };
 
@@ -69,7 +81,7 @@ export default function SignaturePad({ onSave, onClear, ac = `var(--accent-secon
         height: 240, 
         position: 'relative',
         overflow: 'hidden',
-        cursor: 'crosshair',
+        cursor: disabled ? 'not-allowed' : 'crosshair',
         touchAction: 'none'
       }}>
         <canvas 
@@ -92,16 +104,18 @@ export default function SignaturePad({ onSave, onClear, ac = `var(--accent-secon
         <button 
           onClick={clear}
           className="p-btn-light" 
-          style={{ padding: '8px 16px', display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, background: 'none' }}
+          disabled={disabled}
+          style={{ padding: '8px 16px', display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: disabled ? 'default' : 'pointer' }}
         >
           <Trash2 size={16} /> Clear Signature
         </button>
         <button 
           onClick={save}
           className="p-btn-dark"
-          style={{ padding: '8px 24px', display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, borderRadius: 100 }}
+          disabled={disabled}
+          style={{ padding: '8px 24px', display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, borderRadius: 100, background: disabled ? 'var(--border)' : 'var(--accent-secondary)', color: '#fff', border: 'none', cursor: disabled ? 'default' : 'pointer' }}
         >
-          <CheckCircle size={16} /> Save & Finalize Handover
+          <CheckCircle size={16} /> {saveLabel}
         </button>
       </div>
     </div>

@@ -1,14 +1,33 @@
-import React, { useState } from 'react';
-import { LogOut, Package, Truck, Wrench, CheckCircle, ChevronDown, ChevronUp, Camera, MessageSquare, AlertCircle } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { LogOut, Package, Truck, Wrench, CheckCircle, ChevronDown, ChevronUp, Camera, MessageSquare, AlertCircle, RefreshCw, CheckSquare, Square, MapPin } from 'lucide-react';
+import { db } from '../lib/firebase';
+import { updateDoc, doc, serverTimestamp, addDoc, collection } from 'firebase/firestore';
 import { CLIENT_PROJECT_STAGES } from '../data';
 
-const DELIVERY_STAGE = 9;
-const INSTALLATION_STAGE = 10;
-const COMPLETE_STAGE = 11;
+// Map to our Phase 1 normalized 7-stage pipeline
+const DELIVERY_STAGE = 5;       // Shipping & Delivery
+const INSTALLATION_STAGE = 6;     // Installation
+const INSPECTION_SIGN_OFF = 7;    // Inspection & Sign-off
 
 function getStageName(stageId) {
   const s = CLIENT_PROJECT_STAGES.find(s => s.id === stageId);
   return s?.name || `Stage ${stageId}`;
+}
+
+// Haversine Distance Formula (calculates distance in meters between two points)
+function getDistanceMeters(lat1, lon1, lat2, lon2) {
+  const R = 6371e3; // Earth radius in meters
+  const φ1 = lat1 * Math.PI / 180;
+  const φ2 = lat2 * Math.PI / 180;
+  const Δφ = (lat2 - lat1) * Math.PI / 180;
+  const Δλ = (lon2 - lon1) * Math.PI / 180;
+
+  const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+            Math.cos(φ1) * Math.cos(φ2) *
+            Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+  return R * c; // Distance in meters
 }
 
 function ProjectCard({ project, updateProjectStage, addProjectMessage, addProjectDocument, user }) {
@@ -18,23 +37,157 @@ function ProjectCard({ project, updateProjectStage, addProjectMessage, addProjec
   const [noteSent, setNoteSent] = useState(false);
   const [stageDone, setStageDone] = useState(false);
   const [photoLoading, setPhotoLoading] = useState(false);
-  const [photoSent, setPhotoSent] = useState(false);
+  const [photoUploaded, setPhotoUploaded] = useState(false);
+  const [uploadedPhotoUrl, setUploadedPhotoUrl] = useState('');
+
+  // Geolocation states
+  const [workerCoords, setWorkerCoords] = useState(null);
+  const [locating, setLocating] = useState(true);
+  const [locationError, setLocationError] = useState('');
+  const [distance, setDistance] = useState(null);
+  const [devBypass, setDevBypass] = useState(false);
+
+  // QA checklist states
+  const [checkedItems, setCheckedItems] = useState({});
+  const [isOfflineCached, setIsOfflineCached] = useState(false);
+
+  useEffect(() => {
+    const cached = localStorage.getItem('westline_offline_qa_' + project.id);
+    if (cached) {
+      setIsOfflineCached(true);
+      setStageDone(true);
+      try {
+        const parsed = JSON.parse(cached);
+        setCheckedItems(parsed.qaReport?.checkedItems || {});
+      } catch (err) {
+        console.error(err);
+      }
+    } else {
+      setIsOfflineCached(false);
+      setStageDone(false);
+    }
+  }, [project.id]);
 
   const isDelivery = project.stageId === DELIVERY_STAGE;
   const isInstall = project.stageId === INSTALLATION_STAGE;
-  const isComplete = project.stageId >= COMPLETE_STAGE;
+  const isComplete = project.stageId >= INSPECTION_SIGN_OFF;
+
+  // Checklist setups
+  const deliveryChecklist = [
+    { key: 'pkg_intact', label: 'Cargo inspected and crate packaging intact' },
+    { key: 'glass_qty', label: 'All tempered glass profiles accounted for' },
+    { key: 'fittings_check', label: 'Fittings, rubber gaskets, and accessories verified' }
+  ];
+
+  const installChecklist = [
+    { key: 'align_check', label: 'Glass panels aligned, plumb, and level checked' },
+    { key: 'sealant_check', label: 'Structural grade silicone sealant applied evenly' },
+    { key: 'cleanup_done', label: 'Site cleaned and protective films fully removed' },
+    { key: 'supervisor_sign', label: 'Handover checklist verified with site supervisor' }
+  ];
+
+  const activeChecklist = isDelivery ? deliveryChecklist : isInstall ? installChecklist : [];
+
+  // Default target coordinate fallbacks ( Accra Westline Office ) if not set
+  const targetLat = Number(project.latitude) || 5.6037;
+  const targetLng = Number(project.longitude) || -0.1870;
+
+  // Retrieve current location
+  const getWorkerLocation = () => {
+    setLocating(true);
+    setLocationError('');
+    if (!navigator.geolocation) {
+      setLocationError("Geolocation is not supported by your browser.");
+      setLocating(false);
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const coords = { latitude: pos.coords.latitude, longitude: pos.coords.longitude };
+        setWorkerCoords(coords);
+        const dist = getDistanceMeters(coords.latitude, coords.longitude, targetLat, targetLng);
+        setDistance(dist);
+        setLocating(false);
+      },
+      (err) => {
+        console.error("[WorkerView Geolocation Error]:", err);
+        setLocationError("Failed to obtain location. Please grant browser permissions.");
+        setLocating(false);
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  };
+
+  useEffect(() => {
+    if (!isComplete) {
+      getWorkerLocation();
+    }
+  }, [project.id]);
+
+  const toggleCheck = (key) => {
+    setCheckedItems(p => ({ ...p, [key]: !p[key] }));
+  };
+
+  const allChecked = activeChecklist.every(item => checkedItems[item.key]);
+  const checkInLocked = !devBypass && (distance === null || distance > 100);
 
   const handleStageUpdate = async () => {
-    if (!updateProjectStage) return;
+    if (!updateProjectStage || checkInLocked || !allChecked) return;
+    
+    const nextStage = isDelivery ? StageSixFallback() : INSPECTION_SIGN_OFF;
+    const label = isDelivery 
+      ? 'Logistics Complete: Materials delivered on-site. QA verified.'
+      : 'Installation Complete: QA checklists submitted by field team.';
+
+    // Save QA Checklist report meta
+    const qaReport = {
+      checkedItems,
+      photoUrl: uploadedPhotoUrl || null,
+      workerName: user?.name || user?.email || 'Worker',
+      verifiedAt: new Date().toISOString(),
+      siteDistanceMeters: distance || 0,
+      siteCoordinates: workerCoords ? { lat: workerCoords.latitude, lng: workerCoords.longitude } : null,
+      devBypassed: devBypass
+    };
+
+    if (!navigator.onLine) {
+      // Offline mode caching!
+      const cachePayload = {
+        projectId: project.id,
+        qaReport,
+        nextStage,
+        label,
+        cachedAt: new Date().toISOString()
+      };
+      localStorage.setItem('westline_offline_qa_' + project.id, JSON.stringify(cachePayload));
+      setIsOfflineCached(true);
+      setStageDone(true);
+      // Dispatch storage event to trigger top status banner update
+      window.dispatchEvent(new Event('storage'));
+      return;
+    }
+
     setStageLoading(true);
     try {
-      const label = isDelivery ? 'Delivered by field team' : 'Installation complete';
-      await updateProjectStage(project.id, COMPLETE_STAGE, label);
+      await updateDoc(doc(db, 'projects', project.id), {
+        fieldQAReport: qaReport,
+        updatedAt: serverTimestamp()
+      });
+
+      // Update the stage in Firestore
+      await updateProjectStage(project.id, nextStage, label);
       setStageDone(true);
     } catch (e) {
-      console.error(e);
+      console.error("[WorkerView Submit Error]:", e);
+    } finally {
+      setStageLoading(false);
     }
-    setStageLoading(false);
+  };
+
+  const StageSixFallback = () => {
+    // If Delivery is done, advance to Stage 6 (Installation)
+    return INSTALLATION_STAGE;
   };
 
   const handleAddNote = async () => {
@@ -56,13 +209,14 @@ function ProjectCard({ project, updateProjectStage, addProjectMessage, addProjec
     if (!file || !addProjectDocument) return;
     setPhotoLoading(true);
     try {
-      await addProjectDocument(project.id, file, {
+      const result = await addProjectDocument(project.id, file, {
         uploadedBy: user?.name || user?.displayName || 'worker',
         stageId: project.stageId,
-        name: 'Site photo — ' + new Date().toLocaleDateString(),
+        name: 'Field QA photo — ' + new Date().toLocaleDateString(),
       });
-      setPhotoSent(true);
-      setTimeout(() => setPhotoSent(false), 3000);
+      setPhotoUploaded(true);
+      setUploadedPhotoUrl(result?.fileUrl || '');
+      setTimeout(() => setPhotoUploaded(false), 3000);
     } catch (e) {
       console.error(e);
     }
@@ -70,58 +224,192 @@ function ProjectCard({ project, updateProjectStage, addProjectMessage, addProjec
   };
 
   return (
-    <div style={{ background: '#fff', borderRadius: 20, padding: 24, boxShadow: '0 2px 16px rgba(0,0,0,0.06)' }}>
+    <div style={{ background: '#fff', borderRadius: 24, padding: 24, boxShadow: '0 4px 20px rgba(92,58,33,0.06)', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: 20 }}>
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 16, fontWeight: 700, color: `var(--accent-secondary)`, marginBottom: 4, lineHeight: 1.3 }}>
+          <div style={{ fontSize: 16, fontWeight: 900, color: `var(--accent-secondary)`, marginBottom: 4, lineHeight: 1.3 }}>
             {project.title || project.name || 'Untitled Project'}
           </div>
-          <div style={{ fontSize: 12, color: `var(--text-secondary)` }}>{project.clientName || 'Client'}</div>
+          <div style={{ fontSize: 12, color: `var(--text-secondary)`, fontWeight: 500 }}>{project.clientName || 'Client'}</div>
         </div>
         <div style={{
           padding: '4px 10px', borderRadius: 100,
           background: isDelivery ? '#EFF6FF' : isInstall ? '#FFF7ED' : '#F0FDF4',
           color: isDelivery ? '#1D4ED8' : isInstall ? '#D97706' : '#16A34A',
-          fontSize: 10, fontWeight: 800, marginLeft: 12, whiteSpace: 'nowrap'
+          fontSize: 10, fontWeight: 800, marginLeft: 12, whiteSpace: 'nowrap', textTransform: 'uppercase', letterSpacing: '.04em'
         }}>
-          {project.type || (isDelivery ? 'Delivery' : isInstall ? 'Installation' : 'Active')}
+          {isDelivery ? 'Delivery' : isInstall ? 'Installation' : 'Active'}
         </div>
       </div>
 
       {/* Stage badge */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: `var(--bg-secondary)`, borderRadius: 10, marginBottom: 20 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: `var(--bg-secondary)`, borderRadius: 12 }}>
         {isDelivery && <Truck size={14} color="#1D4ED8" />}
         {isInstall && <Wrench size={14} color="#D97706" />}
         {isComplete && <CheckCircle size={14} color="#16A34A" />}
-        <span style={{ fontSize: 12, fontWeight: 700, color: '#3A3430' }}>{getStageName(project.stageId)}</span>
+        <span style={{ fontSize: 12, fontWeight: 800, color: 'var(--accent-secondary)' }}>{getStageName(project.stageId)}</span>
       </div>
 
-      {/* Stage action */}
+      {/* Geo-fencing site coordinates checking indicator */}
+      {!isComplete && (
+        <div style={{ 
+          padding: 16, 
+          borderRadius: 16, 
+          background: checkInLocked ? '#FFFBEB' : '#F0FDF4',
+          border: `1.5px solid ${checkInLocked ? '#F59E0B30' : '#10B98130'}`,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 10
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <MapPin size={16} color={checkInLocked ? '#D97706' : '#16A34A'} />
+              <span style={{ fontSize: 12, fontWeight: 900, color: checkInLocked ? '#92400E' : '#065F46' }}>
+                {checkInLocked ? "Site Check-in Locked" : "Site Check-in Active ✓"}
+              </span>
+            </div>
+            <button 
+              onClick={getWorkerLocation}
+              disabled={locating}
+              style={{ background: 'none', border: 'none', color: 'var(--accent-secondary)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, fontWeight: 700 }}
+            >
+              <RefreshCw size={11} className={locating ? "spin" : ""} style={{ animation: locating ? 'spin 1s linear infinite' : 'none' }} /> Refresh
+            </button>
+          </div>
+
+          <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.4 }}>
+            {locating ? (
+              "Verifying coordinates via carrier satellites..."
+            ) : locationError ? (
+              <span style={{ color: '#DC2626', fontWeight: 700 }}>{locationError}</span>
+            ) : (
+              `You are currently ${distance ? (distance > 1000 ? `${(distance/1000).toFixed(2)} km` : `${Math.round(distance)} meters`) : '—'} away from site coordinates.`
+            )}
+          </div>
+
+          {checkInLocked && !locating && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#D97706', fontWeight: 700 }}>
+              <AlertCircle size={12} /> Must be within 100 meters to log stage completions.
+            </div>
+          )}
+
+          {/* Dev Bypass Switch */}
+          {import.meta.env.DEV && (
+            <div style={{ borderTop: '1px dashed var(--border-color)', paddingTop: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: 10, fontWeight: 800, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>🔧 Dev Geofence Bypass</span>
+              <button 
+                onClick={() => setDevBypass(p => !p)}
+                style={{
+                  padding: '4px 10px', borderRadius: 20, border: 'none',
+                  background: devBypass ? 'var(--accent-secondary)' : 'var(--border-color)',
+                  color: '#fff', fontSize: 10, fontWeight: 800, cursor: 'pointer'
+                }}
+              >
+                {devBypass ? "BYPASSED" : "OFF"}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* QA Inspection Checklist Form */}
+      {!isComplete && !stageDone && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <label style={{ fontSize: 11, fontWeight: 800, color: `var(--text-secondary)`, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+            Site QA Checklist Form
+          </label>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {activeChecklist.map(item => {
+              const checked = !!checkedItems[item.key];
+              return (
+                <div 
+                  key={item.key} 
+                  onClick={() => toggleCheck(item.key)}
+                  style={{ 
+                    display: 'flex', alignItems: 'center', gap: 10, 
+                    padding: '12px 14px', borderRadius: 12, 
+                    background: checked ? '#FDFBF7' : 'var(--bg-secondary)',
+                    border: `1.5px solid ${checked ? 'var(--accent-secondary)30' : 'var(--border-color)'}`,
+                    cursor: 'pointer', transition: 'all 0.15s'
+                  }}
+                >
+                  {checked ? <CheckSquare size={16} color="var(--accent-secondary)" /> : <Square size={16} color="var(--text-secondary)" />}
+                  <span style={{ fontSize: 12, fontWeight: 600, color: checked ? 'var(--accent-secondary)' : 'var(--text-secondary)', lineHeight: 1.4 }}>
+                    {item.label}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Photo upload camera */}
+      {!isComplete && !stageDone && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <label style={{ fontSize: 11, fontWeight: 800, color: `var(--text-secondary)`, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+            Field photo QA proof
+          </label>
+          <label style={{
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+            padding: '14px', borderRadius: 14,
+            background: photoUploaded ? '#F0FDF4' : `var(--bg-secondary)`,
+            color: photoUploaded ? '#16A34A' : `var(--accent-secondary)`,
+            border: `1px dashed ${photoUploaded ? '#10B981' : 'var(--border-color)'}`,
+            fontSize: 13, fontWeight: 800, cursor: photoLoading ? 'default' : 'pointer'
+          }}>
+            <Camera size={16} />
+            {photoLoading ? 'Uploading QA photo...' : photoUploaded ? 'Photo uploaded ✓' : 'Take / Upload Site Photo'}
+            <input
+              type="file"
+              accept="image/*"
+              capture="environment"
+              style={{ display: 'none' }}
+              onChange={handlePhoto}
+              disabled={photoLoading}
+            />
+          </label>
+        </div>
+      )}
+
+      {/* Stage action submit */}
       {(isDelivery || isInstall) && !stageDone && (
         <button
           onClick={handleStageUpdate}
-          disabled={stageLoading}
+          disabled={stageLoading || checkInLocked || !allChecked}
           style={{
-            width: '100%', padding: '14px', borderRadius: 14, marginBottom: 16,
-            background: `var(--accent-secondary)`, color: '#fff', border: 'none',
-            fontSize: 14, fontWeight: 700, cursor: stageLoading ? 'default' : 'pointer',
-            opacity: stageLoading ? 0.7 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8
+            width: '100%', padding: '14px', borderRadius: 14,
+            background: (checkInLocked || !allChecked) ? 'var(--border)' : `var(--accent-secondary)`,
+            color: '#fff', border: 'none',
+            fontSize: 14, fontWeight: 800, cursor: (stageLoading || checkInLocked || !allChecked) ? 'default' : 'pointer',
+            opacity: stageLoading ? 0.7 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+            transition: 'all 0.2s', marginTop: 10
           }}
         >
           {isDelivery && <Truck size={16} />}
           {isInstall && <Wrench size={16} />}
-          {stageLoading ? 'Updating...' : isDelivery ? 'Mark as Delivered' : 'Mark as Installed'}
+          {stageLoading ? 'Updating...' : isDelivery ? 'Mark as Delivered (QA Approved)' : 'Mark as Installed (QA Approved)'}
         </button>
       )}
+      
       {stageDone && (
-        <div style={{ padding: '12px 16px', borderRadius: 12, background: '#F0FDF4', color: '#16A34A', fontSize: 13, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
-          <CheckCircle size={16} /> Status updated successfully
+        <div style={{
+          padding: '12px 16px', borderRadius: 12,
+          background: isOfflineCached ? '#FFFBEB' : '#F0FDF4',
+          color: isOfflineCached ? '#D97706' : '#16A34A',
+          fontSize: 13, fontWeight: 700, display: 'flex',
+          alignItems: 'center', gap: 8
+        }}>
+          <CheckCircle size={16} />
+          {isOfflineCached 
+            ? 'Report cached offline (will sync once online)'
+            : 'Status and QA report updated successfully'}
         </div>
       )}
 
       {/* Notes */}
-      <div style={{ marginBottom: 16 }}>
+      <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: 16 }}>
         <label style={{ fontSize: 11, fontWeight: 800, color: `var(--text-secondary)`, textTransform: 'uppercase', letterSpacing: '0.08em', display: 'block', marginBottom: 8 }}>
           Add a note
         </label>
@@ -152,32 +440,6 @@ function ProjectCard({ project, updateProjectStage, addProjectMessage, addProjec
           {noteLoading ? 'Sending...' : noteSent ? 'Sent ✓' : 'Add Note'}
         </button>
       </div>
-
-      {/* Photo upload */}
-      <div>
-        <label style={{ fontSize: 11, fontWeight: 800, color: `var(--text-secondary)`, textTransform: 'uppercase', letterSpacing: '0.08em', display: 'block', marginBottom: 8 }}>
-          Site photo
-        </label>
-        <label style={{
-          display: 'inline-flex', alignItems: 'center', gap: 8,
-          padding: '10px 16px', borderRadius: 10,
-          background: photoSent ? '#F0FDF4' : `var(--bg-secondary)`,
-          color: photoSent ? '#16A34A' : `var(--accent-secondary)`,
-          border: `1px solid ${photoSent ? '#BBF7D0' : '#E5E0D8'}`,
-          fontSize: 12, fontWeight: 700, cursor: photoLoading ? 'default' : 'pointer'
-        }}>
-          <Camera size={14} />
-          {photoLoading ? 'Uploading...' : photoSent ? 'Photo uploaded ✓' : 'Take / Upload Photo'}
-          <input
-            type="file"
-            accept="image/*"
-            capture="environment"
-            style={{ display: 'none' }}
-            onChange={handlePhoto}
-            disabled={photoLoading}
-          />
-        </label>
-      </div>
     </div>
   );
 }
@@ -187,7 +449,7 @@ function AllProjectsAccordion({ projects, user }) {
   if (!projects || projects.length === 0) return null;
 
   return (
-    <div style={{ background: '#fff', borderRadius: 20, overflow: 'hidden', boxShadow: '0 2px 12px rgba(0,0,0,0.05)' }}>
+    <div style={{ background: '#fff', borderRadius: 20, overflow: 'hidden', boxShadow: '0 2px 12px rgba(0,0,0,0.05)', border: '1px solid var(--border-color)' }}>
       <button
         onClick={() => setOpen(o => !o)}
         style={{
@@ -201,7 +463,7 @@ function AllProjectsAccordion({ projects, user }) {
       {open && (
         <div style={{ padding: '16px 24px', display: 'flex', flexDirection: 'column', gap: 12 }}>
           {projects.map(p => (
-            <div key={p.id} style={{ padding: '12px 16px', background: `var(--bg-secondary)`, borderRadius: 12 }}>
+            <div key={p.id} style={{ padding: '12px 16px', background: `var(--bg-secondary)`, borderRadius: 12, border: '1px solid var(--border-color)' }}>
               <div style={{ fontSize: 14, fontWeight: 700, color: `var(--accent-secondary)` }}>{p.title || p.name || 'Untitled'}</div>
               <div style={{ fontSize: 11, color: `var(--text-secondary)`, marginTop: 4 }}>
                 {p.clientName || ''} · {getStageName(p.stageId)}
@@ -217,7 +479,86 @@ function AllProjectsAccordion({ projects, user }) {
 export default function WorkerView({ user, onLogout, clients, updateProjectStage, addProjectMessage, addProjectDocument, brand }) {
   const ac = brand?.color || `var(--accent-secondary)`;
 
-  // Determine worker identifier — could be uid or email
+  const [syncingOffline, setSyncingOffline] = useState(false);
+  const [offlineSyncMessage, setOfflineSyncMessage] = useState('');
+  const [cachedCount, setCachedCount] = useState(0);
+  const [onlineStatus, setOnlineStatus] = useState(navigator.onLine);
+
+  const updateCachedCount = useCallback(() => {
+    const keys = Object.keys(localStorage);
+    const qaKeys = keys.filter(k => k.startsWith('westline_offline_qa_'));
+    setCachedCount(qaKeys.length);
+  }, []);
+
+  const syncOfflinePayloads = useCallback(async () => {
+    if (!navigator.onLine) return;
+    const keys = Object.keys(localStorage);
+    const qaKeys = keys.filter(k => k.startsWith('westline_offline_qa_'));
+    if (qaKeys.length === 0) return;
+
+    setSyncingOffline(true);
+    setOfflineSyncMessage(`Syncing ${qaKeys.length} cached field reports...`);
+    try {
+      for (const key of qaKeys) {
+        const cachedStr = localStorage.getItem(key);
+        if (!cachedStr) continue;
+        const payload = JSON.parse(cachedStr);
+        const { projectId, qaReport, nextStage, label } = payload;
+        
+        // Sync to Firestore
+        await updateDoc(doc(db, 'projects', projectId), {
+          fieldQAReport: qaReport,
+          updatedAt: serverTimestamp()
+        });
+        await updateProjectStage(projectId, nextStage, label);
+        
+        // Remove from cache
+        localStorage.removeItem(key);
+      }
+      setOfflineSyncMessage('All offline reports synced successfully!');
+      updateCachedCount();
+      setTimeout(() => {
+        setOfflineSyncMessage('');
+        window.location.reload();
+      }, 2000);
+    } catch (error) {
+      console.error("[Offline Sync Error]:", error);
+      setOfflineSyncMessage('Failed to sync some reports. Retrying later.');
+    } finally {
+      setSyncingOffline(false);
+    }
+  }, [updateProjectStage, updateCachedCount]);
+
+  useEffect(() => {
+    updateCachedCount();
+
+    const handleOnline = () => {
+      setOnlineStatus(true);
+      syncOfflinePayloads();
+    };
+    const handleOffline = () => {
+      setOnlineStatus(false);
+    };
+    const handleStorageChange = () => {
+      updateCachedCount();
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    window.addEventListener('storage', handleStorageChange);
+    
+    // Auto-sync on mount if online
+    if (navigator.onLine) {
+      syncOfflinePayloads();
+    }
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+      window.removeEventListener('storage', handleStorageChange);
+    };
+  }, [syncOfflinePayloads, updateCachedCount]);
+
   const workerId = user?.uid || user?.id;
   const workerEmail = user?.email;
 
@@ -242,15 +583,15 @@ export default function WorkerView({ user, onLogout, clients, updateProjectStage
         padding: '0 20px',
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         position: 'sticky', top: 0, zIndex: 100,
-        height: 60, boxShadow: '0 2px 20px rgba(0,0,0,0.2)'
+        height: 60, boxShadow: '0 2px 20px rgba(0,0,0,0.1)'
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div style={{ width: 32, height: 32, borderRadius: 10, background: ac, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ width: 32, height: 32, borderRadius: 10, background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <Wrench size={16} color="var(--accent-secondary)" />
           </div>
           <div>
             <div style={{ fontSize: 14, fontWeight: 700, lineHeight: 1 }}>Field View</div>
-            <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.5)', marginTop: 2 }}>{workerName}</div>
+            <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.6)', marginTop: 2 }}>{workerName}</div>
           </div>
         </div>
         <button
@@ -265,6 +606,46 @@ export default function WorkerView({ user, onLogout, clients, updateProjectStage
           <LogOut size={14} /> Sign out
         </button>
       </div>
+
+      {/* Offline Status Banner */}
+      {(!onlineStatus || cachedCount > 0) && (
+        <div style={{
+          background: !onlineStatus ? '#FEF3C7' : '#ECFDF5',
+          borderBottom: `1px solid ${!onlineStatus ? '#F59E0B' : '#10B981'}`,
+          padding: '12px 16px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 12
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <AlertCircle size={16} color={!onlineStatus ? '#D97706' : '#16A34A'} />
+            <span style={{ fontSize: 12, fontWeight: 700, color: !onlineStatus ? '#92400E' : '#065F46' }}>
+              {!onlineStatus 
+                ? `Offline Mode Active${cachedCount > 0 ? ` (${cachedCount} report cached locally)` : ''}`
+                : `${cachedCount} cached reports ready to sync.`}
+            </span>
+          </div>
+          {onlineStatus && cachedCount > 0 && (
+            <button
+              onClick={syncOfflinePayloads}
+              disabled={syncingOffline}
+              style={{
+                padding: '4px 10px', borderRadius: 6, border: 'none',
+                background: '#10B981', color: '#fff', fontSize: 11, fontWeight: 800,
+                cursor: 'pointer'
+              }}
+            >
+              {syncingOffline ? 'Syncing...' : 'Sync Now'}
+            </button>
+          )}
+        </div>
+      )}
+      {offlineSyncMessage && (
+        <div style={{ background: '#ECFDF5', color: '#065F46', padding: '10px 16px', textAlign: 'center', fontSize: 12, fontWeight: 700, borderBottom: '1px solid #10B981' }}>
+          {offlineSyncMessage}
+        </div>
+      )}
 
       {/* Content */}
       <div style={{ maxWidth: 480, margin: '0 auto', padding: '24px 16px', display: 'flex', flexDirection: 'column', gap: 24 }}>
@@ -284,7 +665,7 @@ export default function WorkerView({ user, onLogout, clients, updateProjectStage
           {todayProjects.length === 0 ? (
             <div style={{
               background: '#fff', borderRadius: 20, padding: '40px 24px', textAlign: 'center',
-              boxShadow: '0 2px 12px rgba(0,0,0,0.05)'
+              boxShadow: '0 2px 12px rgba(0,0,0,0.05)', border: '1px solid var(--border-color)'
             }}>
               <AlertCircle size={36} color="#D97706" style={{ marginBottom: 12 }} />
               <div style={{ fontSize: 15, fontWeight: 700, color: `var(--accent-secondary)`, marginBottom: 8 }}>
@@ -320,7 +701,7 @@ export default function WorkerView({ user, onLogout, clients, updateProjectStage
 
         {/* Footer */}
         <div style={{ textAlign: 'center', padding: '16px 0', fontSize: 11, color: `var(--text-secondary)` }}>
-          {brand?.name || 'WestlineFuture'} Field App
+          {brand?.name || 'Westline Future'} Field App
         </div>
       </div>
     </div>

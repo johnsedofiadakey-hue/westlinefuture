@@ -126,17 +126,40 @@ exports.verifyPaystackPayment = onCall(
 
     // Update the invoice and project payment statuses server-side
     if (invoiceId) {
-      await db.collection("invoices").doc(invoiceId).update({
-        status: "Paid",
-        paidAt: new Date().toISOString(),
-        method: "Paystack"
-      }).catch(e => logger.warn("verifyPaystackPayment: could not update top-level invoice", e));
+      try {
+        const invRef = db.collection("invoices").doc(invoiceId);
+        const invSnap = await invRef.get();
+        if (invSnap.exists) {
+          const invData = invSnap.data();
+          const invoiceTotal = Number(invData.amount || invData.total || 0);
+          const currentPaid = Number(invData.amountPaid || 0);
+          const newAmountPaid = currentPaid + amountGHS;
+          
+          let newStatus = invData.status || "Pending";
+          if (invoiceTotal > 0) {
+            if (newAmountPaid >= invoiceTotal - (invoiceTotal * 0.02)) {
+              newStatus = "Paid";
+            } else if (newAmountPaid > 0) {
+              newStatus = "Partially Paid";
+            }
+          } else {
+            newStatus = "Paid"; // fallback if no total
+          }
 
-      await db.collection("projects").doc(projectId).collection("payments").doc(invoiceId).set({
-        status: "Paid",
-        paidAt: new Date().toISOString(),
-        method: "Paystack"
-      }, { merge: true }).catch(e => logger.warn("verifyPaystackPayment: could not update project payment", e));
+          const updatePayload = {
+            status: newStatus,
+            amountPaid: newAmountPaid,
+            paidAt: new Date().toISOString(),
+            method: "Paystack"
+          };
+
+          await invRef.update(updatePayload);
+
+          await db.collection("projects").doc(projectId).collection("payments").doc(invoiceId).set(updatePayload, { merge: true });
+        }
+      } catch (err) {
+        logger.warn("verifyPaystackPayment: could not update invoice logic properly", err);
+      }
     }
 
     // Audit log
@@ -626,23 +649,67 @@ exports.onLogisticsUpdate = onDocumentUpdated("containers/{containerId}", async 
  * FINANCIAL GATEKEEPER (SERVER-SIDE)
  * Validates escrow release and locks logistics dispatch.
  */
-exports.validateEscrowRelease = onDocumentUpdated("projects/{projectId}", async (event) => {
-  const project = event.data.after.data();
-  if (project.stage === 11) {
-    logger.info(`Project ${event.params.projectId} reached balance-lock stage`);
+exports.validateEscrowRelease = onRequest(
+  { cors: true },
+  async (req, res) => {
+    try {
+      if (req.method !== "POST") {
+        return res.status(405).json({ ok: false, error: "POST required" });
+      }
+
+      const { projectId } = req.body || {};
+      if (!projectId) {
+        return res.status(400).json({ ok: false, error: "projectId is required" });
+      }
+
+      const snap = await getFirestore().collection("projects").doc(projectId).get();
+      if (!snap.exists) {
+        return res.status(404).json({ ok: false, error: "project not found" });
+      }
+
+      const project = snap.data();
+      const stageValue = Number(project.stageId || project.stage || 0);
+      const paymentStatus = project.paymentStatus || project.finance?.paymentStatus || "Unknown";
+      const locked = stageValue >= 10 && paymentStatus !== "Settled";
+
+      logger.info("validateEscrowRelease checked", { projectId, stageValue, paymentStatus, locked });
+      return res.status(200).json({ ok: true, projectId, locked, stageValue, paymentStatus });
+    } catch (err) {
+      logger.error("validateEscrowRelease failed", err);
+      return res.status(500).json({ ok: false, error: "validation failed" });
+    }
   }
-});
+);
 
 /**
  * SPEECH-TO-TEXT
  * Transcribes voice notes from the Client Portal.
  */
-exports.transcribeSupportVoice = onDocumentUpdated("messages/{msgId}", async (event) => {
-  const msg = event.data.after.data();
-  if (msg.type === "voice" && msg.voiceUrl) {
-    logger.info("Voice transcription queued for", event.params.msgId);
+exports.transcribeSupportVoice = onRequest(
+  { cors: true },
+  async (req, res) => {
+    try {
+      if (req.method !== "POST") {
+        return res.status(405).json({ ok: false, error: "POST required" });
+      }
+
+      const { messageId, voiceUrl } = req.body || {};
+      if (!messageId && !voiceUrl) {
+        return res.status(400).json({ ok: false, error: "messageId or voiceUrl is required" });
+      }
+
+      logger.info("Voice transcription requested", { messageId: messageId || null, hasVoiceUrl: Boolean(voiceUrl) });
+      return res.status(202).json({
+        ok: true,
+        status: "queued",
+        messageId: messageId || null,
+      });
+    } catch (err) {
+      logger.error("transcribeSupportVoice failed", err);
+      return res.status(500).json({ ok: false, error: "transcription request failed" });
+    }
   }
-});
+);
 
 // ---------------------------------------------------------------------------
 // Rate limiting — uses Firestore counter documents

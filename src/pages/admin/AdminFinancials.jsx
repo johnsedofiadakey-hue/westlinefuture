@@ -935,7 +935,7 @@ export default function AdminFinancials({ invoices = [], transactions = [], clie
               </div>
             </div>
           </div>
-        </div>
+        </div>, document.body
       )}
 
       {/* ══════════════════════════════════════════════════════════════════════

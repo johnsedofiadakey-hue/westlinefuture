@@ -265,6 +265,7 @@ export function PubNav({ brand, setPage, activePage, onPortal, menuOpen, setMenu
   const isScrolled = scrolled || forceSolid;
 
   return (
+    <>
     <nav style={{
       position: 'fixed', top: 0, left: 0, right: 0, zIndex: 1000,
       background: isScrolled ? 'rgba(24, 14, 6, 0.97)' : 'rgba(24, 14, 6, 0.15)',
@@ -360,177 +361,194 @@ export function PubNav({ brand, setPage, activePage, onPortal, menuOpen, setMenu
           </div>
         )}
         {!mob && <LanguageFlagSwitch variant="floating" />}
-        <div
-          className="mob-only"
-          style={{ background: 'none', border: 'none', padding: 0, marginRight: 6, zIndex: 1001 }}
-        >
-          <LanguageFlagSwitch variant="mobile" />
-        </div>
-        {/* MOBILE TOGGLE */}
-        <button
-          className="mob-only"
-          onClick={() => setMenuOpen(!menuOpen)}
-          aria-label={menuOpen ? 'Close menu' : 'Open menu'}
-          style={{
-            background: menuOpen ? 'rgba(200,169,110,0.15)' : 'rgba(255,255,255,0.12)',
-            border: `1px solid ${menuOpen ? 'rgba(200,169,110,0.4)' : 'rgba(255,255,255,0.2)'}`,
-            color: '#ffffff',
-            zIndex: 1002,
-            padding: '10px',
-            borderRadius: 12,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            backdropFilter: 'blur(8px)',
-            transition: 'all 0.3s',
-            cursor: 'pointer'
-          }}
-        >
-          {menuOpen ? <X size={22} strokeWidth={2.5} /> : <Menu size={22} strokeWidth={2} />}
-        </button>
 
-      </div>
-
-      {/* MOBILE DRAWER — dark branded full-screen */}
-      <div style={{
-        position: 'fixed', top: 0, right: 0, bottom: 0,
-        width: '100%',
-        background: '#100D0A',
-        transform: menuOpen ? 'translateX(0)' : 'translateX(100%)',
-        transition: 'transform 0.45s cubic-bezier(0.16, 1, 0.3, 1)',
-        zIndex: 1001,
-        display: 'flex',
-        flexDirection: 'column',
-        overflow: 'hidden',
-      }}>
-        {/* Subtle texture overlay */}
-        <div style={{
-          position: 'absolute', inset: 0, pointerEvents: 'none',
-          background: 'radial-gradient(ellipse at 80% 10%, rgba(200,169,110,0.06) 0%, transparent 60%), radial-gradient(ellipse at 10% 90%, rgba(200,169,110,0.04) 0%, transparent 55%)'
-        }} />
-
-        {/* TOP BAR — logo + close */}
-        <div style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          padding: '20px 24px',
-          borderBottom: '1px solid rgba(255,255,255,0.06)',
-          position: 'relative', zIndex: 2
-        }}>
-          {brand.logo ? (
-            <img src={brand.logo} alt={brand.name}
-              style={{ height: 40, width: 'auto', objectFit: 'contain', filter: 'brightness(0) invert(1)' }} />
-          ) : (
-            <div>
-              <div style={{ fontSize: 16, fontWeight: 900, color: '#fff', letterSpacing: '0.08em' }}>WESTLINE</div>
-              <div style={{ fontSize: 8, fontWeight: 400, color: 'rgba(255,255,255,0.45)', letterSpacing: '0.4em' }}>FUTURE</div>
-            </div>
-          )}
-          <button
-            onClick={() => setMenuOpen(false)}
-            style={{
-              background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.12)',
-              borderRadius: 10, padding: '8px', color: '#fff', cursor: 'pointer',
-              display: 'flex', alignItems: 'center', justifyContent: 'center'
-            }}
-          >
-            <X size={20} strokeWidth={2} />
-          </button>
-        </div>
-
-        {/* NAV LINKS */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '12px 0', position: 'relative', zIndex: 2 }}>
-          {links.map((l, idx) => {
-            const isActive = activePage === l.id;
-            return (
-              <button
-                key={l.id}
-                onClick={() => {
-                  setMenuOpen(false);
-                  if (l.id === 'home') { navigate('/'); if (setPage) setPage('home'); }
-                  else if (l.id === 'products') navigate('/products');
-                  else if (l.id === 'showcase') navigate('/showcase');
-                  else if (l.id === 'portfolio') navigate('/portfolio');
-                  else if (setPage) {
-                    if (window.location.pathname !== '/') navigate('/?page=' + l.id);
-                    else setPage(l.id);
-                  }
-                }}
-                style={{
-                  width: '100%',
-                  background: 'none',
-                  border: 'none',
-                  borderLeft: isActive ? '3px solid #C8A96E' : '3px solid transparent',
-                  padding: '18px 28px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s',
-                  textAlign: 'left',
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                  <span style={{
-                    fontSize: 10, fontWeight: 700, color: 'rgba(200,169,110,0.5)',
-                    width: 22, textAlign: 'right', letterSpacing: '0.05em', fontVariantNumeric: 'tabular-nums'
-                  }}>
-                    {String(idx + 1).padStart(2, '0')}
-                  </span>
-                  <span style={{
-                    fontSize: 22,
-                    fontWeight: isActive ? 800 : 600,
-                    color: isActive ? '#C8A96E' : 'rgba(255,255,255,0.82)',
-                    letterSpacing: isActive ? '-0.01em' : '0',
-                    transition: 'all 0.2s',
-                    fontFamily: '"Outfit", sans-serif'
-                  }}>
-                    {l.n}
-                    {l.badge && (
-                      <span style={{
-                        marginLeft: 8, fontSize: 8, fontWeight: 800,
-                        background: '#C8A96E', color: '#1A1410',
-                        borderRadius: 100, padding: '2px 6px', verticalAlign: 'middle'
-                      }}>{l.badge}</span>
-                    )}
-                  </span>
-                </div>
-                <div style={{
-                  width: 6, height: 6, borderRadius: '50%',
-                  background: isActive ? '#C8A96E' : 'rgba(255,255,255,0.15)',
-                  transition: 'all 0.2s'
-                }} />
-              </button>
-            );
-          })}
-        </div>
-
-        {/* BOTTOM ACTIONS */}
-        <div style={{
-          padding: '16px 24px 36px',
-          borderTop: '1px solid rgba(255,255,255,0.06)',
-          display: 'flex', flexDirection: 'column', gap: 12,
-          position: 'relative', zIndex: 2
-        }}>
-          <button
-            onClick={() => { setMenuOpen(false); onPortal('client'); }}
-            style={{
-              padding: '18px 24px',
-              background: 'linear-gradient(135deg, #C8A96E 0%, #B07C38 100%)',
-              color: '#1A1410', borderRadius: 14, border: 'none',
-              fontSize: 13, fontWeight: 800, textTransform: 'uppercase',
-              letterSpacing: '0.12em', cursor: 'pointer',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
-              boxShadow: '0 8px 24px rgba(200,169,110,0.25)'
-            }}
-          >
-            {copy.portalLogin} →
-          </button>
-          <div style={{ display: 'flex', justifyContent: 'center' }}>
+        {/* MOBILE: language + hamburger — only rendered on mobile via JS, no CSS class conflicts */}
+        {mob && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <LanguageFlagSwitch variant="mobile" />
+            <button
+              onClick={() => setMenuOpen(!menuOpen)}
+              aria-label={menuOpen ? 'Close menu' : 'Open menu'}
+              style={{
+                background: 'rgba(255,255,255,0.12)',
+                border: '1px solid rgba(255,255,255,0.2)',
+                color: '#ffffff',
+                padding: '10px',
+                borderRadius: 12,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                flexShrink: 0,
+              }}
+            >
+              <Menu size={22} strokeWidth={2} />
+            </button>
           </div>
-        </div>
+        )}
+
       </div>
     </nav>
+
+    {/* ─────────────────────────────────────────────────────
+        MOBILE DRAWER — rendered as a sibling to <nav>, NOT
+        inside it. Placing it inside nav causes the nav's
+        backdrop-filter to create a containing block that
+        clips position:fixed children to the navbar height.
+    ───────────────────────────────────────────────────── */}
+    {mob && (
+      <>
+        {/* Backdrop scrim */}
+        {menuOpen && (
+          <div
+            onClick={() => setMenuOpen(false)}
+            style={{
+              position: 'fixed', inset: 0, zIndex: 9998,
+              background: 'rgba(0,0,0,0.5)',
+              backdropFilter: 'blur(4px)',
+              WebkitBackdropFilter: 'blur(4px)',
+            }}
+          />
+        )}
+
+        {/* Drawer panel */}
+        <div style={{
+          position: 'fixed', top: 0, right: 0, bottom: 0,
+          width: '100%',
+          background: '#100D0A',
+          transform: menuOpen ? 'translateX(0)' : 'translateX(100%)',
+          transition: 'transform 0.45s cubic-bezier(0.16, 1, 0.3, 1)',
+          zIndex: 9999,
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden',
+        }}>
+          {/* Subtle warm glow */}
+          <div style={{
+            position: 'absolute', inset: 0, pointerEvents: 'none',
+            background: 'radial-gradient(ellipse at 80% 10%, rgba(200,169,110,0.07) 0%, transparent 55%), radial-gradient(ellipse at 10% 90%, rgba(200,169,110,0.04) 0%, transparent 50%)'
+          }} />
+
+          {/* TOP BAR — logo + close */}
+          <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            padding: '20px 24px',
+            borderBottom: '1px solid rgba(255,255,255,0.07)',
+            position: 'relative', zIndex: 2, flexShrink: 0
+          }}>
+            <div onClick={() => { setMenuOpen(false); navigate('/'); if (setPage) setPage('home'); }} style={{ cursor: 'pointer' }}>
+              {brand.logo ? (
+                <img src={brand.logo} alt={brand.name}
+                  style={{ height: 38, width: 'auto', objectFit: 'contain', filter: 'brightness(0) invert(1)', display: 'block' }} />
+              ) : (
+                <div>
+                  <div style={{ fontSize: 16, fontWeight: 900, color: '#fff', letterSpacing: '0.08em' }}>WESTLINE</div>
+                  <div style={{ fontSize: 8, fontWeight: 400, color: 'rgba(255,255,255,0.45)', letterSpacing: '0.4em' }}>FUTURE</div>
+                </div>
+              )}
+            </div>
+            <button
+              onClick={() => setMenuOpen(false)}
+              style={{
+                background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.13)',
+                borderRadius: 10, padding: '9px', color: '#fff', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
+              }}
+            >
+              <X size={20} strokeWidth={2} />
+            </button>
+          </div>
+
+          {/* NAV LINKS */}
+          <div style={{ flex: 1, overflowY: 'auto', padding: '8px 0', position: 'relative', zIndex: 2 }}>
+            {links.map((l, idx) => {
+              const isActive = activePage === l.id;
+              return (
+                <button
+                  key={l.id}
+                  onClick={() => {
+                    setMenuOpen(false);
+                    if (l.id === 'home') { navigate('/'); if (setPage) setPage('home'); }
+                    else if (l.id === 'products') navigate('/products');
+                    else if (l.id === 'showcase') navigate('/showcase');
+                    else if (l.id === 'portfolio') navigate('/portfolio');
+                    else if (setPage) {
+                      if (window.location.pathname !== '/') navigate('/?page=' + l.id);
+                      else setPage(l.id);
+                    }
+                  }}
+                  style={{
+                    width: '100%', background: 'none', border: 'none',
+                    borderLeft: isActive ? '3px solid #C8A96E' : '3px solid transparent',
+                    padding: '17px 28px',
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    cursor: 'pointer', transition: 'background 0.2s', textAlign: 'left',
+                    boxSizing: 'border-box',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                    <span style={{
+                      fontSize: 10, fontWeight: 700, color: 'rgba(200,169,110,0.45)',
+                      width: 22, textAlign: 'right', letterSpacing: '0.05em',
+                      fontVariantNumeric: 'tabular-nums', flexShrink: 0
+                    }}>
+                      {String(idx + 1).padStart(2, '0')}
+                    </span>
+                    <span style={{
+                      fontSize: 22, fontWeight: isActive ? 800 : 500,
+                      color: isActive ? '#C8A96E' : 'rgba(255,255,255,0.85)',
+                      transition: 'color 0.2s',
+                      fontFamily: '"Outfit", sans-serif',
+                    }}>
+                      {l.n}
+                      {l.badge && (
+                        <span style={{
+                          marginLeft: 8, fontSize: 8, fontWeight: 800,
+                          background: '#C8A96E', color: '#1A1410',
+                          borderRadius: 100, padding: '2px 6px', verticalAlign: 'middle'
+                        }}>{l.badge}</span>
+                      )}
+                    </span>
+                  </div>
+                  <div style={{
+                    width: 6, height: 6, borderRadius: '50%',
+                    background: isActive ? '#C8A96E' : 'rgba(255,255,255,0.18)',
+                    flexShrink: 0
+                  }} />
+                </button>
+              );
+            })}
+          </div>
+
+          {/* BOTTOM ACTIONS */}
+          <div style={{
+            padding: '16px 24px max(36px, env(safe-area-inset-bottom, 36px))',
+            borderTop: '1px solid rgba(255,255,255,0.07)',
+            display: 'flex', flexDirection: 'column', gap: 12,
+            position: 'relative', zIndex: 2, flexShrink: 0
+          }}>
+            <button
+              onClick={() => { setMenuOpen(false); onPortal('client'); }}
+              style={{
+                padding: '18px 24px',
+                background: 'linear-gradient(135deg, #C8A96E 0%, #B07C38 100%)',
+                color: '#1A1410', borderRadius: 14, border: 'none',
+                fontSize: 13, fontWeight: 800, textTransform: 'uppercase',
+                letterSpacing: '0.12em', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
+                boxShadow: '0 8px 24px rgba(200,169,110,0.25)'
+              }}
+            >
+              {copy.portalLogin} →
+            </button>
+            <div style={{ display: 'flex', justifyContent: 'center' }}>
+              <LanguageFlagSwitch variant="mobile" />
+            </div>
+          </div>
+        </div>
+      </>
+    )}
+  </>
   );
 }
 

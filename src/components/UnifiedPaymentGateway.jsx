@@ -98,7 +98,7 @@ export default function UnifiedPaymentGateway({ label, amountGHS, email, project
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-          <div style={{ width: 44, height: 44, borderRadius: 12, background: '#E0E7FF', color: '#4F46E5', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ width: 44, height: 44, borderRadius: 12, background: '#F4EFE6', color: 'var(--accent-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <CreditCard size={22} />
           </div>
           <div style={{ textAlign: 'left' }}>

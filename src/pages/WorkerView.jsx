@@ -282,8 +282,8 @@ function ProjectCard({ project, updateProjectStage, addProjectMessage, addProjec
         </div>
         <div style={{
           padding: '4px 10px', borderRadius: 100,
-          background: isDelivery ? '#EFF6FF' : isInstall ? '#FFF7ED' : '#F0FDF4',
-          color: isDelivery ? '#1D4ED8' : isInstall ? '#D97706' : '#16A34A',
+          background: isDelivery ? '#F4EFE6' : isInstall ? '#FFF7ED' : '#F0FDF4',
+          color: isDelivery ? 'var(--accent-primary)' : isInstall ? '#D97706' : '#16A34A',
           fontSize: 10, fontWeight: 800, marginLeft: 12, whiteSpace: 'nowrap', textTransform: 'uppercase', letterSpacing: '.04em'
         }}>
           {isDelivery ? 'Delivery' : isInstall ? 'Installation' : 'Active'}
@@ -292,7 +292,7 @@ function ProjectCard({ project, updateProjectStage, addProjectMessage, addProjec
 
       {/* Stage badge */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: `var(--bg-secondary)`, borderRadius: 12 }}>
-        {isDelivery && <Truck size={14} color="#1D4ED8" />}
+        {isDelivery && <Truck size={14} color="var(--accent-primary)" />}
         {isInstall && <Wrench size={14} color="#D97706" />}
         {isComplete && <CheckCircle size={14} color="#16A34A" />}
         <span style={{ fontSize: 12, fontWeight: 800, color: 'var(--accent-secondary)' }}>{getStageName(project.stageId)}</span>

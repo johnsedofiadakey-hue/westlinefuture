@@ -343,7 +343,7 @@ export default function AdminRenderingManager({ project, brand, renderingPackage
                             style={{
                               display: 'flex', alignItems: 'center', gap: 6,
                               padding: '6px 14px', borderRadius: 100, border: 'none',
-                              background: activePin.status === 'Resolved' ? '#EFF6FF' : '#10B981',
+                              background: activePin.status === 'Resolved' ? '#F4EFE6' : '#10B981',
                               color: activePin.status === 'Resolved' ? 'var(--accent-primary)' : '#fff',
                               fontSize: 11, fontWeight: 800, cursor: 'pointer', transition: 'all 0.2s'
                             }}

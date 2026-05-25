@@ -352,7 +352,7 @@ export default function AdminStaff({ team = [], brand, createStaffAccount, clien
         {[
           { label: 'Total Staff', value: team.length, color: `var(--accent-secondary)` },
           { label: 'Active', value: team.filter(m => m.status !== 'Inactive').length, color: '#16A34A' },
-          { label: 'Project Managers', value: team.filter(m => (m.jobRole || m.role) === 'Project Manager').length, color: '#2563EB' },
+          { label: 'Project Managers', value: team.filter(m => (m.jobRole || m.role) === 'Project Manager').length, color: 'var(--accent-primary)' },
           { label: 'Assigned Clients', value: team.reduce((acc, m) => acc + (m.assignedClients?.length || 0), 0), color: ac },
         ].map(s => (
           <div key={s.label} className="p-card" style={{ padding: 20, textAlign: 'center' }}>

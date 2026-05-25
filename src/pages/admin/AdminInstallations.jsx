@@ -113,16 +113,35 @@ export default function AdminInstallations({ clients = [], updateProject, dbClie
 
             {/* TASKS & PROCUREMENT */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
-               <AdminTasks projectId={sel} projectTitle={proj.project} {...props} brand={brand} />
+               <div id="admin-tasks"><AdminTasks projectId={sel} projectTitle={proj.project} {...props} brand={brand} /></div>
                <AdminProcurement projectId={sel} procurements={props.procurements} createProcurement={props.createProcurement} updateProcurement={props.updateProcurement} deleteProcurement={props.deleteProcurement} brand={brand} />
             </div>
 
-            <AdminProjectGallery projectId={sel} media={props.media} uploadMedia={props.uploadMedia} deleteMedia={props.deleteMedia} ac={ac} />
+            <div id="admin-gallery"><AdminProjectGallery projectId={sel} media={props.media} uploadMedia={props.uploadMedia} deleteMedia={props.deleteMedia} ac={ac} /></div>
 
-            <AdminGovernance projectId={sel} {...props} brand={brand} />
+            <div id="admin-gov"><AdminGovernance projectId={sel} {...props} brand={brand} /></div>
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+            {/* FIELD QA REPORT */}
+            {proj.fieldQAReport && (
+              <div className="p-card" style={{ padding: 24 }}>
+                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+                    <Camera size={16} color={ac} />
+                    <h3 className="lxfh" style={{ fontSize: 16 }}>Field QA Report</h3>
+                 </div>
+                 {proj.fieldQAReport.photoUrl && (
+                   <img src={proj.fieldQAReport.photoUrl} alt="QA" style={{ width: '100%', height: 160, objectFit: 'cover', borderRadius: 12, marginBottom: 12 }} />
+                 )}
+                 <div style={{ fontSize: 12, color: `var(--text-secondary)`, marginBottom: 4 }}>
+                   <strong>Verified By:</strong> {proj.fieldQAReport.workerName || 'Worker'}
+                 </div>
+                 <div style={{ fontSize: 12, color: `var(--text-secondary)` }}>
+                   <strong>Distance from Site:</strong> {Math.round(proj.fieldQAReport.siteDistanceMeters || 0)}m {proj.fieldQAReport.devBypassed ? '(Bypassed)' : ''}
+                 </div>
+              </div>
+            )}
+
             {/* FINANCIAL AUDIT LEDGER */}
             <div className="p-card" style={{ padding: 24 }}>
                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
@@ -206,10 +225,10 @@ export default function AdminInstallations({ clients = [], updateProject, dbClie
             <div className="p-card" style={{ padding: 24, background: ac, color: '#fff' }}>
                <h3 className="lxfh" style={{ fontSize: 16, marginBottom: 16, color: '#fff' }}>Quick Actions</h3>
                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                  <button className="glass-btn" style={{ fontSize: 11, padding: '10px 0', borderColor: 'rgba(255,255,255,.2)', color: '#fff' }}><Plus size={14} /> Task</button>
-                  <button className="glass-btn" style={{ fontSize: 11, padding: '10px 0', borderColor: 'rgba(255,255,255,.2)', color: '#fff' }}><Camera size={14} /> Photo</button>
-                  <button className="glass-btn" style={{ fontSize: 11, padding: '10px 0', borderColor: 'rgba(255,255,255,.2)', color: '#fff' }}><FileText size={14} /> Approval</button>
-                  <button className="glass-btn" style={{ fontSize: 11, padding: '10px 0', borderColor: 'rgba(255,255,255,.2)', color: '#fff' }}><DollarSign size={14} /> Invoice</button>
+                  <button onClick={() => document.getElementById('admin-tasks')?.scrollIntoView({behavior: 'smooth'})} className="glass-btn" style={{ fontSize: 11, padding: '10px 0', borderColor: 'rgba(255,255,255,.2)', color: '#fff', cursor: 'pointer' }}><Plus size={14} /> Task</button>
+                  <button onClick={() => document.getElementById('admin-gallery')?.scrollIntoView({behavior: 'smooth'})} className="glass-btn" style={{ fontSize: 11, padding: '10px 0', borderColor: 'rgba(255,255,255,.2)', color: '#fff', cursor: 'pointer' }}><Camera size={14} /> Photo</button>
+                  <button onClick={() => document.getElementById('admin-gov')?.scrollIntoView({behavior: 'smooth'})} className="glass-btn" style={{ fontSize: 11, padding: '10px 0', borderColor: 'rgba(255,255,255,.2)', color: '#fff', cursor: 'pointer' }}><FileText size={14} /> Approval</button>
+                  <button onClick={() => setShowManual(true)} className="glass-btn" style={{ fontSize: 11, padding: '10px 0', borderColor: 'rgba(255,255,255,.2)', color: '#fff', cursor: 'pointer' }}><DollarSign size={14} /> Invoice</button>
                </div>
             </div>
           </div>

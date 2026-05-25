@@ -218,17 +218,23 @@ function CMSServices({ services, onSave, ac, notify }) {
        </button>
     </div>
   );
-}
-
-function CMSProducts({ ac, notify }) {
+}function CMSProducts({ ac, notify }) {
   const [list, setList] = useState([]);
   const [cats, setCats] = useState([]);
   const [view, setView] = useState('list'); // 'list', 'add', 'cats'
   const [uploading, setUploading] = useState(false);
   const [loading, setLoading] = useState(true);
 
+  // Edit states
+  const [isEditing, setIsEditing] = useState(false);
+  const [editingId, setEditingId] = useState(null);
+
   // Form states
-  const [newItem, setNewItem] = useState({ name: '', desc: '', img: '', cat: '', specs: '', fobPrice: '', landedCost: '', status: 'Available', stock: 10, threshold: 2 });
+  const [newItem, setNewItem] = useState({ 
+    name: '', tagline: '', desc: '', img: '', cat: '', specs: '', 
+    fobPrice: '', landedCost: '', status: 'Available', stock: 10, threshold: 2,
+    colors: '', options: ''
+  });
   const [newCat, setNewCat] = useState({ id: '', label: '', icon: '📦', groupId: 'aluminum', desc: '' });
 
   const GROUPS = [
@@ -272,13 +278,100 @@ function CMSProducts({ ac, notify }) {
     }
   };
 
+  const handleEditClick = (p) => {
+    setIsEditing(true);
+    setEditingId(p.id);
+
+    // Format specs to string if it is an object
+    let specsStr = '';
+    if (p.specs) {
+      if (typeof p.specs === 'object') {
+        specsStr = Object.entries(p.specs).map(([k, v]) => `${k}: ${v}`).join('\n');
+      } else {
+        specsStr = String(p.specs);
+      }
+    }
+
+    setNewItem({
+      name: p.name || '',
+      tagline: p.tagline || '',
+      desc: p.desc || '',
+      img: p.img || '',
+      cat: p.cat || '',
+      specs: specsStr,
+      fobPrice: p.fobPrice || '',
+      landedCost: p.landedCost || '',
+      status: p.status || 'Available',
+      stock: p.stock || 10,
+      threshold: p.threshold || 2,
+      colors: Array.isArray(p.colors) ? p.colors.join(', ') : '',
+      options: Array.isArray(p.options) ? p.options.join(', ') : ''
+    });
+
+    setView('add');
+  };
+
+  const handleBackToList = () => {
+    setNewItem({ 
+      name: '', tagline: '', desc: '', img: cats?.[0]?.id || '', cat: '', specs: '', 
+      fobPrice: '', landedCost: '', status: 'Available', stock: 10, threshold: 2,
+      colors: '', options: ''
+    });
+    setIsEditing(false);
+    setEditingId(null);
+    setView('list');
+  };
+
   const saveProduct = async () => {
     if (!newItem.name || !newItem.img) { notify?.('error', 'Name and Image are required.'); return; }
     if (!db) { notify?.('error', 'Database offline.'); return; }
-    const docId = `PROD-${Date.now()}`;
-    await setDoc(doc(db, 'products', docId), { ...newItem, id: docId, createdAt: serverTimestamp() });
-    notify?.('success', 'Asset created live!');
-    setNewItem({ name: '', desc: '', img: '', cat: cats?.[0]?.id || '', specs: '', fobPrice: '', landedCost: '', status: 'Available', stock: 10, threshold: 2 });
+    
+    // Parse specs from string to clean object
+    const parsedSpecs = {};
+    String(newItem.specs || '').split('\n').forEach(line => {
+      const idx = line.indexOf(':');
+      if (idx !== -1) {
+        parsedSpecs[line.slice(0, idx).trim()] = line.slice(idx + 1).trim();
+      }
+    });
+
+    const parsedColors = String(newItem.colors || '').split(',').map(c => c.trim()).filter(Boolean);
+    const parsedOptions = String(newItem.options || '').split(',').map(o => o.trim()).filter(Boolean);
+
+    const docId = isEditing ? editingId : `PROD-${Date.now()}`;
+    const productPayload = {
+      name: newItem.name,
+      tagline: newItem.tagline || '',
+      desc: newItem.desc || '',
+      img: newItem.img,
+      cat: newItem.cat,
+      specs: parsedSpecs,
+      colors: parsedColors.length > 0 ? parsedColors : null,
+      options: parsedOptions.length > 0 ? parsedOptions : null,
+      fobPrice: newItem.fobPrice || '',
+      landedCost: newItem.landedCost || '',
+      status: newItem.status,
+      stock: Number(newItem.stock || 0),
+      threshold: Number(newItem.threshold || 2),
+      updatedAt: serverTimestamp()
+    };
+
+    if (!isEditing) {
+      productPayload.id = docId;
+      productPayload.createdAt = serverTimestamp();
+    }
+
+    await setDoc(doc(db, 'products', docId), productPayload, { merge: true });
+    notify?.('success', isEditing ? 'Asset updated live!' : 'Asset created live!');
+
+    // Reset states
+    setNewItem({ 
+      name: '', tagline: '', desc: '', img: cats?.[0]?.id || '', cat: '', specs: '', 
+      fobPrice: '', landedCost: '', status: 'Available', stock: 10, threshold: 2,
+      colors: '', options: ''
+    });
+    setIsEditing(false);
+    setEditingId(null);
     setView('list');
   };
 
@@ -326,14 +419,14 @@ function CMSProducts({ ac, notify }) {
        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
          <h3 className="lxfh" style={{ fontSize: 24, color: `var(--accent-secondary)` }}>Live Catalog Manager</h3>
          <div style={{ display: 'flex', gap: 12 }}>
-            {view !== 'list' && <button onClick={() => setView('list')} className="p-btn-outline lxf" style={{ padding: '10px 20px', borderRadius: 100 }}>Back to List</button>}
+            {view !== 'list' && <button onClick={handleBackToList} className="p-btn-outline lxf" style={{ padding: '10px 20px', borderRadius: 100 }}>Back to List</button>}
             {view === 'list' && (
-              <>
-                <button onClick={() => setView('cats')} style={{ padding: '10px 20px', background: '#fff', border: '1px solid #ddd', borderRadius: 100, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Manage Categories</button>
-                <button onClick={() => setView('add')} className="p-btn-gold lxf" style={{ padding: '10px 24px', display: 'flex', alignItems: 'center', gap: 8, borderRadius: 100 }}>
-                  <Upload size={16} /> Add Asset
-                </button>
-              </>
+               <>
+                 <button onClick={() => setView('cats')} style={{ padding: '10px 20px', background: '#fff', border: '1px solid #ddd', borderRadius: 100, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Manage Categories</button>
+                 <button onClick={() => setView('add')} className="p-btn-gold lxf" style={{ padding: '10px 24px', display: 'flex', alignItems: 'center', gap: 8, borderRadius: 100 }}>
+                   <Upload size={16} /> Add Asset
+                 </button>
+               </>
             )}
          </div>
        </div>
@@ -415,8 +508,9 @@ function CMSProducts({ ac, notify }) {
            </div>
 
            <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-             <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 16 }}>
+             <div style={{ display: 'grid', gridTemplateColumns: '2fr 1.5fr 1.5fr', gap: 16 }}>
                <PFormField label="Product Name"><input className="p-inp" value={newItem.name} onChange={e => setNewItem({...newItem, name: e.target.value})} /></PFormField>
+               <PFormField label="Product Tagline"><input className="p-inp" placeholder="e.g. Premium Aluminium Systems" value={newItem.tagline} onChange={e => setNewItem({...newItem, tagline: e.target.value})} /></PFormField>
                <PFormField label="Category">
                  <select className="p-inp" value={newItem.cat} onChange={e => setNewItem({...newItem, cat: e.target.value})}>
                     {(cats || []).map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
@@ -437,18 +531,41 @@ function CMSProducts({ ac, notify }) {
                </PFormField>
              </div>
 
-             <PFormField label="Technical Description (Supports line-breaks for rich formatting)">
-                <textarea 
-                  className="p-inp" 
-                  rows={8} 
-                  placeholder="Enter product specifications, features, and overview here. Line breaks are preserved on the public site."
-                  value={newItem.desc} 
-                  onChange={e => setNewItem({...newItem, desc: e.target.value})} 
-                />
-              </PFormField>
+             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+               <PFormField label="Finish Colors (Comma separated)" hint="e.g. Anodized Black, Satin Bronze, Matt White">
+                 <input className="p-inp" placeholder="Anodized Black, Satin Bronze..." value={newItem.colors || ''} onChange={e => setNewItem({...newItem, colors: e.target.value})} />
+               </PFormField>
+               <PFormField label="Structural Options (Comma separated)" hint="e.g. Standard, Double Glazed DGU, Low-E Laminated">
+                 <input className="p-inp" placeholder="Standard, Double Glazed..." value={newItem.options || ''} onChange={e => setNewItem({...newItem, options: e.target.value})} />
+               </PFormField>
+             </div>
 
-             <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: 16, borderTop: '1px solid var(--border-color)' }}>
-               <button onClick={saveProduct} className="p-btn-gold lxf" style={{ padding: '14px 40px', borderRadius: 12, fontSize: 16 }}>Publish to Live Catalog</button>
+             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+               <PFormField label="Product Overview Description (Public page summary)">
+                  <textarea 
+                    className="p-inp" 
+                    rows={6} 
+                    placeholder="Enter premium overview copy for the customer here."
+                    value={newItem.desc} 
+                    onChange={e => setNewItem({...newItem, desc: e.target.value})} 
+                  />
+               </PFormField>
+               <PFormField label="Technical Specifications (Format: Key: Value per line)" hint="e.g. Glass Thickness: 24mm DGU\nWind Resistance: Grade 8">
+                  <textarea 
+                    className="p-inp" 
+                    rows={6} 
+                    placeholder="Thickness: 24mm DGU&#10;Solar Heat Gain: 0.28&#10;Clarity: 92%"
+                    value={newItem.specs} 
+                    onChange={e => setNewItem({...newItem, specs: e.target.value})} 
+                  />
+               </PFormField>
+             </div>
+
+             <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: 16, borderTop: '1px solid var(--border-color)', gap: 12 }}>
+               {isEditing && <button onClick={handleBackToList} className="p-btn-outline lxf" style={{ padding: '14px 30px', borderRadius: 12, fontSize: 16 }}>Cancel Edit</button>}
+               <button onClick={saveProduct} className="p-btn-gold lxf" style={{ padding: '14px 40px', borderRadius: 12, fontSize: 16 }}>
+                 {isEditing ? 'Save Product Changes' : 'Publish to Live Catalog'}
+               </button>
              </div>
            </div>
          </div>
@@ -480,8 +597,9 @@ function CMSProducts({ ac, notify }) {
                       <div><div style={{ fontSize: 9, color: '#888', textTransform: 'uppercase', fontWeight: 700 }}>FOB</div><div style={{ fontSize: 13, fontWeight: 600 }}>{p.fobPrice || '-'}</div></div>
                       <div><div style={{ fontSize: 9, color: '#888', textTransform: 'uppercase', fontWeight: 700 }}>Landed</div><div style={{ fontSize: 13, fontWeight: 600, color: ac }}>{p.landedCost || '-'}</div></div>
                     </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 'auto', borderTop: '1px solid var(--border-color)', paddingTop: 16 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 'auto', borderTop: '1px solid var(--border-color)', paddingTop: 16 }}>
                       <button onClick={() => removeProduct(p.id)} style={{ color: '#ff4444', fontSize: 12, background: 'none', border: 'none', padding: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, fontWeight: 500 }}><Trash size={14} /> Remove</button>
+                      <button onClick={() => handleEditClick(p)} style={{ color: ac, fontSize: 12, background: 'none', border: 'none', padding: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, fontWeight: 600 }}><Palette size={14} /> Edit</button>
                     </div>
                   </div>
                </div>

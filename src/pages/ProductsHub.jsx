@@ -36,6 +36,18 @@ const isMob = (w) => w <= 900;
 
 // --- COMPONENTS ---
 
+// --- DYNAMIC IMAGE FALLBACKS ---
+const getFallbackImage = (category, img) => {
+  if (img && img.trim() !== '') return img;
+  const cat = String(category || '').toLowerCase();
+  if (cat.includes('kitchen')) return '/kitchen/default.png';
+  if (cat.includes('shower') || cat.includes('washroom') || cat.includes('vanity')) return '/glass/shower_room.jpg';
+  if (cat.includes('casement') || cat.includes('window') || cat.includes('sliding-win')) return '/glass/63_casement.jpg';
+  if (cat.includes('door') || cat.includes('pivot')) return '/glass/54_swing_door.jpg';
+  if (cat.includes('sunroom') || cat.includes('sky')) return '/glass/120_sunroom.jpg';
+  return '/kitchen/default.png';
+};
+
 const ProductCard = ({ product, onClick, ac, mob, onCompare, isComparing, waNumber, onToggleFavorite, isFavorited }) => {
   const pCats = Array.isArray(product.cat) ? product.cat : [product.cat];
   const catLabel = pCats[0];
@@ -60,9 +72,9 @@ const ProductCard = ({ product, onClick, ac, mob, onCompare, isComparing, waNumb
     >
       <div style={{ height: mob ? 220 : 260, background: `var(--bg-secondary)`, position: 'relative', overflow: 'hidden' }}>
         <img
-          src={product.img}
+          src={getFallbackImage(catLabel, product.img)}
           alt={product.name}
-          onError={(e) => { e.target.src = '/kitchen/default.png'; }}
+          onError={(e) => { e.target.src = getFallbackImage(catLabel, ''); }}
           style={{ width: '100%', height: '100%', objectFit: 'contain', padding: mob ? 10 : 20 }}
         />
         
@@ -125,6 +137,26 @@ const DetailModal = ({ product, onClose, ac, navigate, mob }) => {
   const [selectedColor, setSelectedColor] = useState(product.colors?.[0] || 'Default');
   const [selectedGlass, setSelectedGlass] = useState(product.options?.[0] || 'Standard');
 
+  const pCats = Array.isArray(product.cat) ? product.cat : [product.cat];
+  const catLabel = pCats[0] || 'aluminum';
+
+  // Support specs saved as an object OR formatted string (scraped entries)
+  const specEntries = useMemo(() => {
+    if (!product.specs) return [];
+    if (typeof product.specs === 'object') return Object.entries(product.specs);
+    if (typeof product.specs === 'string') {
+      return product.specs
+        .split('\n')
+        .map(line => {
+          const idx = line.indexOf(':');
+          if (idx === -1) return null;
+          return [line.slice(0, idx).trim(), line.slice(idx + 1).trim()];
+        })
+        .filter(Boolean);
+    }
+    return [];
+  }, [product.specs]);
+
   if (!product) return null;
   return (
     <motion.div 
@@ -155,9 +187,9 @@ const DetailModal = ({ product, onClose, ac, navigate, mob }) => {
               key={selectedColor}
               initial={{ opacity: 0.8, scale: 0.98 }}
               animate={{ opacity: 1, scale: 1 }}
-              src={product.finishImages?.[selectedColor] || product.img} 
+              src={getFallbackImage(catLabel, product.finishImages?.[selectedColor] || product.img)} 
               alt={product.name} 
-              onError={(e) => { e.target.src = '/kitchen/default.png'; }}
+              onError={(e) => { e.target.src = getFallbackImage(catLabel, ''); }}
               style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} 
             />
             <button onClick={onClose} style={{ position: 'absolute', top: 24, left: 24, background: '#fff', border: 'none', padding: 12, borderRadius: '50%', cursor: 'pointer', boxShadow: '0 10px 30px rgba(0,0,0,0.1)' }}>
@@ -232,7 +264,16 @@ const DetailModal = ({ product, onClose, ac, navigate, mob }) => {
             {product.desc && (
               <div style={{ marginBottom: 32 }}>
                 <h4 style={{ fontSize: 11, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'rgba(0,0,0,0.3)', margin: '0 0 12px' }}>Product Overview</h4>
-                <div style={{ fontSize: 13, color: 'rgba(0,0,0,0.6)', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
+                <div style={{ 
+                  background: 'var(--bg-secondary)', 
+                  padding: '20px', 
+                  borderRadius: '16px', 
+                  border: '1px solid rgba(0,0,0,0.03)', 
+                  fontSize: 13.5, 
+                  color: 'rgba(24, 14, 6, 0.75)', 
+                  lineHeight: 1.7, 
+                  whiteSpace: 'pre-wrap' 
+                }}>
                   {product.desc}
                 </div>
               </div>
@@ -240,14 +281,18 @@ const DetailModal = ({ product, onClose, ac, navigate, mob }) => {
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 20, marginBottom: 40 }}>
               <h4 style={{ fontSize: 11, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'rgba(0,0,0,0.3)', margin: 0 }}>Specifications</h4>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-                {Object.entries(product.specs || {}).map(([k, v]) => (
-                  <div key={k}>
-                    <p style={{ fontSize: 10, color: 'rgba(0,0,0,0.4)', margin: '0 0 4px', textTransform: 'capitalize' }}>{k}</p>
-                    <p style={{ fontSize: 13, fontWeight: 700, margin: 0 }}>{v}</p>
-                  </div>
-                ))}
-              </div>
+              {specEntries.length > 0 ? (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+                  {specEntries.map(([k, v]) => (
+                    <div key={k}>
+                      <p style={{ fontSize: 10, color: 'rgba(0,0,0,0.4)', margin: '0 0 4px', textTransform: 'capitalize' }}>{k}</p>
+                      <p style={{ fontSize: 13, fontWeight: 700, margin: 0 }}>{v}</p>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p style={{ fontSize: 13, color: 'rgba(0,0,0,0.4)', margin: 0 }}>Standard Westline specifications apply.</p>
+              )}
             </div>
 
             <div style={{ position: mob ? 'fixed' : 'static', bottom: 0, left: 0, right: 0, padding: mob ? 20 : 0, background: mob ? '#fff' : 'transparent', borderTop: mob ? '1px solid #eee' : 'none' }}>

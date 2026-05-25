@@ -1279,6 +1279,9 @@ function NewProjectModal({ client, teamMembers = [], onClose, onCreate }) {
     assignedStaff: '',
     assignedWorker: '',
     kickoffMode: 'rendering-first',
+    latitude: '',
+    longitude: '',
+    cat: '',
   });
   const [showBackdate, setShowBackdate] = useState(false);
   const [showBreakdown, setShowBreakdown] = useState(false);
@@ -1340,6 +1343,31 @@ function NewProjectModal({ client, teamMembers = [], onClose, onCreate }) {
           <div>
             <label style={lS}>Project Title *</label>
             <input value={form.title} onChange={e => set('title', e.target.value)} placeholder="e.g. East Legon Villa — Curtain Wall" style={iS} />
+          </div>
+
+          {/* Work Category + Site Coordinates */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16 }}>
+            <div>
+              <label style={lS}>Work Category *</label>
+              <select value={form.cat} onChange={e => set('cat', e.target.value)} style={iS}>
+                <option value="">— Select Category —</option>
+                <option value="glass">Glass & Glazing</option>
+                <option value="shower">Shower & Washroom</option>
+                <option value="partition">Glass Partition & Balustrade</option>
+                <option value="pergola">Pergola & Canopy</option>
+                <option value="cladding">ACP Cladding & Facade</option>
+                <option value="kitchen">Kitchen & Interiors</option>
+                <option value="general">General / Other</option>
+              </select>
+            </div>
+            <div>
+              <label style={lS}>Site Latitude (GPS)</label>
+              <input value={form.latitude} onChange={e => set('latitude', e.target.value)} placeholder="e.g. 5.6037" style={iS} />
+            </div>
+            <div>
+              <label style={lS}>Site Longitude (GPS)</label>
+              <input value={form.longitude} onChange={e => set('longitude', e.target.value)} placeholder="e.g. -0.1870" style={iS} />
+            </div>
           </div>
 
           <div>

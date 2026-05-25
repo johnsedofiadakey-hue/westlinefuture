@@ -72,19 +72,66 @@ function ProjectCard({ project, updateProjectStage, addProjectMessage, addProjec
   const isInstall = project.stageId === INSTALLATION_STAGE;
   const isComplete = project.stageId >= INSPECTION_SIGN_OFF;
 
-  // Checklist setups
-  const deliveryChecklist = [
+  // Dynamic Checklist based on project category.
+  // Falls back to title keyword scan for legacy projects that predate the cat field.
+  const _catField  = project.cat || project.workCategory || '';
+  const _titleFall = project.title || project.project || '';
+  const projCat    = (_catField ? _catField : _titleFall).toLowerCase();
+  
+  const baseDeliveryChecklist = [
     { key: 'pkg_intact', label: 'Cargo inspected and crate packaging intact' },
-    { key: 'glass_qty', label: 'All tempered glass profiles accounted for' },
-    { key: 'fittings_check', label: 'Fittings, rubber gaskets, and accessories verified' }
   ];
-
-  const installChecklist = [
-    { key: 'align_check', label: 'Glass panels aligned, plumb, and level checked' },
-    { key: 'sealant_check', label: 'Structural grade silicone sealant applied evenly' },
+  
+  const baseInstallChecklist = [
     { key: 'cleanup_done', label: 'Site cleaned and protective films fully removed' },
     { key: 'supervisor_sign', label: 'Handover checklist verified with site supervisor' }
   ];
+
+  let deliveryChecklist = [...baseDeliveryChecklist];
+  let installChecklist = [];
+
+  if (projCat.includes('glass') || projCat.includes('shower') || projCat.includes('partition') || projCat.includes('balustrade')) {
+    deliveryChecklist.push(
+      { key: 'glass_qty', label: 'All tempered glass profiles accounted for' },
+      { key: 'fittings_check', label: 'Fittings, rubber gaskets, and accessories verified' }
+    );
+    installChecklist.push(
+      { key: 'align_check', label: 'Glass panels aligned, plumb, and level checked' },
+      { key: 'sealant_check', label: 'Structural grade silicone sealant applied evenly' },
+      ...baseInstallChecklist
+    );
+  } else if (projCat.includes('pergola') || projCat.includes('canopy')) {
+    deliveryChecklist.push(
+      { key: 'alum_qty', label: 'Aluminum beams and louvers accounted for' },
+      { key: 'motor_check', label: 'Motor mechanisms and sensors verified' }
+    );
+    installChecklist.push(
+      { key: 'struct_check', label: 'Main columns and beams securely anchored' },
+      { key: 'motor_test', label: 'Motor operation and drainage tested' },
+      ...baseInstallChecklist
+    );
+  } else if (projCat.includes('cladding') || projCat.includes('acp')) {
+    deliveryChecklist.push(
+      { key: 'panel_qty', label: 'All composite panels accounted for' },
+      { key: 'subframe_check', label: 'Sub-framing materials verified' }
+    );
+    installChecklist.push(
+      { key: 'subframe_install', label: 'Sub-framing installed securely and level' },
+      { key: 'panel_align', label: 'Panels aligned with correct expansion gaps' },
+      ...baseInstallChecklist
+    );
+  } else {
+    // Default
+    deliveryChecklist.push(
+      { key: 'mat_qty', label: 'All primary materials accounted for' },
+      { key: 'acc_check', label: 'Fittings and accessories verified' }
+    );
+    installChecklist.push(
+      { key: 'align_check', label: 'Installation aligned, plumb, and secure' },
+      { key: 'sealant_check', label: 'Joints sealed appropriately' },
+      ...baseInstallChecklist
+    );
+  }
 
   const activeChecklist = isDelivery ? deliveryChecklist : isInstall ? installChecklist : [];
 

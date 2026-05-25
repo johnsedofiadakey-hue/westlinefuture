@@ -606,7 +606,7 @@ export default function ProjectKanban({ clients = [], brand, updateProjectStage,
           { label: 'Completed', value: completedProjects, color: '#16A34A' },
           { label: 'Blocked', value: healthStats.Blocked || 0, color: '#DC2626' },
           { label: 'Waiting', value: healthStats['Waiting Client'] || 0, color: '#D97706' },
-          { label: 'Archived', value: archivedProjects, color: '#9B99C8' },
+          { label: 'Archived', value: archivedProjects, color: 'var(--muted)' },
         ].map(stat => (
           <div key={stat.label} style={{ padding: '12px 20px', background: '#fff', border: '1px solid var(--border-color)', borderRadius: 14, display: 'flex', alignItems: 'center', gap: 12 }}>
             <div style={{ width: 8, height: 8, borderRadius: '50%', background: stat.color }} />

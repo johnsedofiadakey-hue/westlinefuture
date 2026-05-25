@@ -122,7 +122,7 @@ function Bubble({ msg, isMine, isSystem, accentColor, onReact, viewerLang = 'en'
   const [translating, setTranslating] = useState(false);
   const [showReactions, setShowReactions] = useState(false);
   const reactionRef = useRef(null);
-  const ac = accentColor || '#231F78';
+  const ac = accentColor || 'var(--accent-secondary)';
 
   const msgLang = detectLang(msg.text || '');
   const showTranslateBtn = !isSystem && msg.text?.length > 2;
@@ -151,9 +151,9 @@ function Bubble({ msg, isMine, isSystem, accentColor, onReact, viewerLang = 'en'
     return (
       <div style={{ display: 'flex', justifyContent: 'center', padding: '4px 0' }}>
         <div style={{
-          fontSize: 11, color: '#9B99C8', background: 'rgba(35,31,120,0.05)',
+          fontSize: 11, color: 'var(--muted)', background: 'rgba(var(--ac-rgb),0.05)',
           padding: '5px 14px', borderRadius: 20, fontStyle: 'italic',
-          border: '1px dashed rgba(35,31,120,0.12)', maxWidth: '80%', textAlign: 'center',
+          border: '1px dashed rgba(var(--ac-rgb),0.12)', maxWidth: '80%', textAlign: 'center',
         }}>{msg.text}</div>
       </div>
     );
@@ -162,9 +162,9 @@ function Bubble({ msg, isMine, isSystem, accentColor, onReact, viewerLang = 'en'
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: isMine ? 'flex-end' : 'flex-start', gap: 2, position: 'relative' }}>
       {/* Sender label */}
-      <div style={{ fontSize: 10, fontWeight: 700, color: isMine ? ac : '#4945BE', textTransform: 'uppercase', letterSpacing: '.05em', paddingLeft: isMine ? 0 : 4, paddingRight: isMine ? 4 : 0 }}>
+      <div style={{ fontSize: 10, fontWeight: 700, color: isMine ? ac : 'var(--accent-primary)', textTransform: 'uppercase', letterSpacing: '.05em', paddingLeft: isMine ? 0 : 4, paddingRight: isMine ? 4 : 0 }}>
         {isMine ? 'You' : (msg.senderName || 'Westline Future')}
-        {msgLang === 'zh-CN' && <span style={{ marginLeft: 4, background: 'rgba(35,31,120,0.1)', color: ac, fontSize: 9, padding: '1px 5px', borderRadius: 6 }}>中文</span>}
+        {msgLang === 'zh-CN' && <span style={{ marginLeft: 4, background: 'rgba(var(--ac-rgb),0.1)', color: ac, fontSize: 9, padding: '1px 5px', borderRadius: 6 }}>中文</span>}
       </div>
 
       {/* Bubble */}
@@ -175,10 +175,10 @@ function Bubble({ msg, isMine, isSystem, accentColor, onReact, viewerLang = 'en'
             padding: msg.imageUrl ? '4px' : '12px 16px',
             borderRadius: isMine ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
             background: isMine ? ac : '#ffffff',
-            color: isMine ? '#ffffff' : '#0D0B2E',
+            color: isMine ? '#ffffff' : 'var(--fg)',
             fontSize: 14, lineHeight: 1.55,
-            border: isMine ? 'none' : '1.5px solid rgba(35,31,120,0.1)',
-            boxShadow: isMine ? `0 4px 14px ${ac}30` : '0 2px 8px rgba(13,11,46,0.06)',
+            border: isMine ? 'none' : '1.5px solid rgba(var(--ac-rgb),0.1)',
+            boxShadow: isMine ? `0 4px 14px ${ac}30` : '0 2px 8px rgba(24, 14, 6,0.06)',
             cursor: 'default',
             userSelect: 'text',
           }}
@@ -199,9 +199,9 @@ function Bubble({ msg, isMine, isSystem, accentColor, onReact, viewerLang = 'en'
         {showReactions && (
           <div ref={reactionRef} style={{
             position: 'absolute', [isMine ? 'right' : 'left']: 0, bottom: '110%',
-            background: '#fff', borderRadius: 24, boxShadow: '0 8px 32px rgba(13,11,46,0.14)',
+            background: '#fff', borderRadius: 24, boxShadow: '0 8px 32px rgba(24, 14, 6,0.14)',
             display: 'flex', gap: 4, padding: '8px 12px', zIndex: 10,
-            border: '1px solid rgba(35,31,120,0.1)',
+            border: '1px solid rgba(var(--ac-rgb),0.1)',
           }}>
             {REACTIONS.map(e => (
               <button key={e} onClick={() => { onReact?.(msg.id, e); setShowReactions(false); }}
@@ -219,10 +219,10 @@ function Bubble({ msg, isMine, isSystem, accentColor, onReact, viewerLang = 'en'
             {Object.entries(reactions).map(([emoji, users]) =>
               users.length > 0 ? (
                 <div key={emoji} onClick={() => onReact?.(msg.id, emoji)} style={{
-                  background: '#F4F4FA', border: '1.5px solid rgba(35,31,120,0.1)', borderRadius: 20,
+                  background: '#F4F4FA', border: '1.5px solid rgba(var(--ac-rgb),0.1)', borderRadius: 20,
                   padding: '2px 8px', fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 3
                 }}>
-                  {emoji} <span style={{ fontSize: 11, color: '#9B99C8' }}>{users.length}</span>
+                  {emoji} <span style={{ fontSize: 11, color: 'var(--muted)' }}>{users.length}</span>
                 </div>
               ) : null
             )}
@@ -233,8 +233,8 @@ function Bubble({ msg, isMine, isSystem, accentColor, onReact, viewerLang = 'en'
       {/* Translation */}
       {translation && (
         <div style={{
-          maxWidth: '78%', fontSize: 12, color: '#5B5894', fontStyle: 'italic',
-          background: 'rgba(35,31,120,0.04)', padding: '6px 12px',
+          maxWidth: '78%', fontSize: 12, color: 'var(--dim)', fontStyle: 'italic',
+          background: 'rgba(var(--ac-rgb),0.04)', padding: '6px 12px',
           borderRadius: 10, borderLeft: `2px solid ${ac}60`,
           lineHeight: 1.5,
         }}>
@@ -272,9 +272,9 @@ function Bubble({ msg, isMine, isSystem, accentColor, onReact, viewerLang = 'en'
 function DateSep({ label }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 0' }}>
-      <div style={{ flex: 1, height: 1, background: 'rgba(35,31,120,0.08)' }} />
-      <span style={{ fontSize: 11, color: '#9B99C8', fontWeight: 600, whiteSpace: 'nowrap' }}>{label}</span>
-      <div style={{ flex: 1, height: 1, background: 'rgba(35,31,120,0.08)' }} />
+      <div style={{ flex: 1, height: 1, background: 'rgba(var(--ac-rgb),0.08)' }} />
+      <span style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 600, whiteSpace: 'nowrap' }}>{label}</span>
+      <div style={{ flex: 1, height: 1, background: 'rgba(var(--ac-rgb),0.08)' }} />
     </div>
   );
 }
@@ -288,7 +288,7 @@ export default function WorldClassChat({
   isAdmin = false,
   height = 480,
 }) {
-  const ac = accentColor || '#231F78';
+  const ac = accentColor || 'var(--accent-secondary)';
   const [tab, setTab] = useState('client'); // 'client' | 'internal'
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState('');
@@ -437,9 +437,9 @@ export default function WorldClassChat({
           ].map(t => (
             <button key={t.id} onClick={() => setTab(t.id)} style={{
               flex: 1, height: 34, borderRadius: 10,
-              border: `1.5px solid ${tab === t.id ? ac : 'rgba(35,31,120,0.1)'}`,
+              border: `1.5px solid ${tab === t.id ? ac : 'rgba(var(--ac-rgb),0.1)'}`,
               background: tab === t.id ? ac : 'transparent',
-              color: tab === t.id ? '#fff' : '#9B99C8',
+              color: tab === t.id ? '#fff' : 'var(--muted)',
               fontSize: 11, fontWeight: 700, cursor: 'pointer',
               display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
               transition: 'all .2s', position: 'relative',
@@ -459,17 +459,17 @@ export default function WorldClassChat({
       <div
         ref={scrollRef}
         onScroll={handleScroll}
-        style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10, paddingRight: 4, marginBottom: 12, scrollbarWidth: 'thin', scrollbarColor: 'rgba(35,31,120,0.15) transparent' }}
+        style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10, paddingRight: 4, marginBottom: 12, scrollbarWidth: 'thin', scrollbarColor: 'rgba(var(--ac-rgb),0.15) transparent' }}
       >
         {isEmpty && (
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '48px 20px', textAlign: 'center' }}>
-            <div style={{ width: 56, height: 56, borderRadius: '50%', background: 'rgba(35,31,120,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 14 }}>
+            <div style={{ width: 56, height: 56, borderRadius: '50%', background: 'rgba(var(--ac-rgb),0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 14 }}>
               {tab === 'internal' ? <Lock size={22} color={ac} opacity={0.4} /> : <MessageSquare size={22} color={ac} opacity={0.4} />}
             </div>
-            <div style={{ fontSize: 14, fontWeight: 700, color: '#0D0B2E', marginBottom: 6 }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--fg)', marginBottom: 6 }}>
               {tab === 'internal' ? 'No internal notes yet' : 'Start the conversation'}
             </div>
-            <div style={{ fontSize: 12, color: '#9B99C8', lineHeight: 1.6, maxWidth: 240 }}>
+            <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.6, maxWidth: 240 }}>
               {tab === 'internal'
                 ? 'Leave notes for your team. Clients cannot see these.'
                 : 'Have a question about your project? Send a message and the team will respond shortly.'}
@@ -497,12 +497,12 @@ export default function WorldClassChat({
         {/* Typing indicator */}
         {typingPeers.length > 0 && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <div style={{ display: 'flex', gap: 3, padding: '10px 14px', background: '#fff', borderRadius: '18px 18px 18px 4px', border: '1.5px solid rgba(35,31,120,0.1)', boxShadow: '0 2px 8px rgba(13,11,46,0.06)' }}>
+            <div style={{ display: 'flex', gap: 3, padding: '10px 14px', background: '#fff', borderRadius: '18px 18px 18px 4px', border: '1.5px solid rgba(var(--ac-rgb),0.1)', boxShadow: '0 2px 8px rgba(24, 14, 6,0.06)' }}>
               {[0, 1, 2].map(i => (
                 <div key={i} style={{ width: 6, height: 6, borderRadius: '50%', background: ac, opacity: 0.5, animation: `bounce 1.2s ${i * 0.2}s infinite` }} />
               ))}
             </div>
-            <span style={{ fontSize: 10, color: '#9B99C8' }}>{typingPeers[0]} is typing…</span>
+            <span style={{ fontSize: 10, color: 'var(--muted)' }}>{typingPeers[0]} is typing…</span>
           </div>
         )}
 
@@ -514,7 +514,7 @@ export default function WorldClassChat({
         <button onClick={scrollToBottom} style={{
           position: 'absolute', bottom: 80, right: 20, background: ac, color: '#fff',
           border: 'none', borderRadius: 20, padding: '6px 14px', fontSize: 12, fontWeight: 700,
-          cursor: 'pointer', boxShadow: '0 4px 12px rgba(35,31,120,0.3)',
+          cursor: 'pointer', boxShadow: '0 4px 12px rgba(var(--ac-rgb),0.3)',
           display: 'flex', alignItems: 'center', gap: 6,
         }}>
           <ChevronDown size={14} /> {unreadCount} new
@@ -524,7 +524,7 @@ export default function WorldClassChat({
       {/* ── Input bar ── */}
       <div style={{
         flexShrink: 0,
-        borderTop: '1.5px solid rgba(35,31,120,0.08)',
+        borderTop: '1.5px solid rgba(var(--ac-rgb),0.08)',
         paddingTop: 12,
         display: 'flex',
         gap: 8,
@@ -536,7 +536,7 @@ export default function WorldClassChat({
         <button
           onClick={() => fileInputRef.current?.click()}
           disabled={uploading}
-          style={{ width: 40, height: 40, borderRadius: 12, background: 'rgba(35,31,120,0.05)', border: '1.5px solid rgba(35,31,120,0.1)', color: ac, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'all .2s' }}
+          style={{ width: 40, height: 40, borderRadius: 12, background: 'rgba(var(--ac-rgb),0.05)', border: '1.5px solid rgba(var(--ac-rgb),0.1)', color: ac, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'all .2s' }}
           title="Send image"
         >
           {uploading ? <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> : <Paperclip size={16} />}
@@ -561,17 +561,17 @@ export default function WorldClassChat({
               width: '100%',
               padding: '10px 14px',
               borderRadius: 14,
-              border: `1.5px solid ${tab === 'internal' ? 'rgba(200,170,40,0.25)' : 'rgba(35,31,120,0.12)'}`,
+              border: `1.5px solid ${tab === 'internal' ? 'rgba(200,170,40,0.25)' : 'rgba(var(--ac-rgb),0.12)'}`,
               fontSize: 14, outline: 'none', resize: 'none', boxSizing: 'border-box',
               fontFamily: 'inherit', lineHeight: 1.5,
               background: tab === 'internal' ? '#FEFDF0' : '#fff',
-              color: '#0D0B2E',
+              color: 'var(--fg)',
               transition: 'border-color .2s',
             }}
             onFocus={e => e.target.style.borderColor = tab === 'internal' ? 'rgba(200,170,40,0.5)' : `${ac}60`}
           />
           {text.length > 0 && (
-            <span style={{ position: 'absolute', bottom: 6, right: 10, fontSize: 10, color: '#C5C3EC' }}>{text.length}</span>
+            <span style={{ position: 'absolute', bottom: 6, right: 10, fontSize: 10, color: 'var(--ac-light)' }}>{text.length}</span>
           )}
         </div>
 
@@ -581,8 +581,8 @@ export default function WorldClassChat({
           disabled={!text.trim() || sending}
           style={{
             width: 44, height: 44, borderRadius: 14, flexShrink: 0,
-            background: text.trim() ? ac : 'rgba(35,31,120,0.08)',
-            color: text.trim() ? '#fff' : '#C5C3EC',
+            background: text.trim() ? ac : 'rgba(var(--ac-rgb),0.08)',
+            color: text.trim() ? '#fff' : 'var(--ac-light)',
             border: 'none', cursor: text.trim() ? 'pointer' : 'default',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             transition: 'all .2s', boxShadow: text.trim() ? `0 4px 14px ${ac}40` : 'none',

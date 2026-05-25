@@ -24,14 +24,14 @@ export default function InvoiceDocument({ inv, isQuote = false, finSettings, bra
   const isMinimal = finSettings.invoiceTheme === 'minimal';
   const isCorporate = finSettings.invoiceTheme === 'corporate';
 
-  // Rich Beige / Cream / Brown Palette for PDFs
+  // Brand-driven palette — falls back to rich warm brown if brand settings not set
   const theme = {
-    primary: '#4A3B32',     // Dark espresso brown
-    secondary: '#8C6C52',   // Mid-tone warm brown
-    accent: '#C5A880',      // Rich beige gold
-    bg: '#FDFBF7',          // Pristine cream base
-    surface: '#F4EFE6',     // Light beige for table headers / blocks
-    textMuted: '#716259'    // Muted brown for subtext
+    primary:    brand?.accentSecondary || '#1A1410',
+    secondary:  brand?.textSecondary   || '#8C6C52',
+    accent:     brand?.accentPrimary   || '#C8A96E',
+    bg:         brand?.bgPrimary       || '#FDFCFB',
+    surface:    brand?.bgSecondary     || '#F4EFE6',
+    textMuted:  brand?.textSecondary   || '#716259',
   };
 
   return (

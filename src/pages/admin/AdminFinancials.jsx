@@ -805,7 +805,7 @@ export default function AdminFinancials({ invoices = [], transactions = [], clie
                </div>
 
                <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-                  <div className="p-card" style={{ padding: 24, background: `var(--bg-secondary)`, border: '1px solid #C5C3EC', position: 'sticky', top: 0 }}>
+                  <div className="p-card" style={{ padding: 24, background: `var(--bg-secondary)`, border: '1px solid var(--border-color)', position: 'sticky', top: 0 }}>
                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
                         <h4 className="lxf" style={{ fontSize: 11, textTransform: 'uppercase', color: `var(--text-secondary)` }}>Real-time Preview</h4>
                         <div style={{ fontSize: 9, background: `var(--accent-secondary)`, color: '#fff', padding: '2px 8px', borderRadius: 4 }}>{finSettings.invoiceTheme.toUpperCase()}</div>

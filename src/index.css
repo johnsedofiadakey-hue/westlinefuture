@@ -4,33 +4,33 @@
 html{scroll-behavior:smooth;}
 
 :root {
-  /* ── Westline Future Deep Indigo Palette ── */
-  --ac: var(--accent-secondary, #231F78);
-  --ac-rgb: 35, 31, 120;
-  --ac-deep: var(--footer-bg, #0D0B2E);
-  --ac-light: #C5C3EC;
+  /* Brand Core — Westline Future Luxury Bronze-Brown Palette */
+  --ac: var(--accent-secondary);
+  --ac-rgb: 24, 14, 6;
+  --ac-deep: var(--footer-bg);
+  --ac-light: #3E2414;
 
-  /* Secondary accent */
-  --sec: var(--accent-primary, #4945BE);
-  --sec-rgb: 73, 69, 190;
-  --sec-deep: #3A369E;
-  --sec-light: #E8E6F5;
+  /* Elite Accent — Warm Ochre Gold & Champagne Gold */
+  --sec: var(--accent-primary);
+  --sec-rgb: 200, 143, 67;
+  --sec-deep: #B07C38;
+  --sec-light: #F4D6A7;
 
-  --bg: var(--bg-primary, #F4F4FA);
-  --bg-alt: var(--bg-secondary, #F8F8FD);
-  --bg-deep: var(--footer-bg, #0D0B2E);
+  --bg: var(--bg-primary);
+  --bg-alt: var(--bg-primary);
+  --bg-deep: var(--accent-secondary);
 
-  --fg: var(--text-primary, #0D0B2E);
-  --dim: #5B5894;
-  --muted: #9B99C8;
-  --border: rgba(13, 11, 46, 0.08);
+  --fg: var(--accent-secondary);
+  --dim: #5C4E43;
+  --muted: #A69282;
+  --border: rgba(24, 14, 6, 0.08);
 
-  /* Shadows */
-  --sh-sm: 0 4px 12px rgba(13, 11, 46, 0.04);
-  --sh-md: 0 12px 40px rgba(13, 11, 46, 0.07);
-  --sh-lg: 0 32px 64px rgba(13, 11, 46, 0.10);
+  /* Shadows & Depth */
+  --sh-sm: 0 4px 12px rgba(24, 14, 6, 0.03);
+  --sh-md: 0 12px 40px rgba(24, 14, 6, 0.06);
+  --sh-lg: 0 32px 64px rgba(24, 14, 6, 0.08);
 
-  /* Typography */
+  /* Modern Typography */
   --font-h: 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif;
   --font-p: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
   --font-m: 'Space Mono', monospace;
@@ -44,26 +44,26 @@ html{scroll-behavior:smooth;}
   --radius-lg: 32px;
   --radius-sm: 12px;
 
-  /* Safe Areas */
+  /* Native App Safe Areas */
   --safe-top: env(safe-area-inset-top, 20px);
   --safe-bottom: env(safe-area-inset-bottom, 20px);
 }
 
-/* Mesh Gradient System — Westline Future Indigo */
+/* Mesh Gradient System */
 .mesh-bg {
   position: fixed;
   inset: 0;
   z-index: -1;
   background-color: var(--bg);
   background-image:
-    radial-gradient(at 0% 0%,   hsla(243, 55%, 94%, 1) 0, transparent 50%),
-    radial-gradient(at 50% 0%,  hsla(246, 48%, 92%, 1) 0, transparent 50%),
-    radial-gradient(at 100% 0%, hsla(240, 50%, 95%, 1) 0, transparent 50%),
-    radial-gradient(at 0% 50%,  hsla(245, 40%, 96%, 1) 0, transparent 50%),
-    radial-gradient(at 100% 50%,hsla(243, 45%, 94%, 1) 0, transparent 50%),
-    radial-gradient(at 0% 100%, hsla(248, 52%, 93%, 1) 0, transparent 50%),
-    radial-gradient(at 50% 100%,hsla(243, 50%, 92%, 1) 0, transparent 50%),
-    radial-gradient(at 100% 100%,hsla(244,48%,94%,1)  0, transparent 50%);
+    radial-gradient(at 0% 0%,    hsla(35, 35%, 95%, 1) 0, transparent 50%),
+    radial-gradient(at 50% 0%,   hsla(35, 40%, 93%, 1) 0, transparent 50%),
+    radial-gradient(at 100% 0%,  hsla(38, 30%, 96%, 1) 0, transparent 50%),
+    radial-gradient(at 0% 50%,   hsla(35, 25%, 97%, 1) 0, transparent 50%),
+    radial-gradient(at 100% 50%, hsla(35, 30%, 95%, 1) 0, transparent 50%),
+    radial-gradient(at 0% 100%,  hsla(35, 32%, 94%, 1) 0, transparent 50%),
+    radial-gradient(at 50% 100%, hsla(35, 35%, 93%, 1) 0, transparent 50%),
+    radial-gradient(at 100% 100%,hsla(35, 38%, 95%, 1) 0, transparent 50%);
   filter: blur(100px);
   opacity: 0.6;
 }
@@ -71,20 +71,20 @@ html{scroll-behavior:smooth;}
 .dark-theme .mesh-bg {
   background-color: var(--bg-deep);
   background-image:
-    radial-gradient(at 0% 0%,   hsla(243, 60%, 8%,  1) 0, transparent 50%),
-    radial-gradient(at 100% 0%, hsla(246, 55%, 6%,  1) 0, transparent 50%),
-    radial-gradient(at 50% 100%,hsla(243, 50%, 10%, 1) 0, transparent 50%);
-  opacity: 0.9;
+    radial-gradient(at 0% 0%,   hsla(35, 30%, 8%,  1) 0, transparent 50%),
+    radial-gradient(at 100% 0%, hsla(35, 35%, 6%,  1) 0, transparent 50%),
+    radial-gradient(at 50% 100%,hsla(35, 25%, 10%, 1) 0, transparent 50%);
+  opacity: 0.8;
 }
 
 [data-theme='minimal'] {
   --font-h: 'Outfit', sans-serif;
-  --ac: var(--accent-secondary, #231F78);
-  --bg: var(--bg-primary, #F4F4FA);
-  --fg: var(--text-primary, #0D0B2E);
+  --ac: var(--accent-secondary);
+  --bg: var(--bg-primary);
+  --fg: var(--accent-secondary);
   --card-bg: #ffffff;
-  --border: rgba(13, 11, 46, 0.07);
-  --dim: #5B5894;
+  --border: rgba(0,0,0,0.06);
+  --dim: #5C4E43;
 }
 
 /* 📱 RESPONSIVE SYSTEM */
@@ -135,10 +135,10 @@ html{scroll-behavior:smooth;}
   --font-h: 'Inter', sans-serif;
   --font-p: 'Space Mono', monospace;
   --radius: 0px;
-  --ac: var(--accent-secondary, #231F78);
-  --ac-rgb: 35, 31, 120;
+  --ac: var(--accent-secondary);
+  --ac-rgb: 24, 14, 6;
   --bg: #ffffff;
-  --border: rgba(13, 11, 46, 0.15);
+  --border: rgba(0,0,0,0.15);
   --glass-blur: 0px;
   --glass-bg: #fff;
 }
@@ -155,13 +155,13 @@ html{scroll-behavior:smooth;}
 }
 
 .dark-theme {
-  --bg: var(--footer-bg, #0D0B2E);
-  --bg-alt: #120E3A;
-  --fg: #E8E6F5;
-  --dim: #9B99C8;
-  --muted: #6B6AAA;
-  --border: rgba(255, 255, 255, 0.08);
-  --glass-bg: rgba(13, 11, 46, 0.85);
+  --bg: var(--accent-secondary);
+  --bg-alt: var(--accent-secondary);
+  --fg: var(--bg-secondary);
+  --dim: #A8A095;
+  --muted: var(--text-secondary);
+  --border: rgba(255, 255, 255, 0.1);
+  --glass-bg: rgba(92, 58, 33, 0.85);
   --glass-border: rgba(255, 255, 255, 0.1);
 }
 
@@ -286,7 +286,7 @@ body {
 }
 
 .p-btn-gold {
-  background: linear-gradient(135deg, var(--accent-secondary), #4945BE);
+  background: linear-gradient(135deg, var(--accent-secondary), var(--accent-primary));
   color: #ffffff;
   box-shadow: 0 4px 15px rgba(92, 58, 33, 0.3);
 }
@@ -294,7 +294,7 @@ body {
 /* SCROLLBAR LUXE */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #C5C3EC; border-radius: 10px; border: 2px solid var(--bg); }
+::-webkit-scrollbar-thumb { background: var(--ac-light); border-radius: 10px; border: 2px solid var(--bg); }
 ::-webkit-scrollbar-thumb:hover { background: var(--muted); }
 
 /* FADE IN STAGGERED */

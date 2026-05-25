@@ -3232,7 +3232,7 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
                       <WorldClassChat
                         project={selected}
                         user={user}
-                        accentColor={selected?.brandColor || '#231F78'}
+                        accentColor={selected?.brandColor || 'var(--accent-secondary)'}
                         addProjectMessage={props.addProjectMessage}
                         isAdmin={false}
                         height="100%"

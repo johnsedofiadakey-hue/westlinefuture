@@ -141,20 +141,19 @@ export default function App() {
   // Inject dynamic CSS variables based on brand settings
   useEffect(() => {
     const root = document.documentElement;
-    // Westline Future Deep Indigo Palette
-    root.style.setProperty('--bg-primary',       brand.bgPrimary       || '#F4F4FA');
-    root.style.setProperty('--bg-secondary',     brand.bgSecondary     || '#F8F8FD');
-    root.style.setProperty('--text-primary',     brand.textPrimary     || '#0D0B2E');
-    root.style.setProperty('--text-secondary',   brand.textSecondary   || '#9B99C8');
-    root.style.setProperty('--accent-primary',   brand.accentPrimary   || '#4945BE');
-    root.style.setProperty('--accent-secondary', brand.accentSecondary || brand.color || '#231F78');
-    root.style.setProperty('--border-color',     brand.borderColor     || 'rgba(13, 11, 46, 0.08)');
-    root.style.setProperty('--footer-bg',        brand.footerBg        || '#0D0B2E');
+    root.style.setProperty('--bg-primary',       brand.bgPrimary       || '#FDFCFB');
+    root.style.setProperty('--bg-secondary',     brand.bgSecondary     || '#F9F7F4');
+    root.style.setProperty('--text-primary',     brand.textPrimary     || '#1A1410');
+    root.style.setProperty('--text-secondary',   brand.textSecondary   || '#A8A095');
+    root.style.setProperty('--accent-primary',   brand.accentPrimary   || '#C8A96E');
+    root.style.setProperty('--accent-secondary', brand.accentSecondary || '#1A1410');
+    root.style.setProperty('--border-color',     brand.borderColor     || 'rgba(26, 20, 16, 0.08)');
+    root.style.setProperty('--footer-bg',        brand.footerBg        || '#12100E');
 
-    // Legacy aliases — keep in sync
-    root.style.setProperty('--bg',  brand.bgPrimary       || '#F4F4FA');
-    root.style.setProperty('--fg',  brand.textPrimary     || '#0D0B2E');
-    root.style.setProperty('--ac',  brand.accentSecondary || brand.color || '#231F78');
+    // Legacy mapping aliases
+    root.style.setProperty('--bg',  brand.bgPrimary       || '#FDFCFB');
+    root.style.setProperty('--fg',  brand.textPrimary     || '#1A1410');
+    root.style.setProperty('--ac',  brand.accentSecondary || '#1A1410');
     if (brand.fontFamily) root.style.setProperty('--font-primary', brand.fontFamily);
   }, [brand]);
   const fxRate = content?.finSettings?.exchangeRate || brand?.finSettings?.exchangeRate || 15.5;

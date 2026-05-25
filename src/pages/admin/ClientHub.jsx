@@ -1349,7 +1349,7 @@ function NewProjectModal({ client, teamMembers = [], onClose, onCreate }) {
                 { id: 'rendering-first', title: 'Rendering First', desc: 'Client pays design/CAD fee before seeing rendering, then approves quote.' },
                 { id: 'direct-kickoff', title: 'Direct Kickoff', desc: 'Use only for legacy or pre-approved projects with admin responsibility.' },
               ].map(mode => (
-                <button key={mode.id} type="button" onClick={() => set('kickoffMode', mode.id)} style={{ padding: 14, borderRadius: 14, border: `2px solid ${form.kickoffMode === mode.id ? AC : `var(--border-color)`}`, background: form.kickoffMode === mode.id ? 'rgba(35,31,120,.06)' : '#fff', textAlign: 'left', cursor: 'pointer' }}>
+                <button key={mode.id} type="button" onClick={() => set('kickoffMode', mode.id)} style={{ padding: 14, borderRadius: 14, border: `2px solid ${form.kickoffMode === mode.id ? AC : `var(--border-color)`}`, background: form.kickoffMode === mode.id ? 'var(--bg-secondary)' : '#fff', textAlign: 'left', cursor: 'pointer' }}>
                   <div style={{ fontSize: 13, fontWeight: 900, color: form.kickoffMode === mode.id ? AC : `var(--accent-secondary)`, marginBottom: 4 }}>{mode.title}</div>
                   <div style={{ fontSize: 11, color: `var(--text-secondary)`, lineHeight: 1.45 }}>{mode.desc}</div>
                 </button>
@@ -1518,7 +1518,7 @@ function NewProjectModal({ client, teamMembers = [], onClose, onCreate }) {
               { ok: !!form.targetCompletionDate, label: 'Estimated completion date set' },
             ].map(item => (
               <div key={item.label} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 9 }}>
-                <div style={{ width: 18, height: 18, borderRadius: '50%', background: item.ok ? '#16A34A' : '#E8E6F5', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', flexShrink: 0 }}>
+                <div style={{ width: 18, height: 18, borderRadius: '50%', background: item.ok ? '#16A34A' : 'var(--bg-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', flexShrink: 0 }}>
                   {item.ok && <CheckCircle2 size={12} />}
                 </div>
                 <div style={{ fontSize: 12, color: item.ok ? `var(--accent-secondary)` : `var(--text-secondary)`, fontWeight: item.ok ? 800 : 600 }}>{item.label}</div>
@@ -2913,11 +2913,11 @@ export default function ClientHub({ clientId, dbClients = [], onBack, ...props }
 
                 {/* CHAT */}
                 {activeTab === 'chat' && (
-                  <div style={{ height: 'calc(100vh - 340px)', display: 'flex', flexDirection: 'column', background: '#fff', borderRadius: 16, border: '1px solid rgba(35,31,120,0.1)', padding: '16px 20px' }}>
+                  <div style={{ height: 'calc(100vh - 340px)', display: 'flex', flexDirection: 'column', background: '#fff', borderRadius: 16, border: '1px solid var(--border-color)', padding: '16px 20px' }}>
                     <WorldClassChat
                       project={selected}
                       user={props.user}
-                      accentColor={props.brand?.color || '#231F78'}
+                      accentColor={props.brand?.color || props.brand?.accentSecondary || 'var(--accent-secondary)'}
                       addProjectMessage={props.addProjectMessage}
                       isAdmin={true}
                       height="100%"

@@ -267,7 +267,7 @@ export function PubNav({ brand, setPage, activePage, onPortal, menuOpen, setMenu
   return (
     <nav style={{
       position: 'fixed', top: 0, left: 0, right: 0, zIndex: 1000,
-      background: isScrolled ? 'rgba(35, 31, 120, 0.97)' : 'rgba(35, 31, 120, 0.15)',
+      background: isScrolled ? 'rgba(24, 14, 6, 0.97)' : 'rgba(24, 14, 6, 0.15)',
       backdropFilter: 'blur(24px) saturate(180%)',
       WebkitBackdropFilter: 'blur(24px) saturate(180%)',
       borderBottom: isScrolled ? '1px solid rgba(255, 255, 255, 0.08)' : 'none',
@@ -292,7 +292,7 @@ export function PubNav({ brand, setPage, activePage, onPortal, menuOpen, setMenu
           }}
           onMouseEnter={e => {
             e.currentTarget.style.transform = 'scale(1.02)';
-            e.currentTarget.style.filter = 'drop-shadow(0 0 15px rgba(73, 69, 190, 0.45))';
+            e.currentTarget.style.filter = 'drop-shadow(0 0 15px rgba(197, 168, 128, 0.35))';
           }}
           onMouseLeave={e => {
             e.currentTarget.style.transform = 'scale(1)';

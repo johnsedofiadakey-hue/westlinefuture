@@ -367,71 +367,168 @@ export function PubNav({ brand, setPage, activePage, onPortal, menuOpen, setMenu
           <LanguageFlagSwitch variant="mobile" />
         </div>
         {/* MOBILE TOGGLE */}
-        <button 
-          className="mob-only" 
-          onClick={() => setMenuOpen(!menuOpen)} 
+        <button
+          className="mob-only"
+          onClick={() => setMenuOpen(!menuOpen)}
           aria-label={menuOpen ? 'Close menu' : 'Open menu'}
-          style={{ background: '#fff', border: '1px solid rgba(255,255,255,0.22)', color: DARK_TEXT, zIndex: 1001, padding: 10, borderRadius: 14, boxShadow: '0 10px 28px rgba(0,0,0,0.18)' }}
+          style={{
+            background: menuOpen ? 'rgba(200,169,110,0.15)' : 'rgba(255,255,255,0.12)',
+            border: `1px solid ${menuOpen ? 'rgba(200,169,110,0.4)' : 'rgba(255,255,255,0.2)'}`,
+            color: '#ffffff',
+            zIndex: 1002,
+            padding: '10px',
+            borderRadius: 12,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            backdropFilter: 'blur(8px)',
+            transition: 'all 0.3s',
+            cursor: 'pointer'
+          }}
         >
-          {menuOpen ? <X size={32} /> : <Menu size={32} />}
+          {menuOpen ? <X size={22} strokeWidth={2.5} /> : <Menu size={22} strokeWidth={2} />}
         </button>
 
       </div>
 
-      {/* MOBILE DRAWER */}
+      {/* MOBILE DRAWER — dark branded full-screen */}
       <div style={{
-        position: 'fixed', top: 0, right: 0, bottom: 0, left: 0,
-        background: '#FFFFFF',
+        position: 'fixed', top: 0, right: 0, bottom: 0,
+        width: '100%',
+        background: '#100D0A',
         transform: menuOpen ? 'translateX(0)' : 'translateX(100%)',
-        transition: 'transform 0.5s cubic-bezier(0.16, 1, 0.3, 1)', zIndex: 1000,
-        padding: '104px 24px 36px', display: 'flex', flexDirection: 'column',
-        boxShadow: '-20px 0 60px rgba(0,0,0,0.18)',
-        borderLeft: '1px solid rgba(0,0,0,0.08)'
+        transition: 'transform 0.45s cubic-bezier(0.16, 1, 0.3, 1)',
+        zIndex: 1001,
+        display: 'flex',
+        flexDirection: 'column',
+        overflow: 'hidden',
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 22, paddingBottom: 18, borderBottom: '1px solid rgba(24,14,6,0.08)' }}>
-          <div>
-            <div style={{ fontSize: 10, fontWeight: 900, letterSpacing: '0.18em', color: 'rgba(24,14,6,0.44)', textTransform: 'uppercase' }}>Westline Future</div>
-            <div style={{ fontSize: 18, fontWeight: 900, color: DARK_TEXT, marginTop: 4 }}>{currentLang === 'zh' ? '公共导航' : 'Public Menu'}</div>
+        {/* Subtle texture overlay */}
+        <div style={{
+          position: 'absolute', inset: 0, pointerEvents: 'none',
+          background: 'radial-gradient(ellipse at 80% 10%, rgba(200,169,110,0.06) 0%, transparent 60%), radial-gradient(ellipse at 10% 90%, rgba(200,169,110,0.04) 0%, transparent 55%)'
+        }} />
+
+        {/* TOP BAR — logo + close */}
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '20px 24px',
+          borderBottom: '1px solid rgba(255,255,255,0.06)',
+          position: 'relative', zIndex: 2
+        }}>
+          {brand.logo ? (
+            <img src={brand.logo} alt={brand.name}
+              style={{ height: 40, width: 'auto', objectFit: 'contain', filter: 'brightness(0) invert(1)' }} />
+          ) : (
+            <div>
+              <div style={{ fontSize: 16, fontWeight: 900, color: '#fff', letterSpacing: '0.08em' }}>WESTLINE</div>
+              <div style={{ fontSize: 8, fontWeight: 400, color: 'rgba(255,255,255,0.45)', letterSpacing: '0.4em' }}>FUTURE</div>
+            </div>
+          )}
+          <button
+            onClick={() => setMenuOpen(false)}
+            style={{
+              background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.12)',
+              borderRadius: 10, padding: '8px', color: '#fff', cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center'
+            }}
+          >
+            <X size={20} strokeWidth={2} />
+          </button>
+        </div>
+
+        {/* NAV LINKS */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: '12px 0', position: 'relative', zIndex: 2 }}>
+          {links.map((l, idx) => {
+            const isActive = activePage === l.id;
+            return (
+              <button
+                key={l.id}
+                onClick={() => {
+                  setMenuOpen(false);
+                  if (l.id === 'home') { navigate('/'); if (setPage) setPage('home'); }
+                  else if (l.id === 'products') navigate('/products');
+                  else if (l.id === 'showcase') navigate('/showcase');
+                  else if (l.id === 'portfolio') navigate('/portfolio');
+                  else if (setPage) {
+                    if (window.location.pathname !== '/') navigate('/?page=' + l.id);
+                    else setPage(l.id);
+                  }
+                }}
+                style={{
+                  width: '100%',
+                  background: 'none',
+                  border: 'none',
+                  borderLeft: isActive ? '3px solid #C8A96E' : '3px solid transparent',
+                  padding: '18px 28px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                  textAlign: 'left',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                  <span style={{
+                    fontSize: 10, fontWeight: 700, color: 'rgba(200,169,110,0.5)',
+                    width: 22, textAlign: 'right', letterSpacing: '0.05em', fontVariantNumeric: 'tabular-nums'
+                  }}>
+                    {String(idx + 1).padStart(2, '0')}
+                  </span>
+                  <span style={{
+                    fontSize: 22,
+                    fontWeight: isActive ? 800 : 600,
+                    color: isActive ? '#C8A96E' : 'rgba(255,255,255,0.82)',
+                    letterSpacing: isActive ? '-0.01em' : '0',
+                    transition: 'all 0.2s',
+                    fontFamily: '"Outfit", sans-serif'
+                  }}>
+                    {l.n}
+                    {l.badge && (
+                      <span style={{
+                        marginLeft: 8, fontSize: 8, fontWeight: 800,
+                        background: '#C8A96E', color: '#1A1410',
+                        borderRadius: 100, padding: '2px 6px', verticalAlign: 'middle'
+                      }}>{l.badge}</span>
+                    )}
+                  </span>
+                </div>
+                <div style={{
+                  width: 6, height: 6, borderRadius: '50%',
+                  background: isActive ? '#C8A96E' : 'rgba(255,255,255,0.15)',
+                  transition: 'all 0.2s'
+                }} />
+              </button>
+            );
+          })}
+        </div>
+
+        {/* BOTTOM ACTIONS */}
+        <div style={{
+          padding: '16px 24px 36px',
+          borderTop: '1px solid rgba(255,255,255,0.06)',
+          display: 'flex', flexDirection: 'column', gap: 12,
+          position: 'relative', zIndex: 2
+        }}>
+          <button
+            onClick={() => { setMenuOpen(false); onPortal('client'); }}
+            style={{
+              padding: '18px 24px',
+              background: 'linear-gradient(135deg, #C8A96E 0%, #B07C38 100%)',
+              color: '#1A1410', borderRadius: 14, border: 'none',
+              fontSize: 13, fontWeight: 800, textTransform: 'uppercase',
+              letterSpacing: '0.12em', cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
+              boxShadow: '0 8px 24px rgba(200,169,110,0.25)'
+            }}
+          >
+            {copy.portalLogin} →
+          </button>
+          <div style={{ display: 'flex', justifyContent: 'center' }}>
+            <LanguageFlagSwitch variant="mobile" />
           </div>
         </div>
-        <div style={{ flex: 1, display: 'grid', gridTemplateColumns: '1fr 1fr', alignContent: 'start', gap: 12 }}>
-          {links.map((l, i) => (
-            <button 
-              key={l.id} 
-              onClick={() => {
-                setMenuOpen(false);
-                if (l.id === 'home') { navigate('/'); if (setPage) setPage('home'); }
-                else if (l.id === 'products') navigate('/products');
-                else if (l.id === 'showcase') navigate('/showcase');
-                else if (l.id === 'portfolio') navigate('/portfolio');
-                else if (setPage) {
-                  if (window.location.pathname !== '/') navigate('/?page=' + l.id);
-                  else setPage(l.id);
-                }
-              }} 
-              style={{
-                background: activePage === l.id ? 'rgba(24,14,6,0.08)' : '#F8F6F3',
-                border: '1px solid rgba(24,14,6,0.08)',
-                borderRadius: 18,
-                textAlign: 'left',
-                minHeight: 74,
-                fontSize: 18,
-                fontWeight: 900,
-                color: DARK_TEXT,
-                padding: '16px',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'flex-end'
-              }}
-            >
-              {l.n}
-            </button>
-          ))}
-        </div>
-        <button onClick={() => { setMenuOpen(false); onPortal('client'); }} style={{
-          padding: '20px', background: DARK_TEXT, color: '#fff', borderRadius: 16, border: 'none',
-          fontSize: 14, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em'
-        }}>{copy.portalLogin}</button>
       </div>
     </nav>
   );

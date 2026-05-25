@@ -215,97 +215,247 @@ export default function WorkflowManualPage({ brand, user, onPortal, setPage, nav
       </section>
 
       {/* ── MAIN INTERACTIVE CONTAINER ── */}
-      <section style={{ 
+      <section style={{
         flex: 1,
-        maxWidth: '1400px', 
-        width: '100%', 
-        margin: '0 auto', 
-        padding: mob ? '32px 16px' : '80px 4vw',
+        maxWidth: '1400px',
+        width: '100%',
+        margin: '0 auto',
+        padding: mob ? '24px 0' : '80px 4vw',
         boxSizing: 'border-box'
       }}>
         {filteredSteps.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--text-secondary)' }}>
             No steps found matching this phase filter.
           </div>
+        ) : mob ? (
+          /* ═══════════════════════════════════════════
+             MOBILE LAYOUT — detail first, step strip below
+          ═══════════════════════════════════════════ */
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+
+            {/* MOBILE DETAIL PANEL */}
+            <div style={{ padding: '0 16px 24px' }}>
+              <AnimatePresence mode="wait">
+                <motion.div
+                  key={currentStep.step}
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -8 }}
+                  transition={{ duration: 0.3 }}
+                  style={{
+                    background: 'var(--bg-primary)',
+                    borderRadius: '20px',
+                    border: `1px solid var(--border-color)`,
+                    overflow: 'hidden',
+                    boxShadow: '0 12px 32px rgba(0,0,0,0.07)'
+                  }}
+                >
+                  {/* Toggle bar */}
+                  <div style={{
+                    display: 'flex', background: 'var(--bg-secondary)',
+                    padding: '12px 16px', justifyContent: 'space-between', alignItems: 'center',
+                    borderBottom: `1px solid var(--border-color)`
+                  }}>
+                    <span style={{ fontSize: '11px', fontWeight: 800, color: 'var(--text-primary)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+                      Step {currentStep.step} of {filteredSteps.length}
+                    </span>
+                    <div style={{ display: 'flex', background: 'var(--bg-primary)', padding: '3px', borderRadius: '10px', border: '1px solid var(--border-color)' }}>
+                      {['manual', 'render'].map(mode => (
+                        <button key={mode} onClick={() => setDisplayMode(mode)} style={{
+                          display: 'flex', alignItems: 'center', gap: '4px',
+                          padding: '6px 12px', border: 'none', borderRadius: '7px',
+                          background: displayMode === mode ? 'var(--accent-primary)' : 'transparent',
+                          color: displayMode === mode ? 'var(--bg-primary)' : 'var(--text-secondary)',
+                          fontSize: '10px', fontWeight: 800, textTransform: 'uppercase', cursor: 'pointer',
+                          transition: 'all 0.25s'
+                        }}>
+                          {mode === 'manual' ? <><CompassIcon size={12} /> Plan</> : <><Image size={12} /> Render</>}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Image */}
+                  <div style={{
+                    position: 'relative', height: '240px', overflow: 'hidden',
+                    background: displayMode === 'manual' ? '#fff' : 'var(--bg-primary)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    borderBottom: '1px solid var(--border-color)'
+                  }}>
+                    <AnimatePresence mode="wait">
+                      {displayMode === 'manual' ? (
+                        <motion.img key="pdf" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.25 }}
+                          src={currentStep.pdfImg} alt={currentStep.title}
+                          style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', padding: '16px', display: 'block' }} />
+                      ) : (
+                        <motion.img key="render" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.25 }}
+                          src={currentStep.renderImg} alt={currentStep.title}
+                          style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                      )}
+                    </AnimatePresence>
+                    {displayMode === 'render' && (
+                      <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to bottom, rgba(0,0,0,0) 30%, rgba(0,0,0,0.65) 100%)' }} />
+                    )}
+                    <div style={{ position: 'absolute', bottom: '16px', left: '16px', right: '16px' }}>
+                      <div style={{ fontSize: '18px', fontWeight: 900, color: displayMode === 'render' ? '#fff' : 'var(--text-primary)', letterSpacing: '-0.02em' }}>
+                        {currentStep.title}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Body */}
+                  <div style={{ padding: '20px 16px' }}>
+                    <p style={{ fontSize: '14px', color: 'var(--text-secondary)', lineHeight: 1.75, marginBottom: '20px', fontWeight: 400 }}>
+                      {currentStep.desc}
+                    </p>
+                    <div style={{ borderTop: `1px solid var(--border-color)`, paddingTop: '20px', marginBottom: '16px' }}>
+                      <h4 style={{ fontSize: '11px', fontWeight: 800, color: 'var(--accent-primary)', textTransform: 'uppercase', letterSpacing: '0.15em', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '14px' }}>
+                        <Check size={14} strokeWidth={3} /> Key Deliverables
+                      </h4>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                        {currentStep.deliverables.map((item, idx) => (
+                          <div key={idx} style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
+                            <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'var(--accent-primary)', marginTop: '6px', flexShrink: 0 }} />
+                            <span style={{ fontSize: '13px', color: 'var(--text-primary)', lineHeight: 1.5, fontWeight: 500 }}>{item}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Prev / Next */}
+                    <div style={{ display: 'flex', gap: '10px', marginTop: '24px' }}>
+                      <button onClick={handlePrev} disabled={isFirst} style={{
+                        flex: 1, padding: '14px', background: isFirst ? 'var(--bg-secondary)' : 'var(--bg-secondary)',
+                        border: `1px solid var(--border-color)`, borderRadius: '12px',
+                        color: isFirst ? 'var(--border-color)' : 'var(--text-secondary)',
+                        cursor: isFirst ? 'not-allowed' : 'pointer', fontSize: '12px', fontWeight: 700,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+                        textTransform: 'uppercase', letterSpacing: '0.08em'
+                      }}>
+                        <ArrowLeft size={14} /> Prev
+                      </button>
+                      {isLast ? (
+                        <button onClick={() => navigate('/?page=contact')} style={{
+                          flex: 2, padding: '14px', background: 'var(--accent-secondary)', color: '#fff',
+                          border: 'none', borderRadius: '12px', fontWeight: 800, fontSize: '12px',
+                          letterSpacing: '0.1em', textTransform: 'uppercase', cursor: 'pointer',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px'
+                        }}>
+                          Book Consultation <ArrowRight size={14} />
+                        </button>
+                      ) : (
+                        <button onClick={handleNext} style={{
+                          flex: 2, padding: '14px', background: 'var(--accent-secondary)', color: '#fff',
+                          border: 'none', borderRadius: '12px', fontWeight: 800, fontSize: '12px',
+                          letterSpacing: '0.1em', textTransform: 'uppercase', cursor: 'pointer',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px'
+                        }}>
+                          Next Step <ArrowRight size={14} />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </motion.div>
+              </AnimatePresence>
+            </div>
+
+            {/* MOBILE STEP STRIP — horizontal scroll */}
+            <div style={{ borderTop: `1px solid var(--border-color)`, paddingTop: '20px' }}>
+              <div style={{ padding: '0 16px 8px', fontSize: '10px', fontWeight: 800, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.15em' }}>
+                All Steps
+              </div>
+              <div style={{
+                display: 'flex', gap: '8px', overflowX: 'auto', padding: '8px 16px 20px',
+                scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch'
+              }}>
+                {filteredSteps.map((stepItem) => {
+                  const originalIndex = WORKFLOW_STEPS.findIndex(s => s.step === stepItem.step);
+                  const isSelected = activeStep === originalIndex;
+                  return (
+                    <button
+                      key={stepItem.step}
+                      onClick={() => { setActiveStep(originalIndex); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                      style={{
+                        flexShrink: 0,
+                        display: 'flex', flexDirection: 'column', alignItems: 'flex-start',
+                        width: '130px', padding: '12px',
+                        borderRadius: '14px',
+                        background: isSelected ? 'var(--accent-secondary)' : 'var(--bg-secondary)',
+                        border: isSelected ? `1.5px solid var(--accent-secondary)` : `1px solid var(--border-color)`,
+                        cursor: 'pointer', transition: 'all 0.25s', textAlign: 'left'
+                      }}
+                    >
+                      <div style={{
+                        width: '28px', height: '28px', borderRadius: '50%',
+                        background: isSelected ? '#C8A96E' : 'var(--bg-primary)',
+                        color: isSelected ? '#1A1410' : 'var(--text-secondary)',
+                        fontWeight: 800, fontSize: '12px',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        marginBottom: '8px', flexShrink: 0
+                      }}>
+                        {stepItem.step}
+                      </div>
+                      <div style={{
+                        fontSize: '12px', fontWeight: 700,
+                        color: isSelected ? '#fff' : 'var(--text-primary)',
+                        lineHeight: 1.3, overflow: 'hidden',
+                        display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical'
+                      }}>
+                        {stepItem.title}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
         ) : (
-          <div style={{ 
-            display: 'grid', 
-            gridTemplateColumns: mob ? '1fr' : '400px 1fr', 
-            gap: mob ? '40px' : '60px',
-            alignItems: 'start'
-          }}>
-            
+          /* ═══════════════════════════════════════════
+             DESKTOP LAYOUT — sidebar list + detail panel
+          ═══════════════════════════════════════════ */
+          <div style={{ display: 'grid', gridTemplateColumns: '400px 1fr', gap: '60px', alignItems: 'start' }}>
+
             {/* ── LEFT COLUMN: STEP LIST ── */}
-            <div style={{ 
-              display: 'flex', 
-              flexDirection: 'column', 
-              gap: '12px',
-              maxHeight: mob ? 'auto' : 'calc(100vh - 280px)',
-              overflowY: mob ? 'visible' : 'auto',
-              paddingRight: mob ? '0' : '16px',
+            <div style={{
+              display: 'flex', flexDirection: 'column', gap: '12px',
+              maxHeight: 'calc(100vh - 280px)', overflowY: 'auto', paddingRight: '16px',
             }}>
               {filteredSteps.map((stepItem) => {
                 const originalIndex = WORKFLOW_STEPS.findIndex(s => s.step === stepItem.step);
                 const isSelected = activeStep === originalIndex;
                 const IconComponent = stepItem.icon;
-                
                 return (
                   <motion.div
                     key={stepItem.step}
                     onClick={() => setActiveStep(originalIndex)}
                     whileHover={{ scale: 1.01 }}
                     style={{
-                      padding: '16px 20px',
-                      borderRadius: '16px',
+                      padding: '16px 20px', borderRadius: '16px',
                       background: isSelected ? 'var(--bg-secondary)' : 'var(--bg-primary)',
                       border: isSelected ? `1.5px solid var(--accent-primary)` : `1px solid var(--border-color)`,
-                      cursor: 'pointer',
-                      transition: 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '16px',
+                      cursor: 'pointer', transition: 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
+                      display: 'flex', alignItems: 'center', gap: '16px',
                       boxShadow: isSelected ? `0 10px 30px rgba(0,0,0,0.05)` : 'none'
                     }}
                   >
                     <div style={{
-                      width: '36px',
-                      height: '36px',
-                      borderRadius: '50%',
+                      width: '36px', height: '36px', borderRadius: '50%',
                       background: isSelected ? 'var(--accent-primary)' : 'var(--bg-secondary)',
                       color: isSelected ? 'var(--bg-primary)' : 'var(--text-secondary)',
-                      fontWeight: 800,
-                      fontSize: '14px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      flexShrink: 0
+                      fontWeight: 800, fontSize: '14px',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
                     }}>
                       {stepItem.step}
                     </div>
-
                     <div style={{ flex: 1, overflow: 'hidden' }}>
-                      <div style={{ 
-                        fontSize: '10px', 
-                        fontWeight: 800, 
-                        color: isSelected ? 'var(--accent-primary)' : 'var(--text-secondary)', 
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.1em',
-                        marginBottom: '4px'
-                      }}>
+                      <div style={{ fontSize: '10px', fontWeight: 800, color: isSelected ? 'var(--accent-primary)' : 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '4px' }}>
                         Phase {PHASES.indexOf(stepItem.phase)}
                       </div>
-                      <div style={{ 
-                        fontSize: '15px', 
-                        fontWeight: 700, 
-                        color: 'var(--text-primary)',
-                        whiteSpace: 'nowrap',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis'
-                      }}>
+                      <div style={{ fontSize: '15px', fontWeight: 700, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                         {stepItem.title}
                       </div>
                     </div>
-
                     <div style={{ color: isSelected ? 'var(--accent-primary)' : 'var(--text-secondary)', flexShrink: 0 }}>
                       <IconComponent size={20} />
                     </div>
@@ -315,7 +465,7 @@ export default function WorkflowManualPage({ brand, user, onPortal, setPage, nav
             </div>
 
             {/* ── RIGHT COLUMN: ACTIVE DETAILS PANEL ── */}
-            <div style={{ position: mob ? 'relative' : 'sticky', top: mob ? '0' : '200px' }}>
+            <div style={{ position: 'sticky', top: '200px' }}>
               <AnimatePresence mode="wait">
                 <motion.div
                   key={currentStep.step}

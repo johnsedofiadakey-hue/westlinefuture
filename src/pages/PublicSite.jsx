@@ -38,17 +38,28 @@ export function Hero({ slides, brand, navigate, setPage }) {
   }, [slides.length]);
 
   const videoRef = React.useRef(null);
-  
+
   useEffect(() => {
-    if (videoRef.current) {
-      videoRef.current.playbackRate = 0.5; // Slow down
-    }
+    const vid = videoRef.current;
+    if (!vid) return;
+    vid.playbackRate = 0.5;
+    // Force play — some browsers block autoplay until a user gesture;
+    // calling .play() here handles the resume after that first interaction.
+    const attempt = () => {
+      vid.play().catch(() => {
+        // Silently ignore — browser will play on next user interaction
+      });
+    };
+    attempt();
+    // Also re-attempt if the video was paused (e.g. tab visibility change)
+    vid.addEventListener('pause', attempt);
+    return () => vid.removeEventListener('pause', attempt);
   }, []);
 
   return (
     <section style={{ minHeight: mob ? '92vh' : '94vh', position: 'relative', background: LIGHT_BG, overflow: 'hidden' }}>
-      
-      {/* Background Video */}
+
+      {/* Background Video — no controls, pointer-events disabled so clicks pass through */}
       <video
         ref={videoRef}
         src="/hero_video.mp4"
@@ -56,8 +67,11 @@ export function Hero({ slides, brand, navigate, setPage }) {
         loop
         muted
         playsInline
+        controls={false}
+        preload="auto"
         style={{
-          position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', zIndex: 0
+          position: 'absolute', inset: 0, width: '100%', height: '100%',
+          objectFit: 'cover', zIndex: 0, pointerEvents: 'none'
         }}
       />
 

@@ -126,12 +126,12 @@ function Bubble({ msg, isMine, isSystem, accentColor, onReact, viewerLang = 'en'
 
   const msgLang = detectLang(msg.text || '');
   const showTranslateBtn = !isSystem && msg.text?.length > 2;
-  const canTranslate = msgLang !== viewerLang;
+  const targetLang = msgLang === 'zh-CN' ? 'en' : 'zh-CN';
 
   const handleTranslate = async () => {
     if (translation) { setTranslation(null); return; }
     setTranslating(true);
-    const result = await translateText(msg.text, viewerLang);
+    const result = await translateText(msg.text, targetLang);
     setTranslation(result);
     setTranslating(false);
   };
@@ -245,7 +245,7 @@ function Bubble({ msg, isMine, isSystem, accentColor, onReact, viewerLang = 'en'
       {/* Meta row: time + translate + status */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, paddingLeft: isMine ? 0 : 4, paddingRight: isMine ? 4 : 0 }}>
         <span style={{ fontSize: 10, color: '#B8B6D8' }}>{timeStr(msg.createdAt)}</span>
-        {showTranslateBtn && canTranslate && (
+        {showTranslateBtn && (
           <button
             onClick={handleTranslate}
             style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0 2px', color: translation ? ac : '#B8B6D8', display: 'flex', alignItems: 'center', gap: 2, fontSize: 10, fontWeight: 600 }}

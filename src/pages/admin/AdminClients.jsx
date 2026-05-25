@@ -11,11 +11,12 @@ import { Users as UsersIcon } from 'lucide-react';
 
 export default function AdminClients({ dbClients, createClient, updateClient, deleteClient, deleteSelectedClients, deleteAllClients, resetUserPassword, brand, ...props }) {
   const [showAdd, setShowAdd] = useState(false);
+  const [wizardStep, setWizardStep] = useState(1);
   const [editingClient, setEditingClient] = useState(null);
   const [search, setSearch] = useState('');
   const [selectedIds, setSelectedIds] = useState([]);
   const [confirmDelete, setConfirmDelete] = useState(null); 
-  const [newC, setNewC] = useState({ name: '', email: '', phone: '', company: '' });
+  const [newC, setNewC] = useState({ name: '', email: '', phone: '', company: '', taxId: '', address: '', clientType: 'Corporate', source: '' });
   const [loading, setLoading] = useState(false);
   const [formErrors, setFormErrors] = useState({});
 
@@ -34,18 +35,28 @@ export default function AdminClients({ dbClients, createClient, updateClient, de
   };
 
   const resetForm = () => {
-    setNewC({ name: '', email: '', phone: '', company: '' });
+    setNewC({ name: '', email: '', phone: '', company: '', taxId: '', address: '', clientType: 'Corporate', source: '' });
+    setWizardStep(1);
     setEditingClient(null);
     setShowAdd(false);
+    setFormErrors({});
+  };
+
+  const handleNextStep = () => {
+    const errs = {};
+    if (wizardStep === 1) {
+       if (!newC.name.trim()) errs.name = 'Full name is required';
+       if (!newC.phone.trim()) errs.phone = 'Phone number is required';
+       else if (!PHONE_RE.test(newC.phone.trim())) errs.phone = 'Invalid phone format';
+    }
+    
+    setFormErrors(errs);
+    if (Object.keys(errs).length === 0) {
+       setWizardStep(prev => prev + 1);
+    }
   };
 
   const handleSubmit = async () => {
-    const errs = {};
-    if (!newC.name.trim()) errs.name = 'Full name is required';
-    if (!newC.phone.trim()) errs.phone = 'Phone number is required';
-    else if (!PHONE_RE.test(newC.phone.trim())) errs.phone = 'Invalid phone format (e.g. +233 24 000 0000)';
-    setFormErrors(errs);
-    if (Object.keys(errs).length) return;
     setLoading(true);
     try {
       if (editingClient) await updateClient(editingClient.id, newC);
@@ -58,7 +69,12 @@ export default function AdminClients({ dbClients, createClient, updateClient, de
 
   const startEdit = (c) => {
     setEditingClient(c);
-    setNewC({ name: c.name || '', email: c.email || '', phone: c.phone || '', company: c.company || '' });
+    setNewC({ 
+       name: c.name || '', email: c.email || '', phone: c.phone || '', 
+       company: c.company || '', taxId: c.taxId || '', address: c.address || '', 
+       clientType: c.clientType || 'Corporate', source: c.source || '' 
+    });
+    setWizardStep(1);
     setShowAdd(true);
   };
 
@@ -272,37 +288,130 @@ export default function AdminClients({ dbClients, createClient, updateClient, de
             background: '#fff', width: '100%', maxWidth: 500, borderRadius: 32, padding: 40,
             boxShadow: '0 40px 100px rgba(0,0,0,0.5)'
           }}>
-             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 32 }}>
-                <h3 className="lxfh" style={{ fontSize: 24, margin: 0 }}>{editingClient ? 'Modify Stakeholder' : 'Register Stakeholder'}</h3>
+             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 32 }}>
+                <div>
+                   <h3 className="lxfh" style={{ fontSize: 24, margin: 0 }}>{editingClient ? 'Modify Stakeholder' : 'Register Stakeholder'}</h3>
+                   <div style={{ fontSize: 12, color: `var(--text-secondary)`, marginTop: 4 }}>Step {wizardStep} of 3</div>
+                </div>
                 <button onClick={resetForm} style={{ background: 'none', border: 'none', color: `var(--text-secondary)`, cursor: 'pointer' }}><X size={24} /></button>
              </div>
-             
-             <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-                <div className="p-field">
-                   <label style={{ fontSize: 10, textTransform: 'uppercase', fontWeight: 800, color: `var(--text-secondary)`, marginBottom: 8, display: 'block' }}>Full Legal Name</label>
-                   <input className="p-inp" value={newC.name} onChange={e => setNewC({...newC, name: e.target.value})} placeholder="e.g. Samuel Amissah" style={{ borderColor: formErrors.name ? '#EF4444' : undefined }} />
-                   {formErrors.name && <div style={{ color: '#DC2626', fontSize: 11, marginTop: 4 }}>{formErrors.name}</div>}
-                </div>
 
-                <div className="p-field">
-                   <label style={{ fontSize: 10, textTransform: 'uppercase', fontWeight: 800, color: `var(--text-secondary)`, marginBottom: 8, display: 'block' }}>Direct Phone (Primary ID)</label>
-                   <input className="p-inp" value={newC.phone} onChange={e => setNewC({...newC, phone: e.target.value})} placeholder="e.g. +233 24 000 0000" style={{ borderColor: formErrors.phone ? '#EF4444' : undefined }} />
-                   {formErrors.phone && <div style={{ color: '#DC2626', fontSize: 11, marginTop: 4 }}>{formErrors.phone}</div>}
-                </div>
-                <div className="p-field">
-                   <label style={{ fontSize: 10, textTransform: 'uppercase', fontWeight: 800, color: `var(--text-secondary)`, marginBottom: 8, display: 'block' }}>Company / Entity</label>
-                   <input className="p-inp" value={newC.company} onChange={e => setNewC({...newC, company: e.target.value})} placeholder="e.g. Amissah Developments" />
-                </div>
+             <div style={{ display: 'flex', gap: 8, marginBottom: 32 }}>
+                {[1, 2, 3].map(st => (
+                   <div key={st} style={{ flex: 1, height: 4, borderRadius: 2, background: wizardStep >= st ? ac : `var(--border-color)` }} />
+                ))}
+             </div>
+             
+             <div style={{ display: 'flex', flexDirection: 'column', gap: 20, minHeight: 280 }}>
+                {wizardStep === 1 && (
+                   <>
+                      <div className="p-field">
+                         <label style={{ fontSize: 10, textTransform: 'uppercase', fontWeight: 800, color: `var(--text-secondary)`, marginBottom: 8, display: 'block' }}>Client Type</label>
+                         <div style={{ display: 'flex', gap: 12 }}>
+                            {['Corporate', 'Individual'].map(type => (
+                               <button 
+                                  key={type}
+                                  onClick={() => setNewC({...newC, clientType: type})}
+                                  style={{ flex: 1, padding: 12, borderRadius: 12, border: `1px solid ${newC.clientType === type ? ac : 'var(--border-color)'}`, background: newC.clientType === type ? `${ac}10` : 'transparent', color: newC.clientType === type ? ac : `var(--text-secondary)`, fontWeight: 700, cursor: 'pointer' }}
+                               >
+                                  {type}
+                               </button>
+                            ))}
+                         </div>
+                      </div>
+                      <div className="p-field">
+                         <label style={{ fontSize: 10, textTransform: 'uppercase', fontWeight: 800, color: `var(--text-secondary)`, marginBottom: 8, display: 'block' }}>Full Legal Name</label>
+                         <input className="p-inp" value={newC.name} onChange={e => setNewC({...newC, name: e.target.value})} placeholder="e.g. Samuel Amissah" style={{ borderColor: formErrors.name ? '#EF4444' : undefined }} />
+                         {formErrors.name && <div style={{ color: '#DC2626', fontSize: 11, marginTop: 4 }}>{formErrors.name}</div>}
+                      </div>
+                      <div style={{ display: 'flex', gap: 16 }}>
+                         <div className="p-field" style={{ flex: 1 }}>
+                            <label style={{ fontSize: 10, textTransform: 'uppercase', fontWeight: 800, color: `var(--text-secondary)`, marginBottom: 8, display: 'block' }}>Direct Phone</label>
+                            <input className="p-inp" value={newC.phone} onChange={e => setNewC({...newC, phone: e.target.value})} placeholder="+233 24 000 0000" style={{ borderColor: formErrors.phone ? '#EF4444' : undefined }} />
+                            {formErrors.phone && <div style={{ color: '#DC2626', fontSize: 11, marginTop: 4 }}>{formErrors.phone}</div>}
+                         </div>
+                         <div className="p-field" style={{ flex: 1 }}>
+                            <label style={{ fontSize: 10, textTransform: 'uppercase', fontWeight: 800, color: `var(--text-secondary)`, marginBottom: 8, display: 'block' }}>Email Address</label>
+                            <input type="email" className="p-inp" value={newC.email} onChange={e => setNewC({...newC, email: e.target.value})} placeholder="samuel@example.com" style={{ borderColor: formErrors.email ? '#EF4444' : undefined }} />
+                            {formErrors.email && <div style={{ color: '#DC2626', fontSize: 11, marginTop: 4 }}>{formErrors.email}</div>}
+                         </div>
+                      </div>
+                   </>
+                )}
+
+                {wizardStep === 2 && (
+                   <>
+                      <div className="p-field">
+                         <label style={{ fontSize: 10, textTransform: 'uppercase', fontWeight: 800, color: `var(--text-secondary)`, marginBottom: 8, display: 'block' }}>Company / Entity Name</label>
+                         <input className="p-inp" value={newC.company} onChange={e => setNewC({...newC, company: e.target.value})} placeholder="e.g. Amissah Developments" style={{ borderColor: formErrors.company ? '#EF4444' : undefined }} />
+                         {formErrors.company && <div style={{ color: '#DC2626', fontSize: 11, marginTop: 4 }}>{formErrors.company}</div>}
+                      </div>
+                      <div className="p-field">
+                         <label style={{ fontSize: 10, textTransform: 'uppercase', fontWeight: 800, color: `var(--text-secondary)`, marginBottom: 8, display: 'block' }}>Tax ID / VAT Registration</label>
+                         <input className="p-inp" value={newC.taxId} onChange={e => setNewC({...newC, taxId: e.target.value})} placeholder="Optional for individuals" />
+                      </div>
+                      <div className="p-field">
+                         <label style={{ fontSize: 10, textTransform: 'uppercase', fontWeight: 800, color: `var(--text-secondary)`, marginBottom: 8, display: 'block' }}>Billing / Registered Address</label>
+                         <textarea className="p-inp" value={newC.address} onChange={e => setNewC({...newC, address: e.target.value})} placeholder="123 Corporate Ave..." style={{ minHeight: 80, resize: 'none' }} />
+                      </div>
+                   </>
+                )}
+
+                {wizardStep === 3 && (
+                   <>
+                      <div className="p-field">
+                         <label style={{ fontSize: 10, textTransform: 'uppercase', fontWeight: 800, color: `var(--text-secondary)`, marginBottom: 8, display: 'block' }}>Lead Source</label>
+                         <select className="p-inp" value={newC.source} onChange={e => setNewC({...newC, source: e.target.value})} style={{ background: '#f5f5f5', border: '1px solid var(--border-color)', height: 50, borderRadius: 12, padding: '0 16px' }}>
+                            <option value="">Select Source...</option>
+                            <option value="Website">Website Inquiry</option>
+                            <option value="Referral">Client Referral</option>
+                            <option value="Walk-in">Walk-in</option>
+                            <option value="Social Media">Social Media</option>
+                            <option value="Other">Other</option>
+                         </select>
+                      </div>
+                      <div style={{ background: `${ac}10`, padding: 20, borderRadius: 16, marginTop: 20, display: 'flex', gap: 16, alignItems: 'flex-start' }}>
+                         <div style={{ color: ac }}><Info size={24} /></div>
+                         <div>
+                            <div style={{ fontSize: 14, fontWeight: 700, color: ac, marginBottom: 4 }}>Almost Done!</div>
+                            <div style={{ fontSize: 12, color: `var(--text-secondary)`, lineHeight: 1.5 }}>
+                               Saving this profile will create a secure portal for the client. They will automatically receive an invitation email containing their access credentials.
+                            </div>
+                         </div>
+                      </div>
+                   </>
+                )}
              </div>
 
-             <button 
-                onClick={handleSubmit}
-                disabled={loading}
-                className="p-btn-dark" 
-                style={{ width: '100%', marginTop: 40, height: 60, fontSize: 16, borderRadius: 20, opacity: loading ? 0.5 : 1 }}
-             >
-                {loading ? 'Processing...' : (editingClient ? 'Finalize Modifications' : 'Initialize Account')}
-             </button>
+             <div style={{ display: 'flex', gap: 12, marginTop: 40 }}>
+                {wizardStep > 1 && (
+                   <button 
+                      onClick={() => setWizardStep(prev => prev - 1)}
+                      className="p-btn-dark" 
+                      style={{ flex: 1, background: 'transparent', color: `var(--text-secondary)`, border: '1px solid var(--border-color)', height: 60, fontSize: 16, borderRadius: 20 }}
+                   >
+                      Back
+                   </button>
+                )}
+                {wizardStep < 3 ? (
+                   <button 
+                      onClick={handleNextStep}
+                      className="p-btn-dark" 
+                      style={{ flex: 2, height: 60, fontSize: 16, borderRadius: 20 }}
+                   >
+                      Continue to Step {wizardStep + 1}
+                   </button>
+                ) : (
+                   <button 
+                      onClick={handleSubmit}
+                      disabled={loading}
+                      className="p-btn-dark" 
+                      style={{ flex: 2, height: 60, fontSize: 16, borderRadius: 20, opacity: loading ? 0.5 : 1 }}
+                   >
+                      {loading ? 'Processing...' : (editingClient ? 'Finalize Modifications' : 'Initialize Account')}
+                   </button>
+                )}
+             </div>
           </div>
         </div>
       )}

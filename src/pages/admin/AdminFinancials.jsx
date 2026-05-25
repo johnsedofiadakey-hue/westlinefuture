@@ -809,8 +809,28 @@ export default function AdminFinancials({ invoices = [], transactions = [], clie
 
        {/* INVOICE PREVIEW MODAL */}
        {showAdd && (
-         <Modal open={true} title={`New ${showAdd === 'receipt' ? 'Sales Receipt' : showAdd === 'invoice' ? 'Invoice' : 'Quotation'}`} onClose={() => setShowAdd(null)} w={1100}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 450px', gap: 40 }}>
+         <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: '#F8F9FA', display: 'flex', flexDirection: 'column' }}>
+            {/* Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 32px', background: '#fff', borderBottom: '1px solid var(--border-color)', boxShadow: '0 2px 10px rgba(0,0,0,0.02)' }}>
+               <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                 <button onClick={() => setShowAdd(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center' }}><X size={24} /></button>
+                 <div>
+                   <h2 className="lxfh" style={{ fontSize: 20, margin: 0, color: 'var(--accent-secondary)' }}>Invoice Studio</h2>
+                   <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{showAdd === 'receipt' ? 'Sales Receipt' : showAdd === 'invoice' ? 'Invoice' : 'Quotation'}</div>
+                 </div>
+               </div>
+               <div style={{ display: 'flex', gap: 12 }}>
+                 <button onClick={() => setShowAdd(null)} className="p-btn-light" style={{ padding: '8px 16px', fontSize: 13, borderRadius: 8 }}>Cancel</button>
+                 <button onClick={issueDocument} className="p-btn-dark" style={{ padding: '8px 24px', fontSize: 13, background: '#16A34A', border: 'none', borderRadius: 8, fontWeight: 700 }}>
+                   Confirm & Issue
+                 </button>
+               </div>
+            </div>
+
+            {/* Body */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.2fr) minmax(400px, 1fr)', flex: 1, overflow: 'hidden' }}>
+               {/* Left Pane: Editor */}
+               <div style={{ padding: '32px 40px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 32 }} className="no-scrollbar">
                <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
                   {/* Document type tabs */}
                   <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
@@ -899,16 +919,26 @@ export default function AdminFinancials({ invoices = [], transactions = [], clie
                       </PFormField>
                    </div>
                   
-                  <PFormField label="Document Title"><input className="p-inp" placeholder="e.g. Phase 2: Structural Facade Glazing" value={draft.title} onChange={e => setDraft({...draft, title: e.target.value})} /></PFormField>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+                      <PFormField label="Document Title"><input className="p-inp" placeholder="e.g. Phase 2: Structural Facade Glazing" value={draft.title} onChange={e => setDraft({...draft, title: e.target.value})} /></PFormField>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                        <PFormField label="Issue Date"><input type="date" className="p-inp" value={draft.date} onChange={e => setDraft({...draft, date: e.target.value})} /></PFormField>
+                        <PFormField label="Due Date"><input type="date" className="p-inp" value={draft.due || ''} onChange={e => setDraft({...draft, due: e.target.value})} /></PFormField>
+                      </div>
+                  </div>
                   
-                  <div style={{ border: '1px solid var(--border-color)', borderRadius: 20, padding: 24, background: `var(--bg-primary)` }}>
-                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-                        <h4 className="lxf" style={{ fontSize: 11, textTransform: 'uppercase', color: `var(--text-secondary)`, letterSpacing: 1 }}>Line Item Breakdown</h4>
-                        <button onClick={() => setDraft({...draft, items: [...draft.items, {id: Date.now(), desc:'', qty:1, rate:0, unit: draft.invoiceType === 'unit' ? 'pcs' : 'job', discount: 0, total: 0}]})} style={{ background: ac, border: 'none', color: '#fff', fontSize: 10, fontWeight: 800, cursor: 'pointer', padding: '6px 14px', borderRadius: 20 }}>+ ADD LINE</button>
+                  <div style={{ border: '1px solid var(--border-color)', borderRadius: 16, padding: 0, background: `#fff`, overflow: 'hidden', boxShadow: '0 4px 20px rgba(0,0,0,0.03)' }}>
+                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px 24px', borderBottom: '1px solid var(--border-color)', background: 'var(--bg-secondary)' }}>
+                        <h4 className="lxfh" style={{ fontSize: 16, color: `var(--accent-secondary)`, margin: 0 }}>Itemized Charges</h4>
+                        <div style={{ display: 'flex', gap: 8 }}>
+                           {draft.invoiceType === 'unit' && <button onClick={() => document.getElementById('smart-selector').scrollIntoView({ behavior: 'smooth' })} className="p-btn-light" style={{ padding: '6px 12px', fontSize: 11 }}>+ Smart Catalog</button>}
+                           <button onClick={() => setDraft({...draft, items: [...draft.items, {id: Date.now(), desc:'', qty:1, rate:0, unit: draft.invoiceType === 'unit' ? 'pcs' : 'job', discount: 0, total: 0}]})} style={{ background: ac, border: 'none', color: '#fff', fontSize: 11, fontWeight: 800, cursor: 'pointer', padding: '6px 14px', borderRadius: 8 }}>+ Add Blank Row</button>
+                        </div>
                      </div>
                      
+                     <div style={{ padding: '24px' }}>
                      {draft.invoiceType === 'unit' && (
-                       <div style={{ marginBottom: 20, padding: 12, background: '#fff', borderRadius: 12, border: '1px solid #eee' }}>
+                       <div id="smart-selector" style={{ marginBottom: 24, padding: 16, background: '#F8FAFC', borderRadius: 12, border: '1px solid #E2E8F0' }}>
                           <div style={{ fontSize: 10, fontWeight: 900, color: ac, marginBottom: 12, letterSpacing: 1 }}>SMART COMPONENT SELECTOR</div>
                           <div style={{ display: 'flex', gap: 10, overflowX: 'auto', paddingBottom: 10 }} className="no-scrollbar">
                              {GLASS_CATALOG_DATA.slice(0, 12).map(p => (
@@ -947,115 +977,88 @@ export default function AdminFinancials({ invoices = [], transactions = [], clie
                        </div>
                      )}
 
+                     {/* Table Header */}
+                     <div style={{ display: 'grid', gridTemplateColumns: `minmax(200px, 1.5fr) 80px ${draft.invoiceType === 'unit' ? '80px ' : ''}120px 100px 120px 40px`, gap: 12, marginBottom: 12, padding: '0 12px' }}>
+                        <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Item & Description</div>
+                        <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Qty</div>
+                        {draft.invoiceType === 'unit' && <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Unit</div>}
+                        <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Rate</div>
+                        <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Discount</div>
+                        <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--text-secondary)', textTransform: 'uppercase', textAlign: 'right' }}>Amount</div>
+                        <div />
+                     </div>
+
                      {draft.items.map((it, idx) => (
-                       <div key={it.id} style={{ display: 'grid', gridTemplateColumns: `1fr 70px ${draft.invoiceType === 'unit' ? '70px' : ''} 110px 90px 100px 40px`, gap: 12, marginBottom: 12, alignItems: 'center' }}>
-                          <input className="p-inp" placeholder="Description" value={it.desc} onChange={e => { const ni = [...draft.items]; ni[idx].desc = e.target.value; setDraft({...draft, items: ni}); }} />
-                          <input className="p-inp" type="number" placeholder="Qty" value={it.qty} onChange={e => { const ni = [...draft.items]; ni[idx].qty = parseFloat(e.target.value); setDraft({...draft, items: ni}); }} />
-                          {draft.invoiceType === 'unit' && <input className="p-inp" placeholder="Unit" value={it.unit} onChange={e => { const ni = [...draft.items]; ni[idx].unit = e.target.value; setDraft({...draft, items: ni}); }} />}
-                          <input className="p-inp" type="number" placeholder="Rate" value={it.rate} onChange={e => { const ni = [...draft.items]; ni[idx].rate = parseFloat(e.target.value); setDraft({...draft, items: ni}); }} />
-                          <input className="p-inp" type="number" placeholder="Discount" value={it.discount || 0} onChange={e => { const ni = [...draft.items]; ni[idx].discount = parseFloat(e.target.value) || 0; setDraft({...draft, items: ni}); }} />
-                          <div style={{ fontSize: 12, fontWeight: 900, color: `var(--accent-secondary)`, textAlign: 'right' }}>{formatMoney(lineTotal(it), draft.currency)}</div>
-                          <button onClick={() => setDraft({...draft, items: draft.items.filter(x => x.id !== it.id)})} style={{ background: 'none', border: 'none', color: '#ff4444', cursor: 'pointer', opacity: draft.items.length > 1 ? 1 : 0.2 }} disabled={draft.items.length <= 1}><Trash2 size={16}/></button>
+                       <div key={it.id} style={{ display: 'grid', gridTemplateColumns: `minmax(200px, 1.5fr) 80px ${draft.invoiceType === 'unit' ? '80px ' : ''}120px 100px 120px 40px`, gap: 12, marginBottom: 8, alignItems: 'center' }}>
+                          <textarea className="p-inp" rows={1} placeholder="Type an item description..." value={it.desc} onChange={e => { const ni = [...draft.items]; ni[idx].desc = e.target.value; setDraft({...draft, items: ni}); }} style={{ resize: 'vertical', minHeight: 44, padding: '10px 12px' }} />
+                          <input className="p-inp" type="number" placeholder="1" value={it.qty} onChange={e => { const ni = [...draft.items]; ni[idx].qty = parseFloat(e.target.value); setDraft({...draft, items: ni}); }} style={{ padding: '0 12px' }} />
+                          {draft.invoiceType === 'unit' && <input className="p-inp" placeholder="pcs" value={it.unit} onChange={e => { const ni = [...draft.items]; ni[idx].unit = e.target.value; setDraft({...draft, items: ni}); }} style={{ padding: '0 12px' }} />}
+                          <input className="p-inp" type="number" placeholder="0.00" value={it.rate} onChange={e => { const ni = [...draft.items]; ni[idx].rate = parseFloat(e.target.value); setDraft({...draft, items: ni}); }} style={{ padding: '0 12px' }} />
+                          <input className="p-inp" type="number" placeholder="0.00" value={it.discount || ''} onChange={e => { const ni = [...draft.items]; ni[idx].discount = parseFloat(e.target.value) || 0; setDraft({...draft, items: ni}); }} style={{ padding: '0 12px' }} />
+                          <div style={{ fontSize: 14, fontWeight: 700, color: `var(--accent-secondary)`, textAlign: 'right', paddingRight: 8 }}>{formatMoney(lineTotal(it), draft.currency)}</div>
+                          <button onClick={() => setDraft({...draft, items: draft.items.filter(x => x.id !== it.id)})} style={{ background: 'none', border: 'none', color: '#ff4444', cursor: 'pointer', opacity: draft.items.length > 1 ? 1 : 0.2, display: 'flex', alignItems: 'center', justifyContent: 'center', width: 36, height: 36, borderRadius: 8 }} className="hover-lift" disabled={draft.items.length <= 1}><Trash2 size={16}/></button>
                        </div>
                      ))}
-                     <div style={{ marginTop: 20, paddingTop: 20, borderTop: '2px solid var(--border-color)', textAlign: 'right' }}>
-                        <span style={{ fontSize: 12, color: `var(--text-secondary)`, marginRight: 12 }}>Total billable ({draft.currency}):</span>
-                        <span style={{ fontSize: 24, fontWeight: 900, color: `var(--accent-secondary)` }}>{formatMoney(calculateTotal(draft.items), draft.currency)}</span>
+                     
+                     {/* Subtotal & Total Area */}
+                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginTop: 32, paddingTop: 24, borderTop: '1px solid var(--border-color)' }}>
+                        <div style={{ width: '50%' }}>
+                          <PFormField label="Customer Notes / Instructions">
+                            <textarea className="p-inp" rows={3} placeholder="Thanks for your business!" value={draft.notes || ''} onChange={e => setDraft({...draft, notes: e.target.value})} style={{ resize: 'vertical' }} />
+                          </PFormField>
+                        </div>
+                        <div style={{ width: 300, background: 'var(--bg-secondary)', padding: 24, borderRadius: 16 }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12, fontSize: 13, color: 'var(--text-secondary)' }}>
+                            <span>Subtotal</span>
+                            <span>{formatMoney(calculateTotal(draft.items), draft.currency)}</span>
+                          </div>
+                          {finSettings.taxEnabled && (
+                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12, fontSize: 13, color: 'var(--text-secondary)' }}>
+                              <span>{finSettings.taxName} ({finSettings.taxRate}%)</span>
+                              <span>{finSettings.taxInclusive ? '(Inclusive)' : formatMoney(calculateTotal(draft.items) * (finSettings.taxRate / 100), draft.currency)}</span>
+                            </div>
+                          )}
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 16, paddingTop: 16, borderTop: '2px solid var(--border-color)', fontSize: 18, fontWeight: 900, color: 'var(--accent-secondary)' }}>
+                            <span>Total</span>
+                            <span>{formatMoney(calculateTotal(draft.items) * (finSettings.taxEnabled && !finSettings.taxInclusive ? (1 + (finSettings.taxRate/100)) : 1), draft.currency)}</span>
+                          </div>
+                        </div>
+                     </div>
                      </div>
                   </div>
                </div>
+               </div>
 
-               <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-                  <div className="p-card" style={{ padding: 24, background: `var(--bg-secondary)`, border: '1px solid var(--border-color)', position: 'sticky', top: 0 }}>
-                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-                        <h4 className="lxf" style={{ fontSize: 11, textTransform: 'uppercase', color: `var(--text-secondary)` }}>Real-time Preview</h4>
-                        <div style={{ fontSize: 9, background: `var(--accent-secondary)`, color: '#fff', padding: '2px 8px', borderRadius: 4 }}>{finSettings.invoiceTheme.toUpperCase()}</div>
+
+               {/* Right Pane: Live Preview */}
+               <div style={{ background: '#323232', padding: 32, display: 'flex', flexDirection: 'column', gap: 24, overflowY: 'auto', alignItems: 'center' }}>
+                  <div style={{ width: '100%', maxWidth: 794, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                     <div style={{ color: '#aaa', fontSize: 12, display: 'flex', alignItems: 'center', gap: 8 }}><Eye size={16} /> Live PDF Preview</div>
+                     <div style={{ display: 'flex', gap: 8 }}>
+                       <button onClick={() => setFinSettings({...finSettings, invoiceTheme: finSettings.invoiceTheme === 'classic' ? 'modern' : 'classic'})} className="p-btn-light" style={{ padding: '6px 12px', fontSize: 11, background: '#444', color: '#fff', border: '1px solid #555' }}>Toggle Layout ({finSettings.invoiceTheme})</button>
                      </div>
-                     <div style={{ transform: 'scale(0.38)', transformOrigin: 'top left', width: '263%', border: '1px solid #ddd', borderRadius: 12, boxShadow: '0 20px 50px rgba(0,0,0,0.1)' }}>
-                        <InvoiceDocument inv={draft} isQuote={showAdd === 'quotation'} finSettings={finSettings} ac={ac} brand={brand} />
-                     </div>
-                     <div style={{ marginTop: 420 }}>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
-                           <button onClick={async () => {
-                             try {
-                               notify('pending', 'Sending via email...');
-                               await Promise.resolve(); // placeholder until email fn is wired
-                               notify('info', 'PDF Engine: Connecting to Firebase Functions...');
-                             } catch (e) {
-                               notify('error', 'Email delivery failed: ' + e.message);
-                             }
-                           }} className="p-btn-dark" style={{ padding: 16, borderRadius: 16, fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}><Mail size={16} /> Email to Client</button>
-                           <button onClick={async () => {
-                             try {
-                               const msg = `Hello, your ${showAdd} from Westline Future for ${draft.title} is ready. Total: ${formatMoney(calculateTotal(draft.items), draft.currency)}`;
-                               if (props.sendWhatsAppUpdate) await props.sendWhatsAppUpdate(draft.clientPhone || draft.projectId, draft.projectId, msg);
-                               notify('success', 'WhatsApp message sent');
-                             } catch (e) {
-                               notify('error', 'WhatsApp delivery failed: ' + e.message);
-                             }
-                           }} className="p-btn-gold" style={{ padding: 16, borderRadius: 16, fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}><MessageSquare size={16} /> Share WhatsApp</button>
-                        </div>
-                        <button 
-                            onClick={() => {
-                               const printContent = document.getElementById('printable-financial');
-                               if (!printContent) return;
-                               const safeTitle = (draft.title || '').replace(/[<>"'&]/g, c => ({ '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;', '&': '&amp;' })[c]);
-                               const safeMode = (showAdd || '').replace(/[<>"'&]/g, c => ({ '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;', '&': '&amp;' })[c]);
-                               const safeBody = DOMPurify.sanitize(printContent.innerHTML, { ADD_ATTR: ['style', 'class', 'target'], ADD_TAGS: ['img', 'style'] });
-                               const htmlContent = `
-                                  <html>
-                                     <head>
-                                        <base href="${window.location.origin}/" />
-                                        <title>${safeTitle} - ${safeMode.toUpperCase()}</title>
-                                        <style>
-                                           @page { size: A4; margin: 0; }
-                                           body { margin: 0; font-family: sans-serif; }
-                                           #printable-financial { width: 210mm !important; min-height: 297mm !important; border: none !important; margin: 0 !important; box-shadow: none !important; padding: 40px !important; }
-                                           @media print { button { display: none !important; } }
-                                        </style>
-                                     </head>
-                                     <body>
-                                        <div style="width: 210mm; margin: 0 auto;">${safeBody}</div>
-                                     </body>
-                                  </html>
-                               `;
-                               const iframe = document.createElement('iframe');
-                               iframe.style.position = 'fixed';
-                               iframe.style.right = '0';
-                               iframe.style.bottom = '0';
-                               iframe.style.width = '0';
-                               iframe.style.height = '0';
-                               iframe.style.border = '0';
-                               document.body.appendChild(iframe);
-                               
-                               iframe.contentWindow.document.open();
-                               iframe.contentWindow.document.write(htmlContent);
-                               iframe.contentWindow.document.close();
-                               
-                               iframe.onload = () => {
-                                 setTimeout(() => {
-                                   iframe.contentWindow.focus();
-                                   iframe.contentWindow.print();
-                                   setTimeout(() => document.body.removeChild(iframe), 1000);
-                                 }, 500);
-                               };
-                            }} 
-                            className="p-btn-light" 
-                            style={{ width: '100%', padding: 16, borderRadius: 16, marginBottom: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontWeight: 800 }}
-                         >
-                            <Download size={16} /> Premium PDF Export
-                         </button>
-                        <button onClick={issueDocument} className="p-btn-dark" style={{ width: '100%', padding: 18, background: '#16A34A', border: 'none', borderRadius: 16, fontSize: 14, fontWeight: 800 }}>
-          Confirm & Issue — {draft.documentKind === 'receipt' ? 'Sales Receipt' : draft.documentKind === 'quotation' ? 'Quotation' : 'Invoice'}
-        </button>
-                      </div>
+                  </div>
+                  
+                  {/* Container for zooming the A4 preview */}
+                  <div style={{ 
+                     width: 794, // exact A4 width at 96dpi
+                     minHeight: 1123, 
+                     background: '#fff', 
+                     boxShadow: '0 20px 60px rgba(0,0,0,0.5)',
+                     borderRadius: 4,
+                     transformOrigin: 'top center',
+                     transform: 'scale(1)',
+                     transition: 'transform 0.2s',
+                     overflow: 'hidden'
+                  }}>
+                     <InvoiceDocument inv={draft} isQuote={showAdd === 'quotation'} finSettings={finSettings} ac={ac} brand={brand} />
                   </div>
                </div>
             </div>
-         </Modal>
+         </div>
        )}
        {viewInvoice && (
-         <Modal title={`${viewInvoice.type || 'Invoice'} - ${viewInvoice.id?.slice(0, 8).toUpperCase()}`} onClose={() => setViewInvoice(null)}>
+         <Modal open={true} w={900} title={`${viewInvoice.type || 'Invoice'} — ${viewInvoice.id?.slice(0, 8).toUpperCase()}`} onClose={() => setViewInvoice(null)}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
                <div style={{ border: '1px solid #ddd', borderRadius: 12, boxShadow: '0 10px 30px rgba(0,0,0,0.08)' }}>
                   <div id="printable-financial-view" style={{ overflow: 'auto', maxHeight: '60vh', padding: 24, zoom: 0.7 }}>

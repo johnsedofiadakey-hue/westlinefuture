@@ -72,241 +72,237 @@ const PREMIUM_CATALOG = [
   { id: 'cat-door-1', name: 'Solid Timber Interior Flush Door', price: 380, unit: 'pcs', category: 'Doors' }
 ];
 
-// ─── Helper Print Engines ────────────────────────────────────────────────────
+// ─── Helper Print Engine ─────────────────────────────────────────────────────
+// Generates a PDF-printable invoice/receipt/quote that exactly mirrors
+// the InvoiceDocument React component design — same layout, same palette.
 function printInvoiceOrReceipt(inv, brand) {
-  const theme = {
-    primary: '#4A3B32',     // Dark espresso brown
-    secondary: '#8C6C52',   // Mid-tone warm brown
-    accent: '#C5A880',      // Rich beige gold
-    bg: '#FDFBF7',          // Pristine cream base
-    surface: '#F4EFE6',     // Light beige for table headers / blocks
-    textMuted: '#716259'    // Muted brown for subtext
-  };
+  const fs   = brand?.finSettings || {};
+  const ac   = brand?.color || '#C8A96E';
+  const dark = '#1A1410';
+  const mut  = '#716259';
+  const soft = '#EDE8E0';
+  const surf = '#F8F5F0';
 
-  const co = brand?.name || 'Westline Future Ltd.';
-  const addr = brand?.address || 'Accra, Ghana';
-  const phone = brand?.phone || '059 845 5012';
-  const email = brand?.email || 'info@westlinefuture.com';
-  const logoUrl = brand?.logo || '';
-  const logoHtml = logoUrl
-    ? `<img src="${logoUrl}" style="height:60px;object-fit:contain;display:block;" alt="${co}" />`
-    : `<div style="display:flex;flex-direction:column;line-height:1;gap:2px;">
-         <div style="font-size:28px;font-weight:900;color:${theme.primary};letter-spacing:0.05em;">WESTLINE</div>
-         <div style="font-size:12px;font-weight:600;color:${theme.secondary};letter-spacing:0.45em;">FUTURE</div>
-       </div>`;
+  // ── document type ──
+  const isRcpt = inv.documentKind === 'receipt' || inv.invoiceType === 'receipt' || inv.type === 'Receipt';
+  const isQuo  = inv.documentKind === 'quotation' || inv.type === 'Quotation';
+  const lbl    = isRcpt ? 'Sales Receipt' : isQuo ? 'Quotation' : 'Invoice';
 
-  const clientName = inv.clientName || 'Valued Client';
-  const clientPhone = inv.clientPhone || '';
-  const clientEmail = inv.clientEmail || '';
-  
-  const currency = inv.currency || 'GHS';
-  const symbol = currency === 'USD' ? '$' : 'GH₵';
-  const total = Number(inv.total || 0);
-  const paid = Number(inv.paidAmount || 0);
-  const balance = Math.max(0, total - paid);
+  // ── company ──
+  const co      = brand?.name     || 'Westline Future';
+  const tagline = brand?.tagline  || fs.companyTagline || 'Global Trading Co, Ltd';
+  const addr    = brand?.location || '';
+  const phone   = brand?.phone    || '';
+  const email   = brand?.email    || '';
+  const web     = brand?.website  || 'www.westlinefuture.com';
+  const logoSrc = brand?.logo     || '/logo.png';
 
-  const formattedTotal = `${symbol} ${total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-  const formattedPaid = `${symbol} ${paid.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-  const formattedBalance = `${symbol} ${balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  // ── client ──
+  const cn   = inv.clientName    || 'Valued Client';
+  const cco  = inv.clientCompany || '';
+  const cadr = inv.clientAddress || '';
+  const cem  = inv.clientEmail   || '';
+  const cph  = inv.clientPhone   || '';
+  const ctax = inv.clientTaxId   || '';
 
-  const items = inv.items || [];
-  const taxRate = inv.taxRate || 0;
-  const subtotal = items.reduce((sum, item) => sum + (Number(item.qty || 0) * Number(item.rate || 0)), 0);
-  const taxAmount = (subtotal * taxRate) / 100;
+  // ── currency + format helpers ──
+  const cur  = inv.currency || fs.baseCurrency || 'GHS';
+  const syms = { GHS: 'GH₵', USD: '$', EUR: '€', CNY: '¥', GBP: '£' };
+  const sym  = syms[cur] || (cur + ' ');
+  const fmt  = v => `${sym}${parseFloat(v || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const fmtD = d => { if (!d) return '—'; try { return new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }); } catch { return d; } };
 
-  const status = (inv.status || 'Pending').toUpperCase();
-  const statusColor = status === 'PAID' ? '#16A34A' : status === 'PARTIALLY PAID' ? '#D97706' : '#DC2626';
+  // ── line items ──
+  const items   = inv.items || [];
+  const hasDisc = items.some(i => parseFloat(i.discount) > 0);
+  const lt      = it => Math.max(0, (parseFloat(it.qty)||0)*(parseFloat(it.rate)||0)-(parseFloat(it.discount)||0));
+  const sub     = items.reduce((a, b) => a + lt(b), 0);
 
-  const itemsHtml = items.map((item, idx) => `
-    <tr style="border-bottom: 1px solid #E5E5E5;">
-      <td style="padding: 12px 8px; font-size: 12px; font-weight: 600; color: ${theme.primary};">${idx + 1}</td>
-      <td style="padding: 12px 8px; font-size: 12px; color: ${theme.primary};">
-        <div style="font-weight:700;">${item.desc || 'Item'}</div>
+  // ── tax ──
+  const taxOn  = fs.taxEnabled  ?? false;
+  const txRate = parseFloat(inv.taxRate ?? fs.taxRate ?? 0);
+  const txName = fs.taxName     || 'Tax';
+  const txIncl = fs.taxInclusive ?? false;
+  const txAmt  = taxOn ? (txIncl ? sub - sub/(1+txRate/100) : sub*txRate/100) : 0;
+  const grand  = taxOn && !txIncl ? sub + txAmt : sub;
+
+  const paid  = parseFloat(inv.paidAmount || inv.amountPaid || 0);
+  const bal   = Math.max(0, grand - paid);
+
+  // ── status ──
+  const st     = inv.status || 'Pending';
+  const stBg   = st === 'Paid' ? 'rgba(22,163,74,0.12)' : `${ac}20`;
+  const stCol  = st === 'Paid' ? '#16A34A' : '#92632B';
+
+  // ── bank / terms / signature ──
+  const bank  = inv.bankDetails || fs.bankDetails || '';
+  const terms = inv.terms || inv.notes || fs.terms || '';
+  const sigN  = fs.signatureName  || 'Finance Director';
+  const sigT  = fs.signatureTitle || co;
+  const foot  = fs.footerNote     || 'Thank you for your business.';
+
+  const rowsHtml = items.map((it, i) => `
+    <tr style="border-bottom:1px solid ${soft};background:${i%2===1?surf:'#fff'};">
+      <td style="padding:14px 16px;font-size:11px;color:${mut};vertical-align:top;">${i+1}</td>
+      <td style="padding:14px 16px;vertical-align:top;">
+        <div style="font-size:12px;font-weight:700;color:${dark};">${it.desc||'Service Item'}</div>
+        ${it.notes?`<div style="font-size:11px;color:${mut};margin-top:3px;">${it.notes}</div>`:''}
       </td>
-      <td style="padding: 12px 8px; font-size: 12px; text-align: center; color: ${theme.textMuted};">${item.qty || 1}</td>
-      <td style="padding: 12px 8px; font-size: 12px; text-align: center; color: ${theme.textMuted}; text-transform: uppercase;">${item.unit || 'pcs'}</td>
-      <td style="padding: 12px 8px; font-size: 12px; text-align: right; color: ${theme.textMuted};">${symbol} ${Number(item.rate || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-      <td style="padding: 12px 8px; font-size: 12px; text-align: right; font-weight: 700; color: ${theme.primary};">${symbol} ${(Number(item.qty || 0) * Number(item.rate || 0)).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-    </tr>
-  `).join('');
+      <td style="padding:14px 16px;text-align:center;font-size:12px;color:${dark};vertical-align:top;">${it.qty}${it.unit&&it.unit!=='pcs'?` ${it.unit}`:''}</td>
+      <td style="padding:14px 16px;text-align:right;font-size:12px;color:${mut};vertical-align:top;">${fmt(it.rate)}</td>
+      ${hasDisc?`<td style="padding:14px 16px;text-align:right;font-size:12px;color:${mut};vertical-align:top;">${parseFloat(it.discount)>0?`−${fmt(it.discount)}`:'—'}</td>`:''}
+      <td style="padding:14px 16px;text-align:right;font-size:12px;font-weight:700;color:${dark};vertical-align:top;">${fmt(lt(it))}</td>
+    </tr>`).join('');
 
   const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <title>${status === 'PAID' ? 'SALES RECEIPT' : 'INVOICE'} — WF-${(inv.id || '').slice(-8).toUpperCase()}</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-  <style>
-    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
-    html, body { background: ${theme.bg}; font-family: 'Inter', -apple-system, sans-serif; color: ${theme.primary}; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    body { padding: 0; }
-    .page { width: 210mm; min-height: 297mm; margin: 0 auto; padding: 60px 72px; position: relative; overflow: hidden; background: ${theme.bg}; border: 12px solid ${theme.accent}; }
-    .watermark { position: absolute; top: 55%; left: 50%; transform: translate(-50%, -50%) rotate(-35deg); font-size: 100px; font-weight: 900; opacity: 0.03; white-space: nowrap; pointer-events: none; color: ${statusColor}; z-index: 0; text-transform: uppercase; letter-spacing: 0.1em; }
-    .content { position: relative; z-index: 1; }
-    h2 { font-size: 14px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; color: ${theme.primary}; margin-bottom: 12px; margin-top: 24px; border-bottom: 1px solid ${theme.accent}60; padding-bottom: 6px; }
-    p { font-size: 11px; color: ${theme.textMuted}; line-height: 1.5; }
-    table { width: 100%; border-collapse: collapse; margin-top: 16px; margin-bottom: 24px; }
-    th { padding: 10px 8px; font-size: 11px; font-weight: 800; text-transform: uppercase; color: ${theme.secondary}; border-bottom: 2px solid ${theme.accent}; background: ${theme.surface}; text-align: left; }
-    @page { size: A4; margin: 0; }
-    @media print { html, body { width: 210mm; } .page { box-shadow: none !important; border: none; } }
-    @media screen { .page { box-shadow: 0 0 60px rgba(0,0,0,0.12); margin: 40px auto; border-radius: 4px; } body { background: #e5e5e5; } }
-  </style>
+<meta charset="UTF-8"/>
+<base href="${window.location.origin}/" />
+<title>${lbl} — ${(inv.id||'').slice(-10).toUpperCase()||'DRAFT'}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+  *,*::before,*::after{margin:0;padding:0;box-sizing:border-box;}
+  body{font-family:'Inter',-apple-system,Arial,sans-serif;background:#e8e3db;color:${dark};-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+  .page{width:210mm;min-height:297mm;margin:40px auto;background:#fff;box-shadow:0 0 60px rgba(0,0,0,.12);}
+  @page{size:A4;margin:0;}
+  @media print{body{background:#fff;}.page{margin:0;box-shadow:none;}}
+</style>
 </head>
-<body>
-<div class="page">
-  <div style="height:12px;background:${theme.primary};margin:-60px -72px 0 -72px;"></div>
-  <div class="watermark">${status}</div>
-  <div class="content">
+<body><div class="page">
 
-    <!-- HEADER -->
-    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-top:20px;margin-bottom:32px;padding-bottom:20px;border-bottom:2px solid ${theme.accent};">
-      <div style="display:flex;align-items:center;gap:20px;">
-        ${logoHtml}
-        <div>
-          <div style="font-size:18px;font-weight:800;color:${theme.primary};letter-spacing:1px;text-transform:uppercase;">${co}</div>
-          <div style="font-size:10px;color:${theme.secondary};margin-top:2px;letter-spacing:1px;text-transform:uppercase;">${addr}</div>
-        </div>
-      </div>
-      <div style="text-align:right;">
-        <div style="font-size:24px;font-weight:400;letter-spacing:1px;text-transform:uppercase;color:${theme.primary};margin-bottom:6px;">
-          ${status === 'PAID' ? 'SALES RECEIPT' : 'OFFICIAL INVOICE'}
-        </div>
-        <div style="display:inline-block;background:${statusColor};color:${theme.bg};padding:3px 10px;border-radius:4px;font-size:11px;font-weight:700;letter-spacing:1px;">
-          STATUS: ${status}
-        </div>
-      </div>
+<!-- HEADER -->
+<div style="display:flex;justify-content:space-between;align-items:flex-start;padding:40px 48px 28px;border-bottom:3px solid ${ac};">
+  <div style="display:flex;gap:18px;align-items:center;">
+    <img src="${logoSrc}" style="height:60px;max-width:180px;object-fit:contain;display:block;filter:brightness(0);" alt="${co}" onerror="this.style.display='none'" />
+    <div>
+      <div style="font-size:16px;font-weight:800;color:${dark};">${co}</div>
+      <div style="font-size:9px;color:${mut};text-transform:uppercase;letter-spacing:2px;margin-top:3px;">${tagline}</div>
+      ${addr?`<div style="font-size:10px;color:${mut};margin-top:5px;">${addr}</div>`:''}
+      ${(phone||email)?`<div style="font-size:10px;color:${mut};margin-top:3px;">${phone}${phone&&email?'  ·  ':''}${email}</div>`:''}
     </div>
-
-    <!-- METADATA -->
-    <div style="display:grid;grid-template-columns:repeat(4, 1fr);gap:12px;margin-bottom:24px;">
-      <div style="padding:10px 14px;background:${theme.surface};border-radius:6px;">
-        <div style="font-size:8px;text-transform:uppercase;letter-spacing:1px;color:${theme.secondary};font-weight:800;margin-bottom:4px;">Document ID</div>
-        <div style="font-size:12px;font-weight:800;color:${theme.primary};">WF-${(inv.id || '').slice(-8).toUpperCase()}</div>
+  </div>
+  <div style="text-align:right;">
+    <div style="font-size:30px;font-weight:900;text-transform:uppercase;color:${dark};letter-spacing:1.5px;line-height:1;">${lbl}</div>
+    <div style="margin-top:14px;display:flex;flex-direction:column;gap:7px;align-items:flex-end;">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <span style="font-size:9px;color:${mut};text-transform:uppercase;letter-spacing:1px;">Number</span>
+        <span style="font-size:11px;font-weight:800;background:${dark};color:#fff;padding:3px 12px;border-radius:4px;">${(inv.id||'DRAFT').slice(-10).toUpperCase()}</span>
       </div>
-      <div style="padding:10px 14px;background:${theme.surface};border-radius:6px;">
-        <div style="font-size:8px;text-transform:uppercase;letter-spacing:1px;color:${theme.secondary};font-weight:800;margin-bottom:4px;">Date Issued</div>
-        <div style="font-size:12px;font-weight:800;color:${theme.primary};">${inv.date || ''}</div>
+      <div style="display:flex;align-items:center;gap:10px;">
+        <span style="font-size:9px;color:${mut};text-transform:uppercase;letter-spacing:1px;">Date Issued</span>
+        <span style="font-size:12px;font-weight:600;color:${dark};">${fmtD(inv.date)}</span>
       </div>
-      <div style="padding:10px 14px;background:${theme.surface};border-radius:6px;">
-        <div style="font-size:8px;text-transform:uppercase;letter-spacing:1px;color:${theme.secondary};font-weight:800;margin-bottom:4px;">Date Due</div>
-        <div style="font-size:12px;font-weight:800;color:${theme.primary};">${inv.due || '—'}</div>
-      </div>
-      <div style="padding:10px 14px;background:${theme.surface};border-radius:6px;">
-        <div style="font-size:8px;text-transform:uppercase;letter-spacing:1px;color:${theme.secondary};font-weight:800;margin-bottom:4px;">Project Ref</div>
-        <div style="font-size:12px;font-weight:800;color:${theme.primary};">WF-${(inv.parentId || '').slice(-8).toUpperCase()}</div>
-      </div>
+      ${inv.due?`<div style="display:flex;align-items:center;gap:10px;"><span style="font-size:9px;color:${mut};text-transform:uppercase;letter-spacing:1px;">Due Date</span><span style="font-size:12px;font-weight:700;color:${isRcpt?'#16A34A':'#C0392B'};">${fmtD(inv.due)}</span></div>`:''}
+      <div style="font-size:9px;font-weight:900;text-transform:uppercase;letter-spacing:1px;padding:3px 10px;border-radius:20px;background:${stBg};color:${stCol};">${st}</div>
     </div>
-
-    <!-- PARTIES -->
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:24px;padding:14px 18px;border:1px solid ${theme.accent}60;border-radius:6px;background:${theme.surface}50;">
-      <div>
-        <div style="font-size:8px;text-transform:uppercase;letter-spacing:1px;color:${theme.accent};font-weight:900;margin-bottom:4px;">Billed From</div>
-        <div style="font-size:13px;font-weight:800;color:${theme.primary};">${co}</div>
-        <div style="font-size:10px;color:${theme.textMuted};">${addr}</div>
-        <div style="font-size:10px;color:${theme.textMuted};">${phone} | ${email}</div>
-      </div>
-      <div>
-        <div style="font-size:8px;text-transform:uppercase;letter-spacing:1px;color:${theme.accent};font-weight:900;margin-bottom:4px;">Billed To</div>
-        <div style="font-size:13px;font-weight:800;color:${theme.primary};">${clientName}</div>
-        <div style="font-size:10px;color:${theme.textMuted};">${clientPhone}</div>
-        <div style="font-size:10px;color:${theme.textMuted};">${clientEmail}</div>
-      </div>
-    </div>
-
-    <!-- INVOICE TITLE / SUMMARY -->
-    <div style="padding:12px 16px;border:1px solid ${theme.accent};border-radius:6px;background:${theme.surface};margin-bottom:16px;">
-      <div style="font-size:8px;text-transform:uppercase;letter-spacing:1px;color:${theme.secondary};font-weight:800;margin-bottom:4px;">Subject Description</div>
-      <div style="font-size:13px;font-weight:800;color:${theme.primary};text-transform:uppercase;">${inv.title || 'Architectural Glass Sourcing & Service'}</div>
-    </div>
-
-    <!-- LINE ITEMS TABLE -->
-    <table>
-      <thead>
-        <tr>
-          <th style="width: 50px;">#</th>
-          <th>Description</th>
-          <th style="width: 80px; text-align: center;">Qty</th>
-          <th style="width: 80px; text-align: center;">Unit</th>
-          <th style="width: 120px; text-align: right;">Unit Price</th>
-          <th style="width: 130px; text-align: right;">Total</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${itemsHtml}
-      </tbody>
-    </table>
-
-    <!-- TOTALS SECTION -->
-    <div style="display: flex; justify-content: space-between; margin-top: 24px;">
-      <div style="width: 45%; padding: 12px; border: 1px solid #E5E5E5; border-radius: 6px;">
-        <div style="font-size: 8px; font-weight: 800; text-transform: uppercase; color: ${theme.secondary}; letter-spacing: 0.5px; margin-bottom: 6px;">Payment Terms & Instructions</div>
-        <div style="font-size: 10px; color: ${theme.textMuted}; line-height: 1.5;">
-          ${inv.notes || ''}
-        </div>
-      </div>
-      <div style="width: 45%;">
-        <div style="display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #EEE; font-size: 11px;">
-          <span style="color: ${theme.textMuted};">Subtotal</span>
-          <span style="font-weight: 600; color: ${theme.primary};">${symbol} ${subtotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-        </div>
-        ${taxRate > 0 ? `
-        <div style="display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #EEE; font-size: 11px;">
-          <span style="color: ${theme.textMuted};">Taxes (${taxRate}%)</span>
-          <span style="font-weight: 600; color: ${theme.primary};">${symbol} ${taxAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-        </div>` : ''}
-        <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 2px solid ${theme.accent}; font-size: 13px; font-weight: 800;">
-          <span style="color: ${theme.primary};">Grand Total</span>
-          <span style="color: ${theme.primary};">${formattedTotal}</span>
-        </div>
-        <div style="display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #EEE; font-size: 11px;">
-          <span style="color: ${theme.textMuted};">Amount Paid</span>
-          <span style="font-weight: 600; color: #16A34A;">${formattedPaid}</span>
-        </div>
-        <div style="display: flex; justify-content: space-between; padding: 6px 0; font-size: 12px; font-weight: 800;">
-          <span style="color: ${theme.primary};">Balance Due</span>
-          <span style="color: ${status === 'PAID' ? '#16A34A' : '#DC2626'};">${formattedBalance}</span>
-        </div>
-      </div>
-    </div>
-
-    <!-- FOOTER -->
-    <div style="position: absolute; bottom: 60px; left: 72px; right: 72px; padding-top: 20px; border-top: 1.5px solid ${theme.accent}; display: flex; justify-content: space-between; align-items: center;">
-      <div style="font-size: 9px; color: ${theme.textMuted}; line-height: 1.5; font-weight: 500;">
-        This document serves as the official transaction record of ${co}.<br/>Thank you for your valued patronage.
-      </div>
-      <div style="text-align: right; font-size: 9px; color: ${theme.textMuted};">
-        SaaS CRM Billing Ledger · www.westlinefuture.com
-      </div>
-    </div>
-
   </div>
 </div>
-<script>
-  window.onload = () => { setTimeout(() => { window.print(); }, 500); };
-</script>
-</body>
-</html>`;
+
+<!-- BILL TO / ISSUED BY -->
+<div style="display:grid;grid-template-columns:1fr 1fr;padding:28px 48px;border-bottom:1px solid ${soft};">
+  <div>
+    <div style="font-size:9px;text-transform:uppercase;letter-spacing:2px;color:${ac};font-weight:900;margin-bottom:10px;">Bill To</div>
+    <div style="font-size:16px;font-weight:800;color:${dark};margin-bottom:3px;">${cn}</div>
+    ${cco?`<div style="font-size:12px;font-weight:700;color:${mut};margin-bottom:2px;">${cco}</div>`:''}
+    ${cadr?`<div style="font-size:12px;color:${mut};">${cadr}</div>`:''}
+    ${cem?`<div style="font-size:12px;color:${mut};">${cem}</div>`:''}
+    ${cph?`<div style="font-size:12px;color:${mut};">${cph}</div>`:''}
+    ${ctax?`<div style="font-size:11px;color:${mut};margin-top:5px;">Tax / VAT ID: ${ctax}</div>`:''}
+  </div>
+  <div style="border-left:1px solid ${soft};padding-left:32px;">
+    <div style="font-size:9px;text-transform:uppercase;letter-spacing:2px;color:${ac};font-weight:900;margin-bottom:10px;">Issued By</div>
+    <div style="font-size:14px;font-weight:800;color:${dark};margin-bottom:3px;">${co}</div>
+    ${addr?`<div style="font-size:12px;color:${mut};">${addr}</div>`:''}
+    ${phone?`<div style="font-size:12px;color:${mut};">T: ${phone}</div>`:''}
+    ${email?`<div style="font-size:12px;color:${mut};">E: ${email}</div>`:''}
+    ${web?`<div style="font-size:12px;color:${mut};">W: ${web}</div>`:''}
+  </div>
+</div>
+
+<!-- SUBJECT -->
+${inv.title?`<div style="padding:14px 48px;background:${surf};border-bottom:1px solid ${soft};display:flex;align-items:center;gap:14px;"><span style="font-size:9px;text-transform:uppercase;letter-spacing:2px;color:${mut};font-weight:900;">Subject</span><span style="font-size:13px;font-weight:700;color:${dark};">${inv.title}</span></div>`:''}
+
+<!-- LINE ITEMS -->
+<div style="padding:0 48px;">
+  <table style="width:100%;border-collapse:collapse;margin-top:28px;">
+    <thead>
+      <tr style="background:${dark};">
+        <th style="padding:11px 16px;text-align:left;font-size:9px;text-transform:uppercase;letter-spacing:1.5px;color:rgba(255,255,255,.75);font-weight:700;width:32px;">#</th>
+        <th style="padding:11px 16px;text-align:left;font-size:9px;text-transform:uppercase;letter-spacing:1.5px;color:rgba(255,255,255,.75);font-weight:700;">Description</th>
+        <th style="padding:11px 16px;text-align:center;font-size:9px;text-transform:uppercase;letter-spacing:1.5px;color:rgba(255,255,255,.75);font-weight:700;width:70px;">Qty</th>
+        <th style="padding:11px 16px;text-align:right;font-size:9px;text-transform:uppercase;letter-spacing:1.5px;color:rgba(255,255,255,.75);font-weight:700;width:130px;">Unit Price</th>
+        ${hasDisc?`<th style="padding:11px 16px;text-align:right;font-size:9px;text-transform:uppercase;letter-spacing:1.5px;color:rgba(255,255,255,.75);font-weight:700;width:110px;">Discount</th>`:''}
+        <th style="padding:11px 16px;text-align:right;font-size:9px;text-transform:uppercase;letter-spacing:1.5px;color:rgba(255,255,255,.75);font-weight:700;width:140px;">Amount</th>
+      </tr>
+    </thead>
+    <tbody>${rowsHtml}</tbody>
+  </table>
+</div>
+
+<!-- TOTALS -->
+<div style="display:flex;justify-content:flex-end;padding:0 48px;margin-top:0;">
+  <div style="width:310px;border-top:3px solid ${ac};">
+    <div style="display:flex;justify-content:space-between;padding:12px 0;border-bottom:1px solid ${soft};">
+      <span style="font-size:12px;color:${mut};">Subtotal</span>
+      <span style="font-size:12px;font-weight:700;color:${dark};">${fmt(sub)}</span>
+    </div>
+    ${taxOn?`<div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid ${soft};"><span style="font-size:12px;color:${mut};">${txName} (${txRate}%)${txIncl?' · incl.':''}</span><span style="font-size:12px;font-weight:600;color:${mut};">${fmt(txAmt)}</span></div>`:''}
+    <div style="display:flex;justify-content:space-between;padding:16px 0;${paid>0?`border-bottom:1px solid ${soft};`:''}">
+      <span style="font-size:15px;font-weight:900;text-transform:uppercase;letter-spacing:.5px;color:${dark};">${isRcpt?'Total Paid':'Total Due'}</span>
+      <span style="font-size:19px;font-weight:900;color:${dark};">${fmt(grand)}</span>
+    </div>
+    ${paid>0?`<div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid ${soft};"><span style="font-size:12px;color:${mut};">Amount Paid</span><span style="font-size:12px;font-weight:700;color:#16A34A;">${fmt(paid)}</span></div><div style="display:flex;justify-content:space-between;padding:14px 0 0;"><span style="font-size:14px;font-weight:900;text-transform:uppercase;color:${dark};">Balance Due</span><span style="font-size:17px;font-weight:900;color:${bal>0?'#C0392B':'#16A34A'};">${fmt(bal)}</span></div>`:''}
+  </div>
+</div>
+
+<!-- BANK + TERMS -->
+${(bank||terms)?`<div style="display:grid;grid-template-columns:${bank&&terms?'1fr 1fr':'1fr'};margin:44px 48px 0;padding-top:28px;border-top:1px solid ${soft};">
+  ${bank?`<div style="padding-right:${terms?'32px':'0'};">
+    <div style="font-size:9px;text-transform:uppercase;letter-spacing:2px;font-weight:900;color:${mut};margin-bottom:12px;">Bank Details</div>
+    <div style="font-size:12px;color:${dark};line-height:1.9;white-space:pre-line;background:${surf};padding:14px 18px;border-radius:8px;border:1px solid ${soft};">${bank}</div>
+  </div>`:''}
+  ${terms?`<div style="${bank?`border-left:1px solid ${soft};padding-left:32px;`:''}">
+    <div style="font-size:9px;text-transform:uppercase;letter-spacing:2px;font-weight:900;color:${mut};margin-bottom:12px;">Terms &amp; Conditions</div>
+    <div style="font-size:11px;color:${mut};line-height:1.85;white-space:pre-line;">${terms}</div>
+  </div>`:''}
+</div>`:''}
+
+<!-- SIGNATURE -->
+<div style="display:flex;justify-content:flex-end;padding:36px 48px 0;">
+  <div style="text-align:right;">
+    <div style="width:190px;border-bottom:1.5px solid ${dark};margin-bottom:10px;"></div>
+    <div style="font-size:12px;font-weight:800;color:${dark};">${sigN}</div>
+    <div style="font-size:10px;color:${mut};margin-top:3px;">${sigT}</div>
+  </div>
+</div>
+
+<!-- FOOTER -->
+<div style="margin-top:44px;background:${dark};padding:16px 48px;display:flex;justify-content:space-between;align-items:center;">
+  <span style="font-size:10px;color:rgba(255,255,255,.45);font-style:italic;">${foot}</span>
+  <div style="display:flex;gap:24px;align-items:center;">
+    ${web?`<span style="font-size:10px;color:rgba(255,255,255,.6);font-weight:700;letter-spacing:.5px;">${web}</span>`:''}
+    <span style="font-size:10px;color:rgba(255,255,255,.35);">${(inv.id||'DRAFT').slice(-10).toUpperCase()}</span>
+  </div>
+</div>
+
+</div>
+<script>window.onload=()=>{setTimeout(()=>{window.print();},600);};</script>
+</body></html>`;
 
   const iframe = document.createElement('iframe');
-  iframe.style.position = 'fixed';
-  iframe.style.right = '0';
-  iframe.style.bottom = '0';
-  iframe.style.width = '0';
-  iframe.style.height = '0';
-  iframe.style.border = '0';
+  iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;';
   document.body.appendChild(iframe);
-  
   iframe.contentWindow.document.open();
   iframe.contentWindow.document.write(html);
   iframe.contentWindow.document.close();
-  
   iframe.onload = () => {
     setTimeout(() => {
       iframe.contentWindow.focus();
       iframe.contentWindow.print();
-      setTimeout(() => document.body.removeChild(iframe), 1000);
-    }, 500);
+      setTimeout(() => document.body.removeChild(iframe), 1200);
+    }, 600);
   };
 }
 

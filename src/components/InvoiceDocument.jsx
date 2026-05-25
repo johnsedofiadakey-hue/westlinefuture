@@ -30,7 +30,9 @@ const fmtDate = (d) => {
 /* ─── component ─────────────────────────────────────────────────── */
 export default function InvoiceDocument({ inv = {}, isQuote = false, finSettings = {}, brand = {} }) {
   /* Document type */
-  const isReceipt   = inv.documentKind === 'receipt'   || inv.invoiceType === 'receipt'   || inv.type === 'Receipt' || inv.status === 'Paid';
+  // Determine document type strictly from documentKind/invoiceType/type —
+  // NOT from status, so a paid Invoice still reads "Invoice" not "Sales Receipt"
+  const isReceipt   = inv.documentKind === 'receipt' || inv.invoiceType === 'receipt' || inv.type === 'Receipt';
   const isQuotation = isQuote || inv.documentKind === 'quotation' || inv.type === 'Quotation';
   const docLabel    = isReceipt ? 'Sales Receipt' : isQuotation ? 'Quotation' : 'Invoice';
 

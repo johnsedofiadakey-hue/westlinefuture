@@ -819,7 +819,17 @@ export default function AdminFinancials({ invoices = [], transactions = [], clie
                        { id: 'unit', label: 'Ad-hoc / Sales', icon: <Package size={15} /> },
                        { id: 'receipt', label: 'Sales Receipt', icon: <Receipt size={15} /> },
                      ].map(t => (
-                       <button key={t.id} onClick={() => setDraft({ ...draft, invoiceType: t.id, documentKind: t.id === 'receipt' ? 'receipt' : draft.documentKind, status: t.id === 'receipt' ? 'Paid' : draft.status, customerType: t.id === 'project' ? 'existing' : draft.customerType })}
+                       <button key={t.id} onClick={() => {
+                           const isNowReceipt = t.id === 'receipt';
+                           setDraft({ ...draft,
+                             invoiceType: t.id,
+                             documentKind: isNowReceipt ? 'receipt' : (draft.documentKind === 'receipt' ? 'invoice' : draft.documentKind),
+                             status: isNowReceipt ? 'Paid' : 'Pending',
+                             customerType: t.id === 'project' ? 'existing' : draft.customerType,
+                           });
+                           if (isNowReceipt) setShowAdd('receipt');
+                           else if (draft.documentKind === 'receipt') setShowAdd('invoice');
+                         }}
                          style={{ flex: 1, minWidth: 120, padding: '12px 16px', borderRadius: 12, border: draft.invoiceType === t.id ? `2px solid ${ac}` : '1px solid var(--border-color)', background: draft.invoiceType === t.id ? `${ac}10` : '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 700 }}>
                          {t.icon} {t.label}
                        </button>

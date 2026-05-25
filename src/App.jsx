@@ -1379,6 +1379,25 @@ export default function App() {
         createdAt: data.projectDate ? effectiveDate : serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
+      
+      // Auto-generate rendering fee invoice if provided
+      if (data.renderingFee) {
+        const rawFee = parseFloat(String(data.renderingFee).replace(/[^0-9.]/g, '')) || 0;
+        if (rawFee > 0) {
+          await addDoc(collection(db, 'invoices'), {
+            parentId: docRef.id,
+            clientId: clientId,
+            clientEmail: data.clientEmail || '', // Ideally this should be captured, but we might just have clientId
+            title: 'Design & Rendering Fee',
+            amount: rawFee,
+            date: data.projectDate ? new Date(data.projectDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+            due: new Date(Date.now() + 7*24*60*60*1000).toISOString().split('T')[0],
+            status: 'Pending',
+            type: 'Design',
+            createdAt: new Date().toISOString()
+          });
+        }
+      }
       await addDoc(collection(db, 'projects', docRef.id, 'messages'), {
         text: `Project "${data.title}" has been created. Our team will be in touch shortly.`,
         senderRole: 'system', senderId: 'system', senderName: 'Westline Future',

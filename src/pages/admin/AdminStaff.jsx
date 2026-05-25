@@ -14,7 +14,7 @@ const BADGES = [
   { id: 'firstaid', label: 'First Aid', icon: <Heart size={12} />, color: '#EF4444' }
 ];
 
-const STAFF_ROLES = ['Project Manager', 'Site Supervisor', 'Senior Technician', 'Technician', 'Field Worker', 'Finance Officer', 'Procurement Lead', 'Admin Assistant'];
+const STAFF_ROLES = ['Project Manager', 'Site Supervisor', 'Technical Team Lead', 'Field Installer', 'Finance Officer', 'Procurement Lead', 'Admin Assistant', 'Senior Technician', 'Technician', 'Field Worker'];
 
 const ROLE_PROFILES = {
   'Project Manager': {
@@ -30,6 +30,20 @@ const ROLE_PROFILES = {
     modules: ['Installations', 'Work Orders', 'Checklists', 'Photos', 'Messages'],
     onboarding: ['Assign work orders', 'Attach field crew', 'Review photo evidence rules'],
     systemRole: 'staff'
+  },
+  'Technical Team Lead': {
+    description: 'Handles advanced technical work, measurements, quality checks, and field notes.',
+    accessScope: 'Assigned projects and work orders',
+    modules: ['Installations', 'Work Orders', 'Technical Notes', 'Photos'],
+    onboarding: ['Assign certifications', 'Assign supervisor', 'Review checklist standards'],
+    systemRole: 'worker'
+  },
+  'Field Installer': {
+    description: 'Completes field tasks, uploads progress evidence, and updates assigned work orders.',
+    accessScope: 'Assigned work orders only',
+    modules: ['Work Orders', 'Checklists', 'Photo Uploads'],
+    onboarding: ['Assign supervisor', 'Confirm site safety badge', 'Review mobile upload flow'],
+    systemRole: 'worker'
   },
   'Senior Technician': {
     description: 'Handles advanced technical work, measurements, quality checks, and field notes.',
@@ -192,6 +206,7 @@ export default function AdminStaff({ team = [], brand, createStaffAccount, clien
   const allClients = dbClients.length > 0 ? dbClients : clients;
   const ac = brand.color || `var(--accent-secondary)`;
   const [showModal, setShowModal] = useState(false);
+  const [directoryTab, setDirectoryTab] = useState('managers'); // 'managers' or 'technical'
   const defaultCountry = COUNTRIES.find(c => c.code === '+233') || COUNTRIES[0];
   const [form, setForm] = useState({
     name: '',
@@ -336,12 +351,15 @@ export default function AdminStaff({ team = [], brand, createStaffAccount, clien
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
           <button
-            onClick={() => { setShowRepair(true); setRepairResult(null); setRepairForm({ email: '', name: '', role: 'Technician' }); }}
+            onClick={() => { setShowRepair(true); setRepairResult(null); setRepairForm({ email: '', name: '', role: 'Field Installer' }); }}
             style={{ padding: '10px 16px', fontSize: 13, gap: 8, display: 'flex', alignItems: 'center', borderRadius: 12, border: '1.5px solid var(--border-color)', background: `var(--bg-secondary)`, cursor: 'pointer', fontWeight: 700, color: `var(--text-secondary)`, fontFamily: 'inherit' }}
           >
             <Search size={14} /> Recover Account
           </button>
-          <button onClick={() => { setShowModal(true); setCreated(null); }} className="p-btn-dark lxf" style={{ padding: '10px 20px', fontSize: 13, gap: 8, display: 'flex', alignItems: 'center' }}>
+          <button onClick={() => { setForm(f => ({ ...f, role: 'Field Installer', department: 'Installations' })); setShowModal(true); setCreated(null); }} style={{ padding: '10px 20px', fontSize: 13, gap: 8, display: 'flex', alignItems: 'center', borderRadius: 12, border: '1px solid var(--border-color)', background: '#fff', cursor: 'pointer', fontWeight: 700, color: `var(--accent-secondary)`, fontFamily: 'inherit' }}>
+            <HardHat size={16} /> Add Technical Team
+          </button>
+          <button onClick={() => { setForm(f => ({ ...f, role: 'Project Manager', department: 'Operations' })); setShowModal(true); setCreated(null); }} className="p-btn-dark lxf" style={{ padding: '10px 20px', fontSize: 13, gap: 8, display: 'flex', alignItems: 'center' }}>
             <UserPlus size={16} /> Create Staff Account
           </button>
         </div>
@@ -362,6 +380,22 @@ export default function AdminStaff({ team = [], brand, createStaffAccount, clien
         ))}
       </div>
 
+      {/* Directory Tabs */}
+      <div style={{ display: 'flex', gap: 12, borderBottom: '2px solid var(--border-color)', marginBottom: -10 }}>
+        <button
+          onClick={() => setDirectoryTab('managers')}
+          style={{ padding: '12px 24px', background: 'none', border: 'none', borderBottom: directoryTab === 'managers' ? `3px solid ${ac}` : '3px solid transparent', color: directoryTab === 'managers' ? ac : `var(--text-secondary)`, fontSize: 14, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}
+        >
+          <UserCog size={16} /> Account Managers
+        </button>
+        <button
+          onClick={() => setDirectoryTab('technical')}
+          style={{ padding: '12px 24px', background: 'none', border: 'none', borderBottom: directoryTab === 'technical' ? `3px solid ${ac}` : '3px solid transparent', color: directoryTab === 'technical' ? ac : `var(--text-secondary)`, fontSize: 14, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}
+        >
+          <HardHat size={16} /> Technical / Field Team
+        </button>
+      </div>
+
       <div className="p-card" style={{ overflow: 'hidden' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
@@ -370,7 +404,11 @@ export default function AdminStaff({ team = [], brand, createStaffAccount, clien
             </tr>
           </thead>
           <tbody>
-            {(team || []).map(m => (
+            {(team || []).filter(m => {
+              const systemRole = (ROLE_PROFILES[m.role || m.jobRole] || ROLE_PROFILES.Technician).systemRole;
+              if (directoryTab === 'managers') return systemRole === 'staff';
+              return systemRole === 'worker';
+            }).map(m => (
               <tr key={m.id} className="t-row">
                 <td style={{ padding: '16px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -439,16 +477,18 @@ export default function AdminStaff({ team = [], brand, createStaffAccount, clien
                       <Trash2 size={16} />
                     </button>
                   </div>
-
-
                 </td>
               </tr>
             ))}
-            {team.length === 0 && (
+            {team.filter(m => {
+              const systemRole = (ROLE_PROFILES[m.role || m.jobRole] || ROLE_PROFILES.Technician).systemRole;
+              if (directoryTab === 'managers') return systemRole === 'staff';
+              return systemRole === 'worker';
+            }).length === 0 && (
               <tr><td colSpan={6} style={{ padding: 48, textAlign: 'center', color: `var(--text-secondary)` }}>
                 <Users size={40} color="var(--border-color)" style={{ marginBottom: 12 }} />
-                <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 4 }}>No staff accounts yet</div>
-                <div style={{ fontSize: 12 }}>Create a staff account to get started.</div>
+                <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 4 }}>No {directoryTab === 'managers' ? 'account managers' : 'technical team members'} found</div>
+                <div style={{ fontSize: 12 }}>Create an account to get started.</div>
               </td></tr>
             )}
           </tbody>

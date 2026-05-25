@@ -30,7 +30,7 @@ function getDistanceMeters(lat1, lon1, lat2, lon2) {
   return R * c; // Distance in meters
 }
 
-function ProjectCard({ project, updateProjectStage, addProjectMessage, addProjectDocument, user }) {
+function ProjectCard({ project, updateProjectStage, addProjectMessage, addProjectDocument, user, renderingPackages = [] }) {
   const [note, setNote] = useState('');
   const [noteLoading, setNoteLoading] = useState(false);
   const [stageLoading, setStageLoading] = useState(false);
@@ -71,6 +71,8 @@ function ProjectCard({ project, updateProjectStage, addProjectMessage, addProjec
   const isDelivery = project.stageId === DELIVERY_STAGE;
   const isInstall = project.stageId === INSTALLATION_STAGE;
   const isComplete = project.stageId >= INSPECTION_SIGN_OFF;
+
+  const projectRenderings = renderingPackages.filter(r => r.projectId === project.id && (r.status === 'Approved' || r.status === 'Unlocked'));
 
   // Dynamic Checklist based on project category.
   // Falls back to title keyword scan for legacy projects that predate the cat field.
@@ -298,6 +300,26 @@ function ProjectCard({ project, updateProjectStage, addProjectMessage, addProjec
         <span style={{ fontSize: 12, fontWeight: 800, color: 'var(--accent-secondary)' }}>{getStageName(project.stageId)}</span>
       </div>
 
+      {/* Project Blueprints & Renderings */}
+      {projectRenderings.length > 0 && (
+        <div style={{ padding: '16px', background: '#F8F6F3', borderRadius: 16, border: '1px solid var(--border-color)' }}>
+          <div style={{ fontSize: 11, fontWeight: 800, color: `var(--text-secondary)`, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <FileText size={14} /> Approved Blueprints
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {projectRenderings.map(r => (
+              <a key={r.id} href={r.fileUrl} target="_blank" rel="noreferrer" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px', background: '#fff', borderRadius: 10, textDecoration: 'none', border: '1px solid var(--border-color)' }}>
+                <img src={r.fileUrl} style={{ width: 40, height: 40, borderRadius: 6, objectFit: 'cover', background: 'var(--border-color)' }} onError={(e) => e.target.style.display='none'} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--accent-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.title}</div>
+                  <div style={{ fontSize: 10, color: 'var(--text-secondary)' }}>Click to view full size</div>
+                </div>
+              </a>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Geo-fencing site coordinates checking indicator */}
       {!isComplete && (
         <div style={{ 
@@ -491,7 +513,7 @@ function ProjectCard({ project, updateProjectStage, addProjectMessage, addProjec
   );
 }
 
-function AllProjectsAccordion({ projects, user }) {
+function AllProjectsAccordion({ projects, user, renderingPackages, updateProjectStage, addProjectMessage, addProjectDocument }) {
   const [open, setOpen] = useState(false);
   if (!projects || projects.length === 0) return null;
 
@@ -523,7 +545,9 @@ function AllProjectsAccordion({ projects, user }) {
   );
 }
 
-export default function WorkerView({ user, onLogout, clients, updateProjectStage, addProjectMessage, addProjectDocument, brand }) {
+export default function WorkerView({ user, onLogout, clients, updateStage, logs, ...props }) {
+  const { renderingPackages = [] } = props;
+  const { updateProjectStage, addProjectMessage, addProjectDocument, brand } = props;
   const ac = brand?.color || `var(--accent-secondary)`;
 
   const [syncingOffline, setSyncingOffline] = useState(false);
@@ -730,6 +754,7 @@ export default function WorkerView({ user, onLogout, clients, updateProjectStage
                   addProjectMessage={addProjectMessage}
                   addProjectDocument={addProjectDocument}
                   user={user}
+                  renderingPackages={renderingPackages}
                 />
               ))}
             </div>
@@ -742,7 +767,7 @@ export default function WorkerView({ user, onLogout, clients, updateProjectStage
             <div style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.12em', color: `var(--text-secondary)`, marginBottom: 16 }}>
               All Assignments
             </div>
-            <AllProjectsAccordion projects={allAssigned} user={user} />
+            <AllProjectsAccordion projects={allAssigned} user={user} renderingPackages={renderingPackages} updateProjectStage={updateProjectStage} addProjectMessage={props.addProjectMessage} addProjectDocument={props.addProjectDocument} />
           </div>
         )}
 

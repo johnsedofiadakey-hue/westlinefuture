@@ -3,16 +3,18 @@ import {
   LogOut, Check, Calendar, Clock, User, 
   Briefcase, Activity, Mail, Phone, MapPin,
   Folder, DollarSign, MessageSquare, Image, FileText,
-  ChevronRight, LayoutDashboard, Settings, Hammer, Ship
+  ChevronRight, LayoutDashboard, Settings, Hammer, Ship, PenTool, ArrowLeft
 } from 'lucide-react';
 import { 
   PAv, PSBadge, NotificationBell
 } from '../components/Shared';
+import AdminRenderingManager from '../components/AdminRenderingManager';
 
 export default function AccountManagerPortal({ user, brand, onLogout, ...props }) {
   const ac = brand.color || `var(--accent-secondary)`;
-  const { clients, bookings, tasks, updateTask, workOrders = [], containers = [] } = props;
+  const { clients, bookings, tasks, updateTask, workOrders = [], containers = [], renderingPackages = [], invoices = [] } = props;
   const [tab, setTab] = useState('dash');
+  const [selectedVaultClient, setSelectedVaultClient] = useState(null);
   
   const member = user || {};
   const myWorkOrders = (workOrders || []).filter(wo => wo.managerId === user?.id || wo.assignedTo === user.id);
@@ -36,6 +38,7 @@ export default function AccountManagerPortal({ user, brand, onLogout, ...props }
              {[
                 { id: 'dash', label: 'Command', icon: <LayoutDashboard size={18} /> },
                 { id: 'folders', label: 'Work Orders', icon: <Folder size={18} /> },
+                { id: 'vault', label: 'Design Vault', icon: <PenTool size={18} /> },
                 { id: 'tasks', label: 'Field Tasks', icon: <Hammer size={18} /> },
                 { id: 'chat', label: 'Messages', icon: <MessageSquare size={18} /> },
                 { id: 'profile', label: 'My Access', icon: <User size={18} /> }
@@ -149,6 +152,32 @@ export default function AccountManagerPortal({ user, brand, onLogout, ...props }
                         </div>
                       ))}
                    </div>
+                </div>
+             )}
+
+             {tab === 'vault' && (
+                <div className="p-card" style={{ padding: 32, minHeight: 500 }}>
+                   {!selectedVaultClient ? (
+                     <>
+                       <h3 style={{ fontSize: 20, fontWeight: 800, marginBottom: 24 }}>Select a Project to View Designs</h3>
+                       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
+                         {myClients.map(c => (
+                           <div key={c.id} onClick={() => setSelectedVaultClient(c)} style={{ padding: 20, background: `var(--bg-secondary)`, borderRadius: 16, cursor: 'pointer', border: '1px solid var(--border-color)' }}>
+                             <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 4 }}>{c.title || c.project || 'Untitled Project'}</div>
+                             <div style={{ fontSize: 13, color: `var(--text-secondary)` }}>{c.name || 'Unknown Client'}</div>
+                           </div>
+                         ))}
+                         {myClients.length === 0 && <div style={{ color: `var(--text-secondary)`, fontSize: 14 }}>No active projects available.</div>}
+                       </div>
+                     </>
+                   ) : (
+                     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+                       <button onClick={() => setSelectedVaultClient(null)} style={{ alignSelf: 'flex-start', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontSize: 14, fontWeight: 600, color: `var(--text-secondary)`, marginBottom: 20 }}>
+                         <ArrowLeft size={16} /> Back to Projects
+                       </button>
+                       <AdminRenderingManager project={selectedVaultClient} brand={brand} renderingPackages={renderingPackages} invoices={invoices} />
+                     </div>
+                   )}
                 </div>
              )}
 

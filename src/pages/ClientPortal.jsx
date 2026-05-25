@@ -2588,14 +2588,8 @@ function ProjectCard({ project, isSelected, onClick }) {
 function ProjectHeaderCard({ project, isMobile, ac, brand }) {
   const budget = Number(project.budget) || 0;
 
-  // Use paidAmount from project doc if set (logged by admin), else fall back to stage-based estimate
-  const paid = budget > 0 ? Math.min(budget, Number(project.paidAmount) || (() => {
-    if (project.stageId >= 8) return budget;
-    if (project.stageId >= 6) return budget * 0.75;
-    if (project.stageId >= 3) return budget * 0.50;
-    if (project.stageId >= 2) return budget * 0.25;
-    return 0;
-  })()) : 0;
+  // Use paidAmount from project doc if set (logged by admin), else 0
+  const paid = budget > 0 ? Math.min(budget, Number(project.paidAmount) || 0) : 0;
   const paidPct = budget > 0 ? Math.min(100, (paid / budget) * 100) : 0;
   const outstanding = budget > 0 ? budget - paid : 0;
 

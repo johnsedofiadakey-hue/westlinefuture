@@ -132,6 +132,18 @@ export default function AdminRenderingManager({ project, brand, renderingPackage
     return cleanUrl.endsWith('.png') || cleanUrl.endsWith('.jpg') || cleanUrl.endsWith('.jpeg') || cleanUrl.endsWith('.webp') || cleanUrl.endsWith('.gif');
   };
 
+  const handleManualUnlock = async (pkgId, forceUnlock) => {
+    if (!window.confirm(forceUnlock ? "Manually unlock this rendering package (offline payment)?" : "Re-lock this package?")) return;
+    try {
+      await updateDoc(doc(db, 'renderingPackages', pkgId), {
+        unlocked: forceUnlock,
+        status: forceUnlock ? 'Unlocked' : 'Locked'
+      });
+    } catch (err) {
+      console.error("[AdminRenderingManager] Failed to toggle unlock:", err);
+    }
+  };
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       
@@ -195,7 +207,7 @@ export default function AdminRenderingManager({ project, brand, renderingPackage
         <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
           {projectPackages.map(pkg => {
             const linkedInv = invoices.find(i => i.id === pkg.linkedInvoiceId);
-            const isUnlocked = linkedInv && linkedInv.status === 'Paid';
+            const isUnlocked = pkg.unlocked || pkg.status === 'Paid / Unlocked' || (linkedInv && linkedInv.status === 'Paid');
             const statusColor = isUnlocked ? '#10B981' : '#F59E0B';
             const packageMarkups = markups.filter(m => m.packageId === pkg.id);
             const displayImage = isImageFile(pkg.fileUrl) ? pkg.fileUrl : blueprintImg;
@@ -216,9 +228,19 @@ export default function AdminRenderingManager({ project, brand, renderingPackage
                       </div>
                     </div>
                   </div>
-                  <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                     <div style={{ fontSize: 11, fontWeight: 800, padding: '4px 12px', borderRadius: 20, background: `${statusColor}15`, color: statusColor, textTransform: 'uppercase' }}>
-                      {isUnlocked ? pkg.status : 'Locked (Awaiting Payment)'}
+                      {isUnlocked ? (pkg.unlocked ? 'Manually Unlocked' : pkg.status) : 'Locked (Awaiting Payment)'}
+                    </div>
+                    {/* Manual Unlock Toggle */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)' }}>Force Unlock</span>
+                      <div 
+                        onClick={() => handleManualUnlock(pkg.id, !pkg.unlocked)}
+                        style={{ width: 36, height: 20, borderRadius: 10, background: pkg.unlocked ? '#10B981' : 'var(--border-color)', position: 'relative', cursor: 'pointer', transition: 'background 0.2s' }}
+                      >
+                        <div style={{ width: 16, height: 16, borderRadius: '50%', background: '#fff', position: 'absolute', top: 2, left: pkg.unlocked ? 18 : 2, transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,.15)' }} />
+                      </div>
                     </div>
                   </div>
                 </div>

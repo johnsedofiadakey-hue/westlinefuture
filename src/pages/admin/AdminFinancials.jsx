@@ -658,7 +658,7 @@ export default function AdminFinancials({ invoices = [], transactions = [], clie
 
        {/* INVOICE PREVIEW MODAL */}
        {showAdd && (
-         <Modal title={`New ${showAdd === 'receipt' ? 'Sales Receipt' : showAdd === 'invoice' ? 'Invoice' : 'Quotation'}`} onClose={() => setShowAdd(null)}>
+         <Modal open={true} title={`New ${showAdd === 'receipt' ? 'Sales Receipt' : showAdd === 'invoice' ? 'Invoice' : 'Quotation'}`} onClose={() => setShowAdd(null)} w={1100}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 450px', gap: 40 }}>
                <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
                   {/* Document type tabs */}

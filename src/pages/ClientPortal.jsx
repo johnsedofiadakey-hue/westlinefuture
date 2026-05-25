@@ -684,15 +684,15 @@ function StageActionCard({ project, user, approveQuote, payInvoice, updateProjec
     return (
       <div style={{
         padding: '24px 28px', borderRadius: 20,
-        background: 'linear-gradient(135deg, #EFF6FF, #DBEAFE)',
-        border: '1.5px solid var(--accent-primary)30', marginBottom: 4,
+        background: 'linear-gradient(135deg, #FDFAF6, #F4EFE6)',
+        border: '1.5px solid rgba(200,169,110,0.35)', marginBottom: 4,
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
           <AlertCircle size={18} color="var(--accent-primary)" />
           <span style={{ fontSize: 12, fontWeight: 800, color: `var(--accent-primary)`, textTransform: 'uppercase', letterSpacing: '.06em' }}>Action Required</span>
         </div>
         <div style={{ fontSize: 20, fontWeight: 900, color: `var(--accent-secondary)`, marginBottom: 6 }}>Approval Required</div>
-        <div style={{ fontSize: 14, color: '#374151', lineHeight: 1.6, marginBottom: 20 }}>
+        <div style={{ fontSize: 14, color: `var(--text-secondary)`, lineHeight: 1.6, marginBottom: 20 }}>
           {currentStage.id === 3 ? "We've prepared your final quotation. Please review the document, then approve it below." : "Please review the work and confirm your approval."}
         </div>
         <button
@@ -710,10 +710,10 @@ function StageActionCard({ project, user, approveQuote, payInvoice, updateProjec
           style={{
             display: 'inline-flex', alignItems: 'center', gap: 10,
             padding: '14px 32px', borderRadius: 14, border: 'none',
-            background: acting ? `var(--border-color)` : `var(--accent-primary)`,
+            background: acting ? `var(--border-color)` : `var(--accent-secondary)`,
             color: acting ? `var(--text-secondary)` : '#fff',
             fontSize: 15, fontWeight: 800, cursor: acting ? 'default' : 'pointer',
-            boxShadow: acting ? 'none' : '0 4px 16px rgba(37,99,235,.35)',
+            boxShadow: acting ? 'none' : '0 4px 16px rgba(26,20,16,.25)',
             transition: 'all .2s',
           }}
         >
@@ -806,9 +806,9 @@ function ClientNextActionCard({ project, invoices = [], renderingPackages = [], 
   if (lockedRendering) {
     action = { tone: '#D97706', bg: '#FFF7ED', icon: <Lock size={18} />, title: 'Rendering fee required', body: 'Pay the separate design/rendering invoice to unlock your CAD or 3D package.', button: 'Open Design Vault', tab: 'design' };
   } else if (reviewRendering) {
-    action = { tone: '#7C3AED', bg: '#F5F3FF', icon: <PenTool size={18} />, title: 'Review your rendering', body: 'Your design package is unlocked. Review it, leave pins, request changes, or approve the final version.', button: 'Review Design', tab: 'design' };
+    action = { tone: 'var(--accent-primary)', bg: '#F4EFE6', icon: <PenTool size={18} />, title: 'Review your rendering', body: 'Your design package is unlocked. Review it, leave pins, request changes, or approve the final version.', button: 'Review Design', tab: 'design' };
   } else if (pendingQuote) {
-    action = { tone: 'var(--accent-primary)', bg: '#EFF6FF', icon: <FileText size={18} />, title: 'Quote awaiting your review', body: 'Review the latest quote or quotation before kickoff approval.', button: 'View Quotes', tab: 'approvals' };
+    action = { tone: 'var(--accent-primary)', bg: '#FDFAF6', icon: <FileText size={18} />, title: 'Quote awaiting your review', body: 'Review the latest quote or quotation before kickoff approval.', button: 'View Quotes', tab: 'approvals' };
   } else if (pendingAddOn) {
     action = { tone: '#B45309', bg: '#FFFBEB', icon: <Gift size={18} />, title: 'Add-on needs decision', body: `${pendingAddOn.title || pendingAddOn.description || 'A project variation'} is waiting for your approval.`, button: 'Review Add-ons', tab: 'addons' };
   } else if (unpaidInvoice) {
@@ -2054,7 +2054,7 @@ function StageTimeline({ project, onRequestChange, isMobile }) {
               })()}
               <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 8 }}>
                 {currentStage.whoActs === 'client' && (
-                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700, color: `var(--accent-primary)`, background: '#EFF6FF', padding: '6px 14px', borderRadius: 20, border: '1px solid #BFDBFE' }}>
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700, color: `var(--accent-primary)`, background: '#FDFAF6', padding: '6px 14px', borderRadius: 20, border: '1px solid rgba(200,169,110,0.25)' }}>
                     <AlertCircle size={13} /> Action required from you
                   </div>
                 )}
@@ -2095,7 +2095,7 @@ function StageTimeline({ project, onRequestChange, isMobile }) {
           })()}
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             {currentStage.whoActs === 'client' && (
-              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 700, color: `var(--accent-primary)`, background: '#EFF6FF', padding: '7px 14px', borderRadius: 20, border: '1px solid #BFDBFE' }}>
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 700, color: `var(--accent-primary)`, background: '#FDFAF6', padding: '7px 14px', borderRadius: 20, border: '1px solid rgba(200,169,110,0.25)' }}>
                 <AlertCircle size={12} /> Action needed
               </div>
             )}
@@ -2627,9 +2627,9 @@ function ProjectHeaderCard({ project, isMobile, ac, brand }) {
           <div style={{
             fontSize: 10, fontWeight: 800, flexShrink: 0,
             color: project.status === 'Completed' ? '#16A34A' : project.status === 'On Hold' ? '#D97706' : `var(--accent-primary)`,
-            background: project.status === 'Completed' ? '#F0FDF4' : project.status === 'On Hold' ? '#FFFBEB' : '#EFF6FF',
+            background: project.status === 'Completed' ? '#F0FDF4' : project.status === 'On Hold' ? '#FFFBEB' : '#FDFAF6',
             padding: '5px 12px', borderRadius: 20,
-            border: `1px solid ${project.status === 'Completed' ? '#DCFCE7' : project.status === 'On Hold' ? '#FDE68A' : '#DBEAFE'}`,
+            border: `1px solid ${project.status === 'Completed' ? '#DCFCE7' : project.status === 'On Hold' ? '#FDE68A' : 'rgba(200,169,110,0.2)'}`,
             letterSpacing: '.04em',
           }}>
             {project.status || 'Active'}

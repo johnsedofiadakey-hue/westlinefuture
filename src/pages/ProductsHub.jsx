@@ -36,16 +36,33 @@ const isMob = (w) => w <= 900;
 
 // --- COMPONENTS ---
 
-// --- DYNAMIC IMAGE FALLBACKS ---
-const getFallbackImage = (category, img) => {
-  if (img && img.trim() !== '') return img;
-  const cat = String(category || '').toLowerCase();
-  if (cat.includes('kitchen')) return '/kitchen/default.png';
-  if (cat.includes('shower') || cat.includes('washroom') || cat.includes('vanity')) return '/glass/shower_room.jpg';
-  if (cat.includes('casement') || cat.includes('window') || cat.includes('sliding-win')) return '/glass/63_casement.jpg';
-  if (cat.includes('door') || cat.includes('pivot')) return '/glass/54_swing_door.jpg';
-  if (cat.includes('sunroom') || cat.includes('sky')) return '/glass/120_sunroom.jpg';
-  return '/kitchen/default.png';
+const DynamicImage = ({ src, alt, style, iconSize = 40, asMotion = false, initial, animate, layout }) => {
+  const [error, setError] = useState(false);
+  
+  // Reset error if src changes
+  useEffect(() => setError(false), [src]);
+
+  if (!src || error || src.trim() === '') {
+    const FallbackDiv = asMotion ? motion.div : 'div';
+    return (
+      <FallbackDiv
+        layout={layout} initial={initial} animate={animate}
+        style={{ ...style, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-secondary)', color: 'var(--text-secondary)', border: '1px dashed rgba(0,0,0,0.1)' }}
+      >
+        <LayoutGrid size={iconSize} style={{ opacity: 0.3, marginBottom: 8 }} />
+        <span style={{ fontSize: 10, fontWeight: 700, opacity: 0.4, textTransform: 'uppercase' }}>Image Unavailable</span>
+      </FallbackDiv>
+    );
+  }
+  
+  const ImgTag = asMotion ? motion.img : 'img';
+  return (
+    <ImgTag
+      layout={layout} initial={initial} animate={animate}
+      src={src} alt={alt} style={style}
+      onError={() => setError(true)}
+    />
+  );
 };
 
 const ProductCard = ({ product, onClick, ac, mob, onCompare, isComparing, waNumber, onToggleFavorite, isFavorited }) => {
@@ -71,11 +88,11 @@ const ProductCard = ({ product, onClick, ac, mob, onCompare, isComparing, waNumb
       }}
     >
       <div style={{ height: mob ? 220 : 260, background: `var(--bg-secondary)`, position: 'relative', overflow: 'hidden' }}>
-        <img
-          src={getFallbackImage(catLabel, product.img)}
+        <DynamicImage
+          src={product.img}
           alt={product.name}
-          onError={(e) => { e.target.src = getFallbackImage(catLabel, ''); }}
           style={{ width: '100%', height: '100%', objectFit: 'contain', padding: mob ? 10 : 20 }}
+          iconSize={32}
         />
         
         {/* Heart Favorite Toggle Button */}
@@ -183,14 +200,14 @@ const DetailModal = ({ product, onClose, ac, navigate, mob }) => {
         <div style={{ display: 'flex', flexWrap: 'wrap', height: '100%', overflowY: 'auto' }}>
           {/* Left: Image & Dynamic Finish Switcher */}
           <div style={{ flex: '1 1 500px', background: `var(--bg-secondary)`, position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: mob ? 20 : 40, minHeight: mob ? 300 : 400 }}>
-            <motion.img 
-              key={selectedColor}
+            <DynamicImage 
+              asMotion
               initial={{ opacity: 0.8, scale: 0.98 }}
               animate={{ opacity: 1, scale: 1 }}
-              src={getFallbackImage(catLabel, product.finishImages?.[selectedColor] || product.img)} 
+              src={product.finishImages?.[selectedColor] || product.img} 
               alt={product.name} 
-              onError={(e) => { e.target.src = getFallbackImage(catLabel, ''); }}
-              style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} 
+              style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', width: '100%', height: '100%' }} 
+              iconSize={48}
             />
             <button onClick={onClose} style={{ position: 'absolute', top: 24, left: 24, background: '#fff', border: 'none', padding: 12, borderRadius: '50%', cursor: 'pointer', boxShadow: '0 10px 30px rgba(0,0,0,0.1)' }}>
               <X size={20} />

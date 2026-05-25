@@ -545,7 +545,7 @@ function CMSServices({ services, onSave, ac, notify }) {
                   <textarea 
                     className="p-inp" 
                     rows={6} 
-                    placeholder="Enter premium overview copy for the customer here."
+                    placeholder="Provide a premium, structured overview.&#10;Use bullet points (-) for key features:&#10;- Feature 1&#10;- Feature 2"
                     value={newItem.desc} 
                     onChange={e => setNewItem({...newItem, desc: e.target.value})} 
                   />
@@ -554,7 +554,7 @@ function CMSServices({ services, onSave, ac, notify }) {
                   <textarea 
                     className="p-inp" 
                     rows={6} 
-                    placeholder="Thickness: 24mm DGU&#10;Solar Heat Gain: 0.28&#10;Clarity: 92%"
+                    placeholder="Glass Thickness: 24mm DGU&#10;Solar Heat Gain: 0.28&#10;Clarity: 92%&#10;Warranty: 10 Years"
                     value={newItem.specs} 
                     onChange={e => setNewItem({...newItem, specs: e.target.value})} 
                   />
@@ -585,7 +585,7 @@ function CMSServices({ services, onSave, ac, notify }) {
              {list.map(p => (
                <div key={p.id} className="p-card" style={{ padding: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
                   <div style={{ height: 180, background: `var(--bg-secondary)`, position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', borderBottom: '1px solid var(--border-color)' }}>
-                    {p.img ? <img src={p.img} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain', mixBlendMode: 'multiply', padding: 24 }} /> : <div style={{ color: `var(--text-secondary)` }}>No Image</div>}
+                    {p.img ? <img src={p.img} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain', mixBlendMode: 'multiply', padding: 24 }} /> : <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', color: '#EF4444' }}><div style={{ fontSize: 24, marginBottom: 4 }}>⚠️</div><div style={{ fontSize: 11, fontWeight: 700 }}>MISSING IMAGE</div></div>}
                     <div style={{ position: 'absolute', top: 12, right: 12, background: 'rgba(255,255,255,0.9)', padding: '4px 10px', borderRadius: 100, fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.1em', color: p.status === 'Pre-order' ? '#D97706' : '#059669', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
                       {p.status}
                     </div>

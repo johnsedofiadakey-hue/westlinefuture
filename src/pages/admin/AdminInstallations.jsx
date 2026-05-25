@@ -43,7 +43,12 @@ export default function AdminInstallations({ clients = [], updateProject, dbClie
           <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
             <button onClick={() => setSel(null)} className="p-btn-light" style={{ width: 40, height: 40, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><ArrowLeft size={18} /></button>
             <div>
-              <h2 className="lxfh" style={{ fontSize: 24, fontWeight: 400 }}>{proj.project}</h2>
+              <h2 className="lxfh" style={{ fontSize: 24, fontWeight: 400, display: 'flex', alignItems: 'center', gap: 12 }}>
+                {proj.project}
+                <button onClick={() => window.open(`/?page=portal&id=${proj.id}`, '_blank')} className="p-btn-outline lxf" style={{ fontSize: 11, padding: '4px 12px', borderRadius: 100, height: 'auto', display: 'flex', alignItems: 'center', gap: 6, borderColor: 'var(--border-color)', color: 'var(--text-secondary)' }}>
+                  <ArrowRight size={12} /> View Client Portal
+                </button>
+              </h2>
               <div className="lxf" style={{ fontSize: 13, color: `var(--text-secondary)` }}>{proj.cat || 'Full Interior Finishing'} • {proj.name}</div>
             </div>
           </div>
@@ -225,10 +230,10 @@ export default function AdminInstallations({ clients = [], updateProject, dbClie
             <div className="p-card" style={{ padding: 24, background: ac, color: '#fff' }}>
                <h3 className="lxfh" style={{ fontSize: 16, marginBottom: 16, color: '#fff' }}>Quick Actions</h3>
                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                  <button onClick={() => document.getElementById('admin-tasks')?.scrollIntoView({behavior: 'smooth'})} className="glass-btn" style={{ fontSize: 11, padding: '10px 0', borderColor: 'rgba(255,255,255,.2)', color: '#fff', cursor: 'pointer' }}><Plus size={14} /> Task</button>
-                  <button onClick={() => document.getElementById('admin-gallery')?.scrollIntoView({behavior: 'smooth'})} className="glass-btn" style={{ fontSize: 11, padding: '10px 0', borderColor: 'rgba(255,255,255,.2)', color: '#fff', cursor: 'pointer' }}><Camera size={14} /> Photo</button>
-                  <button onClick={() => document.getElementById('admin-gov')?.scrollIntoView({behavior: 'smooth'})} className="glass-btn" style={{ fontSize: 11, padding: '10px 0', borderColor: 'rgba(255,255,255,.2)', color: '#fff', cursor: 'pointer' }}><FileText size={14} /> Approval</button>
-                  <button onClick={() => setShowManual(true)} className="glass-btn" style={{ fontSize: 11, padding: '10px 0', borderColor: 'rgba(255,255,255,.2)', color: '#fff', cursor: 'pointer' }}><DollarSign size={14} /> Invoice</button>
+                  <button onClick={() => document.getElementById('admin-tasks')?.scrollIntoView({behavior: 'smooth'})} className="glass-btn" style={{ fontSize: 11, padding: '10px 0', borderColor: 'rgba(255,255,255,.2)', color: '#fff', cursor: 'pointer', background: 'rgba(255,255,255,0.1)' }}><Plus size={14} /> Task</button>
+                  <button onClick={() => document.getElementById('admin-gallery')?.scrollIntoView({behavior: 'smooth'})} className="glass-btn" style={{ fontSize: 11, padding: '10px 0', borderColor: 'rgba(255,255,255,.2)', color: '#fff', cursor: 'pointer', background: 'rgba(255,255,255,0.1)' }}><Camera size={14} /> Photo</button>
+                  <button onClick={() => document.getElementById('admin-gov')?.scrollIntoView({behavior: 'smooth'})} className="glass-btn" style={{ fontSize: 11, padding: '10px 0', borderColor: 'rgba(255,255,255,.2)', color: '#fff', cursor: 'pointer', background: 'rgba(255,255,255,0.1)' }}><FileText size={14} /> Permits</button>
+                  <button onClick={() => setShowManual(true)} className="glass-btn" style={{ fontSize: 11, padding: '10px 0', borderColor: 'rgba(255,255,255,.2)', color: '#fff', cursor: 'pointer', background: 'rgba(255,255,255,0.1)' }}><DollarSign size={14} /> Log Cash</button>
                </div>
             </div>
           </div>

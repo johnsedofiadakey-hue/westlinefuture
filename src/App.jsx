@@ -101,6 +101,7 @@ export default function App() {
     }
   }, []);
 
+  // --- Audio Notification System ---
   const playNotificationSound = useCallback(() => {
     try {
       const AudioContext = window.AudioContext || window.webkitAudioContext;
@@ -108,33 +109,46 @@ export default function App() {
       const ctx = new AudioContext();
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
-      osc.connect(gain);
-      gain.connect(ctx.destination);
+      
       osc.type = 'sine';
       osc.frequency.setValueAtTime(880, ctx.currentTime);
-      osc.frequency.exponentialRampToValueAtTime(1760, ctx.currentTime + 0.1); 
+      osc.frequency.exponentialRampToValueAtTime(1760, ctx.currentTime + 0.1);
+      
       gain.gain.setValueAtTime(0, ctx.currentTime);
-      gain.gain.linearRampToValueAtTime(0.15, ctx.currentTime + 0.05);
-      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.4);
-      osc.start(ctx.currentTime);
-      osc.stop(ctx.currentTime + 0.4);
-    } catch (e) {}
+      gain.gain.linearRampToValueAtTime(0.5, ctx.currentTime + 0.05);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.5);
+      
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      
+      osc.start();
+      osc.stop(ctx.currentTime + 0.5);
+    } catch(e) { console.error("Sound error", e) }
   }, []);
 
-  const prevNotifsCount = useRef(0);
+  const prevNotifsRef = useRef(null);
   useEffect(() => {
-    if (!userNotifications) return;
-    const unreadCount = userNotifications.filter(n => !n.read).length;
-    if (unreadCount > prevNotifsCount.current) {
-      const newest = userNotifications[0];
-      if (newest && !newest.read && (Date.now() - new Date(newest.createdAt).getTime() < 60000)) {
-        playNotificationSound();
-        notify('persistent', newest.msg || 'New notification', 'persistent');
+    if (userNotifications && userNotifications.length > 0) {
+      // If we haven't loaded them before, just record them (don't beep on initial login)
+      if (prevNotifsRef.current === null) {
+        prevNotifsRef.current = userNotifications;
+        return;
       }
+      
+      const prevIds = prevNotifsRef.current.map(n => n.id);
+      const newNotifs = userNotifications.filter(n => !prevIds.includes(n.id) && !n.read);
+      
+      if (newNotifs.length > 0) {
+        // Find the newest unread notification
+        const newest = newNotifs.sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt))[0];
+        if (newest && (Date.now() - new Date(newest.createdAt).getTime() < 120000)) { // within last 2 minutes
+          playNotificationSound();
+          notify('info', newest.title || newest.msg || newest.message || 'New notification', 'persistent');
+        }
+      }
+      prevNotifsRef.current = userNotifications;
     }
-    prevNotifsCount.current = unreadCount;
-  }, [userNotifications, notify, playNotificationSound]);
-
+  }, [userNotifications, playNotificationSound, notify]);
   const { uploadMedia } = useFileUpload(notify);
   const { sendMessage } = useMessaging();
 
@@ -1523,8 +1537,9 @@ export default function App() {
         quoteApprovedAt: serverTimestamp(),
       });
       if (project?.stageId === 2) {
-        await updateProjectStage(projectId, 3, 'Quotation approved by client');
+        await updateProjectStage(projectId, 3, 'Quotation approved by client', { silent: true });
       }
+      createNotification('admin', `Client approved quote for ${project?.name || 'Project'}`, 'quote_approved', `/admin/clients?tab=projects`);
       notify('success', 'Quote approved — advancing to deposit stage', 'persistent');
     } catch (e) { notify('error', 'Failed to approve quote'); }
   };

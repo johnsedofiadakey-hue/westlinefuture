@@ -45,7 +45,6 @@ export default function AdminClients({ dbClients, createClient, updateClient, de
   const handleNextStep = () => {
     const errs = {};
     if (wizardStep === 1) {
-       if (!newC.name.trim()) errs.name = 'Full name is required';
        if (!newC.phone.trim()) errs.phone = 'Phone number is required';
        else if (!PHONE_RE.test(newC.phone.trim())) errs.phone = 'Invalid phone format';
     }

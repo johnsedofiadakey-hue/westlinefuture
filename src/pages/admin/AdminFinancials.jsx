@@ -62,7 +62,7 @@ export default function AdminFinancials({ invoices = [], transactions = [], clie
     due: '',
     invoiceType,
     documentKind: 'invoice',
-    items: [{ id: Date.now(), desc: '', qty: 1, rate: 0, unit: 'pcs', discount: 0, total: 0 }],
+    items: [{ id: Date.now(), type: 'product', desc: '', qty: 1, rate: 0, unit: 'pcs', discount: 0, total: 0 }],
     bankDetails: finSettings.bankDetails,
     terms: finSettings.terms,
     status: 'Pending',
@@ -408,9 +408,8 @@ export default function AdminFinancials({ invoices = [], transactions = [], clie
   })();
 
   // ─── Item table columns (responsive, no overflow) ─────────────────────────
-  const itemCols = draft.invoiceType === 'unit'
-    ? 'minmax(0,1fr) 68px 68px 108px 90px 108px 36px'
-    : 'minmax(0,1fr) 68px 108px 90px 108px 36px';
+  // Redesigned grid to accommodate type toggle
+  const itemCols = '1fr 60px 80px 100px 80px 100px 34px';
 
   // ─── Subtotals ─────────────────────────────────────────────────────────────
   const subtotal   = calculateTotal(draft.items);
@@ -832,27 +831,39 @@ export default function AdminFinancials({ invoices = [], transactions = [], clie
                     </div>
                   )}
 
-                  {/* Column headers */}
-                  <div style={{ display: 'grid', gridTemplateColumns: itemCols, gap: 8, marginBottom: 8, padding: '0 4px' }}>
-                    {['Item / Description','Qty', ...(draft.invoiceType === 'unit' ? ['Unit'] : []),'Rate','Discount','Amount',''].map(h => (
-                      <div key={h} style={{ fontSize: 10, fontWeight: 800, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '.06em' }}>{h}</div>
-                    ))}
+                  {/* Modern Spreadsheet Column headers */}
+                  <div style={{ display: 'grid', gridTemplateColumns: itemCols, gap: 12, marginBottom: 8, padding: '10px 16px', background: '#F8FAFC', borderTop: '1px solid #E2E8F0', borderBottom: '1px solid #E2E8F0', alignItems: 'center' }}>
+                    <div style={{ fontSize: 10, fontWeight: 800, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '.06em' }}>Item Type & Description</div>
+                    <div style={{ fontSize: 10, fontWeight: 800, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '.06em', textAlign: 'center' }}>Qty</div>
+                    <div style={{ fontSize: 10, fontWeight: 800, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '.06em' }}>Unit</div>
+                    <div style={{ fontSize: 10, fontWeight: 800, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '.06em' }}>Rate</div>
+                    <div style={{ fontSize: 10, fontWeight: 800, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '.06em' }}>Discount</div>
+                    <div style={{ fontSize: 10, fontWeight: 800, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '.06em', textAlign: 'right' }}>Amount</div>
+                    <div></div>
                   </div>
 
                   {/* Item rows */}
-                  {draft.items.map((it, idx) => (
-                    <div key={it.id} style={{ display: 'grid', gridTemplateColumns: itemCols, gap: 8, marginBottom: 8, alignItems: 'center' }}>
-                      <textarea className="p-inp" rows={1} placeholder="Item description…" value={it.desc} onChange={e => { const ni = [...draft.items]; ni[idx].desc = e.target.value; setDraft({ ...draft, items: ni }); }} style={{ resize: 'vertical', minHeight: 40, padding: '8px 12px', fontSize: 12 }} />
-                      <input className="p-inp" type="number" placeholder="1" value={it.qty} onChange={e => { const ni = [...draft.items]; ni[idx].qty = parseFloat(e.target.value); setDraft({ ...draft, items: ni }); }} style={{ padding: '0 10px', textAlign: 'center' }} />
-                      {draft.invoiceType === 'unit' && <input className="p-inp" placeholder="pcs" value={it.unit} onChange={e => { const ni = [...draft.items]; ni[idx].unit = e.target.value; setDraft({ ...draft, items: ni }); }} style={{ padding: '0 10px' }} />}
-                      <input className="p-inp" type="number" placeholder="0.00" value={it.rate} onChange={e => { const ni = [...draft.items]; ni[idx].rate = parseFloat(e.target.value); setDraft({ ...draft, items: ni }); }} style={{ padding: '0 10px' }} />
-                      <input className="p-inp" type="number" placeholder="0.00" value={it.discount || ''} onChange={e => { const ni = [...draft.items]; ni[idx].discount = parseFloat(e.target.value) || 0; setDraft({ ...draft, items: ni }); }} style={{ padding: '0 10px' }} />
-                      <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--accent-secondary)', textAlign: 'right', paddingRight: 4 }}>{formatMoney(lineTotal(it), draft.currency)}</div>
-                      <button onClick={() => setDraft({ ...draft, items: draft.items.filter(x => x.id !== it.id) })} disabled={draft.items.length <= 1} style={{ background: 'none', border: 'none', color: '#EF4444', cursor: draft.items.length > 1 ? 'pointer' : 'default', opacity: draft.items.length > 1 ? 1 : 0.2, width: 34, height: 34, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <Trash2 size={15}/>
-                      </button>
-                    </div>
-                  ))}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '8px 4px' }}>
+                    {draft.items.map((it, idx) => (
+                      <div key={it.id} style={{ display: 'grid', gridTemplateColumns: itemCols, gap: 12, alignItems: 'center', background: '#fff', border: '1px solid #E2E8F0', borderRadius: 8, padding: '8px 12px', transition: 'box-shadow 0.2s' }} className="hover-lift">
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                          <div style={{ display: 'flex', gap: 4, background: '#F1F5F9', padding: '4px', borderRadius: 6, width: 'fit-content' }}>
+                            <button onClick={() => { const ni = [...draft.items]; ni[idx].type = 'product'; setDraft({ ...draft, items: ni }); }} style={{ fontSize: 10, padding: '4px 8px', borderRadius: 4, border: 'none', background: it.type !== 'service' ? '#fff' : 'transparent', color: it.type !== 'service' ? ac : '#64748B', fontWeight: it.type !== 'service' ? 800 : 600, cursor: 'pointer', boxShadow: it.type !== 'service' ? '0 1px 2px rgba(0,0,0,0.1)' : 'none' }}>Product</button>
+                            <button onClick={() => { const ni = [...draft.items]; ni[idx].type = 'service'; setDraft({ ...draft, items: ni }); }} style={{ fontSize: 10, padding: '4px 8px', borderRadius: 4, border: 'none', background: it.type === 'service' ? '#fff' : 'transparent', color: it.type === 'service' ? ac : '#64748B', fontWeight: it.type === 'service' ? 800 : 600, cursor: 'pointer', boxShadow: it.type === 'service' ? '0 1px 2px rgba(0,0,0,0.1)' : 'none' }}>Service</button>
+                          </div>
+                          <textarea className="p-inp" rows={1} placeholder={it.type === 'service' ? "Describe the service..." : "Item description…"} value={it.desc} onChange={e => { const ni = [...draft.items]; ni[idx].desc = e.target.value; setDraft({ ...draft, items: ni }); }} style={{ resize: 'vertical', minHeight: 40, padding: '8px 12px', fontSize: 12, border: 'none', background: '#F8FAFC' }} />
+                        </div>
+                        <input className="p-inp" type="number" placeholder="1" value={it.qty} onChange={e => { const ni = [...draft.items]; ni[idx].qty = parseFloat(e.target.value); setDraft({ ...draft, items: ni }); }} style={{ padding: '0 8px', textAlign: 'center', height: 38 }} />
+                        <input className="p-inp" placeholder={it.type === 'service' ? "job" : "pcs"} value={it.unit} onChange={e => { const ni = [...draft.items]; ni[idx].unit = e.target.value; setDraft({ ...draft, items: ni }); }} style={{ padding: '0 8px', height: 38 }} />
+                        <input className="p-inp" type="number" placeholder="0.00" value={it.rate} onChange={e => { const ni = [...draft.items]; ni[idx].rate = parseFloat(e.target.value); setDraft({ ...draft, items: ni }); }} style={{ padding: '0 8px', height: 38 }} />
+                        <input className="p-inp" type="number" placeholder="0.00" value={it.discount || ''} onChange={e => { const ni = [...draft.items]; ni[idx].discount = parseFloat(e.target.value) || 0; setDraft({ ...draft, items: ni }); }} style={{ padding: '0 8px', height: 38 }} />
+                        <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--accent-secondary)', textAlign: 'right', paddingRight: 4 }}>{formatMoney(lineTotal(it), draft.currency)}</div>
+                        <button onClick={() => setDraft({ ...draft, items: draft.items.filter(x => x.id !== it.id) })} disabled={draft.items.length <= 1} style={{ background: 'none', border: 'none', color: '#EF4444', cursor: draft.items.length > 1 ? 'pointer' : 'default', opacity: draft.items.length > 1 ? 1 : 0.2, width: 34, height: 34, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          <Trash2 size={15}/>
+                        </button>
+                      </div>
+                    ))}
+                  </div>
 
                   {/* Totals + Notes */}
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 280px', gap: 20, marginTop: 24, paddingTop: 20, borderTop: '1.5px solid var(--border-color)' }}>

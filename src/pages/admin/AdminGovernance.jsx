@@ -12,7 +12,7 @@ export default function AdminGovernance({ approvals = [], projects = [], brand, 
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
         <div>
-          <h2 className="lxfh" style={{ fontSize: 32, fontWeight: 400, color: `var(--accent-secondary)`, marginBottom: 4 }}>Governance & Approvals</h2>
+          <h2 className="lxfh" style={{ fontSize: 32, fontWeight: 400, color: `var(--accent-secondary)`, marginBottom: 4 }}>Approvals & Permits</h2>
           <p style={{ fontSize: 13, color: '#666' }}>Critical path sign-offs and change request management</p>
         </div>
         <div style={{ display: 'flex', background: '#eee', padding: 4, borderRadius: 10, gap: 4 }}>

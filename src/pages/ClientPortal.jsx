@@ -1507,9 +1507,9 @@ function PaymentsTab({ project, user, transactions: propTxns, invoices: propInvs
 
   const uid = user?.id || user?.uid || user?.phone;
   const allPayments = livePayments
-    ?? (propTxns || []).filter(t => t.projectId === project.id || t.clientId === uid);
+    ?? (propTxns || []).filter(t => t.projectId === project.id);
   const allInvoices = liveInvoices
-    ?? (propInvs || []).filter(i => i.projectId === project.id || i.parentId === project.id || i.clientId === uid);
+    ?? (propInvs || []).filter(i => i.projectId === project.id || i.parentId === project.id);
 
   const parseAmount = value => parseFloat(String(value || '0').replace(/[^0-9.]/g, '')) || 0;
   const totalPaid = allPayments.reduce((s, t) => s + parseAmount(t.amount), 0);

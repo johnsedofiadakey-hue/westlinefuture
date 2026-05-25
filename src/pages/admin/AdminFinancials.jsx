@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import DOMPurify from 'dompurify';
 import {
   DollarSign, Receipt, FileText, Download,
@@ -682,7 +683,7 @@ export default function AdminFinancials({ invoices = [], transactions = [], clie
       {/* ══════════════════════════════════════════════════════════════════════
           INVOICE STUDIO — Full-screen overlay
       ══════════════════════════════════════════════════════════════════════ */}
-      {showAdd && (
+      {showAdd && createPortal(
         <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: '#F4F2EF', display: 'flex', flexDirection: 'column' }}>
 
           {/* Studio Header */}

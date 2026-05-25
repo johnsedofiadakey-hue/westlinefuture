@@ -19,11 +19,11 @@ const SERVICES = [
 ];
 
 const BUDGETS = [
-  'Below GHS 10,000',
-  'GHS 10,000 – 30,000',
-  'GHS 30,000 – 80,000',
-  'GHS 80,000 – 200,000',
-  'Above GHS 200,000',
+  'Below USD 5,000',
+  'USD 5,000 – 20,000',
+  'USD 20,000 – 60,000',
+  'USD 60,000 – 200,000',
+  'Above USD 200,000',
   'Prefer not to say',
 ];
 

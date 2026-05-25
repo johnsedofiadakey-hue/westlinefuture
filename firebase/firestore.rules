@@ -68,7 +68,15 @@ service cloud.firestore {
 
       match /messages/{msgId} {
         allow get, list: if isAdmin() || isClient(get(/databases/$(database)/documents/projects/$(projectId)).data.clientId);
-        allow write: if isAdmin() || isClient(get(/databases/$(database)/documents/projects/$(projectId)).data.clientId);
+        allow create: if isAdmin() || isClient(get(/databases/$(database)/documents/projects/$(projectId)).data.clientId);
+        allow update: if isAdmin() || isClient(get(/databases/$(database)/documents/projects/$(projectId)).data.clientId);
+        allow delete: if isAdmin();
+      }
+      // Typing presence — any authenticated participant can write
+      match /typing/{userId} {
+        allow read: if isAdmin() || isClient(get(/databases/$(database)/documents/projects/$(projectId)).data.clientId);
+        allow write: if isAuthenticated() && request.auth.uid == userId || isAdmin();
+        allow delete: if isAuthenticated();
       }
       match /{subcollection}/{docId} {
         allow get, list: if isAdmin() || isClient(get(/databases/$(database)/documents/projects/$(projectId)).data.clientId);

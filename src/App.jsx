@@ -141,26 +141,24 @@ export default function App() {
   // Inject dynamic CSS variables based on brand settings
   useEffect(() => {
     const root = document.documentElement;
-    root.style.setProperty('--bg-primary', brand.bgPrimary || '#FDFCFB');
-    root.style.setProperty('--bg-secondary', brand.bgSecondary || '#F9F7F4');
-    root.style.setProperty('--text-primary', brand.textPrimary || '#1A1410');
-    root.style.setProperty('--text-secondary', brand.textSecondary || '#A8A095');
-    root.style.setProperty('--accent-primary', brand.accentPrimary || '#C8A96E');
-    
-    // Ignore legacy brand.color which might be blue! Force the dark brown default if accentSecondary is missing.
-    root.style.setProperty('--accent-secondary', brand.accentSecondary || '#1A1410');
-    
-    root.style.setProperty('--border-color', brand.borderColor || 'rgba(26, 20, 16, 0.08)');
-    root.style.setProperty('--footer-bg', brand.footerBg || '#12100E');
-    
-    // Legacy mapping aliases
-    root.style.setProperty('--bg', brand.bgPrimary || '#FDFCFB');
-    root.style.setProperty('--fg', brand.textPrimary || '#1A1410');
-    root.style.setProperty('--ac', brand.accentSecondary || '#1A1410');
+    // Westline Future Deep Indigo Palette
+    root.style.setProperty('--bg-primary',       brand.bgPrimary       || '#F4F4FA');
+    root.style.setProperty('--bg-secondary',     brand.bgSecondary     || '#F8F8FD');
+    root.style.setProperty('--text-primary',     brand.textPrimary     || '#0D0B2E');
+    root.style.setProperty('--text-secondary',   brand.textSecondary   || '#9B99C8');
+    root.style.setProperty('--accent-primary',   brand.accentPrimary   || '#4945BE');
+    root.style.setProperty('--accent-secondary', brand.accentSecondary || brand.color || '#231F78');
+    root.style.setProperty('--border-color',     brand.borderColor     || 'rgba(13, 11, 46, 0.08)');
+    root.style.setProperty('--footer-bg',        brand.footerBg        || '#0D0B2E');
+
+    // Legacy aliases — keep in sync
+    root.style.setProperty('--bg',  brand.bgPrimary       || '#F4F4FA');
+    root.style.setProperty('--fg',  brand.textPrimary     || '#0D0B2E');
+    root.style.setProperty('--ac',  brand.accentSecondary || brand.color || '#231F78');
     if (brand.fontFamily) root.style.setProperty('--font-primary', brand.fontFamily);
   }, [brand]);
   const fxRate = content?.finSettings?.exchangeRate || brand?.finSettings?.exchangeRate || 15.5;
-  const rates = { USD: 1, GHS: fxRate, EUR: 0.93 };
+  const rates = { USD: 1, GHS: fxRate, EUR: 0.93, CNY: 7.25, AED: 3.67 };
 
 
 
@@ -1301,7 +1299,7 @@ export default function App() {
   const buildDefaultMilestones = (budget, paymentSchedule = 'standard') => {
     const num = parseFloat(String(budget).replace(/[^0-9.]/g, '')) || 0;
     if (!num) return [];
-    const fmt = (v) => `GHS ${v.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+    const fmt = (v) => `USD ${v.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
     const ts = Date.now();
     const SCHEDULES = {
       standard: [
@@ -1740,16 +1738,21 @@ export default function App() {
       const container = document.getElementById('recaptcha-container');
       if (container) container.innerHTML = '';
       const msg = (() => {
-        if (err?.code === 'auth/invalid-app-credential' || err?.code === 'auth/unauthorized-domain') {
-          return `Phone login reCAPTCHA was rejected for ${window.location.host}. This is not an SMS region issue. Check Firebase Auth authorized domains and Google Cloud API key HTTP referrers for this host.`;
+        const host = window.location.host;
+        if (err?.code === 'auth/network-request-failed') {
+          return `Network error sending OTP. This usually means the domain "${host}" is not in Firebase Auth → Authorized Domains, or the reCAPTCHA API key doesn't allow this referrer. Ask your admin to add "${host}" to Firebase Console → Authentication → Settings → Authorized Domains.`;
         }
-        if (err?.code === 'auth/app-not-authorized') return 'This Firebase API key is not authorized for this app/domain. Check the API key app restrictions and authorized referrers.';
-        if (err?.code === 'auth/captcha-check-failed') return 'reCAPTCHA verification failed. Refresh the page and try again.';
+        if (err?.code === 'auth/invalid-app-credential' || err?.code === 'auth/unauthorized-domain') {
+          return `Domain "${host}" is not authorized for Firebase Phone Auth. Go to Firebase Console → Authentication → Settings → Authorized Domains and add "${host}".`;
+        }
+        if (err?.code === 'auth/app-not-authorized') return `API key not authorized for domain "${host}". Check Firebase Auth → Authorized Domains and Google Cloud API key restrictions.`;
+        if (err?.code === 'auth/captcha-check-failed') return 'Security check failed. Please refresh the page and try again.';
         if (err?.code === 'auth/missing-phone-number') return 'Enter a valid phone number before requesting an OTP.';
         if (err?.code === 'auth/too-many-requests') return 'Too many OTP attempts. Please wait a few minutes and try again.';
-        if (err?.code === 'auth/invalid-phone-number') return 'That phone number is not valid. Please check the country code and number.';
-        if (err?.message?.includes('400')) return `Firebase rejected the OTP request for ${window.location.host}. Check Phone Auth is enabled, Firebase Auth authorized domains include this host, and the API key allows this HTTP referrer.`;
-        return err.message || 'Could not send verification code.';
+        if (err?.code === 'auth/invalid-phone-number') return 'That phone number is not valid. Please include the country code, e.g. +86 for China or +1 for USA.';
+        if (err?.code === 'auth/quota-exceeded') return 'SMS quota exceeded for today. Please try again tomorrow or contact support.';
+        if (err?.message?.includes('400')) return `Firebase rejected the OTP request. Check Phone Auth is enabled and "${host}" is in Authorized Domains.`;
+        return err.message || 'Could not send verification code. Please check your connection and try again.';
       })();
       err.userMessage = msg;
       setNotification({ msg, type: 'error' });

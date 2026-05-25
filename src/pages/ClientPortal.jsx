@@ -18,6 +18,7 @@ import {
 import { usePaystackPayment } from 'react-paystack';
 import ClientRenderingVault from '../components/ClientRenderingVault';
 import UnifiedPaymentGateway from '../components/UnifiedPaymentGateway';
+import WorldClassChat from '../components/WorldClassChat';
 
 const AC = `var(--accent-secondary)`;
 
@@ -1823,96 +1824,7 @@ function PaymentsTab({ project, user, transactions: propTxns, invoices: propInvs
   );
 }
 
-// ─── Project Chat ─────────────────────────────────────────────────────────────
-function ProjectChat({ project, user, addProjectMessage }) {
-  const [messages, setMessages] = useState([]);
-  const [text, setText] = useState('');
-  const [sending, setSending] = useState(false);
-  const bottomRef = useRef(null);
-
-  useEffect(() => {
-    if (!db || !project?.id) { setMessages([]); return; }
-    const q = query(
-      collection(db, 'projects', project.id, 'messages'),
-      orderBy('createdAt', 'asc')
-    );
-    const unsub = onSnapshot(q, snap => {
-      const visible = snap.docs
-        .map(d => ({ id: d.id, ...d.data() }))
-        .filter(m => !m.isInternal);
-      setMessages(visible);
-      setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 80);
-    });
-    return unsub;
-  }, [project?.id]);
-
-  const send = async () => {
-    if (!text.trim() || sending) return;
-    setSending(true);
-    await addProjectMessage(project.id, text.trim(), 'client', false);
-    setText('');
-    setSending(false);
-  };
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 12, paddingRight: 2, marginBottom: 16 }}>
-        {messages.length === 0 && (
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '60px 20px', textAlign: 'center' }}>
-            <div style={{ fontSize: 36, marginBottom: 12 }}>💬</div>
-            <div style={{ fontSize: 15, fontWeight: 700, color: `var(--accent-secondary)`, marginBottom: 6 }}>Start a conversation</div>
-            <div style={{ fontSize: 13, color: `var(--text-secondary)`, lineHeight: 1.5 }}>Have a question about your project? Send us a message and our team will respond shortly.</div>
-          </div>
-        )}
-        {messages.map(m => {
-          const isMe = m.senderRole === 'client';
-          const isSystem = m.senderRole === 'system';
-          return (
-            <div key={m.id} style={{ display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start' }}>
-              {!isSystem && (
-                <div style={{ fontSize: 10, fontWeight: 700, color: isMe ? AC : `var(--accent-primary)`, marginBottom: 4, textTransform: 'uppercase', letterSpacing: '.04em' }}>
-                  {isMe ? 'You' : 'Westline Future Team'}
-                </div>
-              )}
-              <div style={{
-                maxWidth: '80%', padding: isSystem ? '10px 16px' : '13px 18px',
-                borderRadius: isMe ? '18px 18px 4px 18px' : isSystem ? 12 : '18px 18px 18px 4px',
-                background: isMe ? `var(--accent-secondary)` : isSystem ? `var(--bg-secondary)` : '#fff',
-                color: isMe ? '#fff' : isSystem ? `var(--text-secondary)` : `var(--accent-secondary)`,
-                fontSize: isSystem ? 12 : 14, fontStyle: isSystem ? 'italic' : 'normal',
-                border: isSystem ? '1px dashed var(--border-color)' : isMe ? 'none' : '1px solid var(--border-color)',
-                lineHeight: 1.5,
-              }}>
-                {m.text}
-              </div>
-              <div style={{ fontSize: 10, color: '#DFD9D1', marginTop: 4 }}>
-                {m.createdAt?.seconds ? new Date(m.createdAt.seconds * 1000).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : ''}
-              </div>
-            </div>
-          );
-        })}
-        <div ref={bottomRef} />
-      </div>
-      <div style={{ flexShrink: 0, display: 'flex', gap: 10, borderTop: '1px solid var(--border-color)', paddingTop: 14 }}>
-        <textarea
-          value={text}
-          onChange={e => setText(e.target.value)}
-          onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }}
-          placeholder="Send a message to our team..."
-          rows={2}
-          style={{ flex: 1, padding: '12px 16px', borderRadius: 14, border: '1.5px solid var(--border-color)', fontSize: 16, outline: 'none', resize: 'none', boxSizing: 'border-box', fontFamily: 'inherit', lineHeight: 1.5 }}
-        />
-        <button
-          onClick={send}
-          disabled={!text.trim() || sending}
-          style={{ width: 48, height: 48, borderRadius: 14, background: text.trim() ? `var(--accent-secondary)` : `var(--border-color)`, color: '#fff', border: 'none', cursor: text.trim() ? 'pointer' : 'default', display: 'flex', alignItems: 'center', justifyContent: 'center', alignSelf: 'flex-end', flexShrink: 0, transition: 'background .2s' }}
-        >
-          {sending ? <Loader2 size={18} style={{ animation: 'spin 1s linear infinite' }} /> : <Send size={18} />}
-        </button>
-      </div>
-    </div>
-  );
-}
+// ProjectChat is replaced by WorldClassChat — see import above
 
 // ─── Stage Timeline (enhanced) ────────────────────────────────────────────────
 function StageTimeline({ project, onRequestChange, isMobile }) {
@@ -3317,10 +3229,13 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
                   }}>
                     <div style={{ fontSize: 15, fontWeight: 800, color: `var(--accent-secondary)`, marginBottom: 16, flexShrink: 0 }}>Messages</div>
                     <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-                      <ProjectChat
+                      <WorldClassChat
                         project={selected}
                         user={user}
+                        accentColor={selected?.brandColor || '#231F78'}
                         addProjectMessage={props.addProjectMessage}
+                        isAdmin={false}
+                        height="100%"
                       />
                     </div>
                   </div>

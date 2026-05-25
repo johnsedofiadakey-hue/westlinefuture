@@ -209,10 +209,10 @@ export default function LoginPage({ onLogin, onBack, brand, type = 'client', ...
       padding: isMobile ? 0 : 24,
       fontFamily: 'Inter, Satoshi, sans-serif',
       background: isAdmin
-        ? '#0D0B09'
+        ? '#0D0B2E'
         : isMobile
-          ? 'linear-gradient(160deg, #F5F2EE 0%, #EBE5DD 100%)'
-          : '#F8F6F3',
+          ? 'linear-gradient(160deg, #E8E6F5 0%, #D8D5F0 100%)'
+          : '#F4F4FA',
       transition: 'background .5s',
     }}>
       <div id="recaptcha-container" />
@@ -238,8 +238,8 @@ export default function LoginPage({ onLogin, onBack, brand, type = 'client', ...
         boxShadow: isAdmin
           ? '0 40px 80px rgba(0,0,0,.6)'
           : isMobile
-            ? '0 -12px 48px rgba(92, 58, 33,.12)'
-            : '0 24px 60px rgba(92, 58, 33,.08)',
+            ? '0 -12px 48px rgba(35, 31, 120,.12)'
+            : '0 24px 60px rgba(35, 31, 120,.08)',
         position: 'relative',
         overflow: 'hidden',
       }}>

@@ -28,7 +28,7 @@ export default function AdminAddOnManager({ project, brand, addOns = [], invoice
         total: parseFloat(amount),
         status: 'Pending',
         type: 'Invoice',
-        currency: 'GHS',
+        currency: 'USD',
         items: [{ desc: title, qty: 1, rate: parseFloat(amount), total: parseFloat(amount) }],
         date: new Date().toISOString().slice(0, 10),
       };

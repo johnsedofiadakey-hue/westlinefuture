@@ -16,6 +16,7 @@ import {
 } from 'firebase/firestore';
 import AdminRenderingManager from '../../components/AdminRenderingManager';
 import AdminAddOnManager from '../../components/AdminAddOnManager';
+import WorldClassChat from '../../components/WorldClassChat';
 import { calculateTimeline } from '../sharedHelpers';
 
 const AC = `var(--accent-secondary)`;
@@ -2283,124 +2284,7 @@ function DocumentVault({ project, addProjectDocument, user }) {
   );
 }
 
-// ─── Project Conversation (Right Panel) ──────────────────────────────────────
-function ProjectConversation({ project, user, addProjectMessage }) {
-  const [messages, setMessages] = useState([]);
-  const [tab, setTab] = useState('client');
-  const [text, setText] = useState('');
-  const [sending, setSending] = useState(false);
-  const bottomRef = useRef(null);
-
-  useEffect(() => {
-    if (!db || !project?.id) { setMessages([]); return; }
-    const q = query(collection(db, 'projects', project.id, 'messages'), orderBy('createdAt', 'asc'));
-    const unsub = onSnapshot(q, snap => {
-      setMessages(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-      setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
-    });
-    return unsub;
-  }, [project?.id]);
-
-  const visible = messages.filter(m => tab === 'client' ? !m.isInternal : m.isInternal || m.senderRole === 'system');
-
-  const send = async () => {
-    if (!text.trim() || sending) return;
-    const isInternal = tab === 'internal';
-    setSending(true);
-    await addProjectMessage(project.id, text.trim(), 'admin', isInternal);
-    setText('');
-    setSending(false);
-  };
-
-  const roleColor = (role) => {
-    if (role === 'system') return `var(--text-secondary)`;
-    if (role === 'admin') return `var(--accent-secondary)`;
-    if (role === 'client') return `var(--accent-primary)`;
-    return '#059669';
-  };
-
-  const roleName = (role, name) => {
-    if (role === 'system') return 'System';
-    if (role === 'admin') return name || 'Westline Future Team';
-    if (role === 'client') return name || 'Client';
-    return name || 'Worker';
-  };
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      {/* Tabs */}
-      <div style={{ display: 'flex', gap: 4, padding: '0 0 16px 0', flexShrink: 0 }}>
-        {[
-          { id: 'client', label: 'Client Chat', icon: <MessageSquare size={13} /> },
-          { id: 'internal', label: 'Internal Notes', icon: <StickyNote size={13} /> },
-        ].map(t => (
-          <button key={t.id} onClick={() => setTab(t.id)} style={{ flex: 1, height: 36, borderRadius: 10, border: `1.5px solid ${tab === t.id ? `var(--accent-secondary)` : `var(--border-color)`}`, background: tab === t.id ? `var(--accent-secondary)` : '#fff', color: tab === t.id ? '#fff' : `var(--text-secondary)`, fontSize: 11, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, transition: 'all .2s' }}>
-            {t.icon}{t.label}
-          </button>
-        ))}
-      </div>
-
-      {/* Messages */}
-      <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 12, paddingRight: 4, marginBottom: 16 }}>
-        {visible.length === 0 && (
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 32, textAlign: 'center' }}>
-            <MessageSquare size={36} color="var(--border-color)" style={{ marginBottom: 12 }} />
-            <div style={{ fontSize: 13, color: `var(--text-secondary)`, fontWeight: 600 }}>{tab === 'client' ? 'No client messages yet' : 'No internal notes yet'}</div>
-            <div style={{ fontSize: 11, color: '#DFD9D1', marginTop: 4 }}>{tab === 'client' ? 'Start the conversation below.' : 'Add notes for your team.'}</div>
-          </div>
-        )}
-        {visible.map(m => {
-          const isAdmin = m.senderRole === 'admin';
-          const isSystem = m.senderRole === 'system';
-          return (
-            <div key={m.id} style={{ display: 'flex', flexDirection: 'column', alignItems: isAdmin ? 'flex-end' : 'flex-start' }}>
-              {!isSystem && (
-                <div style={{ fontSize: 10, fontWeight: 700, color: roleColor(m.senderRole), marginBottom: 4, textTransform: 'uppercase', letterSpacing: '.04em' }}>
-                  {roleName(m.senderRole, m.senderName)}
-                </div>
-              )}
-              <div style={{
-                maxWidth: '88%', padding: isSystem ? '10px 16px' : '12px 16px',
-                borderRadius: isAdmin ? '18px 18px 4px 18px' : isSystem ? 12 : '18px 18px 18px 4px',
-                background: isAdmin ? `var(--accent-secondary)` : isSystem ? `var(--bg-secondary)` : '#fff',
-                color: isAdmin ? '#fff' : isSystem ? `var(--text-secondary)` : `var(--accent-secondary)`,
-                fontSize: isSystem ? 11 : 13,
-                border: isSystem ? '1px dashed var(--border-color)' : isAdmin ? 'none' : '1px solid var(--border-color)',
-                fontStyle: isSystem ? 'italic' : 'normal',
-                lineHeight: 1.5,
-              }}>
-                {m.text}
-              </div>
-              <div style={{ fontSize: 10, color: '#DFD9D1', marginTop: 4 }}>
-                {m.createdAt?.seconds ? new Date(m.createdAt.seconds * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'now'}
-              </div>
-            </div>
-          );
-        })}
-        <div ref={bottomRef} />
-      </div>
-
-      {/* Input */}
-      <div style={{ flexShrink: 0, display: 'flex', gap: 8, paddingTop: 12, borderTop: '1px solid var(--border-color)' }}>
-        <textarea
-          value={text}
-          onChange={e => setText(e.target.value)}
-          onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }}
-          placeholder={tab === 'client' ? 'Message client...' : 'Internal note (team only)...'}
-          rows={2}
-          style={{ flex: 1, padding: '10px 14px', borderRadius: 12, border: '1.5px solid var(--border-color)', fontSize: 13, outline: 'none', resize: 'none', boxSizing: 'border-box', fontFamily: 'inherit', lineHeight: 1.5, background: tab === 'internal' ? '#FEFDF5' : '#fff' }}
-        />
-        <button
-          onClick={send}
-          disabled={!text.trim() || sending}
-          style={{ width: 44, height: 44, borderRadius: 12, background: text.trim() ? `var(--accent-secondary)` : `var(--border-color)`, color: '#fff', border: 'none', cursor: text.trim() ? 'pointer' : 'default', display: 'flex', alignItems: 'center', justifyContent: 'center', alignSelf: 'flex-end', flexShrink: 0, transition: 'background .2s' }}
-        >
-          {sending ? <Loader2 size={16} className="spin" /> : <Send size={16} />}
-        </button>
-      </div>
-    </div>
-  );
-}
+// ProjectConversation replaced by WorldClassChat — see import above
 
 // ─── Main ClientHub ───────────────────────────────────────────────────────────
 export default function ClientHub({ clientId, dbClients = [], onBack, ...props }) {
@@ -3029,8 +2913,15 @@ export default function ClientHub({ clientId, dbClients = [], onBack, ...props }
 
                 {/* CHAT */}
                 {activeTab === 'chat' && (
-                  <div style={{ height: 'calc(100vh - 340px)', display: 'flex', flexDirection: 'column', background: '#fff', borderRadius: 16, border: '1px solid var(--border-color)', padding: '16px 20px' }}>
-                    <ProjectConversation project={selected} user={props.user} addProjectMessage={props.addProjectMessage} />
+                  <div style={{ height: 'calc(100vh - 340px)', display: 'flex', flexDirection: 'column', background: '#fff', borderRadius: 16, border: '1px solid rgba(35,31,120,0.1)', padding: '16px 20px' }}>
+                    <WorldClassChat
+                      project={selected}
+                      user={props.user}
+                      accentColor={props.brand?.color || '#231F78'}
+                      addProjectMessage={props.addProjectMessage}
+                      isAdmin={true}
+                      height="100%"
+                    />
                   </div>
                 )}
 

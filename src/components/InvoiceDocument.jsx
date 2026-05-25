@@ -11,8 +11,8 @@ const lineTotal = (item = {}) => {
 const calculateTotal = (items = []) =>
   items.reduce((a, b) => a + lineTotal(b), 0);
 
-const formatMoney = (val, currency = 'GHS') => {
-  const symbol = currency === 'USD' ? '$' : 'GH₵';
+const formatMoney = (val, currency = 'USD') => {
+  const symbol = currency === 'GHS' ? 'GH₵' : currency === 'EUR' ? '€' : currency === 'CNY' ? '¥' : '$';
   return `${symbol}${parseFloat(val || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
 };
 

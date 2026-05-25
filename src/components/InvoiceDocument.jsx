@@ -128,9 +128,16 @@ export default function InvoiceDocument({ inv = {}, isQuote = false, finSettings
         <div style={{ display: 'flex', gap: 18, alignItems: 'center' }}>
           <img
             src={logoSrc}
-            style={{ height: 60, maxWidth: 180, objectFit: 'contain', display: 'block' }}
+            style={{ height: 60, maxWidth: 180, objectFit: 'contain', display: 'block', filter: 'brightness(0)' }}
             alt={companyName}
-            onError={e => { e.target.style.display = 'none'; }}
+            onError={e => {
+              // Two-stage fallback: try /logo.png, then hide
+              if (!e.target.src.endsWith('/logo.png') && !e.target.src.endsWith('/logo.png?v=2')) {
+                e.target.src = '/logo.png';
+              } else {
+                e.target.style.display = 'none';
+              }
+            }}
           />
           <div>
             <div style={{ fontSize: 16, fontWeight: 800, color: dark, letterSpacing: 0.2 }}>{companyName}</div>

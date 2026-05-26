@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import {
   ArrowLeft, Plus, Send, CheckCircle2, Circle, ChevronRight,
   User, Briefcase, DollarSign, Phone, Calendar, X, Loader2,
@@ -602,7 +603,7 @@ function InvoiceCreatorModal({ project, brand, createInvoice, onClose, notify })
 
   const categories = ['All', 'Glass', 'Profiles', 'Washrooms', 'Kitchens', 'Doors'];
 
-  return (
+  return createPortal(
     <div style={{ position: 'fixed', inset: 0, zIndex: 10000, background: 'rgba(24, 14, 6, 0.4)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
       <div style={{ background: '#FFF', borderRadius: 24, width: '95vw', maxWidth: 1100, height: '90vh', display: 'flex', flexDirection: 'row', overflow: 'hidden', boxShadow: '0 25px 50px rgba(0,0,0,0.15)' }}>
         
@@ -740,7 +741,7 @@ function InvoiceCreatorModal({ project, brand, createInvoice, onClose, notify })
         </div>
 
       </div>
-    </div>
+    </div>, document.body
   );
 }
 
@@ -946,7 +947,7 @@ function ProjectInvoicesLedger({ project, invoices, brand, updateInvoice, delete
         </div>
       )}
 
-      {payingInvoice && (
+      {payingInvoice && createPortal(
         <div style={{ position: 'fixed', inset: 0, zIndex: 11000, background: 'rgba(24, 14, 6, 0.4)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
           <div style={{ background: '#FFF', borderRadius: 20, width: '100%', maxWidth: 440, padding: 24, boxShadow: '0 20px 45px rgba(0,0,0,0.15)' }}>
             
@@ -1008,7 +1009,7 @@ function ProjectInvoicesLedger({ project, invoices, brand, updateInvoice, delete
             </div>
 
           </div>
-        </div>
+        </div>, document.body
       )}
 
     </div>
@@ -1325,7 +1326,7 @@ function NewProjectModal({ client, teamMembers = [], onClose, onCreate }) {
   const staffOptions = (teamMembers || []).filter(m => ['admin', 'staff', 'project-manager', 'Project Manager'].includes(m.role) || /manager|staff|admin/i.test(m.jobRole || ''));
   const workerOptions = (teamMembers || []).filter(m => m.role === 'worker' || /worker|installer|field/i.test(m.jobRole || ''));
 
-  return (
+  return createPortal(
     <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20, overflowY: 'auto' }}>
       <div style={{ background: '#fff', borderRadius: 24, width: '100%', maxWidth: 880, padding: 40, position: 'relative', boxShadow: '0 32px 80px rgba(0,0,0,.2)', margin: '20px auto' }}>
         <button onClick={onClose} style={{ position: 'absolute', top: 20, right: 20, width: 36, height: 36, borderRadius: 10, border: '1px solid var(--border-color)', background: `var(--bg-secondary)`, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><X size={16} /></button>
@@ -1575,7 +1576,7 @@ function NewProjectModal({ client, teamMembers = [], onClose, onCreate }) {
           {saving ? <><Loader2 size={16} className="spin" /> Creating...</> : 'Create Project'}
         </button>
       </div>
-    </div>
+    </div>, document.body
   );
 }
 
@@ -1631,6 +1632,12 @@ function AdvanceModal({ project, stage, nextStage, invoices = [], onClose, onAdv
       applies: nextStage.id >= 8,
       ok: !!(project.finalPaymentPaid || project.finalSettlementPaid || hasPaidInvoice('final')),
     },
+    {
+      id: 'change-request-pending',
+      label: 'Open change request — resolve all pins and click "Mark Change Complete" before advancing',
+      applies: !!project.changeRequestPending,
+      ok: false,
+    },
   ].filter(c => c.applies);
   const blockingChecks = gateChecks.filter(c => !c.ok);
   const canAdvance = blockingChecks.length === 0 || gateOverride;
@@ -1654,7 +1661,7 @@ function AdvanceModal({ project, stage, nextStage, invoices = [], onClose, onAdv
     onClose();
   };
 
-  return (
+  return createPortal(
     <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
       <div style={{ background: '#fff', borderRadius: 24, width: '100%', maxWidth: 620, padding: 36, position: 'relative', boxShadow: '0 32px 80px rgba(0,0,0,.2)' }}>
         <button onClick={onClose} style={{ position: 'absolute', top: 16, right: 16, width: 32, height: 32, borderRadius: 8, border: '1px solid var(--border-color)', background: `var(--bg-secondary)`, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><X size={14} /></button>
@@ -1764,7 +1771,7 @@ function AdvanceModal({ project, stage, nextStage, invoices = [], onClose, onAdv
           </button>
         </div>
       </div>
-    </div>
+    </div>, document.body
   );
 }
 
@@ -2337,7 +2344,11 @@ export default function ClientHub({ clientId, dbClients = [], onBack, ...props }
         (p.clientIds || []).includes(client.id) || (p.clientIds || []).includes(client.phone)
       );
       setProjects(mine);
-      if (mine.length > 0 && !selectedId) setSelectedId(mine[0].id);
+      setSelectedId(prev => {
+        if (!prev && mine.length > 0) return mine[0].id;
+        if (prev && mine.length > 0 && !mine.find(p => p.id === prev) && prev !== 'MESSAGES') return mine[0].id;
+        return prev;
+      });
       setLoadingProjects(false);
     });
     return unsub;
@@ -2383,8 +2394,7 @@ export default function ClientHub({ clientId, dbClients = [], onBack, ...props }
     { id: 'financials', label: 'Financials', icon: <DollarSign size={14} /> },
     { id: 'renderings', label: 'Design Vault', icon: <PenTool size={14} /> },
     { id: 'documents',  label: 'Documents',  icon: <FileText size={14} /> },
-    { id: 'team',       label: 'Team',       icon: <Users size={14} /> },
-    { id: 'chat',       label: 'Chat',       icon: <MessageSquare size={14} /> },
+    { id: 'team',       label: 'Team',       icon: <Users size={14} /> }
   ];
 
   if (!client) return (
@@ -2441,6 +2451,42 @@ export default function ClientHub({ clientId, dbClients = [], onBack, ...props }
               </div>
             ))}
           </div>
+          <button
+            onClick={() => { setSelectedId('MESSAGES'); setActiveTab('chat'); }}
+            style={{ width: '100%', textAlign: 'left', padding: '13px 14px', borderRadius: 13, border: `2px solid ${selectedId === 'MESSAGES' ? ac : 'transparent'}`, background: selectedId === 'MESSAGES' ? `${ac}10` : `var(--bg-secondary)`, cursor: 'pointer', transition: 'all .2s', marginBottom: 20, display: 'flex', alignItems: 'center', gap: 10 }}
+          >
+            <MessageSquare size={16} color={selectedId === 'MESSAGES' ? ac : 'var(--text-secondary)'} />
+            <div style={{ fontSize: 13, fontWeight: 800, color: selectedId === 'MESSAGES' ? ac : 'var(--text-secondary)' }}>Client Messages</div>
+          </button>
+
+          <button
+            onClick={async () => {
+              const { collection, getDocs, setDoc, doc, deleteDoc } = await import('firebase/firestore');
+              try {
+                console.log("Starting migration...");
+                const projectsSnap = await getDocs(collection(db, "projects"));
+                let moved = 0;
+                for (const p of projectsSnap.docs) {
+                  const data = p.data();
+                  const cId = data.clientId || data.phone; 
+                  if (!cId) continue;
+                  const messagesSnap = await getDocs(collection(db, `projects/${p.id}/messages`));
+                  for (const msg of messagesSnap.docs) {
+                    await setDoc(doc(db, `clients/${cId}/messages/${msg.id}`), { ...msg.data(), migratedFromProject: p.id });
+                    await deleteDoc(doc(db, `projects/${p.id}/messages/${msg.id}`));
+                    moved++;
+                  }
+                }
+                alert(`Successfully migrated ${moved} old messages!`);
+              } catch(e) {
+                console.error(e);
+                alert("Migration failed: " + e.message);
+              }
+            }}
+            style={{ width: '100%', padding: '10px', background: '#EF4444', color: '#fff', borderRadius: 12, border: 'none', cursor: 'pointer', marginBottom: 16, fontWeight: 700, fontSize: 12 }}
+          >
+            Migrate Old Messages
+          </button>
 
           <div style={{ fontSize: 9, fontWeight: 800, color: `var(--text-secondary)`, textTransform: 'uppercase', letterSpacing: '.1em', paddingLeft: 2, paddingBottom: 4 }}>Projects</div>
 
@@ -2460,7 +2506,7 @@ export default function ClientHub({ clientId, dbClients = [], onBack, ...props }
             return (
               <button key={p.id} onClick={() => { setSelectedId(p.id); setActiveTab('overview'); }}
                 style={{ width: '100%', textAlign: 'left', padding: '13px 14px', borderRadius: 13, border: `2px solid ${isActive ? ac : 'transparent'}`, background: isActive ? `${ac}10` : `var(--bg-secondary)`, cursor: 'pointer', transition: 'all .2s' }}>
-                <div style={{ fontSize: 12, fontWeight: 800, color: `var(--accent-secondary)`, marginBottom: 3, lineHeight: 1.3 }}>{p.title}</div>
+                <div style={{ fontSize: 12, fontWeight: 800, color: `var(--accent-secondary)`, marginBottom: 3, lineHeight: 1.3 }}>{p.project || p.title}</div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
                   <span style={{ fontSize: 9, fontWeight: 700, color: stg?.color || `var(--text-secondary)`, background: `${stg?.color || `var(--text-secondary)`}18`, padding: '2px 7px', borderRadius: 20 }}>{stg?.short || 'Stage 1'}</span>
                   <span style={{ fontSize: 9, color: `var(--text-secondary)` }}>{p.status === 'Completed' ? '✓ Done' : 'Active'}</span>
@@ -2475,7 +2521,22 @@ export default function ClientHub({ clientId, dbClients = [], onBack, ...props }
 
         {/* RIGHT — Tabbed Main */}
         <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-          {!selected ? (
+          {selectedId === 'MESSAGES' ? (
+            <div style={{ height: 'calc(100vh - 160px)', display: 'flex', flexDirection: 'column', background: '#fff', borderRadius: 16, border: '1px solid var(--border-color)', padding: '16px 20px', minHeight: 400 }}>
+              <div style={{ fontSize: 16, fontWeight: 900, color: `var(--accent-secondary)`, marginBottom: 12, flexShrink: 0 }}>Unified Client Chat</div>
+              <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+                <WorldClassChat
+                  clientId={client.id}
+                  user={props.user}
+                  accentColor={ac}
+                  addClientMessage={props.addClientMessage}
+                  isAdmin={true}
+                  height="100%"
+                  projects={projects.map(p => ({ id: p.id, title: p.title }))}
+                />
+              </div>
+            </div>
+          ) : !selected ? (
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: 40 }}>
               <Briefcase size={48} color="var(--border-color)" style={{ marginBottom: 16 }} />
               <div style={{ fontSize: 18, fontWeight: 800, color: `var(--accent-secondary)`, marginBottom: 8 }}>Select a project</div>
@@ -2490,7 +2551,7 @@ export default function ClientHub({ clientId, dbClients = [], onBack, ...props }
                     <div style={{ fontSize: 11, fontWeight: 800, color: `var(--text-secondary)`, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 3 }}>
                       {PROJECT_TYPES[selected.projectType]?.label || 'Full Service'} &middot; ID {selected.id.slice(0, 8).toUpperCase()}
                     </div>
-                    <div style={{ fontSize: 20, fontWeight: 900, color: `var(--accent-secondary)`, lineHeight: 1.2 }}>{selected.title}</div>
+                    <div style={{ fontSize: 20, fontWeight: 900, color: `var(--accent-secondary)`, lineHeight: 1.2 }}>{selected.project || selected.title}</div>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -2555,7 +2616,7 @@ export default function ClientHub({ clientId, dbClients = [], onBack, ...props }
 
                 {/* DESIGN VAULT (RENDERINGS) */}
                 {activeTab === 'renderings' && (
-                  <AdminRenderingManager project={selected} brand={brand} renderingPackages={props.renderingPackages} invoices={props.invoices} />
+                  <AdminRenderingManager project={selected} brand={brand} renderingPackages={props.renderingPackages} invoices={props.invoices} notify={props.notify} createInvoice={props.createInvoice} />
                 )}
 
                 {/* OVERVIEW */}
@@ -2934,21 +2995,6 @@ export default function ClientHub({ clientId, dbClients = [], onBack, ...props }
                     </div>
                   </div>
                 )}
-
-                {/* CHAT */}
-                {activeTab === 'chat' && (
-                  <div style={{ height: 'calc(100vh - 340px)', display: 'flex', flexDirection: 'column', background: '#fff', borderRadius: 16, border: '1px solid var(--border-color)', padding: '16px 20px' }}>
-                    <WorldClassChat
-                      project={selected}
-                      user={props.user}
-                      accentColor={props.brand?.color || props.brand?.accentSecondary || 'var(--accent-secondary)'}
-                      addProjectMessage={props.addProjectMessage}
-                      isAdmin={true}
-                      height="100%"
-                    />
-                  </div>
-                )}
-
               </div>
             </>
           )}

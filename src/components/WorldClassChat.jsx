@@ -2,7 +2,7 @@
  * WorldClassChat — WeChat-style project messaging
  *
  * Features:
- *  • Live Firestore subscription (projects/{id}/messages)
+ *  • Live Firestore subscription (clients/{id}/messages)
  *  • One-tap AI translation per bubble (MyMemory API, free, no key)
  *  • Auto language detection (CJK → zh, else en)
  *  • Date separators: Today / Yesterday / DD MMM
@@ -13,13 +13,14 @@
  *  • Internal notes tab (admin only)
  *  • Unread badge counter
  *  • Full EN ↔ ZH bilingual UI
+ *  • Project context tagging: optional project selector + filter bar
  */
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Send, Loader2, Globe, ThumbsUp, Heart, Smile, Image as ImageIcon,
   X, ChevronDown, Lock, MessageSquare, StickyNote, CheckCheck, Check,
-  RefreshCw, Paperclip
+  RefreshCw, Paperclip, Tag, Folder
 } from 'lucide-react';
 import {
   collection, query, orderBy, onSnapshot, addDoc, updateDoc,
@@ -38,7 +39,7 @@ const translationCache = new Map();
 export const translateText = async (text, targetLang) => {
   if (!text?.trim()) return null;
   const srcLang = detectLang(text);
-  if (srcLang === targetLang) return null; // already target language
+  if (srcLang === targetLang) return null;
   const cacheKey = `${text}:${targetLang}`;
   if (translationCache.has(cacheKey)) return translationCache.get(cacheKey);
   try {
@@ -80,11 +81,11 @@ const timeStr = (ts) => {
 
 // ── Typing indicator (Firestore presence) ─────────────────────────────────────
 const TYPING_TTL = 4000;
-const useTyping = (projectId, userId, userName) => {
+const useTyping = (clientId, userId, userName) => {
   const timerRef = useRef(null);
   const setTyping = useCallback((isTyping) => {
-    if (!db || !projectId || !userId) return;
-    const tRef = doc(db, 'projects', projectId, 'typing', userId);
+    if (!db || !clientId || !userId) return;
+    const tRef = doc(db, 'clients', clientId, 'typing', userId);
     if (isTyping) {
       setDoc(tRef, { name: userName || 'Someone', ts: Date.now() }, { merge: true });
       clearTimeout(timerRef.current);
@@ -93,15 +94,15 @@ const useTyping = (projectId, userId, userName) => {
       clearTimeout(timerRef.current);
       deleteDoc(tRef).catch(() => {});
     }
-  }, [projectId, userId, userName]);
+  }, [clientId, userId, userName]);
   return setTyping;
 };
 
-const useTypingPeers = (projectId, myId) => {
+const useTypingPeers = (clientId, myId) => {
   const [peers, setPeers] = useState([]);
   useEffect(() => {
-    if (!db || !projectId) return;
-    const unsub = onSnapshot(collection(db, 'projects', projectId, 'typing'), (snap) => {
+    if (!db || !clientId) return;
+    const unsub = onSnapshot(collection(db, 'clients', clientId, 'typing'), (snap) => {
       const now = Date.now();
       const active = snap.docs
         .filter(d => d.id !== myId && (now - (d.data().ts || 0)) < TYPING_TTL)
@@ -109,12 +110,26 @@ const useTypingPeers = (projectId, myId) => {
       setPeers(active);
     });
     return unsub;
-  }, [projectId, myId]);
+  }, [clientId, myId]);
   return peers;
 };
 
 // ── Reaction emoji set ─────────────────────────────────────────────────────────
 const REACTIONS = ['👍', '❤️', '😂', '😮', '🙏', '✅'];
+
+// ── Project badge pill ─────────────────────────────────────────────────────────
+function ProjectBadge({ title, accentColor }) {
+  return (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', gap: 4,
+      fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20,
+      background: `${accentColor}15`, color: accentColor,
+      border: `1px solid ${accentColor}30`, marginTop: 4,
+    }}>
+      <Folder size={9} />#{title}
+    </span>
+  );
+}
 
 // ── Single message bubble ──────────────────────────────────────────────────────
 function Bubble({ msg, isMine, isSystem, accentColor, onReact, viewerLang = 'en' }) {
@@ -139,7 +154,6 @@ function Bubble({ msg, isMine, isSystem, accentColor, onReact, viewerLang = 'en'
   const reactions = msg.reactions || {};
   const totalReactions = Object.values(reactions).flat().length;
 
-  // Close reaction picker on outside click
   useEffect(() => {
     if (!showReactions) return;
     const handler = (e) => { if (!reactionRef.current?.contains(e.target)) setShowReactions(false); };
@@ -230,6 +244,13 @@ function Bubble({ msg, isMine, isSystem, accentColor, onReact, viewerLang = 'en'
         )}
       </div>
 
+      {/* Project badge */}
+      {msg.projectTitle && (
+        <div style={{ paddingLeft: isMine ? 0 : 4, paddingRight: isMine ? 4 : 0 }}>
+          <ProjectBadge title={msg.projectTitle} accentColor={ac} />
+        </div>
+      )}
+
       {/* Translation */}
       {translation && (
         <div style={{
@@ -281,12 +302,14 @@ function DateSep({ label }) {
 
 // ── Main WorldClassChat component ──────────────────────────────────────────────
 export default function WorldClassChat({
-  project,
+  clientId,
   user,
   accentColor,
-  addProjectMessage,
+  addClientMessage,
   isAdmin = false,
   height = 480,
+  // Project context tagging
+  projects = [],           // array of { id, title } — client's active projects
 }) {
   const ac = accentColor || 'var(--accent-secondary)';
   const [tab, setTab] = useState('client'); // 'client' | 'internal'
@@ -300,43 +323,45 @@ export default function WorldClassChat({
   const scrollRef = useRef(null);
   const fileInputRef = useRef(null);
 
+  // Project tagging
+  const hasMultipleProjects = projects.length > 1;
+  const [activeProjectTag, setActiveProjectTag] = useState(null); // { id, title } | null
+  const [projectFilter, setProjectFilter] = useState(null);       // project id | null = all
+
   // viewer language defaults to browser or brand lang
-  const viewerLang = detectLang(''); // defaults to 'en'; override per user if needed
+  const viewerLang = detectLang('');
 
   // Typing indicator
   const userId = user?.uid || user?.id || 'anon';
   const userName = user?.name || user?.displayName || (isAdmin ? 'Westline Future' : 'Client');
-  const setTyping = useTyping(project?.id, userId, userName);
-  const typingPeers = useTypingPeers(project?.id, userId);
+  const setTyping = useTyping(clientId, userId, userName);
+  const typingPeers = useTypingPeers(clientId, userId);
 
   // Live messages
   useEffect(() => {
-    if (!db || !project?.id) { setMessages([]); return; }
-    const q = query(collection(db, 'projects', project.id, 'messages'), orderBy('createdAt', 'asc'));
+    if (!db || !clientId) { setMessages([]); return; }
+    const q = query(collection(db, 'clients', clientId, 'messages'), orderBy('createdAt', 'asc'));
     const unsub = onSnapshot(q, (snap) => {
       const all = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       setMessages(all);
-      // Mark unread
       const myRole = isAdmin ? 'admin' : 'client';
       const unread = all.filter(m => !m.isInternal && m.senderRole !== myRole && !m[`readBy${isAdmin ? 'Admin' : 'Client'}`]).length;
       setUnreadCount(unread);
       if (atBottom) setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 80);
     });
     return unsub;
-  }, [project?.id]);
+  }, [clientId]);
 
   // Mark messages as read when scrolled to bottom
   const markRead = useCallback(async () => {
-    if (!db || !project?.id || !atBottom) return;
+    if (!db || !clientId || !atBottom) return;
     const myRole = isAdmin ? 'admin' : 'client';
     const readField = isAdmin ? 'readByAdmin' : 'readByClient';
     const toMark = messages.filter(m => !m.isInternal && m.senderRole !== myRole && !m[readField]);
-    for (const m of toMark.slice(-5)) { // mark last 5 in batch
-      try { await updateDoc(doc(db, 'projects', project.id, 'messages', m.id), { [readField]: true }); } catch (_) {}
+    for (const m of toMark.slice(-5)) {
+      try { await updateDoc(doc(db, 'clients', clientId, 'messages', m.id), { [readField]: true }); } catch (_) {}
     }
-  }, [messages, project?.id, atBottom, isAdmin]);
-
-  useEffect(() => { if (atBottom) markRead(); }, [atBottom, messages.length]);
+  }, [messages, clientId, atBottom, isAdmin]);
 
   // Scroll tracking
   const handleScroll = () => {
@@ -346,13 +371,16 @@ export default function WorldClassChat({
     setAtBottom(isAt);
   };
 
-  // Scroll to bottom button
   const scrollToBottom = () => bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
 
-  // Visible messages by tab
-  const visible = tab === 'internal'
+  // ── Visible messages: by tab + project filter ──────────────────────────────
+  const visibleByTab = tab === 'internal'
     ? messages.filter(m => m.isInternal || m.senderRole === 'system')
     : messages.filter(m => !m.isInternal);
+
+  const visible = projectFilter
+    ? visibleByTab.filter(m => !m.projectId || m.projectId === projectFilter || m.senderRole === 'system')
+    : visibleByTab;
 
   // Build list with date separators
   const withSeps = [];
@@ -371,8 +399,30 @@ export default function WorldClassChat({
     if (!text.trim() || sending) return;
     setSending(true);
     setTyping(false);
-    const role = isAdmin ? (tab === 'internal' ? 'admin' : 'admin') : 'client';
-    await addProjectMessage(project.id, text.trim(), role, tab === 'internal');
+    const role = isAdmin ? 'admin' : 'client';
+    const isInternal = tab === 'internal';
+
+    // Write directly to Firestore so we can attach project context
+    try {
+      const msgData = {
+        text: text.trim(),
+        senderRole: role,
+        senderId: userId,
+        senderName: userName,
+        isInternal,
+        createdAt: serverTimestamp(),
+      };
+      if (activeProjectTag && !isInternal) {
+        msgData.projectId = activeProjectTag.id;
+        msgData.projectTitle = activeProjectTag.title;
+      }
+      await addDoc(collection(db, 'clients', clientId, 'messages'), msgData);
+    } catch (err) {
+      // Fallback to prop function if direct write fails
+      console.error('[WorldClassChat] Direct write failed, falling back:', err);
+      await addClientMessage?.(clientId, text.trim(), role, isInternal);
+    }
+
     setText('');
     setSending(false);
     setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
@@ -384,12 +434,12 @@ export default function WorldClassChat({
     if (!file || !db) return;
     setUploading(true);
     try {
-      const path = `projects/${project.id}/chat/${Date.now()}_${file.name}`;
+      const path = `clients/${clientId}/chat/${Date.now()}_${file.name}`;
       const storageRef = ref(storage, path);
       await uploadBytes(storageRef, file);
       const imageUrl = await getDownloadURL(storageRef);
       const role = isAdmin ? 'admin' : 'client';
-      await addDoc(collection(db, 'projects', project.id, 'messages'), {
+      const msgData = {
         text: '',
         imageUrl,
         senderRole: role,
@@ -397,7 +447,12 @@ export default function WorldClassChat({
         senderName: userName,
         isInternal: tab === 'internal',
         createdAt: serverTimestamp(),
-      });
+      };
+      if (activeProjectTag && tab !== 'internal') {
+        msgData.projectId = activeProjectTag.id;
+        msgData.projectTitle = activeProjectTag.title;
+      }
+      await addDoc(collection(db, 'clients', clientId, 'messages'), msgData);
       setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 150);
     } catch (err) {
       console.error('[Chat] Image upload failed:', err.message);
@@ -408,8 +463,8 @@ export default function WorldClassChat({
 
   // React to message
   const handleReact = async (msgId, emoji) => {
-    if (!db || !project?.id) return;
-    const msgRef = doc(db, 'projects', project.id, 'messages', msgId);
+    if (!db || !clientId) return;
+    const msgRef = doc(db, 'clients', clientId, 'messages', msgId);
     const snap = await getDoc(msgRef);
     if (!snap.exists()) return;
     const data = snap.data();
@@ -419,7 +474,7 @@ export default function WorldClassChat({
     await updateDoc(msgRef, {
       [`reactions.${emoji}`]: already
         ? users.filter(u => u !== userId)
-        : [...users, userId],
+        : [...users, userId]
     });
   };
 
@@ -427,6 +482,40 @@ export default function WorldClassChat({
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height, fontFamily: 'Inter, sans-serif' }}>
+
+      {/* ── Project filter bar (shown when client has >1 project) ── */}
+      {hasMultipleProjects && tab === 'client' && (
+        <div style={{ display: 'flex', gap: 6, paddingBottom: 10, flexShrink: 0, flexWrap: 'wrap' }}>
+          <button
+            onClick={() => setProjectFilter(null)}
+            style={{
+              height: 28, padding: '0 12px', borderRadius: 20,
+              border: `1.5px solid ${!projectFilter ? ac : 'rgba(var(--ac-rgb),0.15)'}`,
+              background: !projectFilter ? ac : 'transparent',
+              color: !projectFilter ? '#fff' : 'var(--muted)',
+              fontSize: 11, fontWeight: 700, cursor: 'pointer', transition: 'all .15s',
+            }}
+          >
+            All Messages
+          </button>
+          {projects.map(p => (
+            <button
+              key={p.id}
+              onClick={() => setProjectFilter(projectFilter === p.id ? null : p.id)}
+              style={{
+                height: 28, padding: '0 12px', borderRadius: 20,
+                border: `1.5px solid ${projectFilter === p.id ? ac : 'rgba(var(--ac-rgb),0.15)'}`,
+                background: projectFilter === p.id ? ac : 'transparent',
+                color: projectFilter === p.id ? '#fff' : 'var(--muted)',
+                fontSize: 11, fontWeight: 700, cursor: 'pointer', transition: 'all .15s',
+                display: 'flex', alignItems: 'center', gap: 4,
+              }}
+            >
+              <Folder size={10} />#{p.title}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* ── Tab bar (admin only) ── */}
       {isAdmin && (
@@ -467,12 +556,14 @@ export default function WorldClassChat({
               {tab === 'internal' ? <Lock size={22} color={ac} opacity={0.4} /> : <MessageSquare size={22} color={ac} opacity={0.4} />}
             </div>
             <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--fg)', marginBottom: 6 }}>
-              {tab === 'internal' ? 'No internal notes yet' : 'Start the conversation'}
+              {tab === 'internal' ? 'No internal notes yet' : projectFilter ? `No messages tagged to this project yet` : 'Start the conversation'}
             </div>
             <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.6, maxWidth: 240 }}>
               {tab === 'internal'
                 ? 'Leave notes for your team. Clients cannot see these.'
-                : 'Have a question about your project? Send a message and the team will respond shortly.'}
+                : projectFilter
+                  ? 'Messages tagged to this project will appear here.'
+                  : 'Have a question about your project? Send a message and the team will respond shortly.'}
             </div>
           </div>
         )}
@@ -519,6 +610,43 @@ export default function WorldClassChat({
         }}>
           <ChevronDown size={14} /> {unreadCount} new
         </button>
+      )}
+
+      {/* ── Project tag selector (above input, shown when client has >1 project) ── */}
+      {hasMultipleProjects && tab === 'client' && (
+        <div style={{ flexShrink: 0, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', display: 'flex', alignItems: 'center', gap: 4 }}>
+            <Tag size={11} /> Tag:
+          </span>
+          <button
+            onClick={() => setActiveProjectTag(null)}
+            style={{
+              height: 24, padding: '0 10px', borderRadius: 20,
+              border: `1.5px solid ${!activeProjectTag ? ac : 'rgba(var(--ac-rgb),0.15)'}`,
+              background: !activeProjectTag ? `${ac}15` : 'transparent',
+              color: !activeProjectTag ? ac : 'var(--muted)',
+              fontSize: 10, fontWeight: 700, cursor: 'pointer', transition: 'all .15s',
+            }}
+          >
+            No tag
+          </button>
+          {projects.map(p => (
+            <button
+              key={p.id}
+              onClick={() => setActiveProjectTag(activeProjectTag?.id === p.id ? null : p)}
+              style={{
+                height: 24, padding: '0 10px', borderRadius: 20,
+                border: `1.5px solid ${activeProjectTag?.id === p.id ? ac : 'rgba(var(--ac-rgb),0.15)'}`,
+                background: activeProjectTag?.id === p.id ? `${ac}15` : 'transparent',
+                color: activeProjectTag?.id === p.id ? ac : 'var(--muted)',
+                fontSize: 10, fontWeight: 700, cursor: 'pointer', transition: 'all .15s',
+                display: 'flex', alignItems: 'center', gap: 3,
+              }}
+            >
+              <Folder size={9} />#{p.title}
+            </button>
+          ))}
+        </div>
       )}
 
       {/* ── Input bar ── */}

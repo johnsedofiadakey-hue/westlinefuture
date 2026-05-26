@@ -451,17 +451,19 @@ function printSignedContractDoc(project, user, brand) {
   <div class="content">
 
     <!-- HEADER -->
-    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-top:20px;margin-bottom:32px;padding-bottom:20px;border-bottom:2px solid ${theme.accent};">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-top:20px;margin-bottom:32px;padding:24px;border-radius:12px;background:${theme.primary};color:${theme.bg};">
       <div style="display:flex;align-items:center;gap:20px;">
-        ${logoHtml}
+        <div style="background:rgba(255,255,255,0.1);padding:12px;border-radius:8px;">
+          ${logoHtml.replace(`color:${theme.primary}`, `color:${theme.bg}`).replace(`color:${theme.secondary}`, `color:${theme.accent}`)}
+        </div>
         <div>
-          <div style="font-size:18px;font-weight:800;color:${theme.primary};letter-spacing:1px;text-transform:uppercase;">${co}</div>
-          <div style="font-size:10px;color:${theme.secondary};margin-top:2px;letter-spacing:1px;text-transform:uppercase;">${addr}</div>
+          <div style="font-size:18px;font-weight:800;color:${theme.bg};letter-spacing:1px;text-transform:uppercase;">${co}</div>
+          <div style="font-size:10px;color:${theme.accent};margin-top:2px;letter-spacing:1px;text-transform:uppercase;">${addr}</div>
         </div>
       </div>
       <div style="text-align:right;">
-        <div style="font-size:24px;font-weight:400;letter-spacing:1px;text-transform:uppercase;color:${theme.primary};margin-bottom:6px;">CONTRACT AGREEMENT</div>
-        <div style="display:inline-block;background:#16A34A;color:${theme.bg};padding:3px 10px;border-radius:4px;font-size:11px;font-weight:700;letter-spacing:1px;">STATUS: SIGNED & SECURED</div>
+        <div style="font-size:24px;font-weight:400;letter-spacing:1px;text-transform:uppercase;color:${theme.bg};margin-bottom:6px;">CONTRACT AGREEMENT</div>
+        <div style="display:inline-block;background:#16A34A;color:#fff;padding:3px 10px;border-radius:4px;font-size:11px;font-weight:700;letter-spacing:1px;">STATUS: SIGNED & SECURED</div>
       </div>
     </div>
 
@@ -499,18 +501,23 @@ function printSignedContractDoc(project, user, brand) {
 
     <div style="padding:14px 18px;border:1px solid ${theme.accent};border-radius:6px;background:${theme.surface};margin-bottom:24px;">
       <div style="font-size:9px;text-transform:uppercase;letter-spacing:1px;color:${theme.secondary};font-weight:800;margin-bottom:4px;">Scope of Project</div>
-      <div style="font-size:14px;font-weight:800;color:${theme.primary};text-transform:uppercase;">${project.title || 'Premium Architectural Glass Project'}</div>
+      <div style="font-size:14px;font-weight:800;color:${theme.primary};text-transform:uppercase;">${project.title || 'Premium Architectural Project'}</div>
+      <div style="font-size:12px;color:${theme.textMuted};margin-top:4px;"><strong>Details:</strong> ${project.description || 'Project execution and delivery as outlined in the accepted quotation.'}</div>
       <div style="font-size:12px;color:${theme.textMuted};margin-top:4px;">Target Completion Date: <strong>${estCompletion}</strong></div>
     </div>
 
-    <h2>Standard Contractual Conditions</h2>
-    <ol>
-      <li><strong>Scope of Work:</strong> Contractor agrees to manufacture, fabricate, supply, and install custom high-end premium structural glass fittings, frameless balustrades, or specialized glass components in accordance with final approved technical designs in the design vault.</li>
-      <li><strong>Payment Terms:</strong> Works shall commence upon execution of this contract and clearing of the 50% mobilization deposit (GHS ${(budget * 0.5).toLocaleString(undefined, { minimumFractionDigits: 2 })}). The remaining 50% balance (GHS ${(budget * 0.5).toLocaleString(undefined, { minimumFractionDigits: 2 })}) is due upon completion of site installation and final inspection.</li>
-      <li><strong>Installation and Access:</strong> The Client shall provide adequate, safe, and clean working space for the Contractor's installers on the site. All field inspections are geo-fenced and locked to site coordinates for absolute quality assurance.</li>
-      <li><strong>Warranty Policy:</strong> Contractor provides a 12-month limited warranty on the structural alignment and architectural grade silicone sealant components. Glass breakage due to external physical impact, force majeure, or site modifications after handover is excluded.</li>
-      <li><strong>Governing Law:</strong> This agreement and all subsequent performance evaluations are governed by the laws of the Republic of Ghana.</li>
-    </ol>
+    <h2>Contractual Conditions</h2>
+    ${project.contractTerms ? 
+      `<div style="font-size:12px;color:${theme.textMuted};line-height:1.6;margin-bottom:10px;">${project.contractTerms.replace(/\\n/g, '<br/>')}</div>` 
+      : 
+      `<ol>
+        <li><strong>Scope of Work:</strong> Contractor agrees to manufacture, fabricate, supply, and install custom high-end premium products in accordance with final approved technical designs in the design vault and the details specified above.</li>
+        <li><strong>Payment Terms:</strong> Works shall commence upon execution of this contract and clearing of the 50% mobilization deposit (GHS ${(budget * 0.5).toLocaleString(undefined, { minimumFractionDigits: 2 })}). The remaining 50% balance (GHS ${(budget * 0.5).toLocaleString(undefined, { minimumFractionDigits: 2 })}) is due upon completion of site installation and final inspection.</li>
+        <li><strong>Installation and Access:</strong> The Client shall provide adequate, safe, and clean working space for the Contractor's installers on the site. All field inspections are geo-fenced and locked to site coordinates for absolute quality assurance.</li>
+        <li><strong>Warranty Policy:</strong> Contractor provides a 12-month limited warranty on the structural alignment and architectural grade silicone sealant components. Glass breakage due to external physical impact, force majeure, or site modifications after handover is excluded.</li>
+        <li><strong>Governing Law:</strong> This agreement and all subsequent performance evaluations are governed by the laws of the Republic of Ghana.</li>
+      </ol>`
+    }
 
     <h2>Electronic Execution & Verification Log</h2>
     <div style="display:grid;grid-template-columns:1.5fr 1fr;gap:32px;margin-top:16px;">
@@ -522,16 +529,16 @@ function printSignedContractDoc(project, user, brand) {
         <div style="font-size:11px;color:${theme.textMuted};margin-top:2px;">Authentication Protocol: <strong>Dual-Factor Carrier SMS OTP</strong></div>
         <div style="font-size:11px;color:${theme.textMuted};margin-top:2px;">IP Reference Log: <strong>${project.quoteVerificationStamp?.ipAddress || 'client-portal-secure'}</strong></div>
       </div>
-      <div style="display:flex;flex-direction:column;justify-content:space-between;padding:16px;border:1px solid ${theme.accent}60;border-radius:8px;">
+      <div style="display:flex;flex-direction:column;justify-content:space-between;padding:16px;border:1px solid ${theme.accent}60;border-radius:8px;background:${theme.surface}30;">
         <div>
           <div style="font-size:9px;text-transform:uppercase;letter-spacing:1px;color:${theme.secondary};font-weight:800;margin-bottom:12px;">Contractor Sign-off</div>
           <div style="height:60px;margin-top:8px;margin-bottom:8px;display:flex;align-items:center;justify-content:center;">
-            <div style="font-family:'Georgia',serif;font-size:24px;font-style:italic;color:${theme.secondary};letter-spacing:2px;font-weight:bold;text-decoration:underline;">Westline Future</div>
+            <div style="font-family:'Georgia',serif;font-size:24px;font-style:italic;color:${theme.secondary};letter-spacing:2px;font-weight:bold;text-decoration:none;">${brand?.adminSignatureName || brand?.name || 'Westline Future'}</div>
           </div>
         </div>
         <div>
           <div style="font-size:13px;font-weight:800;color:${theme.primary};">Authorized Representative</div>
-          <div style="font-size:11px;color:${theme.textMuted};margin-top:2px;">Westline Future Ltd.</div>
+          <div style="font-size:11px;color:${theme.textMuted};margin-top:2px;">${brand?.name || 'Westline Future Ltd.'}</div>
           <div style="font-size:10px;color:${theme.textMuted};margin-top:2px;">Date: ${signedDate}</div>
         </div>
       </div>
@@ -2849,6 +2856,41 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
 
   const [projectsError, setProjectsError] = useState(null);
 
+  // Intercept Hubtel Payment Returns
+  const [verifyingPayment, setVerifyingPayment] = useState(false);
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const clientRef = params.get('verifyHubtel');
+    const checkoutId = params.get('checkoutId'); // From Hubtel
+    const pId = params.get('projectId');
+    const invId = params.get('invoiceId');
+    const pType = params.get('type');
+    const pAmt = params.get('amount');
+
+    if (clientRef && pId && !verifyingPayment) {
+      setVerifyingPayment(true);
+      setNotifToast('Verifying payment... Please wait.');
+      const verify = httpsCallable(functions, 'verifyHubtelPayment');
+      verify({
+        clientReference: clientRef,
+        checkoutId: checkoutId,
+        projectId: pId,
+        invoiceId: invId === 'undefined' ? null : invId,
+        type: pType || 'payment',
+        expectedAmountGHS: Number(pAmt)
+      }).then(() => {
+        setNotifToast('Payment verified successfully!');
+        window.history.replaceState({}, document.title, window.location.pathname);
+        setVerifyingPayment(false);
+      }).catch(err => {
+        console.error('Verify failed:', err);
+        setNotifToast('Payment received but verification failed. Ref: ' + clientRef);
+        window.history.replaceState({}, document.title, window.location.pathname);
+        setVerifyingPayment(false);
+      });
+    }
+  }, [verifyingPayment]);
+
   // Subscribe to projects for this client.
   // We skip orderBy to avoid needing a composite index (sort in JS instead).
   // We try multiple possible clientId formats via 'in' to handle any phone format mismatch.
@@ -2886,7 +2928,11 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
           });
         setProjects(mine);
         setProjectsError(null);
-        if (mine.length > 0 && !selectedId) setSelectedId(mine[0].id);
+        setSelectedId(prev => {
+          if (!prev && mine.length > 0) return mine[0].id;
+          if (prev && mine.length > 0 && !mine.find(p => p.id === prev)) return mine[0].id;
+          return prev;
+        });
         setLoadingProjects(false);
       },
       err => {
@@ -2903,6 +2949,29 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
   const activeCount = projects.filter(p => p.status !== 'Completed').length;
   const completedCount = projects.filter(p => p.status === 'Completed').length;
 
+  // Track unread messages for the client
+  const [totalUnread, setTotalUnread] = useState(0);
+  useEffect(() => {
+    if (!db || !user?.id) return;
+    const unsub = onSnapshot(collection(db, 'clients', user.id, 'messages'), snap => {
+      const unread = snap.docs.filter(d => {
+        const m = d.data();
+        return !m.isInternal && m.senderRole !== 'client' && !m.readByClient;
+      }).length;
+      setTotalUnread(unread);
+    });
+    return unsub;
+  }, [user?.id]);
+
+  const prevUnreadRef = useRef(0);
+  useEffect(() => {
+    if (totalUnread > prevUnreadRef.current) {
+      if (props.playNotificationSound) props.playNotificationSound();
+      if (props.notify) props.notify('info', 'You have a new message', 'persistent');
+    }
+    prevUnreadRef.current = totalUnread;
+  }, [totalUnread, props.playNotificationSound, props.notify]);
+
   // Auto-show review modal for completed projects
   const showReviewModal =
     selected &&
@@ -2917,8 +2986,7 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
     { id: 'photos',    label: 'Photos',    icon: <Camera size={14} /> },
     { id: 'payments',  label: 'Payments',  icon: <CreditCard size={14} /> },
     { id: 'addons',    label: 'Add-ons', icon: <Gift size={14} /> },
-    { id: 'documents', label: 'Documents', icon: <FileText size={14} /> },
-    { id: 'messages',  label: 'Messages',  icon: <MessageSquare size={14} /> },
+    { id: 'documents', label: 'Documents', icon: <FileText size={14} /> }
   ];
 
   const handleLogout = () => {
@@ -2992,6 +3060,14 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
             )}
             <span style={{ fontSize: 13, color: 'rgba(255,255,255,.3)', fontWeight: 300 }}>|</span>
             <span style={{ fontSize: 13, color: 'rgba(255,255,255,.6)', fontWeight: 500 }}>Client Portal</span>
+            
+            <div style={{ marginLeft: 32, display: 'flex', gap: 24, alignItems: 'center' }}>
+              <button onClick={() => setActiveTab('dashboard')} style={{ background: 'none', border: 'none', color: activeTab !== 'messages' ? '#fff' : 'rgba(255,255,255,.6)', fontWeight: 700, fontSize: 13, cursor: 'pointer', padding: 0 }}>Dashboard</button>
+              <button onClick={() => setActiveTab('messages')} style={{ position: 'relative', background: 'none', border: 'none', color: activeTab === 'messages' ? '#fff' : 'rgba(255,255,255,.6)', fontWeight: 700, fontSize: 13, cursor: 'pointer', padding: 0 }}>
+                Messages
+                {totalUnread > 0 && <span style={{ position: 'absolute', top: -6, right: -16, background: '#EF4444', color: '#fff', fontSize: 9, fontWeight: 800, padding: '1px 5px', borderRadius: 10 }}>{totalUnread}</span>}
+              </button>
+            </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
             <ClientNotificationBell notifications={props.userNotifications || []} onMarkRead={props.markNotificationRead} ac={ac} />
@@ -3022,13 +3098,36 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
         )}
 
         {/* ── MOBILE REFERRAL CARD ── */}
-        {isMobile && user && !loadingProjects && projects.length > 0 && (
+        {isMobile && user && !loadingProjects && projects.length > 0 && activeTab !== 'messages' && (
           <div style={{ marginBottom: 16, marginTop: 4 }}>
             <ReferralCard user={user} ac={ac} />
           </div>
         )}
 
-        {loadingProjects ? (
+        {activeTab === 'messages' ? (
+          <div style={{
+            padding: isMobile ? '20px 18px' : '24px 28px', background: '#fff',
+            borderRadius: isMobile ? 24 : 20,
+            border: isMobile ? 'none' : '1px solid var(--border-color)',
+            boxShadow: isMobile ? '0 2px 16px rgba(0,0,0,.08)' : '0 4px 20px rgba(0,0,0,.05)',
+            height: isMobile ? 'calc(100dvh - 220px)' : 'calc(100vh - 220px)',
+            minHeight: isMobile ? 320 : 500,
+            display: 'flex', flexDirection: 'column',
+          }}>
+            <div style={{ fontSize: 15, fontWeight: 800, color: `var(--accent-secondary)`, marginBottom: 16, flexShrink: 0 }}>Messages</div>
+            <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+              <WorldClassChat
+                clientId={user.id}
+                user={user}
+                accentColor={ac}
+                addClientMessage={props.addClientMessage}
+                isAdmin={false}
+                height="100%"
+                projects={projects.map(p => ({ id: p.id, title: p.title }))}
+              />
+            </div>
+          </div>
+        ) : loadingProjects ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginTop: isMobile ? 16 : 0 }}>
             {[1, 2, 3].map(i => (
               <div key={i} style={{ height: i === 1 ? 140 : 80, borderRadius: isMobile ? 24 : 20, background: '#fff', animation: 'pulse 1.5s infinite', animationDelay: `${i * 0.15}s`, boxShadow: isMobile ? '0 2px 12px rgba(0,0,0,.06)' : 'none' }} />
@@ -3129,6 +3228,15 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
                         }}
                       >
                         {t.icon}{t.label}
+                        {t.id === 'messages' && totalUnread > 0 && (
+                          <div style={{
+                            background: '#EF4444', color: '#fff', fontSize: 10, fontWeight: 800,
+                            height: 18, minWidth: 18, borderRadius: 9, padding: '0 4px',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center'
+                          }}>
+                            {totalUnread}
+                          </div>
+                        )}
                       </button>
                     ))}
                   </div>
@@ -3239,6 +3347,7 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
                     brand={props.brand}
                     renderingPackages={props.renderingPackages || []}
                     invoices={props.invoices || []}
+                    finSettings={props.brand?.finSettings || {}}
                   />
                 )}
 
@@ -3294,31 +3403,6 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
                   </div>
                 )}
 
-                {/* ── MESSAGES TAB ── */}
-                {activeTab === 'messages' && (
-                  <div style={{
-                    padding: isMobile ? '20px 18px' : '24px 28px', background: '#fff',
-                    borderRadius: isMobile ? 24 : 20,
-                    border: isMobile ? 'none' : '1px solid var(--border-color)',
-                    boxShadow: isMobile ? '0 2px 16px rgba(0,0,0,.08)' : '0 4px 20px rgba(0,0,0,.05)',
-                    height: isMobile ? 'calc(100dvh - 320px)' : 560,
-                    minHeight: isMobile ? 320 : undefined,
-                    display: 'flex', flexDirection: 'column',
-                  }}>
-                    <div style={{ fontSize: 15, fontWeight: 800, color: `var(--accent-secondary)`, marginBottom: 16, flexShrink: 0 }}>Messages</div>
-                    <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-                      <WorldClassChat
-                        project={selected}
-                        user={user}
-                        accentColor={selected?.brandColor || 'var(--accent-secondary)'}
-                        addProjectMessage={props.addProjectMessage}
-                        isAdmin={false}
-                        height="100%"
-                      />
-                    </div>
-                  </div>
-                )}
-
               </div>
             )}
           </div>
@@ -3371,7 +3455,21 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
                   color: active ? ac : '#8E8880',
                   transition: 'color .18s',
                   letterSpacing: '-.01em',
-                }}>{t.label}</span>
+                  letterSpacing: '-.01em',
+                }}>
+                  {t.label}
+                  {t.id === 'messages' && totalUnread > 0 && (
+                    <div style={{
+                      position: 'absolute', top: 2, right: '50%', marginRight: -18,
+                      background: '#EF4444', color: '#fff', fontSize: 9, fontWeight: 800,
+                      height: 16, minWidth: 16, borderRadius: 8, padding: '0 4px',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      boxShadow: '0 0 0 2px rgba(250,248,245,0.88)'
+                    }}>
+                      {totalUnread}
+                    </div>
+                  )}
+                </span>
               </button>
             );
           })}

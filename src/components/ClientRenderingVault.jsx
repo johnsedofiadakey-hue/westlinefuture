@@ -1,11 +1,23 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Lock, FileText, Download, CheckCircle2, AlertCircle, Send, X, PlusCircle, Trash2, Check } from 'lucide-react';
+import {
+  Lock, FileText, Download, CheckCircle2, AlertCircle, Send, X,
+  PlusCircle, Trash2, Check, Banknote, Building2, Smartphone, Clock, Info
+} from 'lucide-react';
 import { db } from '../lib/firebase';
-import { updateDoc, doc, collection, addDoc, onSnapshot, query, orderBy, serverTimestamp, deleteDoc } from 'firebase/firestore';
+import {
+  updateDoc, doc, collection, addDoc, onSnapshot, query, orderBy,
+  serverTimestamp, deleteDoc
+} from 'firebase/firestore';
 import UnifiedPaymentGateway from './UnifiedPaymentGateway';
 import blueprintImg from '../assets/architectural_blueprint.png';
 
-export default function ClientRenderingVault({ project, brand, renderingPackages = [], invoices = [] }) {
+export default function ClientRenderingVault({
+  project,
+  brand,
+  renderingPackages = [],
+  invoices = [],
+  finSettings = {},
+}) {
   const ac = brand?.color || 'var(--accent-secondary)';
   const projectPackages = renderingPackages.filter(r => r.projectId === project?.id);
   const parseAmount = (value) => parseFloat(String(value || '0').replace(/[^0-9.]/g, '')) || 0;
@@ -18,6 +30,11 @@ export default function ClientRenderingVault({ project, brand, renderingPackages
   const [selectedCoords, setSelectedCoords] = useState(null);
   const [submittingPin, setSubmittingPin] = useState(false);
 
+  // Payment method selection per package: { [pkgId]: 'hubtel' | 'bank' | 'offline' | null }
+  const [payMethodMap, setPayMethodMap] = useState({});
+  // Offline/bank transfer submitting state per package
+  const [paySubmitting, setPaySubmitting] = useState({});
+
   // Sync markups in real-time
   useEffect(() => {
     if (!db || !project?.id) return;
@@ -28,25 +45,64 @@ export default function ClientRenderingVault({ project, brand, renderingPackages
     const unsub = onSnapshot(q, (snap) => {
       setMarkups(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     }, (err) => {
-      console.error("[ClientRenderingVault] Sync markups failed:", err);
+      console.error('[ClientRenderingVault] Sync markups failed:', err);
     });
     return unsub;
   }, [project?.id]);
 
+  // ── Post a system message to the client chat thread ──────────────────────
+  const postSystemMessage = async (text) => {
+    if (!db || !project?.clientId) return;
+    try {
+      await addDoc(collection(db, 'clients', project.clientId, 'messages'), {
+        text,
+        senderRole: 'system',
+        isInternal: false,
+        readByAdmin: false,
+        readByClient: true,
+        createdAt: serverTimestamp(),
+      });
+    } catch (err) {
+      console.error('[ClientRenderingVault] postSystemMessage failed:', err);
+    }
+  };
+
   const handleApprove = async (pkg) => {
     try {
       await updateDoc(doc(db, 'renderingPackages', pkg.id), { status: 'Approved' });
+      await postSystemMessage(
+        `✅ ${project.clientName || 'Client'} approved the design rendering "${pkg.title}". The project is cleared to proceed.`
+      );
     } catch (e) {
       console.error(e);
     }
   };
 
+  // ── Non-Hubtel payment submission ──────────────────────────────────────────
+  const handleOfflinePaymentSubmit = async (pkg, linkedInv, method) => {
+    if (!linkedInv) return;
+    setPaySubmitting(prev => ({ ...prev, [pkg.id]: true }));
+    try {
+      await updateDoc(doc(db, 'invoices', linkedInv.id), {
+        awaitingConfirmation: true,
+        paymentMethodSubmitted: method,
+        paymentSubmittedAt: serverTimestamp(),
+      });
+      const methodLabel = method === 'bank' ? 'bank transfer' : 'offline/in-person payment';
+      await postSystemMessage(
+        `💳 ${project.clientName || 'Client'} submitted a ${methodLabel} for the rendering fee invoice "${linkedInv.invoiceNumber || 'INV'}" — ${linkedInv.currency || 'GHS'} ${parseAmount(linkedInv.amount || linkedInv.total).toLocaleString()}. Awaiting admin confirmation.`
+      );
+    } catch (err) {
+      console.error('[ClientRenderingVault] Offline payment submit failed:', err);
+    } finally {
+      setPaySubmitting(prev => ({ ...prev, [pkg.id]: false }));
+    }
+  };
+
   const handleImageClick = (e, pkg) => {
-    // Only allow pinning if the drawing is unlocked/active
     const rect = e.currentTarget.getBoundingClientRect();
     const x = ((e.clientX - rect.left) / rect.width) * 100;
     const y = ((e.clientY - rect.top) / rect.height) * 100;
-
     setSelectedCoords({ x, y, packageId: pkg.id });
     setNewPinText('');
     setShowPinModal(true);
@@ -68,32 +124,42 @@ export default function ClientRenderingVault({ project, brand, renderingPackages
         createdAt: serverTimestamp()
       });
 
-      // Update package revision log
       const pkg = projectPackages.find(p => p.id === selectedCoords.packageId);
+      const newRevCount = (pkg?.usedRevisions || 0) + 1;
       if (pkg) {
         await updateDoc(doc(db, 'renderingPackages', pkg.id), {
           status: 'Changes Requested',
-          usedRevisions: (pkg.usedRevisions || 0) + 1
+          usedRevisions: newRevCount
         });
       }
+
+      // ── HARD FREEZE: set changeRequestPending on the project ──────────────
+      await updateDoc(doc(db, 'projects', project.id), {
+        changeRequestPending: true,
+      });
+
+      // ── System message for audit trail ────────────────────────────────────
+      await postSystemMessage(
+        `📌 ${project.clientName || 'Client'} requested changes on the rendering "${pkg?.title || 'design'}" — pin #${newRevCount} placed. Project is on hold pending revision.`
+      );
 
       setShowPinModal(false);
       setSelectedCoords(null);
       setNewPinText('');
     } catch (err) {
-      console.error("[ClientRenderingVault] Failed to save pin:", err);
+      console.error('[ClientRenderingVault] Failed to save pin:', err);
     } finally {
       setSubmittingPin(false);
     }
   };
 
   const handleDeletePin = async (pinId) => {
-    if (!window.confirm("Are you sure you want to remove this feedback pin?")) return;
+    if (!window.confirm('Are you sure you want to remove this feedback pin?')) return;
     try {
       await deleteDoc(doc(db, 'projects', project.id, 'markups', pinId));
       setActivePin(null);
     } catch (err) {
-      console.error("[ClientRenderingVault] Delete pin failed:", err);
+      console.error('[ClientRenderingVault] Delete pin failed:', err);
     }
   };
 
@@ -116,42 +182,231 @@ export default function ClientRenderingVault({ project, brand, renderingPackages
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div className="lxfh" style={{ fontSize: 18, marginBottom: 8 }}>Design Vault</div>
+
       {projectPackages.map(pkg => {
         const linkedInv = invoices.find(i => i.id === pkg.linkedInvoiceId || i.renderingPackageId === pkg.id);
         const isUnlocked = pkg.unlocked || pkg.status === 'Paid / Unlocked' || (linkedInv && linkedInv.status === 'Paid');
-        
+        const isAwaitingConfirmation = linkedInv?.awaitingConfirmation === true;
+        const selectedMethod = payMethodMap[pkg.id] || null;
+
+        // ── LOCKED SCREEN ───────────────────────────────────────────────────
         if (!isUnlocked) {
+          const invAmount = parseAmount(linkedInv?.amount || linkedInv?.total);
+          const invCurrency = linkedInv?.currency || 'GHS';
+
           return (
-            <div key={pkg.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 40, background: '#fff', border: '1px solid var(--border-color)', borderRadius: 16, textAlign: 'center' }}>
-              <div style={{ width: 64, height: 64, borderRadius: 20, background: '#FFFBEB', color: '#F59E0B', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
-                <Lock size={32} />
-              </div>
-              <div className="lxfh" style={{ fontSize: 16, fontWeight: 800 }}>{pkg.title}</div>
-              <div style={{ fontSize: 13, color: 'var(--text-secondary)', maxWidth: 400, marginTop: 8, lineHeight: 1.5 }}>
-                This design package is securely locked. Please settle the associated rendering fee invoice to instantly unlock your 3D/CAD files.
-              </div>
-              {linkedInv && (
-                <div style={{ marginTop: 20, width: '100%', maxWidth: 280 }}>
-                  <UnifiedPaymentGateway
-                    label={`Pay ${linkedInv.currency || 'GHS'} ${parseAmount(linkedInv.amount || linkedInv.total).toLocaleString()}`}
-                    amountGHS={parseAmount(linkedInv.amount || linkedInv.total)}
-                    email={project.clientEmail || 'client@clients.westlinefuture.com'}
-                    projectId={project.id}
-                    invoiceId={linkedInv.id}
-                    paymentType="invoice"
-                  />
+            <div key={pkg.id} style={{ background: '#fff', border: '1px solid var(--border-color)', borderRadius: 20, overflow: 'hidden' }}>
+
+              {/* Header */}
+              <div style={{ padding: '24px 28px', borderBottom: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', gap: 16 }}>
+                <div style={{ width: 52, height: 52, borderRadius: 16, background: '#FFFBEB', color: '#F59E0B', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <Lock size={26} />
                 </div>
-              )}
+                <div>
+                  <div className="lxfh" style={{ fontSize: 16, fontWeight: 800 }}>{pkg.title}</div>
+                  <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 4, lineHeight: 1.5 }}>
+                    This design package is locked. Pay the rendering fee to instantly unlock your 3D/CAD files.
+                  </div>
+                </div>
+              </div>
+
+              {/* Body */}
+              <div style={{ padding: '24px 28px' }}>
+                {!linkedInv ? (
+                  // No invoice yet — admin hasn't created it
+                  <div style={{ textAlign: 'center', padding: '24px 0' }}>
+                    <Clock size={32} color="var(--text-secondary)" style={{ marginBottom: 12 }} />
+                    <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--accent-secondary)', marginBottom: 6 }}>Invoice Not Yet Issued</div>
+                    <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>The team is preparing your rendering fee invoice. You'll be notified once it's ready to pay.</div>
+                  </div>
+
+                ) : isAwaitingConfirmation ? (
+                  // Payment submitted — waiting for admin confirmation
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16, padding: '20px 0', textAlign: 'center' }}>
+                    <div style={{ width: 56, height: 56, borderRadius: '50%', background: '#EFF6FF', color: '#3B82F6', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <Clock size={28} />
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--accent-secondary)', marginBottom: 6 }}>Payment Submitted</div>
+                      <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6, maxWidth: 360 }}>
+                        Your payment has been submitted and is awaiting confirmation from the team. Your rendering will unlock automatically once confirmed.
+                      </div>
+                    </div>
+                    <div style={{ fontSize: 12, fontWeight: 700, padding: '8px 20px', borderRadius: 20, background: '#EFF6FF', color: '#3B82F6' }}>
+                      Awaiting Admin Confirmation
+                    </div>
+                  </div>
+
+                ) : !selectedMethod ? (
+                  // Payment method selector
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                      <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--accent-secondary)' }}>Select Payment Method</div>
+                      <div style={{ fontSize: 14, fontWeight: 800, color: ac, background: `${ac}15`, padding: '4px 12px', borderRadius: 20 }}>
+                        {invCurrency} {invAmount.toLocaleString()}
+                      </div>
+                    </div>
+
+                    {/* Hubtel / Mobile Money */}
+                    <button
+                      onClick={() => setPayMethodMap(prev => ({ ...prev, [pkg.id]: 'hubtel' }))}
+                      style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '16px 20px', border: '1.5px solid var(--border-color)', borderRadius: 14, background: '#FCFAF7', cursor: 'pointer', textAlign: 'left', transition: 'all 0.2s' }}
+                      onMouseEnter={e => { e.currentTarget.style.borderColor = ac; e.currentTarget.style.background = `${ac}08`; }}
+                      onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border-color)'; e.currentTarget.style.background = '#FCFAF7'; }}
+                    >
+                      <div style={{ width: 44, height: 44, borderRadius: 12, background: '#FFF3E0', color: '#F57C00', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                        <Smartphone size={22} />
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--accent-secondary)' }}>Mobile Money (Hubtel)</div>
+                        <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>Instant payment via MTN MoMo, Vodafone, or AirtelTigo</div>
+                      </div>
+                    </button>
+
+                    {/* Bank Transfer */}
+                    <button
+                      onClick={() => setPayMethodMap(prev => ({ ...prev, [pkg.id]: 'bank' }))}
+                      style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '16px 20px', border: '1.5px solid var(--border-color)', borderRadius: 14, background: '#FCFAF7', cursor: 'pointer', textAlign: 'left', transition: 'all 0.2s' }}
+                      onMouseEnter={e => { e.currentTarget.style.borderColor = ac; e.currentTarget.style.background = `${ac}08`; }}
+                      onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border-color)'; e.currentTarget.style.background = '#FCFAF7'; }}
+                    >
+                      <div style={{ width: 44, height: 44, borderRadius: 12, background: '#E8F5E9', color: '#2E7D32', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                        <Building2 size={22} />
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--accent-secondary)' }}>Bank Transfer</div>
+                        <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>Pay directly to our bank account and notify us</div>
+                      </div>
+                    </button>
+
+                    {/* Offline / Cash */}
+                    <button
+                      onClick={() => setPayMethodMap(prev => ({ ...prev, [pkg.id]: 'offline' }))}
+                      style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '16px 20px', border: '1.5px solid var(--border-color)', borderRadius: 14, background: '#FCFAF7', cursor: 'pointer', textAlign: 'left', transition: 'all 0.2s' }}
+                      onMouseEnter={e => { e.currentTarget.style.borderColor = ac; e.currentTarget.style.background = `${ac}08`; }}
+                      onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border-color)'; e.currentTarget.style.background = '#FCFAF7'; }}
+                    >
+                      <div style={{ width: 44, height: 44, borderRadius: 12, background: '#F3E5F5', color: '#7B1FA2', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                        <Banknote size={22} />
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--accent-secondary)' }}>Cash / In-Person</div>
+                        <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>Pay at our office or through a courier</div>
+                      </div>
+                    </button>
+                  </div>
+
+                ) : selectedMethod === 'hubtel' ? (
+                  // Hubtel / mobile money flow
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                    <button
+                      onClick={() => setPayMethodMap(prev => ({ ...prev, [pkg.id]: null }))}
+                      style={{ alignSelf: 'flex-start', background: 'none', border: 'none', color: 'var(--text-secondary)', fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, padding: 0 }}
+                    >
+                      ← Back
+                    </button>
+                    <div style={{ display: 'flex', justifyContent: 'center' }}>
+                      <UnifiedPaymentGateway
+                        label={`Pay ${invCurrency} ${invAmount.toLocaleString()} via MoMo`}
+                        amountGHS={invAmount}
+                        email={project.clientEmail || 'client@clients.westlinefuture.com'}
+                        projectId={project.id}
+                        invoiceId={linkedInv.id}
+                        paymentType="invoice"
+                      />
+                    </div>
+                  </div>
+
+                ) : selectedMethod === 'bank' ? (
+                  // Bank transfer flow
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                    <button
+                      onClick={() => setPayMethodMap(prev => ({ ...prev, [pkg.id]: null }))}
+                      style={{ alignSelf: 'flex-start', background: 'none', border: 'none', color: 'var(--text-secondary)', fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, padding: 0 }}
+                    >
+                      ← Back
+                    </button>
+                    <div style={{ padding: '20px 24px', background: '#F0FDF4', border: '1.5px solid #BBF7D0', borderRadius: 14 }}>
+                      <div style={{ fontSize: 13, fontWeight: 800, color: '#15803D', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <Building2 size={15} /> Bank Account Details
+                      </div>
+                      {finSettings.bankDetails ? (
+                        <div style={{ fontSize: 13, color: '#166534', lineHeight: 2, whiteSpace: 'pre-wrap', fontFamily: 'monospace' }}>
+                          {finSettings.bankDetails}
+                        </div>
+                      ) : (
+                        <div style={{ fontSize: 13, color: '#166534' }}>
+                          <div>Contact the team for bank account details.</div>
+                        </div>
+                      )}
+                      <div style={{ marginTop: 12, padding: '10px 14px', background: '#DCFCE7', borderRadius: 10, fontSize: 12, color: '#166534' }}>
+                        <strong>Reference:</strong> {linkedInv?.invoiceNumber || pkg.title} / {project.title}
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '12px 16px', background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 12 }}>
+                      <Info size={15} color="#D97706" style={{ flexShrink: 0, marginTop: 1 }} />
+                      <div style={{ fontSize: 12, color: '#92400E', lineHeight: 1.5 }}>
+                        Once you have made the transfer, click the button below. The team will verify and unlock your rendering within 1 business day.
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => handleOfflinePaymentSubmit(pkg, linkedInv, 'bank')}
+                      disabled={paySubmitting[pkg.id]}
+                      style={{ width: '100%', padding: '14px 20px', borderRadius: 14, border: 'none', background: '#16A34A', color: '#fff', fontSize: 14, fontWeight: 800, cursor: paySubmitting[pkg.id] ? 'default' : 'pointer', opacity: paySubmitting[pkg.id] ? 0.7 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+                    >
+                      <Check size={16} /> {paySubmitting[pkg.id] ? 'Submitting…' : "I've Made the Transfer"}
+                    </button>
+                  </div>
+
+                ) : selectedMethod === 'offline' ? (
+                  // Offline / cash flow
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                    <button
+                      onClick={() => setPayMethodMap(prev => ({ ...prev, [pkg.id]: null }))}
+                      style={{ alignSelf: 'flex-start', background: 'none', border: 'none', color: 'var(--text-secondary)', fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, padding: 0 }}
+                    >
+                      ← Back
+                    </button>
+                    <div style={{ padding: '20px 24px', background: '#FAF5FF', border: '1.5px solid #E9D5FF', borderRadius: 14 }}>
+                      <div style={{ fontSize: 13, fontWeight: 800, color: '#6D28D9', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <Banknote size={15} /> In-Person Payment
+                      </div>
+                      <div style={{ fontSize: 13, color: '#5B21B6', lineHeight: 1.6 }}>
+                        Visit our office or arrange a courier. Please reference your invoice number when paying.
+                      </div>
+                      {finSettings.officeAddress && (
+                        <div style={{ marginTop: 10, fontSize: 12, color: '#7C3AED', fontWeight: 700 }}>
+                          📍 {finSettings.officeAddress}
+                        </div>
+                      )}
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '12px 16px', background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 12 }}>
+                      <Info size={15} color="#D97706" style={{ flexShrink: 0, marginTop: 1 }} />
+                      <div style={{ fontSize: 12, color: '#92400E', lineHeight: 1.5 }}>
+                        Click below to notify the team that you'll be paying in person. The team will confirm receipt and unlock your rendering.
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => handleOfflinePaymentSubmit(pkg, linkedInv, 'offline')}
+                      disabled={paySubmitting[pkg.id]}
+                      style={{ width: '100%', padding: '14px 20px', borderRadius: 14, border: 'none', background: '#7C3AED', color: '#fff', fontSize: 14, fontWeight: 800, cursor: paySubmitting[pkg.id] ? 'default' : 'pointer', opacity: paySubmitting[pkg.id] ? 0.7 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+                    >
+                      <Check size={16} /> {paySubmitting[pkg.id] ? 'Submitting…' : "Notify Team — I'll Pay In Person"}
+                    </button>
+                  </div>
+                ) : null}
+              </div>
             </div>
           );
         }
 
+        // ── UNLOCKED PACKAGE ─────────────────────────────────────────────────
         const packageMarkups = markups.filter(m => m.packageId === pkg.id);
         const displayImage = isImageFile(pkg.fileUrl) ? pkg.fileUrl : blueprintImg;
 
         return (
           <div key={pkg.id} style={{ padding: 24, background: '#fff', border: '1px solid var(--border-color)', borderRadius: 16, display: 'flex', flexDirection: 'column', gap: 20 }}>
-            
+
             {/* Header row */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '1px solid var(--border-color)', paddingBottom: 16 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
@@ -170,13 +425,20 @@ export default function ClientRenderingVault({ project, brand, renderingPackages
               </a>
             </div>
 
+            {/* Change Request Banner */}
+            {project.changeRequestPending && (
+              <div style={{ padding: '12px 16px', background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 12, fontSize: 13, fontWeight: 700, color: '#92400E', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <AlertCircle size={15} color="#D97706" /> Your change request is being reviewed. The project is on hold until the team uploads a revision.
+              </div>
+            )}
+
             {/* Interactive Blueprint / Drawing Area */}
             <div>
               <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--accent-secondary)', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
                 <PlusCircle size={14} color={ac} /> Click anywhere on the drawing layout to place a feedback pin
               </div>
-              
-              <div style={{ 
+
+              <div style={{
                 position: 'relative',
                 width: '100%',
                 borderRadius: 16,
@@ -189,10 +451,10 @@ export default function ClientRenderingVault({ project, brand, renderingPackages
                   src={displayImage}
                   alt={pkg.title}
                   onClick={(e) => handleImageClick(e, pkg)}
-                  style={{ 
-                    width: '100%', 
-                    height: 'auto', 
-                    display: 'block', 
+                  style={{
+                    width: '100%',
+                    height: 'auto',
+                    display: 'block',
                     cursor: 'crosshair',
                     maxHeight: 520,
                     objectFit: 'contain'
@@ -305,7 +567,7 @@ export default function ClientRenderingVault({ project, brand, renderingPackages
         );
       })}
 
-      {/* ── PHASE 3: ADD PIN COMMENT OVERLAY MODAL ── */}
+      {/* ── PIN COMMENT OVERLAY MODAL ── */}
       {showPinModal && selectedCoords && (
         <div
           onClick={() => setShowPinModal(false)}
@@ -329,9 +591,9 @@ export default function ClientRenderingVault({ project, brand, renderingPackages
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div style={{ fontSize: 16, fontWeight: 900, color: 'var(--accent-secondary)' }}>
-                Add Coordinate feedback note
+                Add Coordinate Feedback Note
               </div>
-              <button 
+              <button
                 type="button"
                 onClick={() => setShowPinModal(false)}
                 style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}
@@ -341,7 +603,13 @@ export default function ClientRenderingVault({ project, brand, renderingPackages
             </div>
 
             <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.4 }}>
-              Coordinate placement locked at: <strong style={{ color: 'var(--accent-secondary)' }}>X: {Math.round(selectedCoords.x)}% &middot; Y: {Math.round(selectedCoords.y)}%</strong> on drawing template.
+              Coordinate locked at: <strong style={{ color: 'var(--accent-secondary)' }}>X: {Math.round(selectedCoords.x)}% &middot; Y: {Math.round(selectedCoords.y)}%</strong>
+            </div>
+
+            <div style={{ padding: '10px 14px', background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 10 }}>
+              <div style={{ fontSize: 12, color: '#92400E', lineHeight: 1.5 }}>
+                <strong>⚠ Note:</strong> Placing a pin will put the project on hold until the team addresses your revision.
+              </div>
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -352,7 +620,7 @@ export default function ClientRenderingVault({ project, brand, renderingPackages
                 required
                 value={newPinText}
                 onChange={(e) => setNewPinText(e.target.value)}
-                placeholder="e.g. Please reduce the width of the stainless steel base profile profile here by 10mm..."
+                placeholder="e.g. Please reduce the width of the stainless steel base profile here by 10mm..."
                 rows={3}
                 style={{
                   padding: '12px 16px', borderRadius: 12,
@@ -368,7 +636,6 @@ export default function ClientRenderingVault({ project, brand, renderingPackages
               <button
                 type="button"
                 onClick={() => setShowPinModal(false)}
-                className="p-btn-light"
                 style={{ flex: 1, padding: '10px 16px', background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: 13, fontWeight: 700 }}
               >
                 Cancel
@@ -383,14 +650,13 @@ export default function ClientRenderingVault({ project, brand, renderingPackages
                   opacity: (!newPinText.trim() || submittingPin) ? 0.5 : 1
                 }}
               >
-                {submittingPin ? "Saving Pin..." : "Save Pin Note"}
+                {submittingPin ? 'Saving Pin…' : 'Save Pin Note'}
               </button>
             </div>
           </form>
         </div>
       )}
 
-      {/* Pulsing visual CSS */}
       <style>{`
         @keyframes pingPulse {
           0% { box-shadow: 0 0 0 0 rgba(197, 160, 89, 0.75); }
@@ -400,8 +666,4 @@ export default function ClientRenderingVault({ project, brand, renderingPackages
       `}</style>
     </div>
   );
-}
-
-function isMobileImage(url) {
-  return false;
 }

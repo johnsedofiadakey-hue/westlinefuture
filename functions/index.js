@@ -17,10 +17,8 @@ initializeApp();
 // Secrets — set with: firebase functions:secrets:set SECRET_NAME
 const META_WA_TOKEN = { value: () => process.env.META_WA_TOKEN };
 const META_WA_PHONE_ID = { value: () => process.env.META_WA_PHONE_ID };
-const TWILIO_SID = { value: () => process.env.TWILIO_SID };
-const TWILIO_AUTH_TOKEN = { value: () => process.env.TWILIO_AUTH_TOKEN };
-const TWILIO_FROM_NUMBER = { value: () => process.env.TWILIO_FROM_NUMBER };
-const ARKESEL_API_KEY = { value: () => process.env.ARKESEL_API_KEY };
+const ARKESEL_API_KEY = defineSecret('ARKESEL_API_KEY');
+// Twilio removed — use Meta WhatsApp + Arkesel for all messaging.
 const WA_VERIFY_TOKEN = { value: () => process.env.WA_VERIFY_TOKEN };
 const PAYSTACK_SECRET_KEY = { value: () => process.env.PAYSTACK_SECRET_KEY };
 
@@ -207,6 +205,184 @@ exports.verifyPaystackPayment = onCall(
  * Callable: httpsCallable(functions, 'createStaffAccount')
  * Body: { name, email, password, jobRole }
  */
+// ---------------------------------------------------------------------------
+// START HUBTEL PAYMENT INTEGRATION
+// ---------------------------------------------------------------------------
+exports.initializeHubtelPayment = onCall(
+  { cors: true },
+  async (request) => {
+    if (!request.auth) throw new Error("Authentication required");
+
+    const { amountGHS, email, description, returnUrl, cancellationUrl, clientReference } = request.data || {};
+    if (!amountGHS || !clientReference) throw new Error("amountGHS and clientReference are required");
+
+    const db = getFirestore();
+    let gatewaySettings = {};
+    try {
+      const snap = await db.collection("system_settings").doc("payment_gateways").get();
+      if (snap.exists) gatewaySettings = snap.data();
+    } catch (err) {
+      logger.error("initializeHubtelPayment: Failed to load gateway settings", err.message);
+      throw new Error("Payment gateway configuration error");
+    }
+
+    if (!gatewaySettings.enableHubtel || !gatewaySettings.hubtelClientId || !gatewaySettings.hubtelClientSecret || !gatewaySettings.hubtelMerchantId) {
+      throw new Error("Hubtel payment gateway is not properly configured");
+    }
+
+    const { hubtelClientId, hubtelClientSecret, hubtelMerchantId } = gatewaySettings;
+    const authHeader = `Basic ${Buffer.from(`${hubtelClientId}:${hubtelClientSecret}`).toString('base64')}`;
+
+    try {
+      const resp = await axios.post(
+        "https://payproxyapi.hubtel.com/items/initiate",
+        {
+          totalAmount: amountGHS,
+          description: description || "Westline Future Invoice Payment",
+          callbackUrl: "https://westlinefuture.web.app/api/webhook/hubtel", // We don't necessarily have a webhook yet, but it's required
+          returnUrl: returnUrl || "https://westlinefuture.web.app/portal",
+          cancellationUrl: cancellationUrl || "https://westlinefuture.web.app/portal",
+          merchantAccountNumber: hubtelMerchantId,
+          clientReference: clientReference
+        },
+        { headers: { Authorization: authHeader, "Content-Type": "application/json" } }
+      );
+      
+      // Hubtel returns { status: "Success", data: { checkoutUrl: "..." } }
+      return { success: true, checkoutUrl: resp.data?.data?.checkoutUrl, checkoutId: resp.data?.data?.checkoutId };
+    } catch (err) {
+      logger.error("initializeHubtelPayment error:", err.response?.data || err.message);
+      throw new Error("Could not initialize Hubtel checkout: " + (err.response?.data?.message || err.message));
+    }
+  }
+);
+
+exports.verifyHubtelPayment = onCall(
+  { cors: true },
+  async (request) => {
+    if (!request.auth) throw new Error("Authentication required");
+
+    const { clientReference, projectId, invoiceId, expectedAmountGHS, type = "payment" } = request.data || {};
+    if (!clientReference || !projectId) throw new Error("clientReference and projectId are required");
+
+    const uid = request.auth.uid;
+    await enforceRateLimit(`verifyPayment:${uid}`, 10, 3600);
+
+    const db = getFirestore();
+    let gatewaySettings = {};
+    try {
+      const snap = await db.collection("system_settings").doc("payment_gateways").get();
+      if (snap.exists) gatewaySettings = snap.data();
+    } catch (err) {
+      logger.error("verifyHubtelPayment: Failed to load gateway settings", err.message);
+      throw new Error("Payment gateway configuration error");
+    }
+
+    const { hubtelClientId, hubtelClientSecret } = gatewaySettings;
+    const authHeader = `Basic ${Buffer.from(`${hubtelClientId}:${hubtelClientSecret}`).toString('base64')}`;
+
+    let tx;
+    try {
+      // According to Hubtel API, we can check status via:
+      // GET https://payproxyapi.hubtel.com/items/check-status/{clientReference}
+      const resp = await axios.get(
+        `https://payproxyapi.hubtel.com/items/check-status/${encodeURIComponent(clientReference)}`,
+        { headers: { Authorization: authHeader } }
+      );
+      tx = resp.data?.data;
+    } catch (err) {
+      logger.error("verifyHubtelPayment API error", err.response?.data || err.message);
+      throw new Error("Could not reach Hubtel to verify payment");
+    }
+
+    // Usually Hubtel status is 'Paid' or 'Success' for completed txns
+    if (!tx || (tx.status !== "Paid" && tx.status !== "Success")) {
+      throw new Error(`Payment not confirmed by Hubtel: ${tx?.status || "unknown status"}`);
+    }
+
+    const amountGHS = Number(tx.amount);
+    const txId = `TX-${clientReference}`;
+
+    // ── AMOUNT VALIDATION ────────────────────────────────────────────────────
+    if (expectedAmountGHS && typeof expectedAmountGHS === "number") {
+      const tolerance = expectedAmountGHS * 0.02;
+      if (amountGHS < expectedAmountGHS - tolerance) {
+        throw new Error(`Payment amount mismatch. Expected GHS ${expectedAmountGHS.toFixed(2)} but paid GHS ${amountGHS.toFixed(2)}.`);
+      }
+    }
+
+    // Write verified transaction
+    await db
+      .collection("projects").doc(projectId)
+      .collection("transactions").doc(txId)
+      .set({
+        id: txId,
+        invoiceId: invoiceId || clientReference,
+        reference: clientReference,
+        amount: amountGHS,
+        currency: "GHS",
+        method: "Hubtel",
+        status: "verified",
+        paidAt: new Date().toISOString(),
+        type,
+        verifiedAt: FieldValue.serverTimestamp(),
+        verifiedBy: uid,
+      }, { merge: true });
+
+    // Update invoice
+    if (invoiceId) {
+      try {
+        const invRef = db.collection("invoices").doc(invoiceId);
+        const invSnap = await invRef.get();
+        if (invSnap.exists) {
+          const invData = invSnap.data();
+          const invoiceTotal = Number(invData.amount || invData.total || 0);
+          const currentPaid = Number(invData.amountPaid || 0);
+          const newAmountPaid = currentPaid + amountGHS;
+          
+          let newStatus = invData.status || "Pending";
+          if (invoiceTotal > 0) {
+            if (newAmountPaid >= invoiceTotal - (invoiceTotal * 0.02)) {
+              newStatus = "Paid";
+            } else if (newAmountPaid > 0) {
+              newStatus = "Partially Paid";
+            }
+          } else {
+            newStatus = "Paid";
+          }
+
+          const updatePayload = {
+            status: newStatus,
+            amountPaid: newAmountPaid,
+            paidAt: new Date().toISOString(),
+            method: "Hubtel"
+          };
+
+          await invRef.update(updatePayload);
+          await db.collection("projects").doc(projectId).collection("payments").doc(invoiceId).set(updatePayload, { merge: true });
+        }
+      } catch (err) {
+        logger.warn("verifyHubtelPayment: could not update invoice logic properly", err);
+      }
+    }
+
+    // Audit log
+    await db.collection("activity_logs").add({
+      action: "payment_verified",
+      projectId,
+      reference: clientReference,
+      amountGHS,
+      channel: "Hubtel",
+      type,
+      verifiedAt: FieldValue.serverTimestamp(),
+      verifiedBy: uid,
+    });
+
+    return { verified: true, amountGHS, reference: clientReference };
+  }
+);
+// ---------------------------------------------------------------------------
+
 exports.createStaffAccount = onCall(async (request) => {
   if (!request.auth) throw new Error("Authentication required");
 
@@ -422,18 +598,17 @@ exports.setStaffPassword = onCall(async (request) => {
     throw new Error("Could not update password: " + err.message);
   }
 
-  // Store the new password in the user's Firestore doc so admin can view it
+  // Password never stored in Firestore — delivered via SMS only.
+  // Only log the timestamp of the update for audit trail.
   try {
     await db.collection("users").doc(uid).update({
-      tempPassword: newPassword,
       passwordUpdatedAt: FieldValue.serverTimestamp(),
     });
     await db.collection("team").doc(uid).update({
-      tempPassword: newPassword,
       passwordUpdatedAt: FieldValue.serverTimestamp(),
     }).catch(() => {}); // team doc may not exist, ignore
   } catch (err) {
-    logger.warn("setStaffPassword: could not save password to Firestore", err.message);
+    logger.warn("setStaffPassword: could not update timestamp in Firestore", err.message);
     // Not fatal — Auth password was updated successfully
   }
 
@@ -448,7 +623,7 @@ exports.setStaffPassword = onCall(async (request) => {
  * Auth required so arbitrary callers can't abuse it.
  */
 exports.sendSMS = onCall(
-  { cors: true },
+  { cors: true, secrets: [ARKESEL_API_KEY] },
   async (request) => {
     if (!request.auth) throw new Error("Authentication required");
 
@@ -583,19 +758,6 @@ exports.sendWhatsApp = onRequest(
             { headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" } }
           );
           result = { success: true, messageId: resp.data?.messages?.[0]?.id };
-          break;
-        }
-
-        case "twilio": {
-          const sid = TWILIO_SID.value();
-          const auth = TWILIO_AUTH_TOKEN.value();
-          const from = TWILIO_FROM_NUMBER.value();
-          const resp = await axios.post(
-            `https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`,
-            new URLSearchParams({ From: `whatsapp:${from}`, To: `whatsapp:${cleanPhone}`, Body: message }),
-            { auth: { username: sid, password: auth }, headers: { "Content-Type": "application/x-www-form-urlencoded" } }
-          );
-          result = { success: true, sid: resp.data?.sid };
           break;
         }
 

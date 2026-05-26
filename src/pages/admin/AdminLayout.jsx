@@ -6,13 +6,46 @@ import {
 } from 'lucide-react';
 import { NotificationBell } from '../../components/Shared';
 import { getAuth, updatePassword } from 'firebase/auth';
+import { db } from '../../lib/firebase';
+import { collection, onSnapshot } from 'firebase/firestore';
 import LanguageFlagSwitch from '../../components/LanguageFlagSwitch';
 import { translateAdminDom } from '../../lib/adminI18n';
+import { useRef } from 'react';
 
 export default function AdminLayout({ user, onLogout, onPreview, brand, view, setView, userNotifications, markNotificationRead, onSearchChange, children, staffMode = false, ...props }) {
   const ac = brand.color || `var(--accent-secondary)`;
   const [expandedFolders, setExpandedFolders] = useState({});
   const [searchValue, setSearchValue] = useState('');
+
+  // Track unread messages across all active projects for admin
+  const [unreadMap, setUnreadMap] = useState({});
+  useEffect(() => {
+    if (!db || !props.clients || props.clients.length === 0) return;
+    const activeClients = props.clients.filter(c => c.status !== 'Archived');
+    const unsubs = activeClients.map(c => {
+      const cid = c.id;
+      return onSnapshot(collection(db, 'clients', cid, 'messages'), snap => {
+        const unread = snap.docs.filter(d => {
+          const m = d.data();
+          return !m.isInternal && m.senderRole !== 'admin' && m.senderRole !== 'staff' && !m.readByAdmin;
+        }).length;
+        setUnreadMap(prev => ({ ...prev, [cid]: unread }));
+      });
+    });
+    return () => unsubs.forEach(u => u());
+  }, [props.clients]);
+  
+  const totalUnread = Object.values(unreadMap).reduce((a, b) => a + b, 0);
+
+  const prevUnreadRef = useRef(0);
+  useEffect(() => {
+    if (totalUnread > prevUnreadRef.current) {
+      if (props.playNotificationSound) props.playNotificationSound();
+      if (props.notify) props.notify('info', 'New Client Message Received', 'persistent');
+    }
+    prevUnreadRef.current = totalUnread;
+  }, [totalUnread, props.playNotificationSound, props.notify]);
+  
   
   const [showPwModal, setShowPwModal] = useState(false);
   const [newPw, setNewPw] = useState('');
@@ -178,7 +211,18 @@ export default function AdminLayout({ user, onLogout, onPreview, brand, view, se
                     >
                       {m.icon}
                       <span className="lxf" style={{ fontSize: 13, fontWeight: view === m.id ? 700 : 500 }}>{m.label}</span>
-                      {view === m.id && <div style={{ position: 'absolute', right: 12, width: 4, height: 4, borderRadius: '50%', background: ac }} />}
+                      {m.id === 'client-hub' && totalUnread > 0 && (
+                        <div style={{
+                          marginLeft: 'auto',
+                          background: '#EF4444', color: '#fff', fontSize: 10, fontWeight: 800,
+                          height: 18, minWidth: 18, borderRadius: 9, padding: '0 5px',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center'
+                        }}>
+                          {totalUnread > 99 ? '99+' : totalUnread}
+                        </div>
+                      )}
+                      {view === m.id && m.id !== 'client-hub' && <div style={{ position: 'absolute', right: 12, width: 4, height: 4, borderRadius: '50%', background: ac }} />}
+                      {view === 'client-hub' && m.id === 'client-hub' && totalUnread === 0 && <div style={{ position: 'absolute', right: 12, width: 4, height: 4, borderRadius: '50%', background: ac }} />}
                     </button>
                   ))}
                 </div>
@@ -280,6 +324,15 @@ export default function AdminLayout({ user, onLogout, onPreview, brand, view, se
                    <LanguageFlagSwitch variant="mobile" />
                    
                    <NotificationBell notifications={userNotifications} onMarkRead={markNotificationRead} />
+                   
+                   <button onClick={() => setView('client-hub')} style={{ background: 'none', border: 'none', cursor: 'pointer', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)' }} title="Client Messages">
+                     <MessageSquare size={18} />
+                     {totalUnread > 0 && (
+                       <span style={{ position: 'absolute', top: -6, right: -6, background: '#EF4444', color: '#fff', fontSize: 9, fontWeight: 800, minWidth: 16, height: 16, padding: '0 4px', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid #fff' }}>
+                         {totalUnread > 99 ? '99+' : totalUnread}
+                       </span>
+                     )}
+                   </button>
                    
                    <button onClick={onPreview} className="p-btn-light" style={{ padding: '8px 12px', fontSize: 11, borderRadius: 10, display: 'flex', alignItems: 'center', gap: 6, background: '#fff', border: '1px solid var(--border-color)' }}>
                      <Eye size={14} /> <span className="dt-only">Site Preview</span>

@@ -52,6 +52,31 @@ export default function AdminFinancials({ invoices = [], transactions = [], clie
     kpiTargets:        { revenue: 500000, pending: 100000, quotes: 20, conversion: 90 },
   });
 
+  // ─── Gateway Settings ─────────────────────────────────────────────────────
+  const [gatewayLoading, setGatewayLoading] = useState(false);
+  const [gatewaySettings, setGatewaySettings] = useState(
+    brand.gatewaySettings || {
+      enableHubtel:        false,
+      enablePaystack:      true,
+      hubtelClientId:      '',
+      hubtelClientSecret:  '',
+      hubtelMerchantId:    '',
+    }
+  );
+
+  const saveGatewaySettings = async () => {
+    setGatewayLoading(true);
+    try {
+      if (props.syncCMS) await props.syncCMS('gatewaySettings', gatewaySettings);
+      notify('success', 'Gateway settings saved');
+    } catch (err) {
+      console.error('[Gateway] Save failed:', err);
+      notify('error', 'Could not save gateway settings');
+    } finally {
+      setGatewayLoading(false);
+    }
+  };
+
   // ─── Draft State ─────────────────────────────────────────────────────────
   const blankDraft = (invoiceType = 'unit') => ({
     projectId: '', clientId: '',
@@ -296,7 +321,42 @@ export default function AdminFinancials({ invoices = [], transactions = [], clie
         </div>
       </div>
 
-      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+      <div className="p-card" style={{ padding: 28, display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <SectionHead title="Secure Payment Gateways" sub="Configure Hubtel & Paystack API Keys. These are stored securely and never exposed to the client." />
+        {gatewayLoading ? (
+          <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Loading secure settings...</div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, padding: 16, background: 'var(--bg-secondary)', borderRadius: 12 }}>
+              <div>
+                <ToggleRow label="Enable Hubtel" sub="Show Hubtel as a payment option" checked={gatewaySettings.enableHubtel} onChange={e => setGatewaySettings(s => ({ ...s, enableHubtel: e.target.checked }))} />
+              </div>
+              <div>
+                <ToggleRow label="Enable Paystack" sub="Show Paystack as a payment option" checked={gatewaySettings.enablePaystack} onChange={e => setGatewaySettings(s => ({ ...s, enablePaystack: e.target.checked }))} />
+              </div>
+            </div>
+
+            {gatewaySettings.enableHubtel && (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+                <PFormField label="Hubtel Client ID">
+                  <input className="p-inp" type="password" value={gatewaySettings.hubtelClientId || ''} onChange={e => setGatewaySettings(s => ({ ...s, hubtelClientId: e.target.value }))} placeholder="Enter Client ID" />
+                </PFormField>
+                <PFormField label="Hubtel Client Secret">
+                  <input className="p-inp" type="password" value={gatewaySettings.hubtelClientSecret || ''} onChange={e => setGatewaySettings(s => ({ ...s, hubtelClientSecret: e.target.value }))} placeholder="Enter Client Secret" />
+                </PFormField>
+                <PFormField label="Hubtel Merchant Account #">
+                  <input className="p-inp" value={gatewaySettings.hubtelMerchantId || ''} onChange={e => setGatewaySettings(s => ({ ...s, hubtelMerchantId: e.target.value }))} placeholder="e.g. HM00000" />
+                </PFormField>
+              </div>
+            )}
+            <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
+               <button onClick={saveGatewaySettings} className="p-btn-gold" style={{ padding: '10px 24px', fontSize: 13 }}>Save Gateway Settings</button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 20 }}>
         <button onClick={() => { if (props.syncCMS) props.syncCMS('finSettings', finSettings); notify('success', 'Settings saved and synced to all documents'); }} className="p-btn-dark" style={{ padding: '14px 36px', display: 'flex', alignItems: 'center', gap: 10, fontSize: 14 }}>
           <Save size={16} /> Save Settings
         </button>

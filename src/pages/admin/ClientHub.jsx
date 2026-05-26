@@ -2459,35 +2459,6 @@ export default function ClientHub({ clientId, dbClients = [], onBack, ...props }
             <div style={{ fontSize: 13, fontWeight: 800, color: selectedId === 'MESSAGES' ? ac : 'var(--text-secondary)' }}>Client Messages</div>
           </button>
 
-          <button
-            onClick={async () => {
-              const { collection, getDocs, setDoc, doc, deleteDoc } = await import('firebase/firestore');
-              try {
-                console.log("Starting migration...");
-                const projectsSnap = await getDocs(collection(db, "projects"));
-                let moved = 0;
-                for (const p of projectsSnap.docs) {
-                  const data = p.data();
-                  const cId = data.clientId || data.phone; 
-                  if (!cId) continue;
-                  const messagesSnap = await getDocs(collection(db, `projects/${p.id}/messages`));
-                  for (const msg of messagesSnap.docs) {
-                    await setDoc(doc(db, `clients/${cId}/messages/${msg.id}`), { ...msg.data(), migratedFromProject: p.id });
-                    await deleteDoc(doc(db, `projects/${p.id}/messages/${msg.id}`));
-                    moved++;
-                  }
-                }
-                alert(`Successfully migrated ${moved} old messages!`);
-              } catch(e) {
-                console.error(e);
-                alert("Migration failed: " + e.message);
-              }
-            }}
-            style={{ width: '100%', padding: '10px', background: '#EF4444', color: '#fff', borderRadius: 12, border: 'none', cursor: 'pointer', marginBottom: 16, fontWeight: 700, fontSize: 12 }}
-          >
-            Migrate Old Messages
-          </button>
-
           <div style={{ fontSize: 9, fontWeight: 800, color: `var(--text-secondary)`, textTransform: 'uppercase', letterSpacing: '.1em', paddingLeft: 2, paddingBottom: 4 }}>Projects</div>
 
           {loadingProjects ? (

@@ -974,6 +974,7 @@ export default function App() {
       };
       
       await setDoc(doc(db, 'projects', projectId, 'transactions', txId), newTx);
+      try { await createNotification('admin', `Payment received: ${inv?.amount || 'amount'} for invoice ${id} via ${method}`, 'payment', `/admin/financials`); } catch (_) {}
       notify('success', `Payment of ${inv?.amount || ''} confirmed via ${method}`);
     } catch (e) { devErr(e); }
   };
@@ -1398,7 +1399,7 @@ export default function App() {
       if (data.renderingFee) {
         const rawFee = parseFloat(String(data.renderingFee).replace(/[^0-9.]/g, '')) || 0;
         if (rawFee > 0) {
-          await addDoc(collection(db, 'invoices'), {
+          const invRef = await addDoc(collection(db, 'invoices'), {
             parentId: docRef.id,
             clientId: clientId,
             clientEmail: data.clientEmail || '', // Ideally this should be captured, but we might just have clientId
@@ -1410,6 +1411,7 @@ export default function App() {
             type: 'Design',
             createdAt: new Date().toISOString()
           });
+          await updateDoc(docRef, { renderingFeeInvoiceId: invRef.id });
         }
       }
       await addDoc(collection(db, 'projects', docRef.id, 'messages'), {
@@ -1460,9 +1462,13 @@ export default function App() {
         senderRole: 'system', senderId: 'system', senderName: 'Westline Future',
         isInternal: true, createdAt: serverTimestamp(),
       });
-      if (data.clientId) {
-        try { await sendWhatsAppUpdate(data.clientId, projectId, stage?.name || `Stage ${newStageId}`); } catch (_) {}
-        await createNotification(data.clientId, `Your project "${data.title}" has progressed to ${stage?.name}.`, 'info', '/portal');
+      if (user?.role === 'client') {
+        try { await createNotification('admin', `Client advanced project "${data.title}" to ${stage?.name}`, 'info', `/admin/clients?tab=projects`); } catch (_) {}
+      } else {
+        if (data.clientId) {
+          try { await sendWhatsAppUpdate(data.clientId, projectId, stage?.name || `Stage ${newStageId}`); } catch (_) {}
+          try { await createNotification(data.clientId, `Your project "${data.title}" has progressed to ${stage?.name}.`, 'info', '/portal'); } catch (_) {}
+        }
       }
       notify('success', `Project advanced to ${stage?.name}`, 'persistent');
       logAction(data.clientId, 'Projects', `Stage ${newStageId} — ${projectId}`);
@@ -1472,11 +1478,11 @@ export default function App() {
     }
   };
 
-  const addProjectMessage = async (projectId, text, senderRole = 'admin', isInternal = false) => {
+  const addClientMessage = async (clientId, text, senderRole = 'admin', isInternal = false) => {
     if (!db || !text?.trim()) return;
     const senderName = user?.name || user?.displayName || 'Westline Future Team';
     try {
-      await addDoc(collection(db, 'projects', projectId, 'messages'), {
+      await addDoc(collection(db, 'clients', clientId, 'messages'), {
         text: sanitizeText(text.trim()),
         senderRole,
         senderId: user?.uid || user?.id || 'admin',
@@ -1485,31 +1491,18 @@ export default function App() {
         createdAt: serverTimestamp(),
       });
       if (!isInternal) {
-        const project = clients.find(p => p.id === projectId);
-        if (project) {
-          // If admin sent, notify the client and assigned workers
+        const client = clients.find(c => c.id === clientId);
+        if (client) {
           if (senderRole === 'admin') {
-            if (project.clientId) {
-              try { await createNotification(project.clientId, `New message from ${senderName} on your project`, 'message', `/portal`); } catch (_) {}
-            }
-            const assignedWorkers = project.assignedWorkers || [];
-            for (const workerId of assignedWorkers) {
-              try { await createNotification(workerId, `Admin sent a message on ${project.project || project.title}`, 'message', `/admin/client-hub`); } catch (_) {}
-            }
+            try { await createNotification(clientId, `New message from ${senderName}`, 'message', `/portal`); } catch (_) {}
           }
-          // If client sent, notify all admins and assigned workers
           if (senderRole === 'client') {
-            // We notify the assigned workers
-            const assignedWorkers = project.assignedWorkers || [];
-            for (const workerId of assignedWorkers) {
-              try { await createNotification(workerId, `Client replied on ${project.project || project.title}`, 'message', `/admin/client-hub`); } catch (_) {}
-            }
-            // And we create a system notification for admins
-            try { await createNotification('admin', `Client replied on ${project.project || project.title}`, 'message', `/admin/client-hub`); } catch (_) {}
+            try { await createNotification('admin', `Client ${client.name || 'someone'} sent a message`, 'message', `/admin/client-hub`); } catch (_) {}
           }
         }
       }
     } catch (e) {
+      console.error('addClientMessage error:', e);
       notify('error', 'Message failed');
     }
   };
@@ -1645,14 +1638,26 @@ export default function App() {
   const deleteClient = async (id) => {
     if (!db) return;
     try {
+      // Delete the primary user document
       await deleteDoc(doc(db, 'users', id));
-      
-      // Cleanup ghost records associated with this client
+
+      // Clean up client subcollections (messages, typing, etc.)
+      // Firestore does NOT auto-delete subcollections when a doc is deleted
+      const clientSubcollections = ['messages', 'typing'];
+      for (const sub of clientSubcollections) {
+        try {
+          const snap = await getDocs(collection(db, 'clients', id, sub));
+          await Promise.all(snap.docs.map(d => deleteDoc(d.ref)));
+        } catch (_) {}
+      }
+      // Delete the clients/{id} document itself
+      try { await deleteDoc(doc(db, 'clients', id)); } catch (_) {}
+
+      // Cleanup ghost records in top-level collections
       const collectionsToCleanup = [
-        'projects', 'work_orders', 'invoices', 'tasks', 
-        'approvals', 'change_requests', 'procurements'
+        'projects', 'work_orders', 'invoices', 'tasks',
+        'approvals', 'change_requests', 'procurements', 'renderingPackages'
       ];
-      
       for (const coll of collectionsToCleanup) {
         try {
           const q = query(collection(db, coll), where('clientId', '==', id));
@@ -1662,9 +1667,9 @@ export default function App() {
           devWarn(`Failed to cleanup ${coll}:`, err);
         }
       }
-      
-      notify('success', 'Client and associated records removed');
-      logAction(null, 'CRM', `Deleted Client and records: ${id}`);
+
+      notify('success', 'Client and all associated records removed');
+      logAction(null, 'CRM', `Deleted client and records: ${id}`);
     } catch (e) {
       devErr(e);
       notify('error', 'Deletion failed');
@@ -1983,6 +1988,7 @@ export default function App() {
   const commonProps = {
     handleLogout,
     notify,
+    playNotificationSound,
     page, setPage, navigate,
     brand, setBrand, content, setContent,
     clients, updateProject: syncProjects,
@@ -2017,7 +2023,7 @@ export default function App() {
     userNotifications, markNotificationRead,
     submitMarketplaceInquiry,
     migrateToFirebase, getSLA, syncCMS, PROJECT_STAGES,
-    updateEmailStatus, convertInquiryToProject, sendToProcurement,
+    updateEmailStatus, convertInquiryToProject, sendToProcurement, createNotification,
     currency, setCurrency, rates,
     onPortal: (type) => { setLoginType(type); navigate('/login'); },
     formatPrice: (priceStr) => {
@@ -2029,7 +2035,7 @@ export default function App() {
     lang, setLang, t, messages, sendMessage, testimonials, submitTestimonial, showVisualizer, setShowVisualizer,
     sendWhatsAppUpdate,
     jobs, createJob, updateJob,
-    createClientProject, updateProjectStage, addProjectMessage, assignWorkerToProject, deleteProject,
+    createClientProject, updateProjectStage, addClientMessage, assignWorkerToProject, deleteProject,
     approveQuote, updateShippingDetails, addProjectDocument, createStaffAccount, deleteMember, updateMember,
     workOrders, containers,
     updateWorkOrder: (id, d) => db && updateDoc(doc(db, 'work_orders', id), { ...d, updatedAt: serverTimestamp() }),

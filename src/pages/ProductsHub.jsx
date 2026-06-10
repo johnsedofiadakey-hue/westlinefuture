@@ -1,15 +1,17 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useContext } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   X, ChevronRight, Info, Search,
   Download, Filter, ArrowRight, ShoppingCart, Zap, MessageCircle,
   Layers, AppWindow, ShowerHead, ChefHat, Shirt, LayoutGrid,
-  DoorOpen, Droplets, Armchair, Heart
+  DoorOpen, Droplets, Armchair, Heart, Minus, Plus, CreditCard, CheckCircle2
 } from 'lucide-react';
-import { PubNav, Footer } from '../components/PubLayout';
+import { PubNav, Footer, translatePublicDom } from '../components/PubLayout';
 import { db } from '../lib/firebase';
-import { doc, setDoc, collection, onSnapshot } from 'firebase/firestore';
+import { doc, setDoc, addDoc, collection, onSnapshot, serverTimestamp } from 'firebase/firestore';
+import { AppContext } from '../context/AppContext';
+import UnifiedPaymentGateway from '../components/UnifiedPaymentGateway';
 
 const WA_ICON = () => (
   <svg viewBox="0 0 24 24" width={14} height={14} fill="currentColor" style={{ flexShrink: 0 }}>
@@ -65,11 +67,12 @@ const DynamicImage = ({ src, alt, style, iconSize = 40, asMotion = false, initia
   );
 };
 
-const ProductCard = ({ product, onClick, ac, mob, onCompare, isComparing, waNumber, onToggleFavorite, isFavorited }) => {
+const ProductCard = ({ product, onClick, ac, mob, onCompare, isComparing, waNumber, onToggleFavorite, isFavorited, onBuy }) => {
   const pCats = Array.isArray(product.cat) ? product.cat : [product.cat];
   const catLabel = pCats[0];
   const descText = product.description || product.desc || "";
   const waMsg = encodeURIComponent(`Hi Westline Future, I'm interested in: ${product.name}. Please send me a quote.`);
+  const retailPrice = parseFloat(String(product.retailPrice || '0').replace(/[^0-9.]/g, '')) || 0;
 
   return (
     <motion.div
@@ -132,15 +135,33 @@ const ProductCard = ({ product, onClick, ac, mob, onCompare, isComparing, waNumb
         <p style={{ fontSize: mob ? 11 : 12, color: 'rgba(24, 14, 6, 0.5)', lineHeight: 1.5, margin: '0 0 16px', flex: 1 }}>
           {product.tagline || (descText.length > 80 ? descText.substring(0, 80) + '...' : descText)}
         </p>
+        {/* Price row */}
+        {retailPrice > 0 && (
+          <div style={{ paddingBottom: 10 }}>
+            <div style={{ fontSize: 11, color: 'var(--text-secondary)', fontWeight: 600, marginBottom: 2 }}>From</div>
+            <div style={{ fontSize: 18, fontWeight: 900, color: ac }}>
+              GH₵ {retailPrice.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+            </div>
+          </div>
+        )}
         <div style={{ display: 'flex', gap: 8, borderTop: '1px solid #f5f5f5', paddingTop: 14 }}>
-          <a
-            href={`https://wa.me/${waNumber || '233598455012'}?text=${waMsg}`}
-            target="_blank" rel="noopener noreferrer"
-            onClick={e => e.stopPropagation()}
-            style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '10px 0', background: '#25D366', color: '#fff', borderRadius: 10, fontSize: 11, fontWeight: 800, textDecoration: 'none' }}
-          >
-            <WA_ICON /> WhatsApp Quote
-          </a>
+          {retailPrice > 0 ? (
+            <button
+              onClick={e => { e.stopPropagation(); onBuy && onBuy(); }}
+              style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '10px 0', background: '#111', color: '#fff', borderRadius: 10, fontSize: 11, fontWeight: 800, border: 'none', cursor: 'pointer' }}
+            >
+              <CreditCard size={13} /> Buy Now
+            </button>
+          ) : (
+            <a
+              href={`https://wa.me/${waNumber || '233247319778'}?text=${waMsg}`}
+              target="_blank" rel="noopener noreferrer"
+              onClick={e => e.stopPropagation()}
+              style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '10px 0', background: '#25D366', color: '#fff', borderRadius: 10, fontSize: 11, fontWeight: 800, textDecoration: 'none' }}
+            >
+              <WA_ICON /> WhatsApp Quote
+            </a>
+          )}
           <div style={{ display: 'flex', alignItems: 'center', gap: 4, color: DARK_TEXT, fontSize: 11, fontWeight: 800, textTransform: 'uppercase', padding: '10px 12px', background: `var(--bg-secondary)`, borderRadius: 10 }}>
             Details <ArrowRight size={14} />
           </div>
@@ -333,9 +354,282 @@ const DetailModal = ({ product, onClose, ac, navigate, mob }) => {
 
 
 
+// ── Buy Now Modal ────────────────────────────────────────────────────────────
+/**
+ * OrderModal — Two-step product order flow:
+ * Step 1: Quantity + contact info (works for guests AND logged-in clients)
+ * Step 2: Payment via Paystack (if live keys configured) OR order enquiry submitted to admin
+ *
+ * No invoice is created until the user actually submits. Guest-friendly.
+ */
+function BuyNowModal({ product, user, brand, onClose }) {
+  const ac = brand?.color || 'var(--accent-secondary)';
+  const retailPrice = parseFloat(String(product.retailPrice || '0').replace(/[^0-9.]/g, '')) || 0;
+
+  const [step, setStep]         = useState(1); // 1=details, 2=payment
+  const [qty, setQty]           = useState(1);
+  const [name, setName]         = useState(user?.name || '');
+  const [phone, setPhone]       = useState(user?.phone ? `+${user.phone}` : '');
+  const [address, setAddress]   = useState('');
+  const [notes, setNotes]       = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [done, setDone]         = useState(false);
+  const [invoiceId, setInvoiceId]   = useState(null);
+  const [err, setErr]           = useState('');
+
+  const total   = retailPrice * qty;
+  const email   = user?.proxyEmail || (user?.phone ? `${user.phone}@clients.westlinefuture.com` : 'order@westlinefuture.com');
+  const { brand: ctxBrand } = useContext(AppContext);
+  const gw = ctxBrand?.gatewaySettings || {};
+  const paystackKey = gw.paystackPublicKey || '';
+  const paystackActive = !!(gw.enablePaystack !== false && paystackKey);
+  const hubtelActive = !!(gw.enableHubtel && gw.hubtelClientId && gw.hubtelClientSecret && gw.hubtelMerchantId);
+  const paymentAvailable = paystackActive || hubtelActive;
+
+  const handleNext = () => {
+    if (!name.trim()) { setErr('Please enter your name.'); return; }
+    if (!phone.trim()) { setErr('Please enter your phone number.'); return; }
+    setErr('');
+    setStep(2);
+  };
+
+  // Create order enquiry (no payment) — flows to admin Inquiry Queue
+  const submitEnquiry = async () => {
+    setSubmitting(true);
+    try {
+      await addDoc(collection(db, 'emails'), {
+        id: `ORD-${Date.now()}`,
+        fromName: name.trim(),
+        fromPhone: phone.trim(),
+        fromEmail: email,
+        subject: `Product Order — ${product.name} x${qty}`,
+        status: 'pending',
+        type: 'Product Order',
+        productId: product.id || '',
+        productName: product.name,
+        quantity: qty,
+        unitPrice: retailPrice,
+        totalAmount: total,
+        deliveryAddress: address.trim(),
+        notes: notes.trim(),
+        clientId: user?.id || user?.phone || '',
+        sentAt: new Date().toISOString(),
+        createdAt: serverTimestamp(),
+      });
+      setDone(true);
+    } catch (e) {
+      setErr('Failed to submit order. Please try WhatsApp instead.');
+    }
+    setSubmitting(false);
+  };
+
+  // Create invoice then open payment gateway
+  const preparePayment = async () => {
+    setSubmitting(true);
+    try {
+      const ref = await addDoc(collection(db, 'invoices'), {
+        title:       `Product Order — ${product.name} x${qty}`,
+        amount:      total,
+        type:        'Product',
+        status:      'Pending',
+        clientId:    user?.id || user?.phone || '',
+        clientName:  name.trim(),
+        clientPhone: phone.trim(),
+        clientEmail: email,
+        productId:   product.id || '',
+        productName: product.name,
+        quantity:    qty,
+        unitPrice:   retailPrice,
+        deliveryAddress: address.trim(),
+        notes:       notes.trim(),
+        autoGenerated: true,
+        createdAt:   serverTimestamp(),
+      });
+      setInvoiceId(ref.id);
+    } catch (e) {
+      setErr('Could not prepare checkout. Please try the WhatsApp option.');
+    }
+    setSubmitting(false);
+  };
+
+  // As soon as we enter step 2 and payment is available, create the invoice
+  useEffect(() => {
+    if (step === 2 && paymentAvailable && !invoiceId && !submitting) {
+      preparePayment();
+    }
+  }, [step]);
+
+  const wa = (brand?.whatsapp || '233247319778').replace(/\D/g, '');
+  const waMsg = encodeURIComponent(`Hi Westline Future,\n\nI'd like to order:\n*${product.name}* × ${qty}\nTotal: GH₵ ${total.toLocaleString(undefined, { minimumFractionDigits: 2 })}\n\nName: ${name}\nPhone: ${phone}\nAddress: ${address || 'TBD'}\n${notes ? `Notes: ${notes}` : ''}`);
+
+  return (
+    <AnimatePresence>
+      <motion.div
+        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+        style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 9000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
+        onClick={onClose}
+      >
+        <motion.div
+          initial={{ scale: 0.95, y: 20 }} animate={{ scale: 1, y: 0 }}
+          onClick={e => e.stopPropagation()}
+          style={{ background: '#fff', borderRadius: 28, width: '100%', maxWidth: 460, overflow: 'hidden', boxShadow: '0 32px 64px rgba(0,0,0,0.2)', maxHeight: '90vh', overflowY: 'auto' }}
+        >
+          {/* Header */}
+          <div style={{ padding: '24px 24px 18px', borderBottom: '1px solid #f0f0f0', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, position: 'sticky', top: 0, background: '#fff', zIndex: 1 }}>
+            <div>
+              <div style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.15em', color: 'var(--text-secondary)', marginBottom: 3 }}>
+                {done ? 'Order Received' : step === 1 ? 'Place Order' : 'Confirm & Pay'}
+              </div>
+              <div style={{ fontSize: 17, fontWeight: 900, color: 'var(--accent-secondary)', lineHeight: 1.2 }}>{product.name}</div>
+            </div>
+            <button onClick={onClose} style={{ background: 'var(--bg-secondary)', border: 'none', width: 34, height: 34, borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <X size={15} />
+            </button>
+          </div>
+
+          <div style={{ padding: 24 }}>
+            {/* Product summary */}
+            <div style={{ display: 'flex', gap: 14, padding: 14, background: 'var(--bg-secondary)', borderRadius: 14, marginBottom: 20 }}>
+              {product.img && <img src={product.img} alt={product.name} loading="lazy" style={{ width: 56, height: 56, borderRadius: 10, objectFit: 'contain', background: '#fff', border: '1px solid #eee', flexShrink: 0 }} />}
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--accent-secondary)' }}>{product.name}</div>
+                <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 2 }}>{product.cat || product.tagline}</div>
+                <div style={{ fontSize: 15, fontWeight: 900, color: ac, marginTop: 5 }}>GH₵ {retailPrice.toLocaleString(undefined, { minimumFractionDigits: 2 })} each</div>
+              </div>
+            </div>
+
+            {done ? (
+              /* ── SUCCESS ── */
+              <div style={{ textAlign: 'center', padding: '20px 0' }}>
+                <div style={{ width: 64, height: 64, borderRadius: '50%', background: '#F0FDF4', border: '2px solid #BBF7D0', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+                  <CheckCircle2 size={28} color="#16A34A" />
+                </div>
+                <div style={{ fontSize: 17, fontWeight: 800, color: 'var(--accent-secondary)', marginBottom: 8 }}>Order Received!</div>
+                <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.7, marginBottom: 20 }}>
+                  Thanks {name.split(' ')[0]}! We'll call you on <strong>{phone}</strong> within 24 hours to confirm your order and arrange delivery.
+                </div>
+                <button onClick={onClose} style={{ padding: '12px 32px', background: ac, color: '#fff', border: 'none', borderRadius: 12, fontWeight: 700, cursor: 'pointer', fontSize: 14 }}>Done</button>
+              </div>
+
+            ) : step === 1 ? (
+              /* ── STEP 1: DETAILS ── */
+              <>
+                {/* Qty */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--accent-secondary)' }}>Quantity</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 0, border: '2px solid var(--border-color)', borderRadius: 12, overflow: 'hidden' }}>
+                    <button onClick={() => setQty(q => Math.max(1, q - 1))} style={{ width: 40, height: 40, background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Minus size={15} /></button>
+                    <div style={{ width: 40, textAlign: 'center', fontSize: 16, fontWeight: 900 }}>{qty}</div>
+                    <button onClick={() => setQty(q => q + 1)} style={{ width: 40, height: 40, background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Plus size={15} /></button>
+                  </div>
+                </div>
+
+                {/* Total */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', borderRadius: 12, background: `${ac}10`, marginBottom: 20, border: `1px solid ${ac}30` }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)' }}>Total ({qty} unit{qty !== 1 ? 's' : ''})</div>
+                  <div style={{ fontSize: 18, fontWeight: 900, color: ac }}>GH₵ {total.toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
+                </div>
+
+                {/* Contact fields */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 18 }}>
+                  <div>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Your Name *</div>
+                    <input value={name} onChange={e => setName(e.target.value)} placeholder="Full name" style={{ width: '100%', padding: '11px 14px', borderRadius: 10, border: '1.5px solid var(--border-color)', fontSize: 14, fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box' }} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Phone Number *</div>
+                    <input value={phone} onChange={e => setPhone(e.target.value)} placeholder="+233 24 731 9778" style={{ width: '100%', padding: '11px 14px', borderRadius: 10, border: '1.5px solid var(--border-color)', fontSize: 14, fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box' }} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Delivery Address</div>
+                    <input value={address} onChange={e => setAddress(e.target.value)} placeholder="Area, city (e.g. East Legon, Accra)" style={{ width: '100%', padding: '11px 14px', borderRadius: 10, border: '1.5px solid var(--border-color)', fontSize: 14, fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box' }} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Notes (optional)</div>
+                    <input value={notes} onChange={e => setNotes(e.target.value)} placeholder="Colour, size, or delivery instructions…" style={{ width: '100%', padding: '11px 14px', borderRadius: 10, border: '1.5px solid var(--border-color)', fontSize: 14, fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box' }} />
+                  </div>
+                </div>
+
+                {err && <div style={{ padding: '10px 14px', borderRadius: 10, background: '#FEF2F2', border: '1px solid #FEE2E2', color: '#DC2626', fontSize: 12, marginBottom: 14 }}>{err}</div>}
+
+                <button onClick={handleNext} style={{ width: '100%', padding: '14px', background: ac, color: '#fff', border: 'none', borderRadius: 14, fontWeight: 800, fontSize: 15, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                  Continue <ArrowRight size={16} />
+                </button>
+              </>
+
+            ) : (
+              /* ── STEP 2: PAYMENT OR ENQUIRY ── */
+              <>
+                <div style={{ padding: '12px 16px', borderRadius: 12, background: `${ac}10`, marginBottom: 20, border: `1px solid ${ac}30`, display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-secondary)' }}>{product.name} × {qty}</span>
+                  <span style={{ fontSize: 16, fontWeight: 900, color: ac }}>GH₵ {total.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                </div>
+
+                {submitting && !invoiceId ? (
+                  <div style={{ textAlign: 'center', padding: 20, color: 'var(--text-secondary)', fontSize: 13 }}>Preparing checkout…</div>
+                ) : paymentAvailable && invoiceId ? (
+                  <UnifiedPaymentGateway
+                    label={`Pay for ${product.name} × ${qty}`}
+                    amountGHS={total}
+                    description={`${product.name} x${qty}`}
+                    email={email}
+                    invoiceId={invoiceId}
+                    paymentType="product"
+                    onSuccess={() => setDone(true)}
+                  />
+                ) : null}
+
+                {/* Always show WhatsApp + manual order as alternatives */}
+                <div style={{ marginTop: paymentAvailable ? 16 : 0 }}>
+                  {!paymentAvailable && (
+                    <div style={{ marginBottom: 12, padding: '10px 14px', borderRadius: 10, background: '#FFF8F0', border: '1px solid #FED7AA', fontSize: 12, color: '#92400E' }}>
+                      Online payment is being configured. Please order via WhatsApp or submit your order below — we'll call you to confirm.
+                    </div>
+                  )}
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    {/* WhatsApp order */}
+                    <a
+                      href={`https://wa.me/${wa}?text=${waMsg}`}
+                      target="_blank" rel="noopener noreferrer"
+                      style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, padding: '13px', borderRadius: 14, background: '#25D366', color: '#fff', textDecoration: 'none', fontWeight: 700, fontSize: 14 }}
+                    >
+                      <svg viewBox="0 0 24 24" width={18} height={18} fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+                      Order via WhatsApp
+                    </a>
+
+                    {/* Submit enquiry to admin */}
+                    <button
+                      onClick={submitEnquiry}
+                      disabled={submitting}
+                      style={{ padding: '13px', borderRadius: 14, background: submitting ? 'var(--bg-secondary)' : 'var(--accent-secondary)', color: '#fff', border: 'none', fontWeight: 700, fontSize: 14, cursor: submitting ? 'default' : 'pointer' }}
+                    >
+                      {submitting ? 'Submitting…' : 'Submit Order Request'}
+                    </button>
+                  </div>
+                  <div style={{ fontSize: 11, color: 'var(--text-secondary)', textAlign: 'center', marginTop: 10 }}>We'll call {phone} within 24 hours to confirm.</div>
+                </div>
+
+                {err && <div style={{ padding: '10px 14px', borderRadius: 10, background: '#FEF2F2', border: '1px solid #FEE2E2', color: '#DC2626', fontSize: 12, marginTop: 12 }}>{err}</div>}
+
+                <button onClick={() => { setStep(1); setInvoiceId(null); }} style={{ width: '100%', marginTop: 14, padding: '10px', background: 'none', border: '1px solid var(--border-color)', borderRadius: 12, color: 'var(--text-secondary)', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
+                  ← Back
+                </button>
+              </>
+            )}
+          </div>
+        </motion.div>
+      </motion.div>
+    </AnimatePresence>
+  );
+}
+
 export default function ProductsHub({ brand, user, onPortal, setPage, content }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
+
+  // ── Language: re-apply translation whenever lang changes ──────────────────
+  const { lang } = useContext(AppContext);
 
   // Basic States & Layout Variables
   const [activeGroup, setActiveGroup] = useState('aluminum');
@@ -343,13 +637,14 @@ export default function ProductsHub({ brand, user, onPortal, setPage, content })
   const [search, setSearch] = useState('');
   const [menuOpen, setMenuOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState(null);
+  const [buyProduct, setBuyProduct] = useState(null);
   const [catalogData, setCatalogData] = useState({ products: [], categories: [] });
   const [loading, setLoading] = useState(true);
 
   const winW = useWindowWidth();
   const mob = isMob(winW);
   const ac = brand?.color || AC;
-  const waNumber = brand?.whatsapp || '233598455012';
+  const waNumber = brand?.whatsapp || '233247319778';
 
   // Persistent Favorites State (must be initialized before favoriteProducts useMemo)
   const [favorites, setFavorites] = useState(() => {
@@ -409,6 +704,15 @@ export default function ProductsHub({ brand, user, onPortal, setPage, content })
   const categories = useMemo(() => {
     return dbCategories.length > 0 ? dbCategories : (catalogData.categories || []);
   }, [dbCategories, catalogData.categories]);
+
+  // ── Re-translate whenever language changes OR products finish loading ──────
+  useEffect(() => {
+    if (!lang) return;
+    const apply = () => translatePublicDom(lang === 'zh' ? 'zh' : 'en');
+    const raf = requestAnimationFrame(apply);
+    const t = setTimeout(apply, 120);
+    return () => { cancelAnimationFrame(raf); clearTimeout(t); };
+  }, [lang, products, loading]);
 
   // Favorites logic (now safe since favorites, products are fully initialized)
   const favoriteProducts = useMemo(() => {
@@ -679,6 +983,7 @@ export default function ProductsHub({ brand, user, onPortal, setPage, content })
               waNumber={waNumber}
               onToggleFavorite={toggleFavorite}
               isFavorited={favorites.includes(p.id)}
+              onBuy={() => setBuyProduct(p)}
             />
           ))}
         </div>
@@ -965,6 +1270,18 @@ export default function ProductsHub({ brand, user, onPortal, setPage, content })
               </div>
             </motion.div>
           </>
+        )}
+      </AnimatePresence>
+
+      {/* Buy Now Modal */}
+      <AnimatePresence>
+        {buyProduct && (
+          <BuyNowModal
+            product={buyProduct}
+            user={user}
+            brand={brand}
+            onClose={() => setBuyProduct(null)}
+          />
         )}
       </AnimatePresence>
     </div>

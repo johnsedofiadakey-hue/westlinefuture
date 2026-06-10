@@ -84,7 +84,7 @@ export default function AdminSystem({ onReset, syncCatalog, brand }) {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
              {[
                { label: 'Cloud Infrastructure', status: 'Optimal' },
-               { label: 'OTP Gateway (Twilio)', status: 'Active' },
+               { label: 'OTP Gateway (Meta WhatsApp)', status: 'Active' },
                { label: 'Real-time Listeners', status: 'Connected' },
                { label: 'CDN Edge Delivery', status: 'Online' }
              ].map(s => (

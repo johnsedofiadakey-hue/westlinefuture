@@ -65,6 +65,7 @@ export default function AdminProductSync({ brand, notify, user }) {
   const [runs, setRuns] = useState([]);
   const [saving, setSaving] = useState(false);
   const [running, setRunning] = useState(false);
+  const [confirmRemoveSource, setConfirmRemoveSource] = useState(null);
   const [newSource, setNewSource] = useState({
     name: 'Meijia VIP Furniture',
     url: 'https://www.meijiavip.com/',
@@ -150,8 +151,11 @@ export default function AdminProductSync({ brand, notify, user }) {
     }
   };
 
-  const removeSource = async (source) => {
-    if (!window.confirm(`Remove source "${source.name}"?`)) return;
+  const removeSource = (source) => setConfirmRemoveSource(source);
+
+  const confirmRemoveSourceAction = async () => {
+    const source = confirmRemoveSource;
+    setConfirmRemoveSource(null);
     try {
       await deleteDoc(doc(db, 'product_sync_sources', source.id));
       notify?.('success', 'Source removed.');
@@ -335,6 +339,20 @@ export default function AdminProductSync({ brand, notify, user }) {
           </div>
         </div>
       </div>
+
+      {confirmRemoveSource && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+          <div style={{ background: 'var(--bg-primary)', borderRadius: 20, padding: 32, maxWidth: 360, width: '100%', textAlign: 'center', boxShadow: '0 24px 64px rgba(0,0,0,0.18)' }}>
+            <div style={{ fontSize: 28, marginBottom: 12 }}>🗑️</div>
+            <div style={{ fontSize: 15, fontWeight: 800, marginBottom: 8 }}>Remove Source?</div>
+            <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 24 }}>"{confirmRemoveSource.name}" will be removed from the sync list. Products already scraped are not deleted.</div>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={() => setConfirmRemoveSource(null)} style={{ flex: 1, height: 44, borderRadius: 12, border: '1.5px solid var(--border-color)', background: 'transparent', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Cancel</button>
+              <button onClick={confirmRemoveSourceAction} style={{ flex: 1, height: 44, borderRadius: 12, border: 'none', background: '#ef4444', color: '#fff', fontSize: 13, fontWeight: 800, cursor: 'pointer' }}>Remove</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

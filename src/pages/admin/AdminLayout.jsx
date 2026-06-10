@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, Users, Settings, LogOut, Folder, FileCode,
   Eye, Calendar, Activity, Globe, Truck, Package, Mail, MessageSquare, Sparkles,
@@ -14,14 +15,17 @@ import { useRef } from 'react';
 
 export default function AdminLayout({ user, onLogout, onPreview, brand, view, setView, userNotifications, markNotificationRead, onSearchChange, children, staffMode = false, ...props }) {
   const ac = brand.color || `var(--accent-secondary)`;
+  const navigate = useNavigate();
   const [expandedFolders, setExpandedFolders] = useState({});
   const [searchValue, setSearchValue] = useState('');
 
-  // Track unread messages across all active projects for admin
+  // Track unread messages across all clients for admin
+  // props.dbClients = actual client records (ids match clients/{id}/messages)
   const [unreadMap, setUnreadMap] = useState({});
   useEffect(() => {
-    if (!db || !props.clients || props.clients.length === 0) return;
-    const activeClients = props.clients.filter(c => c.status !== 'Archived');
+    const clientList = props.dbClients || props.rawDbClients || [];
+    if (!db || clientList.length === 0) return;
+    const activeClients = clientList.filter(c => c.status !== 'Archived');
     const unsubs = activeClients.map(c => {
       const cid = c.id;
       return onSnapshot(collection(db, 'clients', cid, 'messages'), snap => {
@@ -30,10 +34,10 @@ export default function AdminLayout({ user, onLogout, onPreview, brand, view, se
           return !m.isInternal && m.senderRole !== 'admin' && m.senderRole !== 'staff' && !m.readByAdmin;
         }).length;
         setUnreadMap(prev => ({ ...prev, [cid]: unread }));
-      });
+      }, () => {});
     });
     return () => unsubs.forEach(u => u());
-  }, [props.clients]);
+  }, [props.dbClients, props.rawDbClients]);
   
   const totalUnread = Object.values(unreadMap).reduce((a, b) => a + b, 0);
 
@@ -83,7 +87,7 @@ export default function AdminLayout({ user, onLogout, onPreview, brand, view, se
     setExpandedFolders(prev => ({ ...prev, [id]: !prev[id] }));
   };
 
-  const STAFF_ALLOWED_IDS = ['operations', 'client-hub'];
+  const STAFF_ALLOWED_IDS = ['operations', 'projects'];
 
   const allMenuGroups = [
     {
@@ -148,15 +152,18 @@ export default function AdminLayout({ user, onLogout, onPreview, brand, view, se
     return () => window.removeEventListener('resize', h);
   }, []);
 
+  // Re-translate whenever lang changes or admin content mutates (tabs, Firestore data loads, etc.)
   useEffect(() => {
     const lang = props.lang === 'zh' ? 'zh' : 'en';
     const apply = () => translateAdminDom(lang);
+    // Double-pass: immediate + short delay for async Firestore-driven content
     apply();
+    const t = setTimeout(apply, 150);
     const observer = new MutationObserver(() => requestAnimationFrame(apply));
     const root = document.querySelector('.lx-admin');
     if (root) observer.observe(root, { childList: true, subtree: true, characterData: true });
-    return () => observer.disconnect();
-  }, [props.lang, view, isMobile]);
+    return () => { clearTimeout(t); observer.disconnect(); };
+  }, [props.lang]);
 
   return (
     <div className="lx-admin" style={{ display: 'flex', minHeight: '100vh', background: 'transparent', '--ac': ac }}>
@@ -211,7 +218,7 @@ export default function AdminLayout({ user, onLogout, onPreview, brand, view, se
                     >
                       {m.icon}
                       <span className="lxf" style={{ fontSize: 13, fontWeight: view === m.id ? 700 : 500 }}>{m.label}</span>
-                      {m.id === 'client-hub' && totalUnread > 0 && (
+                      {m.id === 'operations' && totalUnread > 0 && (
                         <div style={{
                           marginLeft: 'auto',
                           background: '#EF4444', color: '#fff', fontSize: 10, fontWeight: 800,
@@ -221,8 +228,7 @@ export default function AdminLayout({ user, onLogout, onPreview, brand, view, se
                           {totalUnread > 99 ? '99+' : totalUnread}
                         </div>
                       )}
-                      {view === m.id && m.id !== 'client-hub' && <div style={{ position: 'absolute', right: 12, width: 4, height: 4, borderRadius: '50%', background: ac }} />}
-                      {view === 'client-hub' && m.id === 'client-hub' && totalUnread === 0 && <div style={{ position: 'absolute', right: 12, width: 4, height: 4, borderRadius: '50%', background: ac }} />}
+                      {view === m.id && !(m.id === 'operations' && totalUnread > 0) && <div style={{ position: 'absolute', right: 12, width: 4, height: 4, borderRadius: '50%', background: ac }} />}
                     </button>
                   ))}
                 </div>
@@ -237,6 +243,8 @@ export default function AdminLayout({ user, onLogout, onPreview, brand, view, se
             <button onClick={() => { setShowPwModal(true); setPwMsg(null); setNewPw(''); }} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', background: 'none', border: 'none', color: 'rgba(249,247,244,.4)', cursor: 'pointer' }}>
               <KeyRound size={16} /> <span style={{ fontSize: 13 }}>Change Password</span>
             </button>
+            {/* Language toggle — desktop sidebar */}
+            <LanguageFlagSwitch variant="mobile" style={{ width: '100%', borderRadius: 12, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', height: 42, fontSize: 18 }} />
             <button onClick={onLogout} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', background: 'none', border: 'none', color: 'rgba(249,247,244,.4)', cursor: 'pointer' }}>
               <LogOut size={16} /> <span style={{ fontSize: 13 }}>Logout</span>
             </button>
@@ -323,14 +331,20 @@ export default function AdminLayout({ user, onLogout, onPreview, brand, view, se
                                 <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
                    <LanguageFlagSwitch variant="mobile" />
                    
-                   <NotificationBell notifications={userNotifications} onMarkRead={markNotificationRead} />
+                   <NotificationBell notifications={userNotifications} onMarkRead={markNotificationRead} navigate={navigate} />
                    
-                   <button onClick={() => setView('client-hub')} style={{ background: 'none', border: 'none', cursor: 'pointer', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)' }} title="Client Messages">
-                     <MessageSquare size={18} />
+                   <button
+                     onClick={() => setView('operations')}
+                     title={totalUnread > 0 ? `${totalUnread} unread client message${totalUnread > 1 ? 's' : ''}` : 'Client Messages'}
+                     style={{ width: 38, height: 38, borderRadius: 10, background: 'transparent', border: '1.5px solid var(--border-color)', cursor: 'pointer', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', color: totalUnread > 0 ? '#6366F1' : 'var(--text-secondary)', transition: 'all .15s' }}
+                     onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-secondary)'}
+                     onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                   >
+                     <MessageSquare size={17} fill={totalUnread > 0 ? '#6366F1' : 'none'} />
                      {totalUnread > 0 && (
-                       <span style={{ position: 'absolute', top: -6, right: -6, background: '#EF4444', color: '#fff', fontSize: 9, fontWeight: 800, minWidth: 16, height: 16, padding: '0 4px', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid #fff' }}>
+                       <div style={{ position: 'absolute', top: -5, right: -5, minWidth: 18, height: 18, borderRadius: 9, background: '#6366F1', color: '#fff', fontSize: 10, fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 4px', border: '2px solid #fff', lineHeight: 1 }}>
                          {totalUnread > 99 ? '99+' : totalUnread}
-                       </span>
+                       </div>
                      )}
                    </button>
                    

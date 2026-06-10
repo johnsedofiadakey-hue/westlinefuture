@@ -1,12 +1,147 @@
 import React, { useState, useCallback } from 'react';
 import { createPortal } from 'react-dom';
+import { useResponsive } from '../../hooks/useResponsive'; // ✅ CRITICAL FIX #7: Add responsive hook
 import {
   Search, X, Check, CheckCircle2,
   DollarSign, MessageCircle, FileText, Camera,
   Clock, User, Grip, Activity, Calendar, ChevronRight, Trash2, AlertTriangle, Users, UserCheck,
-  LayoutGrid, List, Filter, ShieldCheck
+  LayoutGrid, List, Filter, ShieldCheck, Eye, Download
 } from 'lucide-react';
 import { CLIENT_PROJECT_STAGES, PROJECT_TYPES } from '../../data';
+import { isPaidStatus } from '../../components/Shared';
+
+// ─── Contract helpers ─────────────────────────────────────────────────────────
+function applyContractVars(template, project, brand) {
+  const budget = Number(project?.budget || 0);
+  const completionDate = project?.targetCompletionDate
+    ? new Date(project.targetCompletionDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
+    : 'Pending Scheduling';
+  return (template || '')
+    .replace(/\{\{clientName\}\}/g,     project?.clientName || 'Valued Client')
+    .replace(/\{\{projectTitle\}\}/g,   project?.title || 'Your Project')
+    .replace(/\{\{budget\}\}/g,         `GH₵ ${budget.toLocaleString(undefined, { minimumFractionDigits: 2 })}`)
+    .replace(/\{\{company\}\}/g,        brand?.name || 'Westline Future')
+    .replace(/\{\{date\}\}/g,           new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }))
+    .replace(/\{\{completionDate\}\}/g, completionDate);
+}
+
+const DEFAULT_CONTRACT = `SERVICE AGREEMENT
+
+This Service Agreement ("Agreement") is entered into as of {{date}} between {{company}} ("Contractor") and {{clientName}} ("Client").
+
+1. SCOPE OF WORK
+The Contractor agrees to perform the following services for the Client: {{projectTitle}}.
+
+2. PROJECT VALUE
+The total agreed project value is {{budget}}, payable in accordance with the payment schedule set out in the associated quotation.
+
+3. TIMELINE
+Work is expected to be completed by {{completionDate}}, subject to client cooperation, site access, and prompt payment of invoices.
+
+4. PAYMENT TERMS
+Payment shall be made according to the milestone schedule agreed at project kickoff. Late payments may delay project progress and attract a 2% monthly late fee.
+
+5. CHANGES & VARIATIONS
+Any changes to the agreed scope of work must be submitted in writing and approved by both parties. Variations will be quoted separately before work begins.
+
+6. CONFIDENTIALITY
+Both parties agree to keep project details, pricing, and client information confidential and not to disclose it to third parties without prior written consent.
+
+7. ACCEPTANCE
+By signing this agreement, the Client confirms that they have read, understood, and agreed to the full terms of this Service Agreement.`;
+
+// ─── Contract Preview Modal ───────────────────────────────────────────────────
+function ContractPreviewModal({ project, brand, onClose }) {
+  const rawTemplate = project.contractTerms || brand?.finSettings?.contractTemplate || DEFAULT_CONTRACT;
+  const rendered = applyContractVars(rawTemplate, project, brand);
+  const signed = !!project.contractAccepted;
+
+  return createPortal(
+    <div style={{ position: 'fixed', inset: 0, zIndex: 10000, background: 'rgba(0,0,0,.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+      <div style={{ background: '#fff', borderRadius: 20, width: '100%', maxWidth: 680, maxHeight: '90vh', display: 'flex', flexDirection: 'column', boxShadow: '0 32px 80px rgba(0,0,0,.25)', overflow: 'hidden' }}>
+        {/* Header */}
+        <div style={{ padding: '20px 28px', borderBottom: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 3 }}>Contract Preview</div>
+            <div style={{ fontSize: 16, fontWeight: 900, color: 'var(--accent-secondary)' }}>{project.title}</div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            {signed && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 20, background: '#F0FDF4', border: '1px solid #BBF7D0' }}>
+                <CheckCircle2 size={12} color="#16A34A" />
+                <span style={{ fontSize: 11, fontWeight: 800, color: '#15803D' }}>Signed by {project.contractSignedName || 'Client'}</span>
+              </div>
+            )}
+            <button onClick={onClose} style={{ width: 32, height: 32, borderRadius: 8, border: '1px solid var(--border-color)', background: 'var(--bg-secondary)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <X size={14} />
+            </button>
+          </div>
+        </div>
+
+        {/* Contract Body */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: '28px 36px' }}>
+          {/* Letterhead */}
+          <div style={{ textAlign: 'center', marginBottom: 28, paddingBottom: 20, borderBottom: '2px solid var(--border-color)' }}>
+            <div style={{ fontSize: 18, fontWeight: 900, color: 'var(--accent-secondary)', letterSpacing: '.02em' }}>{brand?.name || 'Westline Future'}</div>
+            <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 4 }}>Service Agreement</div>
+          </div>
+
+          {/* Contract text */}
+          <div style={{ fontSize: 13, lineHeight: 1.9, color: '#2D2D2D', whiteSpace: 'pre-wrap', fontFamily: 'Georgia, serif' }}>
+            {rendered}
+          </div>
+
+          {/* Signature block — shown when signed */}
+          {signed && (
+            <div style={{ marginTop: 36, paddingTop: 24, borderTop: '1.5px solid var(--border-color)' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
+                <div>
+                  <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 8 }}>Client Signature</div>
+                  <div style={{ height: 60, display: 'flex', alignItems: 'center' }}>
+                    {project.quoteSignature ? (
+                      <img src={project.quoteSignature} alt="signature" style={{ maxHeight: 55, maxWidth: '100%', objectFit: 'contain' }} />
+                    ) : (
+                      <div style={{ fontSize: 28, fontFamily: 'Georgia, serif', fontStyle: 'italic', color: 'var(--accent-secondary)' }}>{project.contractSignedName}</div>
+                    )}
+                  </div>
+                  <div style={{ height: 1, background: '#2D2D2D', marginTop: 4, width: 200 }} />
+                  <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 6 }}>{project.contractSignedName || 'Client'}</div>
+                  {project.quoteSignedAt?.seconds && (
+                    <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
+                      {new Date(project.quoteSignedAt.seconds * 1000).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 8 }}>For {brand?.name || 'Westline Future'}</div>
+                  <div style={{ height: 60, display: 'flex', alignItems: 'flex-end' }}>
+                    <div style={{ fontSize: 22, fontFamily: 'Georgia, serif', fontStyle: 'italic', color: 'var(--accent-secondary)' }}>{brand?.finSettings?.signatureName || 'Authorised Signatory'}</div>
+                  </div>
+                  <div style={{ height: 1, background: '#2D2D2D', marginTop: 4, width: 200 }} />
+                  <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 6 }}>{brand?.finSettings?.signatureName || 'Authorised Signatory'}</div>
+                  <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{brand?.finSettings?.signatureTitle || brand?.name}</div>
+                </div>
+              </div>
+              {project.quoteVerificationStamp && (
+                <div style={{ marginTop: 16, padding: '10px 14px', borderRadius: 10, background: '#F8F8FD', border: '1px solid var(--border-color)', fontSize: 10, color: 'var(--text-secondary)', fontFamily: 'monospace', lineHeight: 1.7 }}>
+                  <div style={{ fontWeight: 800, marginBottom: 4, fontFamily: 'inherit' }}>VERIFICATION RECORD</div>
+                  IP: {project.quoteVerificationStamp.ipAddress} · UA: {(project.quoteVerificationStamp.userAgent || '').slice(0, 60)}...
+                  <br />Timestamp: {project.quoteVerificationStamp.timestamp}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div style={{ padding: '16px 28px', borderTop: '1px solid var(--border-color)', display: 'flex', justifyContent: 'flex-end', flexShrink: 0 }}>
+          <button onClick={onClose} style={{ padding: '10px 24px', borderRadius: 10, border: '1.5px solid var(--border-color)', background: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Close</button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
 
 // ─── Column definitions — professional project pipeline ─────────────────────
 const KANBAN_COLS = [
@@ -57,12 +192,17 @@ function getProjectHealth(project, invoices = []) {
   const currentEntry = [...history].reverse().find(h => h.stageId === (project.stageId || 1));
   const daysInStage = daysSince(currentEntry?.timestamp || project.createdAt) || 0;
   const projectInvoices = invoices.filter(i => i.parentId === project.id || i.projectId === project.id);
-  const unpaid = projectInvoices.filter(i => !['Paid', 'paid'].includes(i.status));
+  // Only treat invoices as "overdue/blocking" if they are explicitly Overdue OR have a due date set by admin.
+  // Auto-generated milestone invoices with due: null are future obligations — they don't block project health.
+  const overdueInvoices = projectInvoices.filter(i =>
+    !isPaidStatus(i.status) &&
+    (i.status === 'Overdue' || (i.due != null && i.due !== ''))
+  );
   const waitingClient = stage.whoActs === 'client' || String(project.nextAction || '').toLowerCase().includes('client');
   const delayed = project.timelineStatus === 'Delayed' || daysInStage > ((stage.days || 7) + 3);
-  const blocked = delayed || unpaid.length > 0 || project.projectHealth === 'Red' || String(project.healthStatus || '').toLowerCase() === 'red';
+  const blocked = delayed || overdueInvoices.length > 0 || project.projectHealth === 'Red' || String(project.healthStatus || '').toLowerCase() === 'red';
 
-  if (blocked) return { label: 'Blocked', color: '#DC2626', bg: '#FEF2F2', reason: unpaid.length ? `${unpaid.length} unpaid invoice${unpaid.length > 1 ? 's' : ''}` : delayed ? `${daysInStage}d in stage` : 'Needs admin review' };
+  if (blocked) return { label: 'Blocked', color: '#DC2626', bg: '#FEF2F2', reason: overdueInvoices.length ? `${overdueInvoices.length} overdue invoice${overdueInvoices.length > 1 ? 's' : ''}` : delayed ? `${daysInStage}d in stage` : 'Needs admin review' };
   if (waitingClient) return { label: 'Waiting Client', color: '#D97706', bg: '#FFF7ED', reason: project.nextAction || stage.clientMsg };
   return { label: 'On Track', color: '#16A34A', bg: '#F0FDF4', reason: project.nextAction || stage.adminPrompt };
 }
@@ -189,13 +329,15 @@ function KanbanColumn({ col, projects, ac, onOpen, onDragStart, onDrop, onDragOv
 }
 
 // ─── ProjectDrawer ────────────────────────────────────────────────────────────
-function ProjectDrawer({ project, ac, onClose, updateProjectStage, updateProject, createInvoice, sendWhatsAppUpdate, notify, invoices = [], deleteProject, teamMembers = [], assignWorkerToProject, staffMode = false }) {
+function ProjectDrawer({ project, ac, onClose, updateProjectStage, updateProject, createInvoice, sendWhatsAppUpdate, notify, invoices = [], deleteProject, teamMembers = [], assignWorkerToProject, staffMode = false, brand }) {
   const [tab, setTab] = useState('overview');
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [assigning, setAssigning] = useState(null);
   const [archiveReason, setArchiveReason] = useState('');
   const [archiveConfirm, setArchiveConfirm] = useState('');
+  const [customTerms, setCustomTerms] = useState(project.contractTerms || '');
+  const [showContractPreview, setShowContractPreview] = useState(false);
 
   const handleDelete = async () => {
     setDeleting(true);
@@ -208,7 +350,7 @@ function ProjectDrawer({ project, ac, onClose, updateProjectStage, updateProject
   const availableStages = CLIENT_PROJECT_STAGES.filter(s => ptype.stages.includes(s.id));
   const currentIdx = availableStages.findIndex(s => s.id === stageId);
   const nextStage = availableStages[currentIdx + 1];
-  const projInvoices = invoices.filter(i => i.parentId === project.id);
+  const projInvoices = invoices.filter(i => i.parentId === project.id || i.projectId === project.id);
   const history = project.stageHistory || [];
 
   const advance = async () => {
@@ -349,7 +491,7 @@ function ProjectDrawer({ project, ac, onClose, updateProjectStage, updateProject
                 </div>
                 <div style={{ padding: 16, background: `var(--bg-secondary)`, borderRadius: 14 }}>
                   <div style={{ fontSize: 10, color: `var(--text-secondary)`, textTransform: 'uppercase', fontWeight: 800, marginBottom: 8 }}>Invoiced</div>
-                  <div style={{ fontSize: 22, fontWeight: 800, color: `var(--accent-secondary)` }}>{projInvoices.filter(i => i.status === 'Paid').length}<span style={{ fontSize: 13, color: `var(--text-secondary)`, fontWeight: 500 }}>/{projInvoices.length}</span></div>
+                  <div style={{ fontSize: 22, fontWeight: 800, color: `var(--accent-secondary)` }}>{projInvoices.filter(i => isPaidStatus(i.status)).length}<span style={{ fontSize: 13, color: `var(--text-secondary)`, fontWeight: 500 }}>/{projInvoices.length}</span></div>
                 </div>
               </div>
 
@@ -370,6 +512,56 @@ function ProjectDrawer({ project, ac, onClose, updateProjectStage, updateProject
                   </button>
                 </div>
               </div>
+              
+              {/* Contract Signing Status */}
+              <div style={{ marginTop: 20, padding: '12px 16px', borderRadius: 12, background: project.contractAccepted ? '#F0FDF4' : '#FFF7ED', border: `1px solid ${project.contractAccepted ? '#BBF7D0' : '#FED7AA'}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  {project.contractAccepted
+                    ? <><CheckCircle2 size={15} color="#16A34A" /><div><div style={{ fontSize: 12, fontWeight: 800, color: '#15803D' }}>Contract Signed</div><div style={{ fontSize: 11, color: '#16A34A' }}>{project.contractSignedName || 'Client'} · {project.quoteSignedAt?.seconds ? new Date(project.quoteSignedAt.seconds * 1000).toLocaleDateString('en-GB') : '—'}</div></div></>
+                    : <><AlertTriangle size={15} color="#D97706" /><div style={{ fontSize: 12, fontWeight: 700, color: '#92400E' }}>Contract not yet signed by client</div></>
+                  }
+                </div>
+                <button
+                  onClick={() => setShowContractPreview(true)}
+                  style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 13px', borderRadius: 9, border: `1px solid ${project.contractAccepted ? '#BBF7D0' : '#FED7AA'}`, background: '#fff', cursor: 'pointer', fontSize: 11, fontWeight: 800, color: project.contractAccepted ? '#15803D' : '#92400E', whiteSpace: 'nowrap', flexShrink: 0 }}
+                >
+                  {project.contractAccepted ? <><Download size={12} /> View Signed</> : <><Eye size={12} /> Preview</>}
+                </button>
+              </div>
+
+              {/* Contract Terms Customization */}
+              <div style={{ marginTop: 16 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                  <div style={{ fontSize: 11, fontWeight: 800, color: `var(--text-secondary)`, textTransform: 'uppercase', letterSpacing: '.1em' }}>Custom Contract Terms</div>
+                  <button
+                    onClick={() => setShowContractPreview(true)}
+                    style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 10, fontWeight: 800, color: `var(--text-secondary)`, background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', borderRadius: 7, padding: '4px 10px', cursor: 'pointer' }}
+                  >
+                    <Eye size={10} /> Preview as Client
+                  </button>
+                </div>
+                <textarea
+                  value={customTerms}
+                  onChange={e => setCustomTerms(e.target.value)}
+                  onBlur={() => {
+                    if (customTerms !== project.contractTerms) {
+                      updateProject(project.id, { contractTerms: customTerms });
+                      notify && notify('success', 'Contract terms updated');
+                    }
+                  }}
+                  placeholder="Enter customized contract terms for this project. Leave blank to use the global template from Financial Settings."
+                  style={{ width: '100%', minHeight: 100, padding: 12, background: `var(--bg-secondary)`, border: '1px solid var(--border-color)', borderRadius: 12, fontSize: 13, color: `var(--text-primary)`, fontFamily: 'inherit', resize: 'vertical' }}
+                />
+                <div style={{ fontSize: 11, color: `var(--text-secondary)`, marginTop: 6 }}>Leave blank to use the global template set in Admin → Financials → Contract Template.</div>
+              </div>
+
+              {showContractPreview && (
+                <ContractPreviewModal
+                  project={{ ...project, contractTerms: customTerms || project.contractTerms }}
+                  brand={brand}
+                  onClose={() => setShowContractPreview(false)}
+                />
+              )}
             </div>
           )}
 
@@ -436,8 +628,8 @@ function ProjectDrawer({ project, ac, onClose, updateProjectStage, updateProject
                 ))
               )}
               {projInvoices.length > 0 && (() => {
-                const total = projInvoices.reduce((a, b) => a + parseFloat((b.amount || '0').replace(/[^0-9.]/g, '')), 0);
-                const paid = projInvoices.filter(i => i.status === 'Paid').reduce((a, b) => a + parseFloat((b.amount || '0').replace(/[^0-9.]/g, '')), 0);
+                const total = projInvoices.reduce((a, b) => a + (parseFloat(String(b.amount || b.total || 0).replace(/[^0-9.]/g, '')) || 0), 0);
+                const paid = projInvoices.filter(i => isPaidStatus(i.status)).reduce((a, b) => a + (parseFloat(String(b.amount || b.total || 0).replace(/[^0-9.]/g, '')) || 0), 0);
                 return (
                   <div style={{ padding: 16, background: `var(--accent-secondary)`, borderRadius: 14, color: '#fff' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
@@ -509,6 +701,7 @@ function ProjectDrawer({ project, ac, onClose, updateProjectStage, updateProject
 
 // ─── Main export ──────────────────────────────────────────────────────────────
 export default function ProjectKanban({ clients = [], brand, updateProjectStage, updateProject, createInvoice, sendWhatsAppUpdate, notify, invoices = [], deleteProject, teamMembers = [], assignWorkerToProject, staffMode = false, ...props }) {
+  const { isMobile } = useResponsive(); // ✅ CRITICAL FIX #7: Get responsive state
   const ac = brand?.color || `var(--accent-secondary)`;
   const [search, setSearch] = useState('');
   const [dragProject, setDragProject] = useState(null);
@@ -615,7 +808,12 @@ export default function ProjectKanban({ clients = [], brand, updateProjectStage,
           </div>
         ))}
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(260px, 1fr) 2fr', gap: 16 }}>
+      {/* ✅ CRITICAL FIX #7: Responsive layout — stacks on mobile */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: isMobile ? '1fr' : 'minmax(260px, 1fr) 2fr', // Stacks to single column on mobile
+        gap: 16
+      }}>
         <div style={{ background: '#fff', border: '1px solid var(--border-color)', borderRadius: 16, padding: 18 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
             <div style={{ fontSize: 11, fontWeight: 900, color: `var(--text-secondary)`, textTransform: 'uppercase', letterSpacing: '.08em' }}>50 Project Capacity</div>
@@ -628,18 +826,18 @@ export default function ProjectKanban({ clients = [], brand, updateProjectStage,
         </div>
         <div style={{ background: '#fff', border: '1px solid var(--border-color)', borderRadius: 16, padding: 18, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
           <Filter size={14} color="var(--text-secondary)" />
-          <select className="p-inp" value={healthFilter} onChange={e => setHealthFilter(e.target.value)} style={{ height: 38, width: 180, fontSize: 12 }}>
+          <select className="p-inp" value={healthFilter} onChange={e => setHealthFilter(e.target.value)} style={{ height: 38, width: isMobile ? '100%' : 180, fontSize: 12 }}>
             <option value="all">All health states</option>
             <option value="Blocked">Blocked</option>
             <option value="Waiting Client">Waiting Client</option>
             <option value="On Track">On Track</option>
           </select>
-          <select className="p-inp" value={sortBy} onChange={e => setSortBy(e.target.value)} style={{ height: 38, width: 170, fontSize: 12 }}>
+          <select className="p-inp" value={sortBy} onChange={e => setSortBy(e.target.value)} style={{ height: 38, width: isMobile ? '100%' : 170, fontSize: 12 }}>
             <option value="risk">Sort by risk</option>
             <option value="stage">Sort by stage</option>
             <option value="value">Sort by value</option>
           </select>
-          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: `var(--text-secondary)`, fontWeight: 800 }}>
+          <div style={{ marginLeft: isMobile ? 0 : 'auto', display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: `var(--text-secondary)`, fontWeight: 800 }}>
             <ShieldCheck size={14} color="#16A34A" /> {filtered.length} visible projects
           </div>
         </div>
@@ -710,6 +908,7 @@ export default function ProjectKanban({ clients = [], brand, updateProjectStage,
           teamMembers={teamMembers}
           assignWorkerToProject={assignWorkerToProject}
           staffMode={staffMode}
+          brand={brand}
         />,
         document.body
       )}

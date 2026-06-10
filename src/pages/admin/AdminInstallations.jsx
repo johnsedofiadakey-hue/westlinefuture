@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Search, ArrowLeft, Check, Plus, Camera, FileText, DollarSign, ArrowRight, MessageCircle, HardHat, UserCheck, UserX } from 'lucide-react';
-import { PSBadge, SBadge, FF as PFormField } from '../../components/Shared';
+import { PSBadge, SBadge, FF as PFormField, isPaidStatus } from '../../components/Shared';
 import { PROJECT_STAGES } from '../../data';
 import AdminTasks from './AdminTasks';
 import AdminProcurement from './AdminProcurement';
@@ -34,7 +34,7 @@ export default function AdminInstallations({ clients = [], updateProject, dbClie
     const proj = clients.find(x => x.id === sel);
     if (!proj) return <div className="lxf" style={{ padding: 40, textAlign: 'center' }}>Project data missing. <button onClick={() => setSel(null)}>Back</button></div>;
     
-    const paidAmount = (props.invoices || []).filter(i => i.parentId === sel && i.status === 'Paid').reduce((a, b) => a + (parseFloat(String(b.amount || 0).replace(/[$,]/g, '')) || 0), 0);
+    const paidAmount = (props.invoices || []).filter(i => i.parentId === sel && isPaidStatus(i.status)).reduce((a, b) => a + (parseFloat(String(b.amount || 0).replace(/[$,]/g, '')) || 0), 0);
     const totalBudget = parseFloat(String(proj.budget || 0).replace(/[$,]/g, '')) || 0;
     
     return (
@@ -159,7 +159,7 @@ export default function AdminInstallations({ clients = [], updateProject, dbClie
                   {(transactions || []).filter(t => t.parentId === sel).map(t => (
                     <div key={t.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', background: `var(--bg-secondary)`, borderRadius: 8, borderLeft: `3px solid ${ac}` }}>
                        <div>
-                          <div className="lxf" style={{ fontSize: 12, fontWeight: 700 }}>${parseFloat(t.amount).toLocaleString()}</div>
+                          <div className="lxf" style={{ fontSize: 12, fontWeight: 700 }}>GH₵{parseFloat(t.amount).toLocaleString()}</div>
                           <div className="lxf" style={{ fontSize: 10, color: `var(--text-secondary)` }}>{t.date} via {t.method}</div>
                        </div>
                        <SBadge s="VERIFIED" />
@@ -171,18 +171,18 @@ export default function AdminInstallations({ clients = [], updateProject, dbClie
                <div style={{ marginTop: 24, paddingTop: 20, borderTop: '1px solid rgba(0,0,0,.05)' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
                     <span className="lxf" style={{ fontSize: 13, color: `var(--text-secondary)` }}>Total Verified</span>
-                    <span className="lxf" style={{ fontSize: 14, fontWeight: 700, color: '#16A34A' }}>${(transactions || []).filter(t => t.parentId === sel).reduce((a, b) => a + (parseFloat(String(b.amount || '0').replace(/[^0-9.]/g, '')) || 0), 0).toLocaleString()}</span>
+                    <span className="lxf" style={{ fontSize: 14, fontWeight: 700, color: '#16A34A' }}>GH₵{(transactions || []).filter(t => t.parentId === sel).reduce((a, b) => a + (parseFloat(String(b.amount || '0').replace(/[^0-9.]/g, '')) || 0), 0).toLocaleString()}</span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <span className="lxf" style={{ fontSize: 13, color: `var(--text-secondary)` }}>Remaining Balance</span>
-                    <span className="lxf" style={{ fontSize: 14, fontWeight: 700, color: '#ff4444' }}>${(totalBudget - (transactions || []).filter(t => t.parentId === sel).reduce((a, b) => a + (parseFloat(String(b.amount || '0').replace(/[^0-9.]/g, '')) || 0), 0)).toLocaleString()}</span>
+                    <span className="lxf" style={{ fontSize: 14, fontWeight: 700, color: '#ff4444' }}>GH₵{(totalBudget - (transactions || []).filter(t => t.parentId === sel).reduce((a, b) => a + (parseFloat(String(b.amount || '0').replace(/[^0-9.]/g, '')) || 0), 0)).toLocaleString()}</span>
                   </div>
                </div>
             </div>
 
             {/* FIELD CREW ASSIGNMENT */}
             {(() => {
-              const fieldWorkers = (teamMembers || []).filter(m => m.role === 'worker' || m.jobRole === 'Field Worker');
+              const fieldWorkers = (teamMembers || []).filter(m => m.role === 'worker' || /worker|installer|field|tech/i.test(m.jobRole || ''));
               const assignedWorkers = proj.assignedWorkers || [];
               if (fieldWorkers.length === 0) return null;
               return (
@@ -247,7 +247,7 @@ export default function AdminInstallations({ clients = [], updateProject, dbClie
                 <p style={{ fontSize: 13, color: `var(--text-secondary)`, marginBottom: 24 }}>Manually add a payment for audit purposes (Cash, Bank Trace, etc).</p>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                    {manErr && <div style={{ padding: '10px 14px', background: '#FEF2F2', border: '1px solid #FEE2E2', borderRadius: 8, color: '#DC2626', fontSize: 12 }}>{manErr}</div>}
-                   <PFormField label="Amount ($)"><input className="p-inp" type="number" value={manData.amount} onChange={e => setManData({...manData, amount: e.target.value})} /></PFormField>
+                   <PFormField label="Amount (GH₵)"><input className="p-inp" type="number" value={manData.amount} onChange={e => setManData({...manData, amount: e.target.value})} /></PFormField>
                    <PFormField label="Method">
                       <select className="p-inp" value={manData.method} onChange={e => setManData({...manData, method: e.target.value})}>
                          <option value="Bank Transfer">Bank Transfer</option>

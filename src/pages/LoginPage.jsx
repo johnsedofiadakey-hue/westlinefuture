@@ -215,7 +215,7 @@ export default function LoginPage({ onLogin, onBack, brand, type = 'client', ...
           : '#F8F6F3',
       transition: 'background .5s',
     }}>
-      <div id="recaptcha-container" />
+      <div id="recaptcha-container" style={{ display: 'flex', justifyContent: 'center', marginBottom: 8 }} />
 
       {/* Desktop back */}
       {!isMobile && (

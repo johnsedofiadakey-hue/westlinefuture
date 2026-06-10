@@ -5,7 +5,7 @@ import {
   Zap, Globe, Settings, Folder, DollarSign, Activity, AlertCircle,
   Key, MoreVertical, Briefcase, CheckSquare, Square, AlertTriangle
 } from 'lucide-react';
-import { PAv, PSBadge } from '../../components/Shared';
+import { PAv, PSBadge, isPaidStatus } from '../../components/Shared';
 import EmptyState from '../../components/ui/EmptyState';
 import { Users as UsersIcon } from 'lucide-react';
 
@@ -170,12 +170,18 @@ export default function AdminClients({ dbClients, createClient, updateClient, de
               const myProjects = (workOrders || []).filter(wo => wo.clientId === client.id);
               const latestProject = myProjects[myProjects.length - 1];
               const clientInvoices = invoices.filter(inv => inv.clientId === client.id);
+              // Only count invoices that are actually due:
+              // - Has an explicit due date set by admin (milestone was triggered), OR
+              // - Marked Overdue explicitly.
+              // Auto-generated milestones with due: null are future obligations, not current debt.
               const totalOwed = clientInvoices.reduce((sum, inv) => {
-                if (inv.status === 'Paid') return sum;
+                if (isPaidStatus(inv.status)) return sum;
+                const isActuallyDue = inv.status === 'Overdue' || (inv.due != null && inv.due !== '');
+                if (!isActuallyDue) return sum;
                 return sum + ((inv.amount || 0) - (inv.amountPaid || 0));
               }, 0);
-              
-              const unpaidCount = clientInvoices.filter(i => i.status !== 'Paid').length;
+
+              const unpaidCount = clientInvoices.filter(i => !['Paid', 'paid'].includes(i.status) && (i.status === 'Overdue' || (i.due != null && i.due !== ''))).length;
               let healthScore = 'Green'; // Green, Yellow, Red
               let healthText = 'On Track';
               let nextAction = 'Ready for Intake';

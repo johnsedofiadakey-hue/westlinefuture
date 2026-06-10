@@ -34,6 +34,7 @@ export default function ClientRenderingVault({
   const [payMethodMap, setPayMethodMap] = useState({});
   // Offline/bank transfer submitting state per package
   const [paySubmitting, setPaySubmitting] = useState({});
+  const [confirmDeletePin, setConfirmDeletePin] = useState(null); // pinId to confirm-delete
 
   // Sync markups in real-time
   useEffect(() => {
@@ -100,6 +101,10 @@ export default function ClientRenderingVault({
   };
 
   const handleImageClick = (e, pkg) => {
+    const included = pkg.includedRevisions ?? 3;
+    const used = pkg.usedRevisions ?? 0;
+    if (used >= included) return; // hard limit — banner already shown
+    if (project.changeRequestPending) return; // already on hold
     const rect = e.currentTarget.getBoundingClientRect();
     const x = ((e.clientX - rect.left) / rect.width) * 100;
     const y = ((e.clientY - rect.top) / rect.height) * 100;
@@ -154,7 +159,12 @@ export default function ClientRenderingVault({
   };
 
   const handleDeletePin = async (pinId) => {
-    if (!window.confirm('Are you sure you want to remove this feedback pin?')) return;
+    setConfirmDeletePin(pinId);
+  };
+
+  const confirmDeletePinAction = async () => {
+    const pinId = confirmDeletePin;
+    setConfirmDeletePin(null);
     try {
       await deleteDoc(doc(db, 'projects', project.id, 'markups', pinId));
       setActivePin(null);
@@ -185,7 +195,8 @@ export default function ClientRenderingVault({
 
       {projectPackages.map(pkg => {
         const linkedInv = invoices.find(i => i.id === pkg.linkedInvoiceId || i.renderingPackageId === pkg.id);
-        const isUnlocked = pkg.unlocked || pkg.status === 'Paid / Unlocked' || (linkedInv && linkedInv.status === 'Paid');
+        const invPaid = linkedInv && ['paid', 'paid in full'].includes(String(linkedInv.status || '').toLowerCase().trim());
+        const isUnlocked = pkg.unlocked || pkg.status === 'Paid / Unlocked' || invPaid;
         const isAwaitingConfirmation = linkedInv?.awaitingConfirmation === true;
         const selectedMethod = payMethodMap[pkg.id] || null;
 
@@ -433,10 +444,21 @@ export default function ClientRenderingVault({
             )}
 
             {/* Interactive Blueprint / Drawing Area */}
+            {(() => {
+              const included = pkg.includedRevisions ?? 3;
+              const used = pkg.usedRevisions ?? 0;
+              const revLimitReached = used >= included;
+              return (
             <div>
-              <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--accent-secondary)', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
-                <PlusCircle size={14} color={ac} /> Click anywhere on the drawing layout to place a feedback pin
-              </div>
+              {revLimitReached ? (
+                <div style={{ padding: '12px 16px', background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 12, fontSize: 13, fontWeight: 700, color: '#DC2626', display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                  <AlertCircle size={15} color="#DC2626" /> Revision limit reached ({used}/{included}). Contact the team to purchase additional revisions.
+                </div>
+              ) : (
+                <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--accent-secondary)', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <PlusCircle size={14} color={ac} /> Click anywhere on the drawing layout to place a feedback pin &middot; <span style={{ color: used >= included - 1 ? '#D97706' : '#10B981', fontWeight: 800 }}>{used}/{included} revisions used</span>
+                </div>
+              )}
 
               <div style={{
                 position: 'relative',
@@ -455,9 +477,10 @@ export default function ClientRenderingVault({
                     width: '100%',
                     height: 'auto',
                     display: 'block',
-                    cursor: 'crosshair',
+                    cursor: revLimitReached || project.changeRequestPending ? 'not-allowed' : 'crosshair',
                     maxHeight: 520,
-                    objectFit: 'contain'
+                    objectFit: 'contain',
+                    opacity: revLimitReached ? 0.7 : 1,
                   }}
                 />
 
@@ -501,6 +524,8 @@ export default function ClientRenderingVault({
                 })}
               </div>
             </div>
+            );
+            })()}
 
             {/* Active Pin Detail Card */}
             {activePin && activePin.packageId === pkg.id && (
@@ -664,6 +689,21 @@ export default function ClientRenderingVault({
           100% { box-shadow: 0 0 0 0 rgba(197, 160, 89, 0); }
         }
       `}</style>
+
+      {/* Pin delete confirmation */}
+      {confirmDeletePin && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+          <div style={{ background: 'var(--bg-primary)', borderRadius: 20, padding: 32, maxWidth: 360, width: '100%', textAlign: 'center', boxShadow: '0 24px 64px rgba(0,0,0,0.18)' }}>
+            <div style={{ fontSize: 32, marginBottom: 12 }}>🗑️</div>
+            <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 8 }}>Remove Pin?</div>
+            <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 24 }}>This feedback pin and its note will be permanently removed.</div>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={() => setConfirmDeletePin(null)} style={{ flex: 1, height: 44, borderRadius: 12, border: '1.5px solid var(--border-color)', background: 'transparent', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Cancel</button>
+              <button onClick={confirmDeletePinAction} style={{ flex: 1, height: 44, borderRadius: 12, border: 'none', background: '#ef4444', color: '#fff', fontSize: 13, fontWeight: 800, cursor: 'pointer' }}>Remove Pin</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

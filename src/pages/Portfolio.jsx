@@ -6,7 +6,7 @@ import {
   Maximize2, X, Info, Calendar, MapPin, Layers, 
   SplitSquareHorizontal, CheckCircle, ArrowUpRight
 } from 'lucide-react';
-import { PubNav, Footer } from '../components/PubLayout';
+import { PubNav, Footer, usePublicTranslation } from '../components/PubLayout';
 import { PORTFOLIO_DATA } from '../data.jsx';
 
 const LIGHT_BG = `var(--bg-primary)`;
@@ -44,7 +44,7 @@ const MasonryCard = ({ project, onClick, ac, mob }) => (
   >
     <div style={{ position: 'relative', overflow: 'hidden' }}>
       <motion.img 
-        src={project.after} 
+        src={project.after} loading="lazy" 
         alt={project.title} 
         whileHover={{ scale: 1.05 }}
         transition={{ duration: 0.8 }}
@@ -119,7 +119,7 @@ const ProjectDetail = ({ project, onClose, ac, navigate, mob }) => {
                 <motion.img 
                  key={activeImg}
                  initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-                 src={activeImg} 
+                 src={activeImg} loading="lazy" 
                  style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
                 />
               )}
@@ -193,6 +193,7 @@ const ProjectDetail = ({ project, onClose, ac, navigate, mob }) => {
 };
 
 export default function Portfolio({ brand, user, onPortal, setPage, content }) {
+  usePublicTranslation();
   const navigate = useNavigate();
   const [selected, setSelected] = useState(null);
   const [menuOpen, setMenuOpen] = useState(false);

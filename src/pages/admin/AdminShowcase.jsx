@@ -1,19 +1,24 @@
 import React, { useState, useEffect } from 'react';
 import { db, storage } from '../../lib/firebase';
-import { collection, addDoc, deleteDoc, doc, onSnapshot, serverTimestamp } from 'firebase/firestore';
+import { collection, addDoc, deleteDoc, doc, onSnapshot, serverTimestamp, updateDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { Trash2, Image as ImageIcon, MapPin, X, PlusCircle, Search, Copy, Eye, Star, ShieldCheck } from 'lucide-react';
+import { Trash2, Image as ImageIcon, MapPin, X, PlusCircle, Search, Copy, Eye, Star, ShieldCheck, Pencil, AlertTriangle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { DEFAULT_SCENES } from '../../data.jsx';
+
+const BLANK_SCENE = { title: '', location: '', description: '', img: '', videoUrl: '', hotspots: [], category: 'Residential', audience: 'Client Presentation', status: 'Published', featured: false, clientVisible: true, sortOrder: 99 };
 
 export default function AdminShowcase({ brand, notify }) {
   const [scenes, setScenes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
-  const [newScene, setNewScene] = useState({ title: '', location: '', description: '', img: '', hotspots: [], category: 'Residential', audience: 'Client Presentation', status: 'Published', featured: false, clientVisible: true });
+  const [editTarget, setEditTarget] = useState(null); // scene being edited (null = add mode)
+  const [newScene, setNewScene] = useState(BLANK_SCENE);
   const [uploading, setUploading] = useState(false);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [deleteTarget, setDeleteTarget] = useState(null); // scene pending delete confirmation
+  const [deleting, setDeleting] = useState(false);
 
   const ac = brand?.color || `var(--accent-secondary)`;
 
@@ -48,34 +53,75 @@ export default function AdminShowcase({ brand, notify }) {
     }
   };
 
+  const openAdd = () => {
+    setEditTarget(null);
+    setNewScene(BLANK_SCENE);
+    setShowAdd(true);
+  };
+
+  const openEdit = (scene) => {
+    setEditTarget(scene);
+    setNewScene({
+      title: scene.title || '',
+      location: scene.location || '',
+      description: scene.description || '',
+      img: scene.img || '',
+      videoUrl: scene.videoUrl || '',
+      hotspots: scene.hotspots || [],
+      category: scene.category || 'Residential',
+      audience: scene.audience || 'Client Presentation',
+      status: scene.status || 'Published',
+      featured: !!scene.featured,
+      clientVisible: scene.clientVisible !== false,
+      sortOrder: scene.sortOrder ?? 99,
+    });
+    setShowAdd(true);
+  };
+
   const saveScene = async () => {
     if (!newScene.img || !newScene.title) return notify('error', 'Title and Image required');
     try {
-      if (!db) {
-        setScenes(prev => [{ ...newScene, id: `local-${Date.now()}`, createdAt: new Date().toISOString() }, ...prev]);
+      if (editTarget) {
+        // UPDATE existing
+        if (!db || String(editTarget.id || '').startsWith('local-') || String(editTarget.id || '').startsWith('def-')) {
+          setScenes(prev => prev.map(s => s.id === editTarget.id ? { ...s, ...newScene } : s));
+        } else {
+          await updateDoc(doc(db, 'showcase', editTarget.id), { ...newScene, updatedAt: serverTimestamp() });
+        }
+        notify('success', 'Scene updated');
       } else {
-        await addDoc(collection(db, 'showcase'), { ...newScene, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
+        // ADD new
+        if (!db) {
+          setScenes(prev => [{ ...newScene, id: `local-${Date.now()}`, createdAt: new Date().toISOString() }, ...prev]);
+        } else {
+          await addDoc(collection(db, 'showcase'), { ...newScene, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
+        }
+        notify('success', 'Scene added to showroom');
       }
       setShowAdd(false);
-      setNewScene({ title: '', location: '', description: '', img: '', hotspots: [], category: 'Residential', audience: 'Client Presentation', status: 'Published', featured: false, clientVisible: true });
-      notify('success', 'Scene added to showroom');
+      setEditTarget(null);
+      setNewScene(BLANK_SCENE);
     } catch (err) {
-      notify('error', 'Save failed');
+      console.error(err);
+      notify('error', editTarget ? 'Update failed' : 'Save failed');
     }
   };
 
-  const deleteScene = async (scene) => {
-    if (!window.confirm("Delete this scene from the showroom?")) return;
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
     try {
-      if (!db || String(scene.id || '').startsWith('local-') || String(scene.id || '').startsWith('def-')) {
-        setScenes(prev => prev.filter(s => s.id !== scene.id));
+      if (!db || String(deleteTarget.id || '').startsWith('local-') || String(deleteTarget.id || '').startsWith('def-')) {
+        setScenes(prev => prev.filter(s => s.id !== deleteTarget.id));
       } else {
-        await deleteDoc(doc(db, 'showcase', scene.id));
+        await deleteDoc(doc(db, 'showcase', deleteTarget.id));
       }
-      // Optionally delete from storage if we have the path, but URL is enough for now
       notify('success', 'Scene removed');
     } catch (err) {
       notify('error', 'Delete failed');
+    } finally {
+      setDeleting(false);
+      setDeleteTarget(null);
     }
   };
 
@@ -84,7 +130,6 @@ export default function AdminShowcase({ brand, notify }) {
     const rect = e.currentTarget.getBoundingClientRect();
     const x = ((e.clientX - rect.left) / rect.width) * 100;
     const y = ((e.clientY - rect.top) / rect.height) * 100;
-    
     const h = { x, y, title: 'New Detail', desc: 'Technical specifications...' };
     setNewScene(prev => ({ ...prev, hotspots: [...prev.hotspots, h] }));
   };
@@ -117,9 +162,9 @@ export default function AdminShowcase({ brand, notify }) {
           <h1 style={{ fontSize: 32, fontWeight: 800, margin: '0 0 8px' }}>Showroom Manager</h1>
           <p style={{ color: '#888', margin: 0 }}>Manage immersive sales scenes, technical hotspots, and client-ready presentation assets.</p>
         </div>
-        <button 
-          onClick={() => setShowAdd(true)} 
-          className="p-btn-gold" 
+        <button
+          onClick={openAdd}
+          className="p-btn-gold"
           style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 24px' }}
         >
           <PlusCircle size={20} /> Add New Scene
@@ -165,16 +210,28 @@ export default function AdminShowcase({ brand, notify }) {
             <div key={s.id} className="p-card" style={{ overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
               <div style={{ height: 200, position: 'relative' }}>
                 <img src={s.img} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt={s.title} />
-                <div style={{ position: 'absolute', left: 12, top: 12, display: 'flex', gap: 6 }}>
+                <div style={{ position: 'absolute', left: 12, top: 12, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                   <span style={{ background: (s.status || 'Published') === 'Published' ? '#16A34A' : (s.status || '') === 'Internal' ? '#7C3AED' : '#D97706', color: '#fff', padding: '4px 8px', borderRadius: 999, fontSize: 10, fontWeight: 900 }}>{s.status || 'Published'}</span>
                   {s.featured && <span style={{ background: ac, color: `var(--accent-secondary)`, padding: '4px 8px', borderRadius: 999, fontSize: 10, fontWeight: 900 }}>Featured</span>}
+                  {s.videoUrl && <span style={{ background: '#1D4ED8', color: '#fff', padding: '4px 8px', borderRadius: 999, fontSize: 10, fontWeight: 900 }}>🎬 3D Tour</span>}
                 </div>
-                <button 
-                  onClick={() => deleteScene(s)}
-                  style={{ position: 'absolute', top: 12, right: 12, background: 'rgba(239, 68, 68, 0.9)', color: '#fff', border: 'none', padding: 8, borderRadius: 8, cursor: 'pointer' }}
-                >
-                  <Trash2 size={16} />
-                </button>
+                {/* Actions top-right */}
+                <div style={{ position: 'absolute', top: 12, right: 12, display: 'flex', gap: 6 }}>
+                  <button
+                    onClick={() => openEdit(s)}
+                    style={{ background: 'rgba(30,30,30,0.85)', color: '#fff', border: 'none', padding: 8, borderRadius: 8, cursor: 'pointer', backdropFilter: 'blur(8px)' }}
+                    title="Edit scene"
+                  >
+                    <Pencil size={14} />
+                  </button>
+                  <button
+                    onClick={() => setDeleteTarget(s)}
+                    style={{ background: 'rgba(239, 68, 68, 0.9)', color: '#fff', border: 'none', padding: 8, borderRadius: 8, cursor: 'pointer' }}
+                    title="Delete scene"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
               </div>
               <div style={{ padding: 20 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', marginBottom: 4 }}>
@@ -205,16 +262,55 @@ export default function AdminShowcase({ brand, notify }) {
           <ImageIcon size={48} style={{ color: '#ccc', marginBottom: 16 }} />
           <h3 className="lxfh" style={{ fontSize: 20, marginBottom: 8 }}>No Showroom Scenes Yet</h3>
           <p style={{ color: '#888', marginBottom: 24, maxWidth: 400, margin: '0 auto 24px' }}>Add your first immersive cinematic scene to showcase your technical excellence to clients.</p>
-          <button onClick={() => setShowAdd(true)} className="p-btn-gold" style={{ padding: '12px 24px' }}>Add First Scene</button>
+          <button onClick={openAdd} className="p-btn-gold" style={{ padding: '12px 24px' }}>Add First Scene</button>
         </div>
       )}
 
 
-      {/* ADD MODAL */}
+      {/* ── DELETE CONFIRMATION MODAL ── */}
+      <AnimatePresence>
+        {deleteTarget && (
+          <div style={{ position: 'fixed', inset: 0, zIndex: 10001, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(12px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              style={{ background: '#fff', borderRadius: 24, padding: 36, width: '100%', maxWidth: 440, boxShadow: '0 40px 80px rgba(0,0,0,0.3)' }}
+            >
+              <div style={{ width: 52, height: 52, borderRadius: 16, background: '#FEF2F2', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 20 }}>
+                <AlertTriangle size={24} color="#EF4444" />
+              </div>
+              <div style={{ fontSize: 20, fontWeight: 900, marginBottom: 8 }}>Remove Scene?</div>
+              <div style={{ fontSize: 14, color: 'var(--text-secondary)', marginBottom: 24, lineHeight: 1.6 }}>
+                <strong style={{ color: 'var(--accent-secondary)' }}>{deleteTarget.title}</strong> will be permanently removed from the showroom. This cannot be undone.
+              </div>
+              <div style={{ display: 'flex', gap: 12 }}>
+                <button
+                  onClick={() => setDeleteTarget(null)}
+                  disabled={deleting}
+                  style={{ flex: 1, height: 48, borderRadius: 12, border: '1.5px solid var(--border-color)', background: '#fff', fontSize: 13, fontWeight: 800, cursor: 'pointer' }}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmDelete}
+                  disabled={deleting}
+                  style={{ flex: 1, height: 48, borderRadius: 12, border: 'none', background: '#EF4444', color: '#fff', fontSize: 13, fontWeight: 900, cursor: deleting ? 'default' : 'pointer', opacity: deleting ? 0.7 : 1 }}
+                >
+                  {deleting ? 'Removing…' : 'Remove Scene'}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+
+      {/* ── ADD / EDIT MODAL ── */}
       <AnimatePresence>
         {showAdd && (
           <div style={{ position: 'fixed', inset: 0, zIndex: 10000, background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(20px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-            <motion.div 
+            <motion.div
               initial={{ scale: 0.95, opacity: 0, y: 20 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
               style={{ background: '#fff', width: '100%', maxWidth: 800, maxHeight: '90vh', borderRadius: 32, overflow: 'hidden', display: 'flex', flexDirection: 'column', boxShadow: '0 40px 100px rgba(0,0,0,0.4)' }}
@@ -222,12 +318,12 @@ export default function AdminShowcase({ brand, notify }) {
               {/* FIXED HEADER */}
               <div style={{ padding: '24px 32px', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#fff' }}>
                 <div>
-                   <h2 style={{ fontSize: 20, fontWeight: 900, margin: 0 }}>Immersive Scene Creator</h2>
+                   <h2 style={{ fontSize: 20, fontWeight: 900, margin: 0 }}>{editTarget ? 'Edit Scene' : 'Immersive Scene Creator'}</h2>
                    <div style={{ fontSize: 11, color: `var(--text-secondary)`, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1 }}>{newScene.hotspots.length} active detail hotspots</div>
                 </div>
-                <button onClick={() => setShowAdd(false)} style={{ background: `var(--bg-secondary)`, border: 'none', width: 44, height: 44, borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><X size={20} /></button>
+                <button onClick={() => { setShowAdd(false); setEditTarget(null); }} style={{ background: `var(--bg-secondary)`, border: 'none', width: 44, height: 44, borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><X size={20} /></button>
               </div>
-              
+
               {/* SCROLLABLE CONTENT */}
               <div style={{ padding: 32, flex: 1, overflowY: 'auto', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 32 }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
@@ -245,6 +341,11 @@ export default function AdminShowcase({ brand, notify }) {
                         </select>
                       </div>
                       <input value={newScene.audience} onChange={e => setNewScene({...newScene, audience: e.target.value})} placeholder="Audience, e.g. Client Presentation" className="p-inp" style={{ marginTop: 12 }} />
+                      <input value={newScene.videoUrl} onChange={e => setNewScene({...newScene, videoUrl: e.target.value})} placeholder="🎬 3D Tour / Embed URL (optional — Kujiale, Matterport, etc.)" className="p-inp" style={{ marginTop: 12 }} />
+                      <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginTop: 12 }}>
+                        <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>Display Order (1 = first on site):</label>
+                        <input type="number" min={1} max={99} value={newScene.sortOrder ?? 99} onChange={e => setNewScene({ ...newScene, sortOrder: parseInt(e.target.value) || 99 })} className="p-inp" style={{ width: 80 }} />
+                      </div>
                       <div style={{ display: 'flex', gap: 16, marginTop: 14, flexWrap: 'wrap' }}>
                         <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, fontWeight: 800, color: `var(--text-secondary)` }}>
                           <input type="checkbox" checked={newScene.clientVisible} onChange={e => setNewScene({ ...newScene, clientVisible: e.target.checked })} /> Client visible
@@ -291,10 +392,10 @@ export default function AdminShowcase({ brand, notify }) {
 
                 <div>
                    <label style={{ display: 'block', fontSize: 10, fontWeight: 900, textTransform: 'uppercase', color: ac, marginBottom: 12 }}>3. Visual Context</label>
-                   <div 
+                   <div
                      onClick={newScene.img ? addHotspot : () => document.getElementById('scene-up').click()}
-                     style={{ 
-                       width: '100%', height: 450, background: `var(--bg-secondary)`, borderRadius: 24, 
+                     style={{
+                       width: '100%', height: 450, background: `var(--bg-secondary)`, borderRadius: 24,
                        border: '2px dashed #DCD7D1', position: 'relative', overflow: 'hidden',
                        cursor: newScene.img ? 'crosshair' : 'pointer'
                      }}
@@ -303,9 +404,9 @@ export default function AdminShowcase({ brand, notify }) {
                        <>
                          <img src={newScene.img} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                          {newScene.hotspots.map((h, i) => (
-                           <div key={i} style={{ 
-                             position: 'absolute', left: `${h.x}%`, top: `${h.y}%`, 
-                             width: 24, height: 24, background: ac, borderRadius: '50%', 
+                           <div key={i} style={{
+                             position: 'absolute', left: `${h.x}%`, top: `${h.y}%`,
+                             width: 24, height: 24, background: ac, borderRadius: '50%',
                              border: '2px solid #fff', transform: 'translate(-50%, -50%)',
                              display: 'flex', alignItems: 'center', justifyContent: 'center',
                              color: '#fff', fontSize: 10, fontWeight: 800, boxShadow: '0 0 20px rgba(0,0,0,0.3)'
@@ -313,6 +414,13 @@ export default function AdminShowcase({ brand, notify }) {
                               {i + 1}
                            </div>
                          ))}
+                         {/* Replace image button */}
+                         <button
+                           onClick={e => { e.stopPropagation(); document.getElementById('scene-up').click(); }}
+                           style={{ position: 'absolute', bottom: 12, right: 12, background: 'rgba(0,0,0,0.7)', color: '#fff', border: 'none', borderRadius: 10, padding: '8px 14px', fontSize: 11, fontWeight: 800, cursor: 'pointer', backdropFilter: 'blur(8px)' }}
+                         >
+                           Replace Image
+                         </button>
                        </>
                      ) : (
                        <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12 }}>
@@ -333,8 +441,10 @@ export default function AdminShowcase({ brand, notify }) {
 
               {/* FIXED FOOTER */}
               <div style={{ padding: '24px 32px', borderTop: '1px solid var(--border-color)', display: 'flex', gap: 12, background: '#fff' }}>
-                <button onClick={() => setShowAdd(false)} className="p-btn-light" style={{ flex: 1, height: 56 }}>Discard Draft</button>
-                <button onClick={saveScene} className="p-btn-gold" style={{ flex: 2, height: 56, fontSize: 16 }}>Publish Immersive Scene</button>
+                <button onClick={() => { setShowAdd(false); setEditTarget(null); }} className="p-btn-light" style={{ flex: 1, height: 56 }}>Discard</button>
+                <button onClick={saveScene} className="p-btn-gold" style={{ flex: 2, height: 56, fontSize: 16 }}>
+                  {editTarget ? 'Save Changes' : 'Publish Immersive Scene'}
+                </button>
               </div>
             </motion.div>
           </div>

@@ -1,32 +1,39 @@
 import React, { useState, useEffect } from 'react';
 import { collection, onSnapshot } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
-import { 
-  DollarSign, Receipt, Clock, CheckCircle, Plus, Users, FileText, Truck, AlertTriangle, Target, Activity, Sparkles, TrendingUp
+import { useResponsive } from '../../hooks/useResponsive'; // ✅ CRITICAL FIX #7: Use centralized responsive hook
+import {
+  DollarSign, Receipt, Clock, CheckCircle, Plus, Users, FileText, Truck, AlertTriangle, Target, Activity, Sparkles, TrendingUp, MessageSquareDiff
 } from 'lucide-react';
-import { 
-  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, 
-  ResponsiveContainer 
+import {
+  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
+  ResponsiveContainer
 } from 'recharts';
 import { REV, CLIENT_PROJECT_STAGES } from '../../data';
+import { isPaidStatus } from '../../components/Shared';
+
+function fmtMoney(val) {
+  const n = Number(val) || 0;
+  if (n >= 1_000_000) return `GH₵${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 10_000)    return `GH₵${(n / 1_000).toFixed(1)}k`;
+  if (n >= 1_000)     return `GH₵${(n / 1_000).toFixed(2)}k`;
+  return `GH₵${n.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+}
 
 export default function AdminDashboard({ clients, invoices, proposals, brand, getSLA, stats, ...props }) {
   const ac = brand.color || `var(--accent-secondary)`;
-  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+  const { isMobile } = useResponsive(); // ✅ CRITICAL FIX #7: Use centralized responsive hook instead of local state
   const [liveProducts, setLiveProducts] = useState([]);
   useEffect(() => {
-    const h = () => setIsMobile(window.innerWidth <= 768);
-    window.addEventListener('resize', h);
     if (db) {
        const unsub = onSnapshot(collection(db, 'products'), (snap) => {
           setLiveProducts(snap.docs.map(d => ({ id: d.id, ...d.data() })));
        });
-       return () => { window.removeEventListener('resize', h); unsub(); };
+       return () => unsub();
     }
-    return () => window.removeEventListener('resize', h);
   }, []);
   
-  const totalRev = (invoices || []).filter(i => i?.status === 'Paid').reduce((a, i) => a + parseFloat(String(i?.amount || '0').replace(/[$,]/g, '') || 0), 0);
+  const totalRev = (invoices || []).filter(i => isPaidStatus(i?.status)).reduce((a, i) => a + parseFloat(String(i?.amount || '0').replace(/[$,]/g, '') || 0), 0);
   const pendingInvs = (invoices || []).filter(i => i?.status === 'Pending' || i?.status === 'pending' || i?.status === 'Unpaid');
   const totalUnpaid = pendingInvs.reduce((a, i) => a + parseFloat(String(i?.amount || '0').replace(/[$,]/g, '') || 0), 0);
   const oneTimeSales = (invoices || [])
@@ -41,8 +48,8 @@ export default function AdminDashboard({ clients, invoices, proposals, brand, ge
   const activeShipments = (props.procurements || []).filter(p => p?.isShipment && p?.status !== 'Delivered' && p?.status !== 'delivered').length;
 
   const dashboardStats = [
-    { label: 'Settled Revenue', value: `GH₵${(totalRev / 1000).toFixed(1)}k`, icon: <DollarSign size={22} />, sub: 'Validated liquidity', color: '#16A34A', trend: 18 },
-    { label: 'Awaiting Capital', value: `GH₵${(totalUnpaid / 1000).toFixed(1)}k`, icon: <Receipt size={22} />, sub: `${pendingInvs.length} active invoices`, color: '#B45309', trend: 2 },
+    { label: 'Settled Revenue', value: fmtMoney(totalRev), raw: totalRev, icon: <DollarSign size={22} />, sub: 'Validated liquidity', color: '#16A34A', trend: 18 },
+    { label: 'Awaiting Capital', value: fmtMoney(totalUnpaid), raw: totalUnpaid, icon: <Receipt size={22} />, sub: `${pendingInvs.length} active invoices`, color: '#B45309', trend: 2 },
     { label: 'Risk Exposure', value: delayedProjects, icon: <AlertTriangle size={22} />, sub: 'SLA priority alerts', color: '#EF4444', trend: -5 },
     { label: 'Client Approvals', value: pendingApprovals, icon: <CheckCircle size={22} />, sub: 'Pending quote, rendering, or sign-off decisions', color: ac, trend: 12 },
   ];
@@ -121,41 +128,53 @@ export default function AdminDashboard({ clients, invoices, proposals, brand, ge
       }}>
          <div style={{ position: 'absolute', top: -100, right: -100, width: 300, height: 300, background: `${ac}10`, filter: 'blur(100px)', borderRadius: '50%' }} />
          
-         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+         <div style={{ display: 'flex', flexDirection: 'column', gap: 12, minWidth: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-               <div style={{ width: 40, height: 40, borderRadius: 12, background: 'rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: ac }}>
+               <div style={{ width: 40, height: 40, borderRadius: 12, background: 'rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: ac, flexShrink: 0 }}>
                   <Target size={20} />
                </div>
                <div className="lxf eyebrow" style={{ fontSize: 10, letterSpacing: '.1em', color: 'rgba(255,255,255,0.5)', fontWeight: 800 }}>Total Value in Transit</div>
             </div>
-            <div className="lxfh" style={{ fontSize: 32, letterSpacing: '-0.03em' }}>
-              GH₵{(( (props.containers || []).filter(c => c.status !== 'Delivered').reduce((acc, c) => acc + (c.value || 0), 0) ) / 1000).toFixed(1)}k
+            <div
+              className="lxfh"
+              title={`GH₵${(props.containers || []).filter(c => c.status !== 'Delivered').reduce((acc, c) => acc + (c.value || 0), 0).toLocaleString()}`}
+              style={{ fontSize: 'clamp(16px, 1.6vw, 26px)', letterSpacing: '-0.03em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+            >
+              {fmtMoney((props.containers || []).filter(c => c.status !== 'Delivered').reduce((acc, c) => acc + (c.value || 0), 0))}
             </div>
             <div style={{ fontSize: 11, color: '#16A34A', fontWeight: 700 }}>Active Shipments Risk</div>
          </div>
 
-         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+         <div style={{ display: 'flex', flexDirection: 'column', gap: 12, minWidth: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-               <div style={{ width: 40, height: 40, borderRadius: 12, background: 'rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#16A34A' }}>
+               <div style={{ width: 40, height: 40, borderRadius: 12, background: 'rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#16A34A', flexShrink: 0 }}>
                   <TrendingUp size={20} />
                </div>
                <div className="lxf eyebrow" style={{ fontSize: 10, letterSpacing: '.1em', color: 'rgba(255,255,255,0.5)', fontWeight: 800 }}>Settled Liquidity</div>
             </div>
-            <div className="lxfh" style={{ fontSize: 32, letterSpacing: '-0.03em' }}>
-               GH₵{(totalRev / 1000).toFixed(1)}k
+            <div
+              className="lxfh"
+              title={`GH₵${totalRev.toLocaleString()}`}
+              style={{ fontSize: 'clamp(16px, 1.6vw, 26px)', letterSpacing: '-0.03em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+            >
+               {fmtMoney(totalRev)}
             </div>
             <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>Valid cash on hand</div>
          </div>
 
-         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+         <div style={{ display: 'flex', flexDirection: 'column', gap: 12, minWidth: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-               <div style={{ width: 40, height: 40, borderRadius: 12, background: 'rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#EF4444' }}>
+               <div style={{ width: 40, height: 40, borderRadius: 12, background: 'rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#EF4444', flexShrink: 0 }}>
                   <AlertTriangle size={20} />
                </div>
                <div className="lxf eyebrow" style={{ fontSize: 10, letterSpacing: '.1em', color: 'rgba(255,255,255,0.5)', fontWeight: 800 }}>Open Quote Pipeline</div>
             </div>
-            <div className="lxfh" style={{ fontSize: 32, letterSpacing: '-0.03em' }}>
-               GH₵{(openQuoteValue / 1000).toFixed(1)}k
+            <div
+              className="lxfh"
+              title={`GH₵${openQuoteValue.toLocaleString()}`}
+              style={{ fontSize: 'clamp(16px, 1.6vw, 26px)', letterSpacing: '-0.03em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+            >
+               {fmtMoney(openQuoteValue)}
             </div>
             <div style={{ fontSize: 11, color: '#FBBF24', fontWeight: 700 }}>Quotes waiting for approval</div>
          </div>
@@ -220,7 +239,7 @@ export default function AdminDashboard({ clients, invoices, proposals, brand, ge
       {/* 3. CORE METRICS OVERVIEW */}
       <div className="kpi-grid">
         {dashboardStats.map((s, i) => (
-          <div key={i} className="p-card" style={{ padding: 32, background: 'rgba(255,255,255,0.6)', backdropFilter: 'blur(20px)', borderRadius: 24, border: '1px solid rgba(255,255,255,0.5)' }}>
+          <div key={i} className="p-card" style={{ padding: 32, background: 'rgba(255,255,255,0.6)', backdropFilter: 'blur(20px)', borderRadius: 24, border: '1px solid rgba(255,255,255,0.5)', minWidth: 0, overflow: 'hidden' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
               <div style={{ width: 52, height: 52, borderRadius: 16, border: `1px solid ${s.color}20`, background: `${s.color}08`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: s.color }}>
                 {s.icon}
@@ -230,20 +249,24 @@ export default function AdminDashboard({ clients, invoices, proposals, brand, ge
               </div>
             </div>
             <div className="lxf eyebrow" style={{ fontSize: 10, color: `var(--text-secondary)`, marginBottom: 6, fontWeight: 800 }}>{s.label}</div>
-            <div className="lxfh" style={{ fontSize: 36, fontWeight: 300, color: `var(--accent-secondary)`, letterSpacing: '-0.02em' }}>{s.value}</div>
+            <div
+              className="lxfh"
+              title={s.raw != null ? `GH₵${Number(s.raw).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : String(s.value)}
+              style={{ fontSize: 'clamp(18px, 1.8vw, 30px)', fontWeight: 300, color: `var(--accent-secondary)`, letterSpacing: '-0.02em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+            >{s.value}</div>
             <p className="lxf" style={{ fontSize: 13, color: `var(--text-secondary)`, marginTop: 14 }}>{s.sub}</p>
           </div>
         ))}
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 20 }}>
-        <div className="p-card" style={{ padding: 24, borderRadius: 20, border: '1px solid var(--border-color)', background: '#fff' }}>
+        <div className="p-card" style={{ padding: 24, borderRadius: 20, border: '1px solid var(--border-color)', background: '#fff', minWidth: 0, overflow: 'hidden' }}>
           <div className="lxf eyebrow" style={{ fontSize: 10, color: `var(--text-secondary)`, marginBottom: 8, fontWeight: 800 }}>Retail / One-Time Sales</div>
-          <div className="lxfh" style={{ fontSize: 30, color: `var(--accent-secondary)`, marginBottom: 6 }}>GH₵{(oneTimeSales / 1000).toFixed(1)}k</div>
+          <div className="lxfh" title={`GH₵${oneTimeSales.toLocaleString()}`} style={{ fontSize: 'clamp(17px, 1.6vw, 26px)', color: `var(--accent-secondary)`, marginBottom: 6, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{fmtMoney(oneTimeSales)}</div>
           <div style={{ fontSize: 12, color: `var(--text-secondary)` }}>Revenue from walk-ins, direct purchases, and one-time client documents.</div>
         </div>
-        <div className="p-card" style={{ padding: 24, borderRadius: 20, border: '1px solid var(--border-color)', background: '#fff' }}>
+        <div className="p-card" style={{ padding: 24, borderRadius: 20, border: '1px solid var(--border-color)', background: '#fff', minWidth: 0, overflow: 'hidden' }}>
           <div className="lxf eyebrow" style={{ fontSize: 10, color: `var(--text-secondary)`, marginBottom: 8, fontWeight: 800 }}>Project Board Capacity</div>
-          <div className="lxfh" style={{ fontSize: 30, color: `var(--accent-secondary)`, marginBottom: 6 }}>{(clients || []).filter(c => c.status !== 'Archived').length}/50</div>
+          <div className="lxfh" style={{ fontSize: 'clamp(17px, 1.6vw, 26px)', color: `var(--accent-secondary)`, marginBottom: 6 }}>{(clients || []).filter(c => c.status !== 'Archived').length}/50</div>
           <div style={{ fontSize: 12, color: `var(--text-secondary)` }}>Active visible projects against the current operating load target.</div>
         </div>
       </div>
@@ -473,6 +496,70 @@ export default function AdminDashboard({ clients, invoices, proposals, brand, ge
               </button>
           </div>
         </div>
+      </div>
+      {/* 4. CHANGE REQUESTS */}
+      {(() => {
+        const pendingCRs = (props.changeRequests || []).filter(cr => cr.status === 'pending' || cr.status === 'Pending');
+        if (pendingCRs.length === 0) return null;
+        return (
+          <div className="p-card" style={{ padding: 40, background: 'rgba(255,255,255,0.6)', backdropFilter: 'blur(20px)', borderRadius: 32, border: '1px solid rgba(255,255,255,0.5)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 32 }}>
+              <div>
+                <h3 className="lxfh" style={{ fontSize: 24, letterSpacing: '-0.02em' }}>Change Requests</h3>
+                <p className="lxf" style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 4 }}>Client-submitted scope changes awaiting your decision.</p>
+              </div>
+              <div style={{ background: '#FEF3C7', color: '#B45309', padding: '4px 12px', borderRadius: 100, fontSize: 11, fontWeight: 800 }}>{pendingCRs.length} PENDING</div>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              {pendingCRs.map(cr => (
+                <ChangeRequestRow key={cr.id} cr={cr} clients={clients} ac={ac} onUpdate={props.updateChangeRequest} />
+              ))}
+            </div>
+          </div>
+        );
+      })()}
+    </div>
+  );
+}
+
+function ChangeRequestRow({ cr, clients, ac, onUpdate }) {
+  const [loading, setLoading] = useState(false);
+  const client = (clients || []).find(c => c.id === cr.clientId);
+  const clientName = client?.name || client?.company || cr.clientId || 'Client';
+
+  const handle = async (status) => {
+    if (!onUpdate || loading) return;
+    setLoading(true);
+    await onUpdate(cr.id, { status, resolvedAt: new Date().toISOString() }, cr.projectId);
+    setLoading(false);
+  };
+
+  return (
+    <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start', padding: 20, borderRadius: 18, border: '1px solid var(--bg-secondary)', background: '#fff' }}>
+      <div style={{ width: 44, height: 44, borderRadius: 12, background: '#FEF3C7', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+        <MessageSquareDiff size={20} color="#B45309" />
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontWeight: 800, fontSize: 14 }}>{clientName}</div>
+        <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>{cr.projectId || 'No project ref'} • {cr.createdAt ? new Date(cr.createdAt).toLocaleDateString() : ''}</div>
+        {cr.description && <div style={{ fontSize: 13, marginTop: 8, color: 'var(--text-primary)', lineHeight: 1.5 }}>{cr.description}</div>}
+        {cr.items && Array.isArray(cr.items) && (
+          <ul style={{ margin: '8px 0 0', paddingLeft: 16, fontSize: 12, color: 'var(--text-secondary)' }}>
+            {cr.items.map((item, i) => <li key={i}>{item}</li>)}
+          </ul>
+        )}
+      </div>
+      <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+        <button
+          disabled={loading}
+          onClick={() => handle('approved')}
+          style={{ padding: '8px 16px', borderRadius: 10, background: '#16A34A', color: '#fff', border: 'none', fontWeight: 700, fontSize: 12, cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.6 : 1 }}
+        >Approve</button>
+        <button
+          disabled={loading}
+          onClick={() => handle('rejected')}
+          style={{ padding: '8px 16px', borderRadius: 10, background: '#EF4444', color: '#fff', border: 'none', fontWeight: 700, fontSize: 12, cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.6 : 1 }}
+        >Reject</button>
       </div>
     </div>
   );

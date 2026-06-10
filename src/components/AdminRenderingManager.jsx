@@ -27,7 +27,8 @@ export default function AdminRenderingManager({
   // Upload form fields
   const [pkgTitle, setPkgTitle] = useState('');
   const [pkgUrl, setPkgUrl] = useState('');
-  const [linkedInvoiceId, setLinkedInvoiceId] = useState('');
+  // Pre-select the rendering fee invoice that was auto-created at project setup (if any)
+  const [linkedInvoiceId, setLinkedInvoiceId] = useState(project?.renderingFeeInvoiceId || '');
   const [includedRevisions, setIncludedRevisions] = useState(2);
 
   // Invoice auto-prompt modal
@@ -43,6 +44,9 @@ export default function AdminRenderingManager({
   const [selectedCoords, setSelectedCoords] = useState(null);
   const [submittingPin, setSubmittingPin] = useState(false);
 
+  // Inline confirmation state — replaces window.confirm (blocked by ad blockers)
+  const [confirmAction, setConfirmAction] = useState(null); // { label, sublabel, onConfirm }
+
   const projectPackages = renderingPackages.filter(r => r.projectId === project?.id);
   const projectInvoices = invoices.filter(i => i.projectId === project?.id);
 
@@ -56,7 +60,7 @@ export default function AdminRenderingManager({
     const unsub = onSnapshot(q, (snap) => {
       setMarkups(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     }, (err) => {
-      console.error('[AdminRenderingManager] Sync markups failed:', err);
+      if (import.meta.env.DEV) console.error('[AdminRenderingManager] Sync markups failed:', err);
     });
     return unsub;
   }, [project?.id]);
@@ -74,7 +78,7 @@ export default function AdminRenderingManager({
         createdAt: serverTimestamp(),
       });
     } catch (err) {
-      console.error('[AdminRenderingManager] postSystemMessage failed:', err);
+      if (import.meta.env.DEV) console.error('[AdminRenderingManager] postSystemMessage failed:', err);
     }
   };
 
@@ -82,9 +86,16 @@ export default function AdminRenderingManager({
   const handleUploadAttempt = () => {
     if (!pkgTitle || !pkgUrl) return;
     if (!linkedInvoiceId) {
-      // No invoice linked — prompt admin to create one
-      setInvoiceAmount(project?.renderingFee || '');
-      setShowInvoicePrompt(true);
+      // Auto-link to the existing rendering fee invoice if one was created at project setup
+      const existingRenderingInvId = project?.renderingFeeInvoiceId;
+      if (existingRenderingInvId) {
+        // Project already has a rendering fee invoice — link it directly, no new invoice needed
+        handleUpload(existingRenderingInvId);
+      } else {
+        // No existing invoice — prompt admin to create one
+        setInvoiceAmount(project?.renderingFee || '');
+        setShowInvoicePrompt(true);
+      }
     } else {
       handleUpload(linkedInvoiceId);
     }
@@ -116,7 +127,7 @@ export default function AdminRenderingManager({
       setLinkedInvoiceId('');
       notify?.('success', 'Rendering package published successfully');
     } catch (e) {
-      console.error(e);
+      if (import.meta.env.DEV) console.error(e);
       notify?.('error', 'Failed to publish rendering package');
     } finally {
       setLoading(false);
@@ -135,9 +146,11 @@ export default function AdminRenderingManager({
       if (createInvoice) {
         const inv = await createInvoice({
           projectId: project.id,
+          parentId: project.id,
           clientId: project.clientId,
           title: `Rendering Fee — ${pkgTitle}`,
           invoiceType: 'Rendering Fee',
+          type: 'Rendering Fee',
           amount: parseFloat(invoiceAmount),
           currency: 'GHS',
           status: 'Pending',
@@ -152,7 +165,7 @@ export default function AdminRenderingManager({
       setShowInvoicePrompt(false);
       await handleUpload(newInvoiceId);
     } catch (err) {
-      console.error('[AdminRenderingManager] Create invoice failed:', err);
+      if (import.meta.env.DEV) console.error('[AdminRenderingManager] Create invoice failed:', err);
       notify?.('error', 'Could not create invoice. Upload without invoice instead?');
     } finally {
       setCreatingInvoice(false);
@@ -178,7 +191,7 @@ export default function AdminRenderingManager({
       );
       notify?.('success', `Payment confirmed — "${pkg.title}" unlocked`);
     } catch (err) {
-      console.error('[AdminRenderingManager] Confirm receipt failed:', err);
+      if (import.meta.env.DEV) console.error('[AdminRenderingManager] Confirm receipt failed:', err);
       notify?.('error', 'Could not confirm receipt');
     } finally {
       setConfirmReceiptLoading(prev => ({ ...prev, [pkg.id]: false }));
@@ -187,7 +200,14 @@ export default function AdminRenderingManager({
 
   // ── Mark Change Complete ───────────────────────────────────────────────────
   const handleMarkChangeComplete = async (pkg) => {
-    if (!window.confirm('Mark all changes as resolved and clear the project freeze?')) return;
+    setConfirmAction({
+      label: 'Mark Change Complete?',
+      sublabel: 'This resolves all open pins and unfreezes the project.',
+      onConfirm: () => _doMarkChangeComplete(pkg),
+    });
+  };
+
+  const _doMarkChangeComplete = async (pkg) => {
     setMarkCompleteLoading(true);
     try {
       // Resolve all open pins for this package
@@ -208,7 +228,7 @@ export default function AdminRenderingManager({
       );
       notify?.('success', 'Change request resolved — project unfrozen');
     } catch (err) {
-      console.error('[AdminRenderingManager] Mark change complete failed:', err);
+      if (import.meta.env.DEV) console.error('[AdminRenderingManager] Mark change complete failed:', err);
       notify?.('error', 'Could not resolve change request');
     } finally {
       setMarkCompleteLoading(false);
@@ -243,7 +263,7 @@ export default function AdminRenderingManager({
       setSelectedCoords(null);
       setNewPinText('');
     } catch (err) {
-      console.error('[AdminRenderingManager] Failed to save pin:', err);
+      if (import.meta.env.DEV) console.error('[AdminRenderingManager] Failed to save pin:', err);
     } finally {
       setSubmittingPin(false);
     }
@@ -255,18 +275,23 @@ export default function AdminRenderingManager({
       await updateDoc(doc(db, 'projects', project.id, 'markups', pin.id), { status: nextStatus });
       setActivePin({ ...pin, status: nextStatus });
     } catch (err) {
-      console.error('[AdminRenderingManager] Failed to resolve pin:', err);
+      if (import.meta.env.DEV) console.error('[AdminRenderingManager] Failed to resolve pin:', err);
     }
   };
 
   const handleDeletePin = async (pinId) => {
-    if (!window.confirm('Are you sure you want to delete this pin note?')) return;
-    try {
-      await deleteDoc(doc(db, 'projects', project.id, 'markups', pinId));
-      setActivePin(null);
-    } catch (err) {
-      console.error('[AdminRenderingManager] Failed to delete pin:', err);
-    }
+    setConfirmAction({
+      label: 'Delete Pin?',
+      sublabel: 'This feedback pin and its note will be permanently removed.',
+      onConfirm: async () => {
+        try {
+          await deleteDoc(doc(db, 'projects', project.id, 'markups', pinId));
+          setActivePin(null);
+        } catch (err) {
+          if (import.meta.env.DEV) console.error('[AdminRenderingManager] Failed to delete pin:', err);
+        }
+      },
+    });
   };
 
   const isImageFile = (url) => {
@@ -276,15 +301,22 @@ export default function AdminRenderingManager({
   };
 
   const handleManualUnlock = async (pkgId, forceUnlock) => {
-    if (!window.confirm(forceUnlock ? 'Manually unlock this rendering package?' : 'Re-lock this package?')) return;
-    try {
-      await updateDoc(doc(db, 'renderingPackages', pkgId), {
-        unlocked: forceUnlock,
-        status: forceUnlock ? 'Unlocked' : 'Locked'
-      });
-    } catch (err) {
-      console.error('[AdminRenderingManager] Failed to toggle unlock:', err);
-    }
+    setConfirmAction({
+      label: forceUnlock ? 'Manually Unlock Package?' : 'Re-lock Package?',
+      sublabel: forceUnlock
+        ? 'Client will see the rendering without paying the invoice.'
+        : 'Client will be asked to pay before viewing.',
+      onConfirm: async () => {
+        try {
+          await updateDoc(doc(db, 'renderingPackages', pkgId), {
+            unlocked: forceUnlock,
+            status: forceUnlock ? 'Unlocked' : 'Locked'
+          });
+        } catch (err) {
+          if (import.meta.env.DEV) console.error('[AdminRenderingManager] Failed to toggle unlock:', err);
+        }
+      },
+    });
   };
 
   return (
@@ -363,7 +395,8 @@ export default function AdminRenderingManager({
         <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
           {projectPackages.map(pkg => {
             const linkedInv = invoices.find(i => i.id === pkg.linkedInvoiceId);
-            const isUnlocked = pkg.unlocked || pkg.status === 'Paid / Unlocked' || (linkedInv && linkedInv.status === 'Paid');
+            const invPaid = linkedInv && ['paid', 'paid in full'].includes(String(linkedInv.status || '').toLowerCase().trim());
+            const isUnlocked = pkg.unlocked || pkg.status === 'Paid / Unlocked' || invPaid;
             const isAwaitingConfirmation = linkedInv?.awaitingConfirmation === true;
             const statusColor = isUnlocked ? '#10B981' : isAwaitingConfirmation ? '#3B82F6' : '#F59E0B';
             const packageMarkups = markups.filter(m => m.packageId === pkg.id);
@@ -392,7 +425,7 @@ export default function AdminRenderingManager({
                       {isUnlocked ? (pkg.unlocked ? 'Manually Unlocked' : pkg.status) : isAwaitingConfirmation ? 'Awaiting Confirmation' : 'Locked'}
                     </div>
                     {/* Force Unlock Toggle */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }} title="Force-unlock grants file access regardless of invoice status. The invoice remains unpaid until you confirm receipt separately.">
                       <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)' }}>Force Unlock</span>
                       <div
                         onClick={() => handleManualUnlock(pkg.id, !pkg.unlocked)}
@@ -401,6 +434,9 @@ export default function AdminRenderingManager({
                         <div style={{ width: 16, height: 16, borderRadius: '50%', background: '#fff', position: 'absolute', top: 2, left: pkg.unlocked ? 18 : 2, transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,.15)' }} />
                       </div>
                     </div>
+                    {pkg.unlocked && (
+                      <span style={{ fontSize: 10, color: '#D97706', fontWeight: 700 }} title="Invoice payment status is independent of this toggle. Confirm receipt via the button below to mark the invoice paid.">⚠ Invoice status unchanged</span>
+                    )}
                   </div>
                 </div>
 
@@ -725,6 +761,21 @@ export default function AdminRenderingManager({
           100% { box-shadow: 0 0 0 0 rgba(197, 160, 89, 0); }
         }
       `}</style>
+
+      {/* Inline confirmation modal — replaces window.confirm (blocked by ad blockers) */}
+      {confirmAction && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+          <div style={{ background: 'var(--bg-primary)', borderRadius: 20, padding: 32, maxWidth: 360, width: '100%', textAlign: 'center', boxShadow: '0 24px 64px rgba(0,0,0,0.18)' }}>
+            <div style={{ fontSize: 28, marginBottom: 12 }}>⚠️</div>
+            <div style={{ fontSize: 15, fontWeight: 800, marginBottom: 8 }}>{confirmAction.label}</div>
+            {confirmAction.sublabel && <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 24 }}>{confirmAction.sublabel}</div>}
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={() => setConfirmAction(null)} style={{ flex: 1, height: 44, borderRadius: 12, border: '1.5px solid var(--border-color)', background: 'transparent', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Cancel</button>
+              <button onClick={() => { setConfirmAction(null); confirmAction.onConfirm(); }} style={{ flex: 1, height: 44, borderRadius: 12, border: 'none', background: 'var(--accent-secondary)', color: '#fff', fontSize: 13, fontWeight: 800, cursor: 'pointer' }}>Confirm</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

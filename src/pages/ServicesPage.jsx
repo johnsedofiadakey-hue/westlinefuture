@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { ChevronRight, ArrowRight, Layers, AppWindow, ShowerHead, ChefHat, Shirt, LayoutGrid, DoorOpen, Zap, Droplets } from 'lucide-react';
+import { ChevronRight, ArrowRight, Layers, AppWindow, ShowerHead, ChefHat, Shirt, LayoutGrid, DoorOpen, Zap, Droplets, Hammer, Sofa, Refrigerator, Sparkles } from 'lucide-react';
 import { useWindowWidth } from './sharedHelpers';
+import { usePublicTranslation } from '../components/PubLayout';
 
 const DARK_TEXT = `var(--accent-secondary)`;
 const LIGHT_BG = `var(--bg-primary)`;
@@ -8,6 +9,7 @@ const LIGHT_BG = `var(--bg-primary)`;
 import { ALL_SERVICES } from '../data';
 
 export default function ServicesPage({ brand, navigate, content }) {
+  usePublicTranslation();
   const ac = brand?.color || `var(--accent-secondary)`;
   const winW = useWindowWidth();
   const mob = winW <= 900;
@@ -25,7 +27,7 @@ export default function ServicesPage({ brand, navigate, content }) {
     img: s.img || '🛠️'
   })) : ALL_SERVICES;
 
-  const whatsappBase = brand?.whatsapp || '233598455012';
+  const whatsappBase = brand?.whatsapp || '233247319778';
 
   return (
     <div style={{ background: LIGHT_BG }}>
@@ -38,7 +40,7 @@ export default function ServicesPage({ brand, navigate, content }) {
             <em style={{ fontStyle: 'italic', fontWeight: 400, color: ac }}>home or office needs.</em>
           </h1>
           <p style={{ fontSize: mob ? 15 : 18, color: 'rgba(255,255,255,0.55)', maxWidth: 600, lineHeight: 1.7, marginBottom: 40 }}>
-            Glass, aluminium, bathrooms, kitchens, wardrobes, tiles, doors, electrical, and plumbing — we handle it all under one roof worldwide.
+            Surface finishes, custom carpentry, furniture, appliances and décor — every single product your home interior needs, sourced from China and installed by our team.
           </p>
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
             {servicesToRender.map(s => (

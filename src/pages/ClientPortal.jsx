@@ -1,4 +1,6 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import DOMPurify from 'dompurify';
+import { translateClientDom } from '../lib/clientI18n';
 import {
   LogOut, ChevronRight, Send, MessageSquare, FileText,
   DollarSign, CheckCircle2, Circle, Clock, Loader2,
@@ -7,18 +9,21 @@ import {
   Truck, Wrench, ShoppingCart, ArrowRight, Lock,
   Download, File, Image, Archive, Package, Camera,
   X, Copy, Check, RefreshCw, Gift, Edit3, ChevronDown,
-  ZoomIn, ScanSearch, PenTool
+  ZoomIn, ScanSearch, PenTool, Printer, FileCheck, PenLine, ShieldCheck
 } from 'lucide-react';
 import { CLIENT_PROJECT_STAGES, PROJECT_TYPES } from '../data';
+import { calculateTimeline } from './sharedHelpers';
 import { db, functions } from '../lib/firebase';
 import { httpsCallable } from 'firebase/functions';
 import {
-  collection, onSnapshot, query, where, orderBy, limit, addDoc, serverTimestamp
+  collection, onSnapshot, query, where, orderBy, limit, addDoc, serverTimestamp,
+  updateDoc, doc
 } from 'firebase/firestore';
 import { usePaystackPayment } from 'react-paystack';
 import ClientRenderingVault from '../components/ClientRenderingVault';
 import UnifiedPaymentGateway from '../components/UnifiedPaymentGateway';
 import WorldClassChat from '../components/WorldClassChat';
+import InvoiceDocument from '../components/InvoiceDocument';
 
 const AC = `var(--accent-secondary)`;
 
@@ -306,12 +311,18 @@ const STAGE_ICONS = {
 // ─── Payment Schedule Configs ─────────────────────────────────────────────────
 const SCHEDULE_CONFIGS = {
   standard: {
-    label: 'Standard (10/40/40/10)',
+    label: 'Standard (60/30/10)',
     milestones: [
-      { key: 'deposit',      label: '10% Deposit',         pct: 0.10, cumPct: 0.10 },
-      { key: 'pre-prod',     label: '40% Pre-production',  pct: 0.40, cumPct: 0.50 },
-      { key: 'pre-delivery', label: '40% Pre-delivery',    pct: 0.40, cumPct: 0.90 },
-      { key: 'completion',   label: '10% Completion',      pct: 0.10, cumPct: 1.00 },
+      { key: 'post-rendering',  label: '60% After Rendering Approval',  pct: 0.60, cumPct: 0.60 },
+      { key: 'post-production', label: '30% After Production Complete', pct: 0.30, cumPct: 0.90 },
+      { key: 'post-shipping',   label: '10% After Delivery',            pct: 0.10, cumPct: 1.00 },
+    ],
+  },
+  '50-50': {
+    label: '50/50 (Deposit / Delivery)',
+    milestones: [
+      { key: 'deposit',     label: '50% Deposit',        pct: 0.50, cumPct: 0.50 },
+      { key: 'completion',  label: '50% After Delivery', pct: 0.50, cumPct: 1.00 },
     ],
   },
   '70-30': {
@@ -328,6 +339,9 @@ const SCHEDULE_CONFIGS = {
 };
 const MILESTONES = SCHEDULE_CONFIGS.standard.milestones;
 
+// Canonical paid-status check — handles "Paid", "paid", "Paid in Full", "paid in full"
+const isPaidStatus = (status) => ['paid', 'paid in full'].includes(String(status || '').toLowerCase().trim());
+
 // ─── Invoice PDF Download ─────────────────────────────────────────────────────
 function downloadInvoicePDF(invoice, project, client, brand) {
   const issuedDate = invoice.createdAt
@@ -340,7 +354,7 @@ function downloadInvoicePDF(invoice, project, client, brand) {
   const docNum = invoice.invoiceNumber || (invoice.id || '').slice(-8).toUpperCase();
   const rawTotal = parseFloat(String(invoice.amount || 0).replace(/[^0-9.]/g, '')) || 0;
   const totalStr = `GH₵ ${rawTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
-  const isPaid = invoice.status === 'Paid';
+  const isPaid = isPaidStatus(invoice.status);
   const isQuote = invoice.type === 'Quotation' || invoice.type === 'quotation';
 
   const items = invoice.items?.length
@@ -512,7 +526,18 @@ function printSignedContractDoc(project, user, brand) {
       : 
       `<ol>
         <li><strong>Scope of Work:</strong> Contractor agrees to manufacture, fabricate, supply, and install custom high-end premium products in accordance with final approved technical designs in the design vault and the details specified above.</li>
-        <li><strong>Payment Terms:</strong> Works shall commence upon execution of this contract and clearing of the 50% mobilization deposit (GHS ${(budget * 0.5).toLocaleString(undefined, { minimumFractionDigits: 2 })}). The remaining 50% balance (GHS ${(budget * 0.5).toLocaleString(undefined, { minimumFractionDigits: 2 })}) is due upon completion of site installation and final inspection.</li>
+        <li><strong>Payment Terms:</strong> Works shall commence upon execution of this contract and clearance of the mobilisation deposit as stated in the payment plan. ${(() => {
+              const schedKey = project.paymentSchedule || 'standard';
+              const sched = SCHEDULE_CONFIGS[schedKey] || SCHEDULE_CONFIGS.standard;
+              if (sched.milestones && sched.milestones.length > 0) {
+                const lines = sched.milestones.map(m => {
+                  const amt = budget > 0 ? ` (GHS ${(budget * m.pct).toLocaleString(undefined, { minimumFractionDigits: 2 })})` : ` (${Math.round(m.pct * 100)}% of contract value)`;
+                  return `${m.label}${amt}`;
+                });
+                return `Payment schedule: ${lines.join('; ')}.`;
+              }
+              return 'All milestone payments are due as per the agreed schedule.';
+            })()} No installation works shall commence if any preceding milestone payment remains outstanding.</li>
         <li><strong>Installation and Access:</strong> The Client shall provide adequate, safe, and clean working space for the Contractor's installers on the site. All field inspections are geo-fenced and locked to site coordinates for absolute quality assurance.</li>
         <li><strong>Warranty Policy:</strong> Contractor provides a 12-month limited warranty on the structural alignment and architectural grade silicone sealant components. Glass breakage due to external physical impact, force majeure, or site modifications after handover is excluded.</li>
         <li><strong>Governing Law:</strong> This agreement and all subsequent performance evaluations are governed by the laws of the Republic of Ghana.</li>
@@ -577,6 +602,484 @@ function printSignedContractDoc(project, user, brand) {
       setTimeout(() => document.body.removeChild(iframe), 1000);
     }, 500);
   };
+}
+
+// ─── Contract Variable Substitution ──────────────────────────────────────────
+function applyContractVariables(template, project, user, brand) {
+  const budget = Number(project?.budget || 0);
+  const budgetStr = budget ? `GH₵ ${budget.toLocaleString(undefined, { minimumFractionDigits: 2 })}` : 'As quoted';
+  const completionDate = project?.targetCompletionDate
+    ? (project.targetCompletionDate.seconds
+        ? new Date(project.targetCompletionDate.seconds * 1000).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
+        : new Date(project.targetCompletionDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }))
+    : 'Pending Scheduling';
+  return (template || '')
+    .replace(/\{\{clientName\}\}/g,     user?.name || project?.clientName || 'Valued Client')
+    .replace(/\{\{projectTitle\}\}/g,   project?.title || 'Your Project')
+    .replace(/\{\{budget\}\}/g,         budgetStr)
+    .replace(/\{\{company\}\}/g,        brand?.name || 'Westline Future')
+    .replace(/\{\{date\}\}/g,           new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }))
+    .replace(/\{\{completionDate\}\}/g, completionDate);
+}
+
+// ─── Typed Name → Signature Image ────────────────────────────────────────────
+function nameToSignatureDataUrl(name, ac) {
+  try {
+    const canvas = document.createElement('canvas');
+    canvas.width = 480; canvas.height = 110;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, 480, 110);
+    ctx.font = 'italic 52px Georgia, "Times New Roman", serif';
+    ctx.fillStyle = ac && !ac.startsWith('var') ? ac : '#1A1410';
+    ctx.fillText(name, 16, 78);
+    return canvas.toDataURL('image/png');
+  } catch (e) {
+    return null;
+  }
+}
+
+// ─── SpecApprovalCard ─────────────────────────────────────────────────────────
+function SpecApprovalCard({ project, user, brand, isMobile }) {
+  const ac = brand?.color || AC;
+  const spec = project?.specDoc;
+  const [busy, setBusy] = useState(false);
+  const [showRejectBox, setShowRejectBox] = useState(false);
+  const [rejectNote, setRejectNote] = useState('');
+  const [done, setDone] = useState(false);
+
+  if (!spec?.url) return null;
+  if (spec.status === 'approved' && !done) return null;
+
+  const handleRespond = async (status) => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await updateDoc(doc(db, 'projects', project.id), {
+        'specDoc.status': status,
+        'specDoc.reviewedAt': new Date().toISOString(),
+        'specDoc.reviewNote': status === 'rejected' ? rejectNote.trim() : '',
+        'specDoc.reviewedBy': user?.name || user?.phone || 'Client',
+      });
+      setDone(true);
+      setShowRejectBox(false);
+    } catch (e) {
+      console.error('[SpecApproval]', e);
+    }
+    setBusy(false);
+  };
+
+  if (done || spec.status === 'approved') {
+    return (
+      <div style={{ padding: '20px 24px', borderRadius: 20, background: '#F0FDF4', border: '1.5px solid #BBF7D0', display: 'flex', alignItems: 'center', gap: 14 }}>
+        <CheckCircle2 size={24} color="#16A34A" style={{ flexShrink: 0 }} />
+        <div>
+          <div style={{ fontSize: 14, fontWeight: 800, color: '#15803D' }}>Project Specification Approved</div>
+          <div style={{ fontSize: 12, color: '#166534', marginTop: 2 }}>You've approved the project deliverables. Production can now begin.</div>
+        </div>
+      </div>
+    );
+  }
+
+  if (spec.status === 'rejected') {
+    return (
+      <div style={{ padding: '20px 24px', borderRadius: 20, background: '#FEF2F2', border: '1.5px solid #FECACA', display: 'flex', alignItems: 'center', gap: 14 }}>
+        <AlertCircle size={24} color="#DC2626" style={{ flexShrink: 0 }} />
+        <div>
+          <div style={{ fontSize: 14, fontWeight: 800, color: '#DC2626' }}>Specification Under Review</div>
+          <div style={{ fontSize: 12, color: '#7F1D1D', marginTop: 2 }}>You've raised concerns. Our team will review and update the document shortly.</div>
+          {spec.reviewNote && <div style={{ fontSize: 11, color: '#991B1B', marginTop: 6, fontStyle: 'italic' }}>Your note: "{spec.reviewNote}"</div>}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{
+      padding: isMobile ? '20px 18px' : '24px 28px', borderRadius: 20,
+      background: 'linear-gradient(135deg, #EFF6FF, #DBEAFE)',
+      border: '1.5px solid #BFDBFE',
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+        <FileCheck size={18} color="#1D4ED8" />
+        <span style={{ fontSize: 12, fontWeight: 800, color: '#1D4ED8', textTransform: 'uppercase', letterSpacing: '.06em' }}>Approval Required</span>
+      </div>
+      <div style={{ fontSize: 18, fontWeight: 900, color: 'var(--accent-secondary)', marginBottom: 6 }}>
+        Review & Approve Project Specification
+      </div>
+      <div style={{ fontSize: 13, color: '#374151', lineHeight: 1.6, marginBottom: 20 }}>
+        Your account manager has prepared the project specification, deliverables, and design outcome document. Please review it carefully and confirm your approval before production begins.
+      </div>
+
+      {/* Document link */}
+      <a
+        href={spec.url}
+        target="_blank"
+        rel="noreferrer"
+        style={{
+          display: 'inline-flex', alignItems: 'center', gap: 8,
+          padding: '10px 18px', borderRadius: 12,
+          background: '#1D4ED8', color: '#fff', textDecoration: 'none',
+          fontSize: 13, fontWeight: 700, marginBottom: 20,
+        }}
+      >
+        <FileText size={15} /> Open Document
+      </a>
+
+      {!showRejectBox ? (
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          <button
+            onClick={() => handleRespond('approved')}
+            disabled={busy}
+            style={{ flex: 1, minWidth: 140, padding: '13px 20px', borderRadius: 12, border: 'none', background: '#16A34A', color: '#fff', fontSize: 14, fontWeight: 800, cursor: busy ? 'default' : 'pointer', opacity: busy ? 0.6 : 1 }}
+          >
+            {busy ? 'Saving…' : '✓ Approve & Proceed'}
+          </button>
+          <button
+            onClick={() => setShowRejectBox(true)}
+            disabled={busy}
+            style={{ flex: 1, minWidth: 140, padding: '13px 20px', borderRadius: 12, border: '1.5px solid #FECACA', background: '#FEF2F2', color: '#DC2626', fontSize: 14, fontWeight: 800, cursor: 'pointer' }}
+          >
+            Request Changes
+          </button>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <textarea
+            value={rejectNote}
+            onChange={e => setRejectNote(e.target.value)}
+            placeholder="Describe what needs to change…"
+            rows={3}
+            style={{ width: '100%', padding: '12px 14px', borderRadius: 12, border: '1.5px solid #FECACA', fontSize: 13, resize: 'vertical', boxSizing: 'border-box' }}
+          />
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button onClick={() => { setShowRejectBox(false); setRejectNote(''); }} style={{ flex: 1, padding: '12px', borderRadius: 12, border: '1px solid var(--border-color)', background: 'transparent', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Cancel</button>
+            <button
+              onClick={() => handleRespond('rejected')}
+              disabled={busy || !rejectNote.trim()}
+              style={{ flex: 2, padding: '12px', borderRadius: 12, border: 'none', background: '#DC2626', color: '#fff', fontSize: 13, fontWeight: 800, cursor: busy || !rejectNote.trim() ? 'default' : 'pointer', opacity: busy || !rejectNote.trim() ? 0.6 : 1 }}
+            >
+              {busy ? 'Sending…' : 'Submit Change Request'}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── ContractAgreementModal ───────────────────────────────────────────────────
+function ContractAgreementModal({ project, user, brand, onClose, onSigned, isMobile }) {
+  const ac = brand?.color || AC;
+  const [step, setStep] = useState(1); // 1=read, 2=sign
+  const [scrolled, setScrolled] = useState(false);
+  const [accepted, setAccepted] = useState(false);
+  const [typedName, setTypedName] = useState('');
+  const [drawMode, setDrawMode] = useState(false);
+  const [drawnSig, setDrawnSig] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const scrollRef = useRef(null);
+
+  // Build contract body text
+  const rawTemplate = project?.contractTerms || brand?.finSettings?.contractTemplate || '';
+  const budget = Number(project?.budget || 0);
+
+  const contractBody = rawTemplate
+    ? applyContractVariables(rawTemplate, project, user, brand)
+    : null; // null = use default clauses
+
+  const defaultClauses = [
+    {
+      title: 'Scope of Work',
+      text: `Westline Future Ltd. ("Contractor") agrees to supply, source, and install premium interior decoration products and finishes for the project <strong>${project?.title || '[Project Name]'}</strong>, in accordance with the approved 3D interior design and specifications confirmed at the time of quotation. This includes all agreed items covering kitchen, bathroom, flooring, wardrobes, doors, ceilings, and any other elements detailed in the accepted quote.`,
+    },
+    {
+      title: 'Payment Terms',
+      text: `The total agreed contract value is <strong>${budget ? `GH₵ ${budget.toLocaleString(undefined, { minimumFractionDigits: 2 })}` : 'as per the accepted quotation'}</strong>. Works shall commence upon execution of this contract and clearance of the mobilisation deposit as stated in the payment plan. All milestone payments are due as per the agreed schedule. No installation works shall commence if any preceding milestone payment remains outstanding.`,
+    },
+    {
+      title: '3D Design Approval',
+      text: 'The Client confirms that the approved 3D interior design rendered by Westline Future forms the binding design specification for this contract. Any alterations requested after design approval are subject to a formal change order and may incur additional costs and revised timelines.',
+    },
+    {
+      title: 'Site Readiness & Access',
+      text: 'The Client is responsible for ensuring the property is structurally complete and ready for interior works by the agreed commencement date. The Client shall provide unrestricted, safe site access to the Contractor\'s installation team on all agreed working days. Any delays caused by the Client\'s failure to provide site access will extend the project timeline accordingly.',
+    },
+    {
+      title: 'Pre-Interior Works',
+      text: 'Where electrical rewiring, plumbing modifications, or other pre-fitout civil works are required, the Client acknowledges that such works must be completed and signed off before interior installation commences. Westline Future coordinates trusted local partners for these works where requested, at separately agreed costs.',
+    },
+    {
+      title: 'Material Sourcing & Delivery',
+      text: 'Westline Future sources materials globally, primarily from China and the wider international market. Lead times for shipped items are estimated and subject to logistics factors outside the Contractor\'s control. The Contractor will keep the Client informed of any material delays and adjust timelines accordingly.',
+    },
+    {
+      title: 'Warranty',
+      text: 'Westline Future provides a 12-month limited workmanship warranty on all installed items, commencing from the date of project handover. The warranty covers defects in installation quality. It does not cover damage arising from misuse, unauthorised modifications, natural wear, or events outside the Contractor\'s control.',
+    },
+    {
+      title: 'Change Requests',
+      text: 'Any changes to the approved scope of work, materials, or design specifications must be submitted in writing by the Client. All change requests are subject to a formal change order, written approval, and may revise the contract value and/or timeline.',
+    },
+    {
+      title: 'Confidentiality',
+      text: 'Both parties agree to keep all project details, pricing, design drawings, and proprietary information confidential. Westline Future reserves the right to use project photos and details for portfolio and marketing purposes unless the Client requests otherwise in writing.',
+    },
+    {
+      title: 'Governing Law',
+      text: 'This agreement is governed exclusively by the laws of the Republic of Ghana. Any disputes arising from this contract shall first be resolved through good-faith negotiation. If unresolved within 30 days, disputes shall be referred to mediation before any legal proceedings are commenced.',
+    },
+  ];
+
+  const handleScroll = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    if (el.scrollTop + el.clientHeight >= el.scrollHeight - 40) setScrolled(true);
+  };
+
+  const handleSign = async () => {
+    if (busy) return;
+    const name = typedName.trim();
+    if (!name && !drawnSig) { setError('Please type your full name or draw your signature.'); return; }
+    if (!accepted) { setError('Please tick the acceptance checkbox.'); return; }
+    setBusy(true);
+    setError(null);
+    try {
+      const ip = await fetch('https://api.ipify.org?format=json')
+        .then(r => r.json()).then(d => d.ip).catch(() => 'unavailable');
+      const sigDataUrl = drawnSig || nameToSignatureDataUrl(name, ac);
+      await updateDoc(doc(db, 'projects', project.id), {
+        contractAccepted:       true,
+        contractSignedName:     name || 'Drawn Signature',
+        quoteSignature:         sigDataUrl,
+        quoteSignedAt:          serverTimestamp(),
+        quoteSignedByPhone:     user?.phone || '',
+        quoteVerificationStamp: { ipAddress: ip, userAgent: navigator.userAgent, timestamp: new Date().toISOString() },
+      });
+      onSigned?.();
+    } catch (e) {
+      setError('Failed to save signature. Please try again.');
+      if (import.meta.env.DEV) console.error('[ContractSign]', e);
+    }
+    setBusy(false);
+  };
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 9900, background: 'rgba(0,0,0,.65)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
+      <div style={{ background: '#fff', borderRadius: isMobile ? '24px 24px 0 0' : 24, width: '100%', maxWidth: isMobile ? '100%' : 680, maxHeight: '96dvh', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 -8px 64px rgba(0,0,0,.25)' }}>
+
+        {/* Header */}
+        <div style={{ padding: '20px 24px 16px', borderBottom: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 900, color: 'var(--accent-secondary)', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <FileCheck size={16} color={ac} /> Contract Agreement
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 2 }}>{project?.title}</div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+            {/* Step indicator */}
+            <div style={{ display: 'flex', gap: 6 }}>
+              {[1, 2].map(s => (
+                <div key={s} style={{ width: s === step ? 24 : 8, height: 8, borderRadius: 4, background: s === step ? ac : s < step ? '#16A34A' : 'var(--border-color)', transition: 'all .3s' }} />
+              ))}
+            </div>
+            <button onClick={onClose} style={{ width: 32, height: 32, borderRadius: 8, border: '1px solid var(--border-color)', background: 'var(--bg-secondary)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><X size={14} /></button>
+          </div>
+        </div>
+
+        {/* Step 1 — Read */}
+        {step === 1 && (
+          <>
+            <div ref={scrollRef} onScroll={handleScroll} style={{ flex: 1, overflowY: 'auto', padding: '24px 24px 8px' }}>
+              <div style={{ marginBottom: 20 }}>
+                <div style={{ fontSize: 18, fontWeight: 900, color: 'var(--accent-secondary)', marginBottom: 4 }}>Review Your Contract</div>
+                <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+                  Please read this agreement carefully. You must scroll to the bottom before you can accept and sign.
+                </div>
+              </div>
+
+              {/* Project summary block */}
+              <div style={{ padding: '14px 16px', borderRadius: 14, background: `${ac}10`, border: `1.5px solid ${ac}30`, marginBottom: 20 }}>
+                <div style={{ fontSize: 10, fontWeight: 900, color: ac, textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 6 }}>Project Details</div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                  <div><div style={{ fontSize: 10, color: 'var(--text-secondary)' }}>Project</div><div style={{ fontSize: 13, fontWeight: 700 }}>{project?.title || '—'}</div></div>
+                  <div><div style={{ fontSize: 10, color: 'var(--text-secondary)' }}>Contract Value</div><div style={{ fontSize: 13, fontWeight: 700 }}>{budget ? `GH₵ ${budget.toLocaleString()}` : 'As quoted'}</div></div>
+                  <div><div style={{ fontSize: 10, color: 'var(--text-secondary)' }}>Client</div><div style={{ fontSize: 13, fontWeight: 700 }}>{user?.name || '—'}</div></div>
+                  <div><div style={{ fontSize: 10, color: 'var(--text-secondary)' }}>Contractor</div><div style={{ fontSize: 13, fontWeight: 700 }}>{brand?.name || 'Westline Future'}</div></div>
+                </div>
+              </div>
+
+              {/* Contract body */}
+              {contractBody ? (
+                <div style={{ fontSize: 13, color: 'var(--text-primary)', lineHeight: 1.8, whiteSpace: 'pre-line' }}>{contractBody}</div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                  {defaultClauses.map((c, i) => (
+                    <div key={i}>
+                      <div style={{ fontSize: 12, fontWeight: 800, color: 'var(--accent-secondary)', marginBottom: 4 }}>{i + 1}. {c.title}</div>
+                      <div style={{ fontSize: 13, color: 'var(--text-primary)', lineHeight: 1.7 }} dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(c.text || '') }} />
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Spacer so user must scroll */}
+              <div style={{ height: 60 }} />
+            </div>
+
+            {/* Scroll hint */}
+            {!scrolled && (
+              <div style={{ padding: '8px 24px', background: '#FFF7ED', borderTop: '1px solid #FED7AA', display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                <ChevronDown size={14} color="#D97706" />
+                <span style={{ fontSize: 11, color: '#92400E', fontWeight: 700 }}>Scroll to the bottom to continue</span>
+              </div>
+            )}
+
+            <div style={{ padding: '16px 24px', borderTop: '1px solid var(--border-color)', flexShrink: 0 }}>
+              <button
+                onClick={() => { if (scrolled) setStep(2); }}
+                disabled={!scrolled}
+                style={{ width: '100%', height: 50, borderRadius: 14, border: 'none', background: scrolled ? ac : 'var(--border-color)', color: '#fff', fontSize: 14, fontWeight: 800, cursor: scrolled ? 'pointer' : 'not-allowed', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, transition: 'background .2s' }}
+              >
+                <PenLine size={16} /> I've Read the Contract — Proceed to Sign
+              </button>
+            </div>
+          </>
+        )}
+
+        {/* Step 2 — Sign */}
+        {step === 2 && (
+          <>
+            <div style={{ flex: 1, overflowY: 'auto', padding: '24px' }}>
+              <div style={{ marginBottom: 20 }}>
+                <div style={{ fontSize: 18, fontWeight: 900, color: 'var(--accent-secondary)', marginBottom: 4 }}>Sign the Agreement</div>
+                <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+                  By signing below you confirm you have read and agree to all terms in this contract.
+                </div>
+              </div>
+
+              {/* Acceptance checkbox */}
+              <label style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '14px 16px', borderRadius: 14, background: accepted ? '#F0FDF4' : 'var(--bg-secondary)', border: `1.5px solid ${accepted ? '#BBF7D0' : 'var(--border-color)'}`, cursor: 'pointer', marginBottom: 20, transition: 'all .2s' }}>
+                <input type="checkbox" checked={accepted} onChange={e => setAccepted(e.target.checked)} style={{ width: 18, height: 18, marginTop: 1, cursor: 'pointer', accentColor: ac, flexShrink: 0 }} />
+                <span style={{ fontSize: 13, lineHeight: 1.6, color: accepted ? '#15803D' : 'var(--text-primary)', fontWeight: accepted ? 700 : 400 }}>
+                  I, <strong>{user?.name || 'the undersigned'}</strong>, confirm that I have read, understood, and agree to all terms and conditions of this contract with <strong>{brand?.name || 'Westline Future'}</strong> for the project <strong>{project?.title}</strong>.
+                </span>
+              </label>
+
+              {/* Signature mode toggle */}
+              <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+                <button onClick={() => setDrawMode(false)} style={{ flex: 1, height: 36, borderRadius: 10, border: `1.5px solid ${!drawMode ? ac : 'var(--border-color)'}`, background: !drawMode ? `${ac}12` : 'transparent', color: !drawMode ? ac : 'var(--text-secondary)', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+                  Type Name
+                </button>
+                <button onClick={() => setDrawMode(true)} style={{ flex: 1, height: 36, borderRadius: 10, border: `1.5px solid ${drawMode ? ac : 'var(--border-color)'}`, background: drawMode ? `${ac}12` : 'transparent', color: drawMode ? ac : 'var(--text-secondary)', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+                  Draw Signature
+                </button>
+              </div>
+
+              {!drawMode ? (
+                <div>
+                  <label style={{ fontSize: 11, fontWeight: 800, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '.08em', display: 'block', marginBottom: 8 }}>Type your full legal name</label>
+                  <input
+                    type="text"
+                    value={typedName}
+                    onChange={e => setTypedName(e.target.value)}
+                    placeholder="e.g. John Kwame Mensah"
+                    autoComplete="name"
+                    style={{ width: '100%', height: 48, borderRadius: 12, border: '1.5px solid var(--border-color)', padding: '0 16px', fontSize: 15, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' }}
+                  />
+                  {typedName.trim() && (
+                    <div style={{ marginTop: 12, padding: '14px 20px', borderRadius: 12, background: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}>
+                      <div style={{ fontSize: 10, color: 'var(--text-secondary)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '.08em' }}>Signature Preview</div>
+                      <div style={{ fontFamily: 'Georgia, "Times New Roman", serif', fontStyle: 'italic', fontSize: 34, color: ac && !ac.startsWith('var') ? ac : 'var(--accent-secondary)', letterSpacing: 1 }}>{typedName}</div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div>
+                  <label style={{ fontSize: 11, fontWeight: 800, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '.08em', display: 'block', marginBottom: 8 }}>Draw your signature</label>
+                  <SignaturePadInline onSave={setDrawnSig} onClear={() => setDrawnSig(null)} ac={ac} />
+                </div>
+              )}
+
+              {error && (
+                <div style={{ marginTop: 12, padding: '10px 14px', borderRadius: 10, background: '#FEF2F2', border: '1px solid #FECACA', color: '#DC2626', fontSize: 12, fontWeight: 700 }}>
+                  {error}
+                </div>
+              )}
+
+              <div style={{ marginTop: 16, padding: '10px 14px', borderRadius: 10, background: '#F0F9FF', fontSize: 11, color: '#0369A1', lineHeight: 1.6 }}>
+                <ShieldCheck size={12} style={{ display: 'inline', marginRight: 5, verticalAlign: 'middle' }} />
+                Your IP address, device info and timestamp are logged for legal verification purposes.
+              </div>
+            </div>
+
+            <div style={{ padding: '16px 24px', borderTop: '1px solid var(--border-color)', flexShrink: 0, display: 'flex', gap: 10 }}>
+              <button onClick={() => setStep(1)} style={{ height: 50, padding: '0 20px', borderRadius: 14, border: '1.5px solid var(--border-color)', background: 'transparent', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Back</button>
+              <button
+                onClick={handleSign}
+                disabled={busy || !accepted || (!typedName.trim() && !drawnSig)}
+                style={{ flex: 1, height: 50, borderRadius: 14, border: 'none', background: (busy || !accepted || (!typedName.trim() && !drawnSig)) ? 'var(--border-color)' : '#16A34A', color: '#fff', fontSize: 14, fontWeight: 800, cursor: (busy || !accepted || (!typedName.trim() && !drawnSig)) ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, transition: 'background .2s' }}
+              >
+                {busy ? <><Loader2 size={15} style={{ animation: 'spin 1s linear infinite' }} /> Signing…</> : <><CheckCircle2 size={16} /> Sign & Accept Contract</>}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Inline Signature Pad (canvas) ───────────────────────────────────────────
+function SignaturePadInline({ onSave, onClear, ac }) {
+  const canvasRef = useRef(null);
+  const [isDrawing, setIsDrawing] = useState(false);
+  const [hasDrawn, setHasDrawn] = useState(false);
+  const ctxRef = useRef(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const ratio = window.devicePixelRatio || 1;
+    canvas.width = canvas.offsetWidth * ratio;
+    canvas.height = canvas.offsetHeight * ratio;
+    const ctx = canvas.getContext('2d');
+    ctx.scale(ratio, ratio);
+    ctx.strokeStyle = ac && !ac.startsWith('var') ? ac : '#1A1410';
+    ctx.lineWidth = 2.5;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctxRef.current = ctx;
+  }, [ac]);
+
+  const getPos = e => {
+    const rect = canvasRef.current.getBoundingClientRect();
+    const src = e.touches ? e.touches[0] : e;
+    return { x: src.clientX - rect.left, y: src.clientY - rect.top };
+  };
+
+  const start = e => { const { x, y } = getPos(e); ctxRef.current.beginPath(); ctxRef.current.moveTo(x, y); setIsDrawing(true); e.preventDefault(); };
+  const move  = e => { if (!isDrawing) return; const { x, y } = getPos(e); ctxRef.current.lineTo(x, y); ctxRef.current.stroke(); setHasDrawn(true); e.preventDefault(); };
+  const stop  = () => { setIsDrawing(false); if (hasDrawn) { onSave?.(canvasRef.current.toDataURL('image/png')); } };
+
+  const clear = () => {
+    const canvas = canvasRef.current;
+    ctxRef.current.clearRect(0, 0, canvas.offsetWidth, canvas.offsetHeight);
+    setHasDrawn(false);
+    onClear?.();
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div style={{ border: '1.5px dashed var(--border-color)', borderRadius: 14, background: '#fff', height: 160, position: 'relative', overflow: 'hidden', touchAction: 'none' }}>
+        <canvas ref={canvasRef} style={{ width: '100%', height: '100%' }}
+          onMouseDown={start} onMouseMove={move} onMouseUp={stop} onMouseLeave={stop}
+          onTouchStart={start} onTouchMove={move} onTouchEnd={stop}
+        />
+        {!hasDrawn && <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}><span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Sign here with your finger or mouse</span></div>}
+      </div>
+      <button onClick={clear} style={{ alignSelf: 'flex-start', height: 30, padding: '0 12px', borderRadius: 8, border: '1px solid var(--border-color)', background: 'transparent', fontSize: 11, cursor: 'pointer', color: 'var(--text-secondary)' }}>Clear</button>
+    </div>
+  );
 }
 
 // ─── FileType Icon Helper ─────────────────────────────────────────────────────
@@ -679,14 +1182,41 @@ function StageActionCard({ project, user, approveQuote, payInvoice, updateProjec
   const currentStage = applicableStages.find(s => s.id === project.stageId);
   const [acting, setActing] = useState(false);
 
+  // Live invoice query so we show real amounts, not hardcoded 50%
+  const [dueInvoice, setDueInvoice] = useState(null);
+  useEffect(() => {
+    if (!db || !project?.id || !currentStage?.requiresPayment) return;
+    const q = query(
+      collection(db, 'invoices'),
+      where('projectId', '==', project.id),
+    );
+    const q2 = query(
+      collection(db, 'invoices'),
+      where('parentId', '==', project.id),
+    );
+    let fromProject = [], fromParent = [];
+    const merge = () => {
+      const all = [...fromProject, ...fromParent];
+      const unpaid = all.filter(i => !['paid', 'paid in full'].includes(String(i.status || '').toLowerCase().trim()));
+      setDueInvoice(unpaid[0] || null);
+    };
+    const u1 = onSnapshot(q, s => { fromProject = s.docs.map(d => ({ id: d.id, ...d.data() })); merge(); }, () => merge());
+    const u2 = onSnapshot(q2, s => { fromParent = s.docs.map(d => ({ id: d.id, ...d.data() })); merge(); }, () => merge());
+    return () => { u1(); u2(); };
+  }, [project?.id, currentStage?.requiresPayment]);
+
   if (!currentStage || (currentStage.whoActs !== 'client' && currentStage.whoActs !== 'both')) return null;
 
   const email = user?.proxyEmail || (user?.phone ? user.phone + '@clients.westlinefuture.com' : 'client@clients.westlinefuture.com');
-  const budget = project.budget || 0;
-  const halfBudget = budget * 0.5;
+  const budget = parseFloat(String(project.budget || '0').replace(/[^0-9.]/g, '')) || 0;
+  const parseAmt = v => parseFloat(String(v || '0').replace(/[^0-9.]/g, '')) || 0;
+  // Use actual invoice amount if available, otherwise derive from stage milestone percentage
+  const stagePct = currentStage?.pct ? (currentStage.pct / 100) : 0.4; // default 40% if unknown
+  const dueAmount = dueInvoice ? parseAmt(dueInvoice.amount || dueInvoice.total) : budget * stagePct;
 
   if (currentStage.needsClientApproval) {
     if (currentStage.id === 3 && project.quoteApproved) return null;
+    const contractRequired = currentStage.id === 3 && !project.contractAccepted;
 
     return (
       <div style={{
@@ -699,12 +1229,20 @@ function StageActionCard({ project, user, approveQuote, payInvoice, updateProjec
           <span style={{ fontSize: 12, fontWeight: 800, color: `var(--accent-primary)`, textTransform: 'uppercase', letterSpacing: '.06em' }}>Action Required</span>
         </div>
         <div style={{ fontSize: 20, fontWeight: 900, color: `var(--accent-secondary)`, marginBottom: 6 }}>Approval Required</div>
-        <div style={{ fontSize: 14, color: `var(--text-secondary)`, lineHeight: 1.6, marginBottom: 20 }}>
+        <div style={{ fontSize: 14, color: `var(--text-secondary)`, lineHeight: 1.6, marginBottom: contractRequired ? 16 : 20 }}>
           {currentStage.id === 3 ? "We've prepared your final quotation. Please review the document, then approve it below." : "Please review the work and confirm your approval."}
         </div>
+        {contractRequired && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', borderRadius: 12, background: '#FEF3C7', border: '1px solid #FDE68A', marginBottom: 20 }}>
+            <AlertCircle size={15} color="#D97706" style={{ flexShrink: 0 }} />
+            <span style={{ fontSize: 13, fontWeight: 700, color: '#92400E' }}>
+              You must sign the project contract before approving the quote. Please complete that step first.
+            </span>
+          </div>
+        )}
         <button
           onClick={async () => {
-            if (acting) return;
+            if (acting || contractRequired) return;
             setActing(true);
             if (currentStage.id === 3) {
               await approveQuote(project.id);
@@ -713,14 +1251,14 @@ function StageActionCard({ project, user, approveQuote, payInvoice, updateProjec
             }
             setActing(false);
           }}
-          disabled={acting}
+          disabled={acting || contractRequired}
           style={{
             display: 'inline-flex', alignItems: 'center', gap: 10,
             padding: '14px 32px', borderRadius: 14, border: 'none',
-            background: acting ? `var(--border-color)` : `var(--accent-secondary)`,
-            color: acting ? `var(--text-secondary)` : '#fff',
-            fontSize: 15, fontWeight: 800, cursor: acting ? 'default' : 'pointer',
-            boxShadow: acting ? 'none' : '0 4px 16px rgba(26,20,16,.25)',
+            background: (acting || contractRequired) ? `var(--border-color)` : `var(--accent-secondary)`,
+            color: (acting || contractRequired) ? `var(--text-secondary)` : '#fff',
+            fontSize: 15, fontWeight: 800, cursor: (acting || contractRequired) ? 'default' : 'pointer',
+            boxShadow: (acting || contractRequired) ? 'none' : '0 4px 16px rgba(26,20,16,.25)',
             transition: 'all .2s',
           }}
         >
@@ -735,6 +1273,8 @@ function StageActionCard({ project, user, approveQuote, payInvoice, updateProjec
 
   if (currentStage.requiresPayment) {
     const isDeposit = currentStage.id === 3;
+    const invoiceTitle = dueInvoice?.title || (isDeposit ? 'Project Deposit' : 'Balance Payment');
+    const fmt = n => `GH₵ ${Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
     return (
       <div style={{
         padding: '24px 28px', borderRadius: 20,
@@ -742,29 +1282,35 @@ function StageActionCard({ project, user, approveQuote, payInvoice, updateProjec
         border: '1.5px solid #16A34A30', marginBottom: 4,
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-          <AlertCircle size={18} color="#16A34A" />
+          <CreditCard size={18} color="#16A34A" />
           <span style={{ fontSize: 12, fontWeight: 800, color: '#16A34A', textTransform: 'uppercase', letterSpacing: '.06em' }}>Payment Required</span>
         </div>
         <div style={{ fontSize: 20, fontWeight: 900, color: `var(--accent-secondary)`, marginBottom: 4 }}>
-          {isDeposit ? "Your 50% deposit is due" : "Your final balance is due"}
+          {invoiceTitle}
         </div>
-        {budget > 0 && (
-          <div style={{ fontSize: 15, fontWeight: 700, color: '#16A34A', marginBottom: 6 }}>
-            Amount: GHS {Number(halfBudget).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+        {dueAmount > 0 && (
+          <div style={{ fontSize: 22, fontWeight: 900, color: '#15803D', marginBottom: 6 }}>
+            {fmt(dueAmount)}
           </div>
         )}
-        <div style={{ fontSize: 14, color: '#374151', lineHeight: 1.6, marginBottom: 20 }}>
-          {isDeposit ? "A 50% deposit is required to initiate production and material procurement." : "Your project is nearly complete. Please settle the remaining 50% balance."}
+        {dueInvoice?.due && (
+          <div style={{ fontSize: 12, fontWeight: 700, color: '#B45309', marginBottom: 8 }}>
+            ⏰ Due by {new Date(dueInvoice.due + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}
+          </div>
+        )}
+        <div style={{ fontSize: 13, color: '#374151', lineHeight: 1.6, marginBottom: 20 }}>
+          {isDeposit
+            ? 'This payment is required to initiate production and material procurement.'
+            : 'Please settle this balance to continue to the next project stage.'}
         </div>
         <UnifiedPaymentGateway
-          label={`Pay ${isDeposit ? 'Deposit' : 'Balance'} — GHS ${Number(halfBudget).toLocaleString(undefined, { minimumFractionDigits: 2 })}`}
-          amountGHS={halfBudget}
+          label={`Pay ${fmt(dueAmount)}`}
+          amountGHS={dueAmount}
           email={email}
           projectId={project.id}
-          paymentType={isDeposit ? "deposit" : "final"}
-          onSuccess={(ref) => {
-            console.log(`${isDeposit ? 'Deposit' : 'Final'} payment verified:`, ref);
-          }}
+          invoiceId={dueInvoice?.id}
+          paymentType={isDeposit ? 'deposit' : 'milestone'}
+          onSuccess={() => {}}
         />
       </div>
     );
@@ -798,21 +1344,33 @@ function ClientNextActionCard({ project, invoices = [], renderingPackages = [], 
   const projectAddOns = addOns.filter(a => a.projectId === project.id);
   const lockedRendering = projectPackages.find(pkg => {
     const linkedInv = projectInvoices.find(i => i.id === pkg.linkedInvoiceId || i.renderingPackageId === pkg.id);
-    return linkedInv && linkedInv.status !== 'Paid' && !pkg.unlocked;
+    return linkedInv && !isPaidStatus(linkedInv.status) && !pkg.unlocked;
   });
   const reviewRendering = projectPackages.find(pkg => {
     const linkedInv = projectInvoices.find(i => i.id === pkg.linkedInvoiceId || i.renderingPackageId === pkg.id);
-    const unlocked = pkg.unlocked || pkg.status === 'Paid / Unlocked' || linkedInv?.status === 'Paid';
+    const unlocked = pkg.unlocked || pkg.status === 'Paid / Unlocked' || isPaidStatus(linkedInv?.status);
     return unlocked && pkg.status !== 'Approved';
   });
   const pendingAddOn = projectAddOns.find(a => ['Pending', 'Pending Approval', 'Priced'].includes(a.status || a.approvalStatus));
-  const unpaidInvoice = projectInvoices.find(i => !['Paid', 'paid'].includes(i.status) && i.type !== 'Quotation' && i.documentKind !== 'quotation');
-  const pendingQuote = projectInvoices.find(i => ['Quotation', 'quote', 'quotation'].includes(i.type || i.documentKind) && !['Approved', 'Paid'].includes(i.status));
+  // Only surface invoices that have been explicitly activated by admin (have a due date, are Sent, or Overdue).
+  // Auto-generated milestone invoices with due: null are future obligations — don't prompt yet.
+  const unpaidInvoice = projectInvoices.find(i =>
+    !isPaidStatus(i.status) &&
+    i.type !== 'Quotation' && i.documentKind !== 'quotation' &&
+    (i.status === 'Overdue' || i.status === 'Sent' || (i.due != null && i.due !== ''))
+  );
+  const pendingQuote = projectInvoices.find(i => ['Quotation', 'quote', 'quotation'].includes(i.type || i.documentKind) && !['approved'].includes(String(i.status || '').toLowerCase()) && !isPaidStatus(i.status));
+
+  const noRendering = project.kickoffMode === 'direct-kickoff';
+
+  const specPending = project.specDoc?.url && project.specDoc?.status === 'pending';
 
   let action;
-  if (lockedRendering) {
+  if (specPending) {
+    action = { tone: '#1D4ED8', bg: '#EFF6FF', icon: <FileCheck size={18} />, title: 'Spec approval required', body: 'Your account manager has uploaded the project specification and deliverables. Please review and approve before production begins.', button: 'Review Spec', tab: 'timeline' };
+  } else if (!noRendering && lockedRendering) {
     action = { tone: '#D97706', bg: '#FFF7ED', icon: <Lock size={18} />, title: 'Rendering fee required', body: 'Pay the separate design/rendering invoice to unlock your CAD or 3D package.', button: 'Open Design Vault', tab: 'design' };
-  } else if (reviewRendering) {
+  } else if (!noRendering && reviewRendering) {
     action = { tone: 'var(--accent-primary)', bg: '#F4EFE6', icon: <PenTool size={18} />, title: 'Review your rendering', body: 'Your design package is unlocked. Review it, leave pins, request changes, or approve the final version.', button: 'Review Design', tab: 'design' };
   } else if (pendingQuote) {
     action = { tone: 'var(--accent-primary)', bg: '#FDFAF6', icon: <FileText size={18} />, title: 'Quote awaiting your review', body: 'Review the latest quote or quotation before kickoff approval.', button: 'View Quotes', tab: 'approvals' };
@@ -820,7 +1378,7 @@ function ClientNextActionCard({ project, invoices = [], renderingPackages = [], 
     action = { tone: '#B45309', bg: '#FFFBEB', icon: <Gift size={18} />, title: 'Add-on needs decision', body: `${pendingAddOn.title || pendingAddOn.description || 'A project variation'} is waiting for your approval.`, button: 'Review Add-ons', tab: 'addons' };
   } else if (unpaidInvoice) {
     const amount = parseAmount(unpaidInvoice.amount || unpaidInvoice.total);
-    action = { tone: '#16A34A', bg: '#F0FDF4', icon: <CreditCard size={18} />, title: 'Payment pending', body: `${unpaidInvoice.title || 'An invoice'} is outstanding${amount ? `: GHS ${amount.toLocaleString()}` : ''}.`, button: 'Open Payments', tab: 'payments' };
+    action = { tone: '#16A34A', bg: '#F0FDF4', icon: <CreditCard size={18} />, title: 'Payment pending', body: `${unpaidInvoice.title || 'An invoice'} is outstanding${amount ? `: GH₵ ${amount.toLocaleString()}` : ''}.`, button: 'Open Payments', tab: 'payments' };
   } else {
     const currentStage = CLIENT_PROJECT_STAGES.find(s => s.id === project.stageId);
     action = { tone: '#16A34A', bg: '#F0FDF4', icon: <CheckCircle2 size={18} />, title: project.nextAction || 'Everything is on track', body: currentStage?.clientMsg || 'Your project is moving. We will notify you when your next action is required.', button: 'View Timeline', tab: 'timeline' };
@@ -843,46 +1401,274 @@ function ClientNextActionCard({ project, invoices = [], renderingPackages = [], 
   );
 }
 
-function ClientApprovalsTab({ project, invoices = [], approveQuote, brand, user, isMobile }) {
+function ClientApprovalsTab({ project, invoices = [], approvals = [], approveQuote, brand, user, isMobile, setActiveTab, updateProjectStage, updateApproval }) {
+  const [signOffBusy, setSignOffBusy] = useState(false);
+  const [signOffDone, setSignOffDone] = useState(false);
+  const [showContract, setShowContract] = useState(false);
+  const [contractJustSigned, setContractJustSigned] = useState(false);
+  const [approvalNotes, setApprovalNotes] = useState({});
+  const [approvalBusy, setApprovalBusy] = useState({});
+
   const quoteDocs = invoices.filter(i => (i.projectId === project.id || i.parentId === project.id) && ['Quotation', 'quote', 'quotation'].includes(i.type || i.documentKind));
+  const pendingApprovals = (approvals || []).filter(a => a.projectId === project.id && a.status === 'pending');
+  const pastApprovals = (approvals || []).filter(a => a.projectId === project.id && a.status !== 'pending');
+
+  const handleApprovalResponse = async (id, status) => {
+    if (!updateApproval || approvalBusy[id]) return;
+    setApprovalBusy(b => ({ ...b, [id]: true }));
+    try {
+      await updateApproval(id, { status, clientNote: approvalNotes[id] || '' }, project.id);
+    } finally {
+      setApprovalBusy(b => ({ ...b, [id]: false }));
+    }
+  };
   const cardStyle = { padding: isMobile ? '20px 18px' : '24px 28px', background: '#fff', borderRadius: isMobile ? 24 : 20, border: isMobile ? 'none' : '1px solid var(--border-color)', boxShadow: isMobile ? '0 2px 16px rgba(0,0,0,.08)' : '0 4px 20px rgba(0,0,0,.05)' };
 
+  const sectionStyle = { display: 'flex', flexDirection: 'column', gap: 10, padding: '20px 0', borderBottom: '1px solid var(--border-color)' };
+  const sectionTitleStyle = { fontSize: 12, fontWeight: 900, color: `var(--text-secondary)`, textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 6 };
+
+  // ── Rendering Package status
+  const renderPkg = (project.renderingPackages || []).find(p => p.status !== 'Superseded') || null;
+  const renderStatus = renderPkg?.status || (project.stageId >= 2 ? 'Awaiting Upload' : null);
+
+  const handleInspectionSignOff = async () => {
+    if (!updateProjectStage || signOffBusy || signOffDone) return;
+    setSignOffBusy(true);
+    try {
+      await updateProjectStage(project.id, 8, 'Client signed off on site inspection.');
+      setSignOffDone(true);
+    } finally {
+      setSignOffBusy(false);
+    }
+  };
+
   return (
-    <div style={{ ...cardStyle, display: 'flex', flexDirection: 'column', gap: 14 }}>
-      <div>
-        <div style={{ fontSize: 15, fontWeight: 900, color: `var(--accent-secondary)` }}>Quotes & Approvals</div>
-        <div style={{ fontSize: 12, color: `var(--text-secondary)`, marginTop: 4 }}>Review official quote versions and approval records.</div>
+    <div style={{ ...cardStyle, display: 'flex', flexDirection: 'column', gap: 0 }}>
+      <div style={{ marginBottom: 18 }}>
+        <div style={{ fontSize: 15, fontWeight: 900, color: `var(--accent-secondary)` }}>Approvals</div>
+        <div style={{ fontSize: 12, color: `var(--text-secondary)`, marginTop: 4 }}>Track all project approval gates — design, quotation, and final inspection.</div>
       </div>
-      {quoteDocs.length === 0 ? (
-        <div style={{ padding: '32px 0', textAlign: 'center', color: `var(--text-secondary)`, fontSize: 13 }}>No quote has been issued for this project yet.</div>
-      ) : quoteDocs.map(inv => (
-        <div key={inv.id} style={{ padding: 16, borderRadius: 16, background: `var(--bg-secondary)`, border: '1px solid var(--border-color)', display: 'flex', gap: 14, alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}>
-          <div>
-            <div style={{ fontSize: 13, fontWeight: 900, color: `var(--accent-secondary)` }}>{inv.title || `Quote v${inv.version || 1}`}</div>
-            <div style={{ fontSize: 11, color: `var(--text-secondary)`, marginTop: 3 }}>{inv.amount || `GHS ${Number(inv.total || 0).toLocaleString()}`} · {inv.status || 'Pending'}</div>
-          </div>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button onClick={() => downloadInvoicePDF(inv, project, user, brand)} style={{ padding: '9px 13px', borderRadius: 10, border: '1px solid var(--border-color)', background: '#fff', fontSize: 11, fontWeight: 800, cursor: 'pointer' }}>Download</button>
-            {approveQuote && !project.quoteApproved && (
-              <button onClick={() => approveQuote(project.id)} style={{ padding: '9px 13px', borderRadius: 10, border: 'none', background: `var(--accent-primary)`, color: '#fff', fontSize: 11, fontWeight: 900, cursor: 'pointer' }}>Approve Quote</button>
-            )}
-          </div>
+
+      {/* ── SECTION 0: Admin-Requested Approvals ──────────────────────── */}
+      {(pendingApprovals.length > 0 || pastApprovals.length > 0) && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: '20px 0', borderBottom: '1px solid var(--border-color)' }}>
+          <div style={{ fontSize: 12, fontWeight: 900, color: `var(--text-secondary)`, textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 6 }}>⓪ Sign-off Requests from Team</div>
+          {pendingApprovals.map(a => (
+            <div key={a.id} style={{ padding: 16, borderRadius: 16, background: 'linear-gradient(135deg, #FFF7ED, #FFFBF5)', border: '1.5px solid #F59E0B40', display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 900, color: '#92400E' }}>{a.title || a.type}</div>
+                {a.description && <div style={{ fontSize: 12, color: '#78350F', marginTop: 4, lineHeight: 1.5 }}>{a.description}</div>}
+                <div style={{ fontSize: 11, color: '#B45309', marginTop: 4 }}>{a.type} · Requested {new Date(a.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</div>
+              </div>
+              <textarea
+                value={approvalNotes[a.id] || ''}
+                onChange={e => setApprovalNotes(n => ({ ...n, [a.id]: e.target.value }))}
+                placeholder="Add a note (optional)…"
+                rows={2}
+                style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #F59E0B60', fontSize: 12, resize: 'none', boxSizing: 'border-box', background: '#fff' }}
+              />
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  onClick={() => handleApprovalResponse(a.id, 'approved')}
+                  disabled={approvalBusy[a.id]}
+                  style={{ flex: 1, padding: '10px 0', borderRadius: 10, border: 'none', background: '#16A34A', color: '#fff', fontSize: 12, fontWeight: 900, cursor: 'pointer', opacity: approvalBusy[a.id] ? 0.6 : 1 }}
+                >
+                  {approvalBusy[a.id] ? 'Saving…' : '✓ Approve'}
+                </button>
+                <button
+                  onClick={() => handleApprovalResponse(a.id, 'rejected')}
+                  disabled={approvalBusy[a.id]}
+                  style={{ flex: 1, padding: '10px 0', borderRadius: 10, border: '1.5px solid #DC2626', background: '#fff', color: '#DC2626', fontSize: 12, fontWeight: 900, cursor: 'pointer', opacity: approvalBusy[a.id] ? 0.6 : 1 }}
+                >
+                  ✗ Request Changes
+                </button>
+              </div>
+            </div>
+          ))}
+          {pastApprovals.map(a => (
+            <div key={a.id} style={{ padding: '12px 16px', borderRadius: 14, background: a.status === 'approved' ? '#F0FDF4' : '#FEF2F2', border: `1px solid ${a.status === 'approved' ? '#BBF7D0' : '#FECACA'}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 800, color: a.status === 'approved' ? '#15803D' : '#DC2626' }}>
+                  {a.status === 'approved' ? '✓' : '✗'} {a.title || a.type}
+                </div>
+                {a.clientNote && <div style={{ fontSize: 11, color: '#666', marginTop: 2, fontStyle: 'italic' }}>"{a.clientNote}"</div>}
+              </div>
+              <div style={{ fontSize: 11, color: '#999' }}>{a.status === 'approved' ? 'Approved' : 'Changes Requested'}</div>
+            </div>
+          ))}
         </div>
-      ))}
-      {project.quoteApproved && (
-        <div style={{ padding: 14, borderRadius: 14, background: '#F0FDF4', color: '#16A34A', fontSize: 12, fontWeight: 800, display: 'flex', alignItems: 'center', gap: 8 }}>
-          <CheckCircle2 size={15} /> Final quote approved and contract record available in Progress.
+      )}
+
+      {/* ── SECTION 1: Rendering / Design Approval ──────────────────────── */}
+      {project.stageId >= 2 && project.kickoffMode !== 'direct-kickoff' && (
+        <div style={sectionStyle}>
+          <div style={sectionTitleStyle}>① Design Rendering Approval</div>
+          {!renderPkg ? (
+            <div style={{ padding: '14px 16px', borderRadius: 14, background: `var(--bg-secondary)`, border: '1px solid var(--border-color)', fontSize: 12, color: `var(--text-secondary)` }}>
+              Awaiting upload from our design team. You'll be notified when the rendering is ready.
+            </div>
+          ) : (
+            <div style={{ padding: 16, borderRadius: 16, background: `var(--bg-secondary)`, border: '1px solid var(--border-color)', display: 'flex', gap: 14, alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 900, color: `var(--accent-secondary)` }}>{renderPkg.title || 'Rendering Package'}</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
+                  {renderStatus === 'Approved' && <><CheckCircle2 size={13} color="#16A34A" /><span style={{ fontSize: 11, fontWeight: 800, color: '#16A34A' }}>Approved</span></>}
+                  {renderStatus === 'Changes Requested' && <><AlertCircle size={13} color="#D97706" /><span style={{ fontSize: 11, fontWeight: 800, color: '#D97706' }}>Changes Requested — Revision Pending</span></>}
+                  {renderStatus === 'Pending' && <><Clock size={13} color="#6B7280" /><span style={{ fontSize: 11, fontWeight: 800, color: '#6B7280' }}>Awaiting Your Review</span></>}
+                  {renderStatus === 'Awaiting Upload' && <><Clock size={13} color="#6B7280" /><span style={{ fontSize: 11, fontWeight: 800, color: '#6B7280' }}>Awaiting Upload</span></>}
+                </div>
+              </div>
+              {setActiveTab && (
+                <button onClick={() => setActiveTab('design')} style={{ padding: '9px 14px', borderRadius: 10, border: `1px solid var(--accent-secondary)`, background: 'transparent', color: `var(--accent-secondary)`, fontSize: 11, fontWeight: 900, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                  View Design Vault
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── SECTION 2: Contract & Quotation Approval ─────────────────────── */}
+      <div style={{ ...sectionStyle, borderBottom: project.stageId === 7 ? '1px solid var(--border-color)' : 'none' }}>
+        <div style={sectionTitleStyle}>② Contract & Quotation Approval</div>
+
+        {/* Contract signing gate */}
+        {(project.contractAccepted || contractJustSigned) ? (
+          <div style={{ padding: '12px 16px', borderRadius: 14, background: '#F0FDF4', border: '1px solid #BBF7D0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, marginBottom: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <FileCheck size={15} color="#16A34A" />
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 800, color: '#15803D' }}>Contract Signed</div>
+                <div style={{ fontSize: 11, color: '#16A34A' }}>
+                  {project.contractSignedName || user?.name || 'You'} ·{' '}
+                  {project.quoteSignedAt?.seconds ? new Date(project.quoteSignedAt.seconds * 1000).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Just now'}
+                </div>
+              </div>
+            </div>
+            <button
+              onClick={() => printSignedContractDoc(project, user, brand)}
+              style={{ padding: '8px 14px', borderRadius: 10, border: '1px solid #BBF7D0', background: '#fff', color: '#15803D', fontSize: 11, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
+            >
+              <Printer size={12} /> Download Signed Contract
+            </button>
+          </div>
+        ) : (
+          <div style={{ padding: 16, borderRadius: 16, background: 'linear-gradient(135deg, #FFF7ED, #FFFBF5)', border: '1.5px solid #F59E0B40', marginBottom: 12 }}>
+            <div style={{ fontSize: 13, fontWeight: 900, color: '#92400E', marginBottom: 4 }}>Sign the Project Contract</div>
+            <div style={{ fontSize: 12, color: '#78350F', lineHeight: 1.6, marginBottom: 12 }}>
+              Before approving your quote, please read and sign the project contract. This is a legally binding agreement for the work to be carried out.
+            </div>
+            <button
+              onClick={() => setShowContract(true)}
+              style={{ padding: '10px 18px', borderRadius: 12, border: 'none', background: `var(--accent-secondary)`, color: '#fff', fontSize: 12, fontWeight: 900, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 7 }}
+            >
+              <FileCheck size={14} /> Review & Sign Contract →
+            </button>
+          </div>
+        )}
+
+        {/* Quote documents */}
+        {quoteDocs.length === 0 ? (
+          <div style={{ padding: '14px 16px', borderRadius: 14, background: `var(--bg-secondary)`, border: '1px solid var(--border-color)', fontSize: 12, color: `var(--text-secondary)` }}>
+            No quote has been issued for this project yet.
+          </div>
+        ) : quoteDocs.map(inv => (
+          <div key={inv.id} style={{ padding: 16, borderRadius: 16, background: `var(--bg-secondary)`, border: '1px solid var(--border-color)', display: 'flex', gap: 14, alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 900, color: `var(--accent-secondary)` }}>{inv.title || `Quote v${inv.version || 1}`}</div>
+              <div style={{ fontSize: 11, color: `var(--text-secondary)`, marginTop: 3 }}>{inv.amount ? `GHS ${Number(String(inv.amount).replace(/[^0-9.]/g, '')).toLocaleString()}` : `GHS ${Number(inv.total || 0).toLocaleString()}`} · {inv.status || 'Pending'}</div>
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={() => downloadInvoicePDF(inv, project, user, brand)} style={{ padding: '9px 13px', borderRadius: 10, border: '1px solid var(--border-color)', background: '#fff', fontSize: 11, fontWeight: 800, cursor: 'pointer' }}>Download</button>
+              {approveQuote && !project.quoteApproved && (project.contractAccepted || contractJustSigned) && (
+                <button onClick={() => approveQuote(project.id)} style={{ padding: '9px 13px', borderRadius: 10, border: 'none', background: `var(--accent-primary)`, color: '#fff', fontSize: 11, fontWeight: 900, cursor: 'pointer' }}>Approve Quote</button>
+              )}
+              {approveQuote && !project.quoteApproved && !(project.contractAccepted || contractJustSigned) && (
+                <button disabled style={{ padding: '9px 13px', borderRadius: 10, border: '1px solid var(--border-color)', background: 'var(--bg-secondary)', color: 'var(--text-secondary)', fontSize: 11, fontWeight: 800, cursor: 'not-allowed' }} title="Sign contract first">Sign contract first</button>
+              )}
+            </div>
+          </div>
+        ))}
+        {project.quoteApproved && (
+          <div style={{ padding: 14, borderRadius: 14, background: '#F0FDF4', color: '#16A34A', fontSize: 12, fontWeight: 800, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <CheckCircle2 size={15} /> Quote approved — project is moving forward.
+          </div>
+        )}
+      </div>
+
+      {/* Contract Modal */}
+      {showContract && (
+        <ContractAgreementModal
+          project={project}
+          user={user}
+          brand={brand}
+          isMobile={isMobile}
+          onClose={() => setShowContract(false)}
+          onSigned={() => {
+            setContractJustSigned(true);
+            setShowContract(false);
+          }}
+        />
+      )}
+
+      {/* ── SECTION 3: Site Inspection Sign-off (Stage 7 only) ───────────── */}
+      {project.stageId === 7 && (
+        <div style={{ ...sectionStyle, borderBottom: 'none' }}>
+          <div style={sectionTitleStyle}>③ Site Inspection Sign-off</div>
+          {signOffDone || project.stageId > 7 ? (
+            <div style={{ padding: 14, borderRadius: 14, background: '#F0FDF4', color: '#16A34A', fontSize: 12, fontWeight: 800, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <CheckCircle2 size={15} /> You have signed off on the site inspection. Project is moving to completion.
+            </div>
+          ) : (
+            <div style={{ padding: 16, borderRadius: 16, background: 'linear-gradient(135deg, #FFF7ED, #FFFBF5)', border: '1.5px solid #F59E0B40', display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 900, color: '#92400E' }}>Final Site Inspection</div>
+                <div style={{ fontSize: 12, color: '#78350F', marginTop: 4, lineHeight: 1.6 }}>
+                  Our team has completed installation and the site is ready for your inspection. By clicking below, you confirm that you have inspected the work and accept it as complete.
+                </div>
+              </div>
+              <button
+                onClick={handleInspectionSignOff}
+                disabled={signOffBusy}
+                style={{ padding: '12px 18px', borderRadius: 12, border: 'none', background: signOffBusy ? '#9CA3AF' : '#16A34A', color: '#fff', fontSize: 13, fontWeight: 900, cursor: signOffBusy ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+              >
+                {signOffBusy ? <><Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> Submitting…</> : <><CheckCircle2 size={14} /> Confirm Site Inspection — I Accept the Work</>}
+              </button>
+              <div style={{ fontSize: 10, color: '#9CA3AF', textAlign: 'center' }}>This action is permanent and triggers the final payment milestone.</div>
+            </div>
+          )}
         </div>
       )}
     </div>
   );
 }
 
-function ClientAddOnsTab({ project, addOns = [], invoices = [], user, isMobile }) {
-  const projectAddOns = addOns.filter(a => a.projectId === project.id);
+function ClientAddOnsTab({ project, addOns: propAddOns = [], invoices: propInvoices = [], user, isMobile }) {
+  // Own live queries — bypasses the clientId/UID mismatch in AppContext for phone-auth users
+  const [liveAddOns, setLiveAddOns] = useState(null);
+  const [liveInvoices, setLiveInvoices] = useState(null);
+
+  useEffect(() => {
+    if (!db || !project?.id) return;
+    const q = query(collection(db, 'addOns'), where('projectId', '==', project.id));
+    return onSnapshot(q, snap => setLiveAddOns(snap.docs.map(d => ({ id: d.id, ...d.data() }))), () => setLiveAddOns([]));
+  }, [project?.id]);
+
+  useEffect(() => {
+    if (!db || !project?.id) return;
+    const q = query(collection(db, 'invoices'), where('projectId', '==', project.id));
+    return onSnapshot(q, snap => setLiveInvoices(snap.docs.map(d => ({ id: d.id, ...d.data() }))), () => setLiveInvoices([]));
+  }, [project?.id]);
+
+  const projectAddOns = liveAddOns ?? propAddOns.filter(a => a.projectId === project.id);
+  const allInvoices = liveInvoices ?? propInvoices.filter(i => i.projectId === project.id || i.parentId === project.id);
   const email = user?.proxyEmail || (user?.phone ? user.phone + '@clients.westlinefuture.com' : 'client@clients.westlinefuture.com');
   const parseAmount = value => parseFloat(String(value || '0').replace(/[^0-9.]/g, '')) || 0;
   const cardStyle = { padding: isMobile ? '20px 18px' : '24px 28px', background: '#fff', borderRadius: isMobile ? 24 : 20, border: isMobile ? 'none' : '1px solid var(--border-color)', boxShadow: isMobile ? '0 2px 16px rgba(0,0,0,.08)' : '0 4px 20px rgba(0,0,0,.05)' };
+
+  if (liveAddOns === null) {
+    return <div style={{ ...cardStyle, padding: '32px', textAlign: 'center', color: 'var(--text-secondary)', fontSize: 13 }}>Loading add-ons…</div>;
+  }
 
   return (
     <div style={{ ...cardStyle, display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -893,24 +1679,49 @@ function ClientAddOnsTab({ project, addOns = [], invoices = [], user, isMobile }
       {projectAddOns.length === 0 ? (
         <div style={{ padding: '32px 0', textAlign: 'center', color: `var(--text-secondary)`, fontSize: 13 }}>No add-ons or variations have been added to this project.</div>
       ) : projectAddOns.map(addOn => {
-        const linkedInv = invoices.find(i => i.id === addOn.invoiceId || i.addOnId === addOn.id);
+        // Admin saves field as `linkedInvoiceId` — check all possible field names
+        const linkedInv = allInvoices.find(i =>
+          i.id === addOn.linkedInvoiceId ||
+          i.id === addOn.invoiceId ||
+          i.addOnId === addOn.id
+        );
         const amount = parseAmount(addOn.price || addOn.amount || linkedInv?.amount || linkedInv?.total);
-        const unpaid = linkedInv && linkedInv.status !== 'Paid';
+        const isPaid = isPaidStatus(linkedInv?.status);
+        const unpaid = linkedInv && !isPaid;
+        const statusLabel = isPaid ? 'Paid' : addOn.status || 'Pending Payment';
+        const statusColor = isPaid ? '#16A34A' : '#D97706';
+        const statusBg = isPaid ? '#F0FDF4' : '#FFF7ED';
         return (
-          <div key={addOn.id} style={{ padding: 16, borderRadius: 16, border: '1px solid var(--border-color)', background: `var(--bg-secondary)` }}>
+          <div key={addOn.id} style={{ padding: 16, borderRadius: 16, border: `1.5px solid ${isPaid ? '#BBF7D040' : 'var(--border-color)'}`, background: isPaid ? '#FAFFFE' : 'var(--bg-secondary)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, marginBottom: 8 }}>
               <div>
                 <div style={{ fontSize: 13, fontWeight: 900, color: `var(--accent-secondary)` }}>{addOn.title || addOn.description || 'Project Add-on'}</div>
-                <div style={{ fontSize: 11, color: `var(--text-secondary)`, marginTop: 3 }}>{addOn.reason || addOn.timelineImpact || 'Scope variation'}</div>
+                {addOn.description && addOn.title && (
+                  <div style={{ fontSize: 11, color: `var(--text-secondary)`, marginTop: 3 }}>{addOn.description}</div>
+                )}
               </div>
-              <span style={{ fontSize: 11, fontWeight: 900, color: addOn.status === 'Approved' ? '#16A34A' : '#D97706', background: addOn.status === 'Approved' ? '#F0FDF4' : '#FFF7ED', padding: '4px 9px', borderRadius: 999, height: 24 }}>{addOn.status || addOn.approvalStatus || 'Pending'}</span>
+              <span style={{ fontSize: 11, fontWeight: 900, color: statusColor, background: statusBg, padding: '4px 9px', borderRadius: 999, height: 24, whiteSpace: 'nowrap', flexShrink: 0 }}>{statusLabel}</span>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-              <div style={{ fontSize: 14, fontWeight: 900, color: `var(--accent-secondary)` }}>{amount ? `GHS ${amount.toLocaleString()}` : 'Pricing pending'}</div>
+              <div style={{ fontSize: 14, fontWeight: 900, color: isPaid ? '#16A34A' : `var(--accent-secondary)` }}>
+                {amount ? `GH₵ ${amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}` : 'Pricing pending'}
+                {isPaid && <span style={{ fontSize: 11, fontWeight: 700, marginLeft: 6 }}>✓ Settled</span>}
+              </div>
               {unpaid && amount > 0 && (
-                <div style={{ width: 240, maxWidth: '100%' }}>
-                  <UnifiedPaymentGateway label="Pay Add-on" amountGHS={amount} email={email} projectId={project.id} invoiceId={linkedInv.id} paymentType="addon" />
+                <div style={{ width: isMobile ? '100%' : 260, maxWidth: '100%' }}>
+                  <UnifiedPaymentGateway
+                    label={`Pay Add-on — GH₵ ${amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}`}
+                    amountGHS={amount}
+                    email={email}
+                    projectId={project.id}
+                    invoiceId={linkedInv.id}
+                    paymentType="addon"
+                    onSuccess={() => {}}
+                  />
                 </div>
+              )}
+              {!linkedInv && amount === 0 && (
+                <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Invoice being prepared by your account manager.</div>
               )}
             </div>
           </div>
@@ -1479,14 +2290,19 @@ function CostBreakdownCard({ project, fmt, card, pad, isMobile }) {
 }
 
 // ─── Payments Tab ─────────────────────────────────────────────────────────────
-function PaymentsTab({ project, user, transactions: propTxns, invoices: propInvs, brand, isMobile }) {
+function PaymentsTab({ project, user, transactions: propTxns, invoices: propInvs, brand, isMobile, finSettings = {} }) {
   const budget = Number(project.budget) || 0;
-  const USD_RATE = Number(brand?.exchangeRate) || 15.5;
+  const USD_RATE = Number(brand?.finSettings?.exchangeRate || brand?.exchangeRate) || 15.5;
   const [showUSD, setShowUSD] = useState(
     user?.currency === 'USD' || project?.currency === 'USD'
   );
   const [livePayments, setLivePayments] = useState(null);
   const [liveInvoices, setLiveInvoices] = useState(null);
+  const [viewInvoice, setViewInvoice] = useState(null);
+  const [offlineMethod, setOfflineMethod] = useState(null); // 'bank' | 'cash' | null
+  const [offlineSubmitting, setOfflineSubmitting] = useState(false);
+  const [offlineSubmitted, setOfflineSubmitted] = useState(false);
+  const [paySuccess, setPaySuccess] = useState(false);
 
   useEffect(() => {
     if (!db || !project?.id) return;
@@ -1502,14 +2318,20 @@ function PaymentsTab({ project, user, transactions: propTxns, invoices: propInvs
 
   useEffect(() => {
     if (!db || !project?.id) return;
-    const q = query(
-      collection(db, 'projects', project.id, 'payments'),
-      orderBy('createdAt', 'desc')
-    );
-    return onSnapshot(q,
-      snap => setLiveInvoices(snap.docs.map(d => ({ id: d.id, ...d.data() }))),
-      () => setLiveInvoices([])
-    );
+    // Run two queries: some invoices use parentId, others use projectId
+    // Merge and deduplicate by document id
+    let byParent = [];
+    let byProject = [];
+    const merge = () => {
+      const map = new Map();
+      [...byParent, ...byProject].forEach(inv => map.set(inv.id, inv));
+      setLiveInvoices(Array.from(map.values()));
+    };
+    const q1 = query(collection(db, 'invoices'), where('parentId', '==', project.id));
+    const q2 = query(collection(db, 'invoices'), where('projectId', '==', project.id));
+    const unsub1 = onSnapshot(q1, snap => { byParent = snap.docs.map(d => ({ id: d.id, ...d.data() })); merge(); }, () => { byParent = []; merge(); });
+    const unsub2 = onSnapshot(q2, snap => { byProject = snap.docs.map(d => ({ id: d.id, ...d.data() })); merge(); }, () => { byProject = []; merge(); });
+    return () => { unsub1(); unsub2(); };
   }, [project?.id]);
 
   const uid = user?.id || user?.uid || user?.phone;
@@ -1542,13 +2364,34 @@ function PaymentsTab({ project, user, transactions: propTxns, invoices: propInvs
   const activeMilestones = scheduleConfig.milestones;
   const isCustom = scheduleType === 'custom';
 
+  // Which project stage triggers each standard milestone key
+  const MILESTONE_TRIGGERS = {
+    'post-rendering':  { stage: 3, label: 'After rendering approval',  stageLabel: 'Stage 3 — Quote' },
+    'post-production': { stage: 5, label: 'After production complete', stageLabel: 'Stage 5 — Delivery' },
+    'post-shipping':   { stage: 7, label: 'After delivery',            stageLabel: 'Stage 7 — Inspection' },
+  };
+
   const getMilestoneStatus = (m) => {
     if (budget <= 0) return 'upcoming';
-    if (totalPaid >= budget * m.cumPct) return 'paid';
-    if (totalPaid >= budget * (m.cumPct - m.pct)) return 'due';
+    // Check if the linked Firestore invoice is paid
+    const linkedInv = allInvoices.find(i => i.milestoneKey === m.key);
+    if (linkedInv && ['paid', 'paid in full'].includes(String(linkedInv.status || '').toLowerCase().trim())) return 'paid';
+    // Check if cumulative payment total covers this milestone
+    if (totalPaid >= budget * m.cumPct - 0.01) return 'paid';
+    // Determine if this milestone has been triggered (stage reached OR invoice activated by admin)
+    const trigger = MILESTONE_TRIGGERS[m.key];
+    const stageReached = !trigger || (project.stageId || 1) >= trigger.stage;
+    const invoiceActivated = linkedInv && (linkedInv.due || ['Sent', 'Overdue'].includes(linkedInv.status));
+    if (stageReached || invoiceActivated) {
+      // Only show as "due" if previous milestones are settled
+      if (totalPaid >= budget * (m.cumPct - m.pct) - 0.01) return 'due';
+    }
     return 'upcoming';
   };
   const currentDueMilestone = activeMilestones.find(m => getMilestoneStatus(m) === 'due');
+  const currentDueMilestoneInv = currentDueMilestone
+    ? allInvoices.find(i => i.milestoneKey === currentDueMilestone.key)
+    : null;
   const email = user?.proxyEmail || (user?.phone ? user.phone + '@clients.westlinefuture.com' : 'client@clients.westlinefuture.com');
 
   const card = {
@@ -1649,56 +2492,156 @@ function PaymentsTab({ project, user, transactions: propTxns, invoices: propInvs
               const status = getMilestoneStatus(m);
               const isPaid = status === 'paid';
               const isDue = status === 'due';
+              const trigger = MILESTONE_TRIGGERS[m.key];
+              const linkedInv = allInvoices.find(i => i.milestoneKey === m.key);
+              const dueDateStr = linkedInv?.due
+                ? new Date(linkedInv.due + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+                : null;
               return (
                 <div key={m.key} style={{
-                  display: 'flex', alignItems: 'center', gap: isMobile ? 12 : 14,
-                  padding: isMobile ? '13px 14px' : '15px 18px', borderRadius: 14,
-                  background: isDue ? '#F0FDF4' : '#FAFAF9',
-                  border: `1.5px solid ${isDue ? '#16A34A40' : isPaid ? '#16A34A20' : `var(--border-color)`}`,
+                  borderRadius: 16,
+                  background: isDue ? 'linear-gradient(135deg,#F0FDF4,#FAFFF8)' : isPaid ? '#FAFAF9' : '#FAFAF9',
+                  border: `1.5px solid ${isDue ? '#16A34A50' : isPaid ? '#16A34A20' : `var(--border-color)`}`,
+                  overflow: 'hidden',
                 }}>
-                  <div style={{
-                    width: 32, height: 32, borderRadius: 9, flexShrink: 0,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    background: isPaid ? '#16A34A' : isDue ? '#F0FDF4' : `var(--border-color)`,
-                    border: isDue ? '2px solid #16A34A' : 'none',
-                  }}>
-                    {isPaid
-                      ? <Check size={14} color="#fff" />
-                      : <span style={{ fontSize: 11, fontWeight: 900, color: isDue ? '#16A34A' : `var(--text-secondary)` }}>{idx + 1}</span>
-                    }
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: `var(--accent-secondary)` }}>{m.label}</div>
-                    {budget > 0 && (
-                      <div style={{ fontSize: 13, fontWeight: 800, color: isPaid ? '#16A34A' : isDue ? '#16A34A' : `var(--text-secondary)`, marginTop: 2 }}>
-                        {fmt(budget * m.pct)}
-                      </div>
-                    )}
-                  </div>
-                  <div style={{ flexShrink: 0 }}>
-                    {isPaid && <span style={{ fontSize: 10, fontWeight: 800, color: '#065F46', background: '#D1FAE5', padding: '4px 10px', borderRadius: 20 }}>Paid ✓</span>}
-                    {isDue && <span style={{ fontSize: 10, fontWeight: 800, color: '#92400E', background: '#FEF3C7', padding: '4px 10px', borderRadius: 20 }}>Due Now</span>}
-                    {status === 'upcoming' && <span style={{ fontSize: 10, fontWeight: 700, color: `var(--text-secondary)`, background: `var(--border-color)`, padding: '4px 10px', borderRadius: 20 }}>Upcoming</span>}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 12 : 14, padding: isMobile ? '13px 14px' : '15px 18px' }}>
+                    <div style={{
+                      width: 36, height: 36, borderRadius: 10, flexShrink: 0,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      background: isPaid ? '#16A34A' : isDue ? '#D1FAE5' : `var(--border-color)`,
+                      border: isDue ? '2px solid #16A34A60' : 'none',
+                    }}>
+                      {isPaid
+                        ? <Check size={14} color="#fff" />
+                        : <span style={{ fontSize: 12, fontWeight: 900, color: isDue ? '#15803D' : `var(--text-secondary)` }}>{idx + 1}</span>
+                      }
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 13, fontWeight: 800, color: `var(--accent-secondary)` }}>{m.label}</div>
+                      {budget > 0 && (
+                        <div style={{ fontSize: 14, fontWeight: 900, color: isPaid ? '#16A34A' : isDue ? '#15803D' : `var(--text-secondary)`, marginTop: 1 }}>
+                          {fmt(budget * m.pct)}
+                        </div>
+                      )}
+                      {trigger && (
+                        <div style={{ fontSize: 10, color: `var(--text-secondary)`, fontWeight: 600, marginTop: 2 }}>
+                          {trigger.label} · {trigger.stageLabel}
+                        </div>
+                      )}
+                      {isDue && dueDateStr && (
+                        <div style={{ fontSize: 10, fontWeight: 800, color: '#B45309', marginTop: 3 }}>⏰ Due by {dueDateStr}</div>
+                      )}
+                    </div>
+                    <div style={{ flexShrink: 0 }}>
+                      {isPaid && <span style={{ fontSize: 10, fontWeight: 800, color: '#065F46', background: '#D1FAE5', padding: '4px 10px', borderRadius: 20 }}>Paid ✓</span>}
+                      {isDue && <span style={{ fontSize: 10, fontWeight: 800, color: '#14532D', background: '#BBFAD5', padding: '4px 10px', borderRadius: 20 }}>Due Now</span>}
+                      {status === 'upcoming' && <span style={{ fontSize: 10, fontWeight: 700, color: `var(--text-secondary)`, background: `var(--border-color)`, padding: '4px 10px', borderRadius: 20 }}>Upcoming</span>}
+                    </div>
                   </div>
                 </div>
               );
             })}
 
             {currentDueMilestone && budget > 0 && (
-              <div style={{ marginTop: 10, paddingTop: 16, borderTop: '1px solid var(--border-color)' }}>
-                <div style={{ fontSize: 13, color: `var(--text-secondary)`, marginBottom: 12 }}>
-                  Ready to pay your <strong>{currentDueMilestone.label}</strong>?
-                </div>
-                <UnifiedPaymentGateway
-                  label={`Pay ${fmt(budget * currentDueMilestone.pct)} Now`}
-                  amountGHS={budget * currentDueMilestone.pct}
-                  email={email}
-                  projectId={project?.id}
-                  paymentType={currentDueMilestone.label?.toLowerCase().replace(/\s+/g, '_')}
-                  onSuccess={async (ref) => {
-                    if (import.meta.env.DEV) console.log('[PaymentsTab] Payment success', ref);
-                  }}
-                />
+              <div style={{ marginTop: 10, padding: '18px 20px', borderRadius: 16, background: 'linear-gradient(135deg,#F0FDF4,#FAFFF8)', border: '1.5px solid #16A34A30' }}>
+                {paySuccess ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, padding: '16px 0', textAlign: 'center' }}>
+                    <div style={{ width: 56, height: 56, borderRadius: '50%', background: '#D1FAE5', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <CheckCircle2 size={28} color="#16A34A" />
+                    </div>
+                    <div style={{ fontSize: 16, fontWeight: 900, color: '#14532D' }}>Payment Confirmed!</div>
+                    <div style={{ fontSize: 13, color: '#15803D' }}>Your payment has been received. The team has been notified and your project will advance shortly.</div>
+                  </div>
+                ) : offlineSubmitted ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, padding: '12px 0', textAlign: 'center' }}>
+                    <div style={{ width: 48, height: 48, borderRadius: '50%', background: '#EFF6FF', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <Clock size={24} color="#3B82F6" />
+                    </div>
+                    <div style={{ fontSize: 14, fontWeight: 800, color: '#1D4ED8' }}>Payment Notified</div>
+                    <div style={{ fontSize: 12, color: '#3B82F6', lineHeight: 1.5 }}>The team will verify your {offlineMethod === 'bank' ? 'bank transfer' : 'cash payment'} and confirm within 1 business day.</div>
+                  </div>
+                ) : (
+                  <>
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 14 }}>
+                      <div style={{ width: 40, height: 40, borderRadius: 12, background: '#D1FAE5', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                        <CreditCard size={18} color="#15803D" />
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 14, fontWeight: 900, color: '#14532D' }}>Payment Due</div>
+                        <div style={{ fontSize: 13, color: '#15803D', fontWeight: 700, marginTop: 2 }}>{currentDueMilestone.label}</div>
+                        <div style={{ fontSize: 15, fontWeight: 900, color: '#14532D', marginTop: 4 }}>{fmt(budget * currentDueMilestone.pct)}</div>
+                        {currentDueMilestoneInv?.due && (
+                          <div style={{ fontSize: 11, color: '#B45309', fontWeight: 700, marginTop: 3 }}>
+                            ⏰ Due by {new Date(currentDueMilestoneInv.due + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {!offlineMethod ? (
+                      <>
+                        <UnifiedPaymentGateway
+                          label={`Pay ${fmt(budget * currentDueMilestone.pct)} Now`}
+                          amountGHS={budget * currentDueMilestone.pct}
+                          email={email}
+                          projectId={project?.id}
+                          invoiceId={currentDueMilestoneInv?.id}
+                          paymentType="milestone"
+                          onSuccess={async () => { setPaySuccess(true); }}
+                        />
+                        <div style={{ marginTop: 10, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                          <button onClick={() => setOfflineMethod('bank')} style={{ flex: 1, padding: '11px 14px', borderRadius: 12, border: '1.5px solid var(--border-color)', background: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', color: 'var(--accent-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                            🏦 Bank Transfer
+                          </button>
+                          <button onClick={() => setOfflineMethod('cash')} style={{ flex: 1, padding: '11px 14px', borderRadius: 12, border: '1.5px solid var(--border-color)', background: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', color: 'var(--accent-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                            💵 Cash / In-Person
+                          </button>
+                        </div>
+                      </>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                        <button onClick={() => setOfflineMethod(null)} style={{ alignSelf: 'flex-start', background: 'none', border: 'none', fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', cursor: 'pointer', padding: 0 }}>← Back to payment options</button>
+                        {offlineMethod === 'bank' ? (
+                          <div style={{ padding: '16px 18px', background: '#F0FDF4', border: '1.5px solid #BBF7D0', borderRadius: 12 }}>
+                            <div style={{ fontSize: 12, fontWeight: 800, color: '#15803D', marginBottom: 8 }}>🏦 Bank Account Details</div>
+                            {finSettings.bankDetails ? (
+                              <div style={{ fontSize: 13, color: '#166534', lineHeight: 2, whiteSpace: 'pre-wrap', fontFamily: 'monospace' }}>{finSettings.bankDetails}</div>
+                            ) : (
+                              <div style={{ fontSize: 13, color: '#166534' }}>Contact the team for bank account details.</div>
+                            )}
+                            <div style={{ marginTop: 10, padding: '8px 12px', background: '#DCFCE7', borderRadius: 8, fontSize: 11, color: '#166534', fontWeight: 700 }}>
+                              Reference: {currentDueMilestoneInv?.invoiceNumber || currentDueMilestone.label} / {project.title}
+                            </div>
+                          </div>
+                        ) : (
+                          <div style={{ padding: '16px 18px', background: '#FAF5FF', border: '1.5px solid #E9D5FF', borderRadius: 12 }}>
+                            <div style={{ fontSize: 12, fontWeight: 800, color: '#6D28D9', marginBottom: 8 }}>💵 In-Person Payment</div>
+                            <div style={{ fontSize: 13, color: '#5B21B6', lineHeight: 1.6 }}>Visit our office or arrange a courier. Reference your invoice when paying.</div>
+                            {finSettings.officeAddress && <div style={{ marginTop: 8, fontSize: 12, color: '#7C3AED', fontWeight: 700 }}>📍 {finSettings.officeAddress}</div>}
+                          </div>
+                        )}
+                        <button
+                          onClick={async () => {
+                            if (!currentDueMilestoneInv?.id || offlineSubmitting) return;
+                            setOfflineSubmitting(true);
+                            try {
+                              await updateDoc(doc(db, 'invoices', currentDueMilestoneInv.id), {
+                                awaitingConfirmation: true,
+                                paymentMethodSubmitted: offlineMethod,
+                                paymentSubmittedAt: serverTimestamp(),
+                              });
+                              setOfflineSubmitted(true);
+                            } catch (e) { console.error(e); } finally { setOfflineSubmitting(false); }
+                          }}
+                          disabled={offlineSubmitting}
+                          style={{ width: '100%', padding: '13px 18px', borderRadius: 12, border: 'none', background: offlineMethod === 'bank' ? '#16A34A' : '#7C3AED', color: '#fff', fontSize: 13, fontWeight: 800, cursor: offlineSubmitting ? 'default' : 'pointer', opacity: offlineSubmitting ? 0.7 : 1 }}
+                        >
+                          {offlineSubmitting ? 'Submitting…' : offlineMethod === 'bank' ? "I've Made the Transfer" : "Notify Team — Paying In Person"}
+                        </button>
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
             )}
           </div>
@@ -1780,16 +2723,13 @@ function PaymentsTab({ project, user, transactions: propTxns, invoices: propInvs
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 13, fontWeight: 700, color: `var(--accent-secondary)`, marginBottom: 3 }}>
-                      Invoice #{inv.invoiceNumber || (inv.id || '').slice(0, 8).toUpperCase()}
+                      {inv.title || `Invoice #${inv.invoiceNumber || (inv.id || '').slice(0, 8).toUpperCase()}`}
                     </div>
                     <div style={{ fontSize: 11, color: `var(--text-secondary)`, marginBottom: 6 }}>
-                      {fmtDate(inv.createdAt || inv.date)}
+                      {inv.invoiceNumber ? `#${inv.invoiceNumber} · ` : ''}{fmtDate(inv.createdAt || inv.date)}
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                       <span style={{ fontSize: 15, fontWeight: 800, color: `var(--accent-secondary)` }}>{fmt(parseAmount(inv.amount || inv.total))}</span>
-                      {showUSD && inv.amount && (
-                        <span style={{ fontSize: 10, color: `var(--text-secondary)` }}>≈ GHS {parseAmount(inv.amount || inv.total).toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
-                      )}
                       <span style={{
                         fontSize: 10, fontWeight: 800, padding: '3px 10px', borderRadius: 20,
                         background: inv.status === 'Paid' ? '#D1FAE5' : inv.status === 'Overdue' ? '#FEE2E2' : '#FEF3C7',
@@ -1798,14 +2738,13 @@ function PaymentsTab({ project, user, transactions: propTxns, invoices: propInvs
                         {inv.status || 'Pending'}
                       </span>
                     </div>
-                    {inv.title && <div style={{ fontSize: 12, color: `var(--text-secondary)`, marginTop: 4 }}>{inv.title}</div>}
                   </div>
                 </div>
-                <div style={{ borderTop: '1px solid var(--border-color)', padding: isMobile ? '9px 14px' : '9px 18px', display: 'flex', justifyContent: 'flex-end', gap: 8, flexWrap: 'wrap' }}>
-                  {inv.status !== 'Paid' && parseAmount(inv.amount || inv.total) > 0 && (
-                    <div style={{ width: 180 }}>
+                <div style={{ borderTop: '1px solid var(--border-color)', padding: isMobile ? '9px 14px' : '9px 18px', display: 'flex', justifyContent: 'flex-end', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                  {!isPaidStatus(inv.status) && parseAmount(inv.amount || inv.total) > 0 && (
+                    <div style={{ width: 160 }}>
                       <UnifiedPaymentGateway
-                        label="Pay Invoice"
+                        label="Pay Now"
                         amountGHS={parseAmount(inv.amount || inv.total)}
                         email={email}
                         projectId={project.id}
@@ -1815,10 +2754,10 @@ function PaymentsTab({ project, user, transactions: propTxns, invoices: propInvs
                     </div>
                   )}
                   <button
-                    onClick={() => downloadInvoicePDF(inv, project, user, brand)}
-                    style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 10, background: `var(--accent-secondary)`, border: 'none', fontSize: 11, fontWeight: 700, color: '#fff', cursor: 'pointer', touchAction: 'manipulation', minHeight: 34 }}
+                    onClick={() => setViewInvoice(inv)}
+                    style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 16px', borderRadius: 10, background: `var(--accent-secondary)`, border: 'none', fontSize: 11, fontWeight: 700, color: '#fff', cursor: 'pointer', touchAction: 'manipulation', minHeight: 34 }}
                   >
-                    <Download size={12} /> Download Invoice
+                    <FileText size={12} /> View Invoice
                   </button>
                 </div>
               </div>
@@ -1826,6 +2765,77 @@ function PaymentsTab({ project, user, transactions: propTxns, invoices: propInvs
           </div>
         )}
       </div>
+
+      {/* ── Invoice Viewer Modal (same design as admin) ── */}
+      {viewInvoice && (
+        <div
+          style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(12px)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: isMobile ? '16px 0 0' : '32px 20px', overflowY: 'auto' }}
+          onClick={e => { if (e.target === e.currentTarget) setViewInvoice(null); }}
+        >
+          <div style={{ background: '#fff', borderRadius: isMobile ? '24px 24px 0 0' : 20, width: '100%', maxWidth: 860, boxShadow: '0 40px 100px rgba(0,0,0,0.3)', overflow: 'hidden', marginBottom: isMobile ? 0 : 32 }}>
+            {/* Modal header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '18px 24px', borderBottom: '1px solid var(--border-color)', background: '#fff', position: 'sticky', top: 0, zIndex: 1 }}>
+              <div>
+                <div style={{ fontSize: 15, fontWeight: 800, color: `var(--accent-secondary)` }}>
+                  {viewInvoice.title || `Invoice #${viewInvoice.invoiceNumber || (viewInvoice.id || '').slice(0, 8).toUpperCase()}`}
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 2 }}>
+                  {fmtDate(viewInvoice.createdAt || viewInvoice.date)} · {viewInvoice.status || 'Pending'}
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <button
+                  onClick={() => {
+                    const el = document.getElementById('client-invoice-doc');
+                    if (!el) return;
+                    const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${viewInvoice.title || 'Invoice'}</title><style>@page{size:A4;margin:0}body{margin:0;background:#fff;font-family:sans-serif}#client-invoice-doc{width:210mm;min-height:297mm;margin:0 auto}@media print{button{display:none!important}}</style></head><body><div id="client-invoice-doc">${el.innerHTML}</div><script>window.onload=()=>{setTimeout(()=>{window.print();},500);};<\/script></body></html>`;
+                    const win = window.open('', '_blank');
+                    if (!win) return;
+                    win.document.open();
+                    win.document.write(html);
+                    win.document.close();
+                  }}
+                  style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 10, background: `var(--accent-secondary)`, border: 'none', fontSize: 12, fontWeight: 700, color: '#fff', cursor: 'pointer' }}
+                >
+                  <Printer size={13} /> Print / Download PDF
+                </button>
+                <button
+                  onClick={() => setViewInvoice(null)}
+                  style={{ width: 36, height: 36, borderRadius: 10, border: '1px solid var(--border-color)', background: 'var(--bg-secondary)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                >
+                  <X size={16} />
+                </button>
+              </div>
+            </div>
+
+            {/* Invoice document — same InvoiceDocument component as admin portal */}
+            <div style={{ overflowY: 'auto', maxHeight: isMobile ? '75vh' : '72vh', padding: isMobile ? '16px' : '24px', background: '#e8e4de' }}>
+              <div id="client-invoice-doc" style={{ background: '#fff', boxShadow: '0 4px 32px rgba(0,0,0,0.12)', borderRadius: 4 }}>
+                <InvoiceDocument
+                  inv={viewInvoice}
+                  isQuote={viewInvoice.type === 'Quotation' || viewInvoice.documentKind === 'quotation'}
+                  finSettings={brand?.finSettings || {}}
+                  brand={brand}
+                />
+              </div>
+            </div>
+
+            {/* Pay button at bottom if unpaid */}
+            {!isPaidStatus(viewInvoice.status) && parseAmount(viewInvoice.amount || viewInvoice.total) > 0 && (
+              <div style={{ padding: '16px 24px', borderTop: '1px solid var(--border-color)', background: '#fff' }}>
+                <UnifiedPaymentGateway
+                  label={`Pay ${fmt(parseAmount(viewInvoice.amount || viewInvoice.total))}`}
+                  amountGHS={parseAmount(viewInvoice.amount || viewInvoice.total)}
+                  email={email}
+                  projectId={project.id}
+                  invoiceId={viewInvoice.id}
+                  paymentType={viewInvoice.documentKind === 'receipt' ? 'receipt' : 'invoice'}
+                />
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
     </div>
   );
@@ -1870,6 +2880,10 @@ function StageTimeline({ project, onRequestChange, isMobile }) {
     return null;
   })();
 
+  // Use calculateTimeline to respect admin-set duration overrides
+  const computedTimeline = calculateTimeline(project.createdAt, project.timeline || {}, applicableStages);
+  const totalDays = Object.values(computedTimeline).reduce((sum, s) => sum + (s.durationDays || 0), 0);
+
   const scrollRef = useRef(null);
   useEffect(() => {
     if (scrollRef.current) {
@@ -1897,7 +2911,7 @@ function StageTimeline({ project, onRequestChange, isMobile }) {
               </div>
             )}
             <div style={{ fontSize: 10, fontWeight: 700, color: `var(--text-secondary)`, textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 2 }}>Total Duration</div>
-            <div style={{ fontSize: 12, fontWeight: 800, color: ac }}>~{applicableStages.reduce((sum, s) => sum + (s.days || 0), 0)} days</div>
+            <div style={{ fontSize: 12, fontWeight: 800, color: ac }}>~{totalDays} days</div>
           </div>
         </div>
         <div style={{ height: 10, background: `var(--border-color)`, borderRadius: 5, overflow: 'hidden' }}>
@@ -1964,9 +2978,16 @@ function StageTimeline({ project, onRequestChange, isMobile }) {
                       </div>
                     )}
                   </div>
-                  {s.days && (
+                  {computedTimeline[s.id] && (
                     <div style={{ fontSize: 10, color: isCurrent ? s.color : `var(--text-secondary)`, fontWeight: isCurrent ? 800 : 600, marginTop: 1 }}>
-                      ~{s.days} day{s.days !== 1 ? 's' : ''}
+                      ~{computedTimeline[s.id].durationDays} day{computedTimeline[s.id].durationDays !== 1 ? 's' : ''}
+                    </div>
+                  )}
+                  {computedTimeline[s.id] && !isPast && (
+                    <div style={{ fontSize: 10, color: `var(--text-secondary)`, marginTop: 1, lineHeight: 1.4 }}>
+                      {new Date(computedTimeline[s.id].startDate + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+                      {' → '}
+                      {new Date(computedTimeline[s.id].endDate + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
                     </div>
                   )}
                   {enteredDate && (isPast || isCurrent) && (
@@ -2021,9 +3042,16 @@ function StageTimeline({ project, onRequestChange, isMobile }) {
                 <div style={{ fontSize: 10, fontWeight: 700, color: isPast ? `var(--text-secondary)` : isCurrent ? s.color : '#DFD9D1', textAlign: 'center', lineHeight: 1.2, maxWidth: 90, marginTop: 2 }}>
                   {s.name}
                 </div>
-                {s.days && (
+                {computedTimeline[s.id] && (
                   <div style={{ fontSize: 9, fontWeight: 700, color: isCurrent ? s.color : '#C4B9AE', textAlign: 'center', background: isCurrent ? `${s.color}10` : 'transparent', padding: isCurrent ? '1px 6px' : 0, borderRadius: 20 }}>
-                    ~{s.days}d
+                    ~{computedTimeline[s.id].durationDays}d
+                  </div>
+                )}
+                {computedTimeline[s.id] && !isPast && (
+                  <div style={{ fontSize: 8, color: `var(--text-secondary)`, textAlign: 'center', lineHeight: 1.3 }}>
+                    {new Date(computedTimeline[s.id].startDate + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+                    {' – '}
+                    {new Date(computedTimeline[s.id].endDate + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
                   </div>
                 )}
                 {enteredDate && (isPast || isCurrent) && (
@@ -2450,9 +3478,22 @@ function ReferralCard({ user, ac }) {
 // ─── Client Notification Bell ─────────────────────────────────────────────────
 function ClientNotificationBell({ notifications = [], onMarkRead, ac }) {
   const [open, setOpen] = useState(false);
+  const bellRef = useRef(null);
   const unread = notifications.filter(n => !n.read);
+
+  // Close panel when clicking outside
+  useEffect(() => {
+    if (!open) return;
+    const handle = (e) => {
+      if (bellRef.current && !bellRef.current.contains(e.target)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handle);
+    document.addEventListener('touchstart', handle);
+    return () => { document.removeEventListener('mousedown', handle); document.removeEventListener('touchstart', handle); };
+  }, [open]);
+
   return (
-    <div style={{ position: 'relative' }}>
+    <div ref={bellRef} style={{ position: 'relative' }}>
       <button onClick={() => setOpen(o => !o)} style={{ width: 40, height: 40, borderRadius: 12, background: 'rgba(255,255,255,0.6)', border: '1px solid rgba(255,255,255,0.8)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
         <Bell size={18} color={unread.length > 0 ? ac : `var(--text-secondary)`} fill={unread.length > 0 ? ac : 'none'} />
         {unread.length > 0 && (
@@ -2462,19 +3503,44 @@ function ClientNotificationBell({ notifications = [], onMarkRead, ac }) {
         )}
       </button>
       {open && (
-        <div onClick={e => e.stopPropagation()} style={{ position: 'absolute', right: 0, top: 48, width: 340, maxHeight: 400, overflowY: 'auto', background: '#fff', borderRadius: 18, border: '1.5px solid var(--border-color)', boxShadow: '0 20px 60px rgba(0,0,0,0.15)', zIndex: 1000 }}>
-          <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div
+          onClick={e => e.stopPropagation()}
+          style={{
+            // Fixed positioning keeps the panel inside the viewport on all screen sizes.
+            // Using right: 12px ensures it never overflows the right edge.
+            // Width is capped at 340px but shrinks on narrow screens.
+            position: 'fixed',
+            top: 70,
+            right: 12,
+            width: 'min(340px, calc(100vw - 24px))',
+            maxHeight: '70vh',
+            overflowY: 'auto',
+            background: '#fff',
+            borderRadius: 18,
+            border: '1.5px solid var(--border-color)',
+            boxShadow: '0 20px 60px rgba(0,0,0,0.18)',
+            zIndex: 9900,
+          }}
+        >
+          <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'sticky', top: 0, background: '#fff', borderRadius: '18px 18px 0 0', zIndex: 1 }}>
             <div style={{ fontSize: 13, fontWeight: 800, color: `var(--accent-secondary)` }}>Notifications</div>
-            {unread.length > 0 && <button onClick={() => { notifications.forEach(n => !n.read && onMarkRead?.(n.id)); setOpen(false); }} style={{ background: 'none', border: 'none', fontSize: 11, fontWeight: 700, color: ac, cursor: 'pointer' }}>Mark all read</button>}
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+              {unread.length > 0 && (
+                <button onClick={() => { notifications.forEach(n => !n.read && onMarkRead?.(n.id)); }} style={{ background: 'none', border: 'none', fontSize: 11, fontWeight: 700, color: ac, cursor: 'pointer' }}>
+                  Mark all read
+                </button>
+              )}
+              <button onClick={() => setOpen(false)} style={{ background: 'none', border: 'none', fontSize: 18, color: 'var(--text-secondary)', cursor: 'pointer', lineHeight: 1, padding: '0 2px' }}>×</button>
+            </div>
           </div>
           {notifications.length === 0 ? (
             <div style={{ padding: '40px 20px', textAlign: 'center', color: `var(--text-secondary)`, fontSize: 13 }}>No notifications yet</div>
           ) : (
             notifications.slice(0, 20).map(n => (
-              <div key={n.id} onClick={() => onMarkRead?.(n.id)} style={{ padding: '14px 20px', borderBottom: '1px solid var(--bg-secondary)', display: 'flex', gap: 12, alignItems: 'flex-start', background: n.read ? '#fff' : '#FAFAF7', cursor: 'pointer', transition: 'background .15s' }}>
+              <div key={n.id} onClick={() => { onMarkRead?.(n.id); }} style={{ padding: '14px 20px', borderBottom: '1px solid var(--bg-secondary)', display: 'flex', gap: 12, alignItems: 'flex-start', background: n.read ? '#fff' : '#FAFAF7', cursor: 'pointer', transition: 'background .15s' }}>
                 <div style={{ width: 8, height: 8, borderRadius: '50%', background: n.read ? `var(--border-color)` : ac, marginTop: 5, flexShrink: 0 }} />
-                <div>
-                  <div style={{ fontSize: 13, color: `var(--accent-secondary)`, lineHeight: 1.4, fontWeight: n.read ? 500 : 700 }}>{n.msg}</div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, color: `var(--accent-secondary)`, lineHeight: 1.45, fontWeight: n.read ? 500 : 700, wordBreak: 'break-word' }}>{n.msg || n.message}</div>
                   <div style={{ fontSize: 11, color: `var(--text-secondary)`, marginTop: 4 }}>
                     {n.createdAt?.seconds ? new Date(n.createdAt.seconds * 1000).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : ''}
                   </div>
@@ -2609,7 +3675,7 @@ function ProjectHeaderCard({ project, isMobile, ac, brand }) {
   const stageTotal = CLIENT_PROJECT_STAGES.length;
   const progressPct = Math.round(((project.stageId || 1) / stageTotal) * 100);
 
-  const waPhone = (brand?.phone || '').replace(/\D/g, '') || '233598455012';
+  const waPhone = (brand?.phone || '').replace(/\D/g, '') || '233247319778';
   const waMsg = encodeURIComponent(`Hi, I'm checking on my project: ${project.title}`);
   const waLink = `https://wa.me/${waPhone}?text=${waMsg}`;
 
@@ -2788,6 +3854,178 @@ function AppInstallGuideModal({ onDismiss, ac }) {
   );
 }
 
+// ─── KickoffGate ─────────────────────────────────────────────────────────────
+function KickoffGate({ project, user, brand, isMobile, invoices = [], onGateCleared }) {
+  const ac = brand?.color || AC;
+  const [showContract, setShowContract] = useState(false);
+
+  const requiresRendering = project.kickoffMode === 'rendering-first';
+  const renderingPaid = !!project.renderingFeePaid;
+  const contractSigned = !!project.contractAccepted;
+
+  // Step 1: Rendering fee (only if required and not paid)
+  const needsRenderingPayment = requiresRendering && !renderingPaid;
+  // Step 2: Contract signing
+  const needsContractSign = !contractSigned;
+
+  const renderingInvoice = invoices.find(inv =>
+    inv.id === project.renderingFeeInvoiceId ||
+    (inv.projectId === project.id && inv.type === 'rendering')
+  );
+
+  const step = needsRenderingPayment ? 1 : needsContractSign ? 2 : null;
+
+  // Gate cleared — parent should handle this
+  if (step === null) {
+    onGateCleared?.();
+    return null;
+  }
+
+  const totalSteps = requiresRendering ? 2 : 1;
+  const currentStep = needsRenderingPayment ? 1 : 2;
+  const stepLabel = requiresRendering ? `Step ${currentStep} of ${totalSteps}` : 'Required before we begin';
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      {/* Gate header */}
+      <div style={{
+        padding: isMobile ? '24px 20px' : '28px 32px',
+        background: 'linear-gradient(135deg, var(--accent-secondary), #4A3B32)',
+        borderRadius: 20, color: '#fff',
+      }}>
+        <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.1em', opacity: .6, marginBottom: 8 }}>
+          {project.title}
+        </div>
+        <div style={{ fontSize: isMobile ? 22 : 26, fontWeight: 900, marginBottom: 6 }}>
+          {step === 1 ? '3D Rendering Fee' : 'Sign Your Contract'}
+        </div>
+        <div style={{ fontSize: 13, opacity: .75, lineHeight: 1.5 }}>
+          {step === 1
+            ? 'Your project requires a 3D rendering design before we proceed. Please complete this payment to unlock your full portal.'
+            : 'Please read and sign the project agreement to officially kick off your project.'}
+        </div>
+
+        {/* Step progress */}
+        {totalSteps > 1 && (
+          <div style={{ marginTop: 20, display: 'flex', gap: 8, alignItems: 'center' }}>
+            {Array.from({ length: totalSteps }, (_, i) => (
+              <React.Fragment key={i}>
+                <div style={{
+                  width: 28, height: 28, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  background: i + 1 < currentStep ? '#4ADE80' : i + 1 === currentStep ? '#fff' : 'rgba(255,255,255,.2)',
+                  color: i + 1 < currentStep ? '#fff' : i + 1 === currentStep ? 'var(--accent-secondary)' : 'rgba(255,255,255,.5)',
+                  fontSize: 12, fontWeight: 900, flexShrink: 0,
+                }}>
+                  {i + 1 < currentStep ? '✓' : i + 1}
+                </div>
+                {i < totalSteps - 1 && (
+                  <div style={{ flex: 1, height: 2, background: i + 1 < currentStep ? '#4ADE80' : 'rgba(255,255,255,.2)', borderRadius: 2 }} />
+                )}
+              </React.Fragment>
+            ))}
+            <div style={{ fontSize: 11, fontWeight: 700, opacity: .7, marginLeft: 8 }}>{stepLabel}</div>
+          </div>
+        )}
+      </div>
+
+      {/* Step content */}
+      {step === 1 && (
+        <div style={{
+          padding: isMobile ? '24px 20px' : '28px 32px',
+          background: '#fff', borderRadius: 20,
+          border: '1px solid var(--border-color)',
+          boxShadow: '0 4px 20px rgba(0,0,0,.05)',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 20 }}>
+            <div style={{ width: 48, height: 48, borderRadius: 14, background: `${ac}15`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <PenTool size={22} color={ac} />
+            </div>
+            <div>
+              <div style={{ fontSize: 16, fontWeight: 900, color: 'var(--accent-secondary)' }}>3D Interior Design Rendering</div>
+              <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>
+                Fee: {renderingInvoice
+                  ? `GH₵ ${Number(renderingInvoice.amount || project.renderingFee || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}`
+                  : project.renderingFee
+                    ? `GH₵ ${Number(project.renderingFee).toLocaleString(undefined, { minimumFractionDigits: 2 })}`
+                    : 'Contact team for amount'}
+              </div>
+            </div>
+          </div>
+
+          <div style={{ background: 'var(--bg-secondary)', borderRadius: 14, padding: '16px 20px', marginBottom: 20, fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+            <strong style={{ color: 'var(--accent-secondary)', display: 'block', marginBottom: 6 }}>What you'll receive:</strong>
+            Photorealistic 3D renders of your interior design, allowing you to visualise exactly how your space will look before any fabrication begins. Revisions are included based on your package.
+          </div>
+
+          {renderingInvoice ? (
+            <UnifiedPaymentGateway
+              label={`Pay Rendering Fee — GH₵ ${Number(renderingInvoice.amount || renderingInvoice.total || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}`}
+              amountGHS={Number(renderingInvoice.amount || renderingInvoice.total || 0)}
+              email={user?.proxyEmail || (user?.phone ? `${user.phone}@clients.westlinefuture.com` : 'client@clients.westlinefuture.com')}
+              projectId={project.id}
+              invoiceId={renderingInvoice.id}
+              paymentType="rendering"
+              onSuccess={() => { /* Firestore listener will update renderingFeePaid */ }}
+            />
+          ) : (
+            <div style={{ padding: '16px 20px', background: '#FEF3C7', borderRadius: 12, border: '1px solid #FDE68A', fontSize: 13, color: '#92400E' }}>
+              <strong>No invoice created yet.</strong> Your account manager will create the rendering fee invoice shortly. You'll be notified when it's ready.
+            </div>
+          )}
+        </div>
+      )}
+
+      {step === 2 && (
+        <div style={{
+          padding: isMobile ? '24px 20px' : '28px 32px',
+          background: '#fff', borderRadius: 20,
+          border: '1px solid var(--border-color)',
+          boxShadow: '0 4px 20px rgba(0,0,0,.05)',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 20 }}>
+            <div style={{ width: 48, height: 48, borderRadius: 14, background: `${ac}15`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <FileCheck size={22} color={ac} />
+            </div>
+            <div>
+              <div style={{ fontSize: 16, fontWeight: 900, color: 'var(--accent-secondary)' }}>Project Agreement</div>
+              <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>
+                Sign electronically with your full name
+              </div>
+            </div>
+          </div>
+
+          <div style={{ background: 'var(--bg-secondary)', borderRadius: 14, padding: '16px 20px', marginBottom: 20, fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+            By signing this agreement you confirm the scope of work, payment schedule, and terms as discussed with your account manager. This is a binding contract.
+          </div>
+
+          <button
+            onClick={() => setShowContract(true)}
+            style={{
+              width: '100%', padding: '16px', borderRadius: 14, border: 'none',
+              background: `var(--accent-secondary)`, color: '#fff',
+              fontSize: 15, fontWeight: 800, cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
+            }}
+          >
+            <PenLine size={18} /> Read & Sign Contract
+          </button>
+        </div>
+      )}
+
+      {showContract && (
+        <ContractAgreementModal
+          project={project}
+          user={user}
+          brand={brand}
+          isMobile={isMobile}
+          onClose={() => setShowContract(false)}
+          onSigned={() => setShowContract(false)}
+        />
+      )}
+    </div>
+  );
+}
+
 // ─── Main ClientPortal ────────────────────────────────────────────────────────
 export default function ClientPortal({ client, onLogout, updateClientProfile, ...props }) {
   const user = props.user || client;
@@ -2795,7 +4033,10 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
 
   const [projects, setProjects] = useState([]);
   const [loadingProjects, setLoadingProjects] = useState(true);
-  const [selectedId, setSelectedId] = useState(null);
+  const [selectedId, setSelectedId] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('projectId') || null;
+  });
   const [activeTab, setActiveTab] = useState('timeline');
 
   // Mobile detection — use UA (catches "Request Desktop Site" on iOS) + viewport width
@@ -2813,6 +4054,9 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
 
   // Change request modal
   const [showChangeRequest, setShowChangeRequest] = useState(false);
+
+  // Kickoff gate: track which project IDs the client has cleared in this session
+  const [gateCleared, setGateCleared] = useState({});
 
   // App Install Guide Modal logic
   const [showInstallGuide, setShowInstallGuide] = useState(false);
@@ -2836,6 +4080,17 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
     localStorage.setItem('hasSeenInstallGuide', 'true');
     setShowInstallGuide(false);
   };
+
+  // ── Language translation (DOM-walker, same pattern as admin portal) ──────────
+  useEffect(() => {
+    const lang = props.lang || 'en';
+    const apply = () => translateClientDom(lang);
+    apply();
+    const observer = new MutationObserver(() => requestAnimationFrame(apply));
+    const root = document.querySelector('.lx-portal');
+    if (root) observer.observe(root, { childList: true, subtree: true, characterData: true });
+    return () => observer.disconnect();
+  }, [props.lang, selectedId, activeTab]);
 
   // Review modal state
   const [reviewDismissed, setReviewDismissed] = useState(false);
@@ -2981,7 +4236,7 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
 
   const tabs = [
     { id: 'timeline',  label: 'Progress',  icon: <CheckCircle2 size={14} /> },
-    { id: 'design',    label: 'Design Vault', icon: <PenTool size={14} /> },
+    ...(selected?.kickoffMode !== 'direct-kickoff' ? [{ id: 'design', label: 'Design Vault', icon: <PenTool size={14} /> }] : []),
     { id: 'approvals', label: 'Approvals', icon: <FileText size={14} /> },
     { id: 'photos',    label: 'Photos',    icon: <Camera size={14} /> },
     { id: 'payments',  label: 'Payments',  icon: <CreditCard size={14} /> },
@@ -2994,7 +4249,7 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
   };
 
   return (
-    <div style={{ minHeight: '100dvh', background: isMobile ? '#EDEAE6' : '#F8F6F3', fontFamily: 'Inter, Satoshi, sans-serif', overscrollBehavior: 'contain' }}>
+    <div className="lx-portal" style={{ minHeight: '100dvh', background: isMobile ? '#EDEAE6' : '#F8F6F3', fontFamily: 'Inter, Satoshi, sans-serif', overscrollBehavior: 'contain' }}>
 
       {/* ── NOTIFICATION TOAST ── */}
       {notifToast && (
@@ -3028,6 +4283,15 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
               )}
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+              {/* Language toggle — mobile */}
+              <button
+                data-no-portal-translate
+                onClick={() => props.setLang?.(props.lang === 'zh' ? 'en' : 'zh')}
+                title={props.lang === 'zh' ? 'Switch to English' : '切换为中文'}
+                style={{ width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(255,255,255,.1)', borderRadius: 12, border: 'none', cursor: 'pointer', fontSize: 20, touchAction: 'manipulation', flexShrink: 0 }}
+              >
+                {props.lang === 'zh' ? '🇬🇧' : '🇨🇳'}
+              </button>
               <ClientNotificationBell notifications={props.userNotifications || []} onMarkRead={props.markNotificationRead} ac={ac} />
               <PushNotificationBell ac={ac} />
               <button onClick={handleLogout} style={{ width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(255,255,255,.1)', borderRadius: 12, border: 'none', cursor: 'pointer', color: 'rgba(255,255,255,.65)', touchAction: 'manipulation', flexShrink: 0 }}>
@@ -3073,6 +4337,16 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
             <ClientNotificationBell notifications={props.userNotifications || []} onMarkRead={props.markNotificationRead} ac={ac} />
             <PushNotificationBell ac={ac} />
             <div style={{ fontSize: 13, color: 'rgba(255,255,255,.7)', fontWeight: 600 }}>{user?.name || 'Client'}</div>
+            {/* Language toggle — desktop */}
+            <button
+              data-no-portal-translate
+              onClick={() => props.setLang?.(props.lang === 'zh' ? 'en' : 'zh')}
+              title={props.lang === 'zh' ? 'Switch to English' : '切换为中文'}
+              style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,.6)', background: 'rgba(255,255,255,.1)', border: 'none', cursor: 'pointer', padding: '5px 10px', borderRadius: 8 }}
+            >
+              <span style={{ fontSize: 16 }}>{props.lang === 'zh' ? '🇬🇧' : '🇨🇳'}</span>
+              <span>{props.lang === 'zh' ? 'EN' : '中文'}</span>
+            </button>
             <button onClick={handleLogout} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,.5)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
               <LogOut size={14} /> Sign out
             </button>
@@ -3152,7 +4426,7 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
               Once your account manager creates a project for you, it will appear here with real-time updates.
             </div>
             <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 14, fontWeight: 700, color: ac, background: `${ac}10`, padding: '12px 24px', borderRadius: 14, border: `1.5px solid ${ac}30` }}>
-              Contact us: {props.brand?.phone || '+233 59 845 5012'}
+              Contact us: {props.brand?.phone || '+233 24 731 9778'}
             </div>
           </div>
         ) : (
@@ -3200,6 +4474,34 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
 
                 {/* Project header card */}
                 <ProjectHeaderCard project={selected} isMobile={isMobile} ac={ac} brand={props.brand} />
+
+                {/* ── KICKOFF GATE ── */}
+                {(() => {
+                  const isCleared = selected.kickoffGateCleared || gateCleared[selected.id];
+                  const requiresRendering = selected.kickoffMode === 'rendering-first';
+                  const renderingPaid = !!selected.renderingFeePaid;
+                  const contractSigned = !!selected.contractAccepted;
+                  const gateActive = !isCleared && (
+                    (requiresRendering && !renderingPaid) || !contractSigned
+                  );
+                  if (!gateActive) return null;
+                  return (
+                    <KickoffGate
+                      project={selected}
+                      user={user}
+                      brand={props.brand}
+                      isMobile={isMobile}
+                      invoices={props.invoices || []}
+                      onGateCleared={() => setGateCleared(prev => ({ ...prev, [selected.id]: true }))}
+                    />
+                  );
+                })()}
+
+                {/* Hide tabs and content while kickoff gate is active */}
+                {(selected.kickoffGateCleared || gateCleared[selected.id] || (
+                  (selected.kickoffMode !== 'rendering-first' || !!selected.renderingFeePaid) && !!selected.contractAccepted
+                )) && (
+                <>
 
                 <ClientNextActionCard
                   project={selected}
@@ -3289,6 +4591,7 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
                         </button>
                       </div>
                     )}
+                    <SpecApprovalCard project={selected} user={user} brand={props.brand} isMobile={isMobile} />
                     <StageActionCard
                       project={selected}
                       user={user}
@@ -3356,10 +4659,14 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
                   <ClientApprovalsTab
                     project={selected}
                     invoices={props.invoices || []}
+                    approvals={props.approvals || []}
                     approveQuote={props.approveQuote}
+                    updateApproval={props.updateApproval}
                     brand={props.brand}
                     user={user}
                     isMobile={isMobile}
+                    setActiveTab={setActiveTab}
+                    updateProjectStage={props.updateProjectStage}
                   />
                 )}
 
@@ -3381,6 +4688,7 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
                     formatPrice={props.formatPrice}
                     brand={props.brand}
                     isMobile={isMobile}
+                    finSettings={props.brand?.finSettings || {}}
                   />
                 )}
 
@@ -3401,6 +4709,9 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
                     <div style={{ fontSize: 15, fontWeight: 800, color: `var(--accent-secondary)`, marginBottom: 20 }}>Project Documents</div>
                     <DocumentsTab projectId={selected.id} />
                   </div>
+                )}
+
+                </>
                 )}
 
               </div>
@@ -3440,8 +4751,22 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
                   background: 'none', border: 'none', cursor: 'pointer',
                   padding: '2px 4px 0', touchAction: 'manipulation', minHeight: 48,
                   opacity: selected ? 1 : 0.4,
+                  position: 'relative',
                 }}
               >
+                {/* Unread badge — anchored to the icon */}
+                {t.id === 'messages' && totalUnread > 0 && (
+                  <div style={{
+                    position: 'absolute', top: 0, right: 'calc(50% - 28px)',
+                    background: '#EF4444', color: '#fff', fontSize: 9, fontWeight: 900,
+                    height: 16, minWidth: 16, borderRadius: 8, padding: '0 4px',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    boxShadow: '0 0 0 2px rgba(250,248,245,0.88)',
+                    zIndex: 2,
+                  }}>
+                    {totalUnread > 9 ? '9+' : totalUnread}
+                  </div>
+                )}
                 <div style={{
                   width: 48, height: 32, borderRadius: 16,
                   background: active ? `${ac}20` : 'transparent',
@@ -3455,20 +4780,8 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
                   color: active ? ac : '#8E8880',
                   transition: 'color .18s',
                   letterSpacing: '-.01em',
-                  letterSpacing: '-.01em',
                 }}>
                   {t.label}
-                  {t.id === 'messages' && totalUnread > 0 && (
-                    <div style={{
-                      position: 'absolute', top: 2, right: '50%', marginRight: -18,
-                      background: '#EF4444', color: '#fff', fontSize: 9, fontWeight: 800,
-                      height: 16, minWidth: 16, borderRadius: 8, padding: '0 4px',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      boxShadow: '0 0 0 2px rgba(250,248,245,0.88)'
-                    }}>
-                      {totalUnread}
-                    </div>
-                  )}
                 </span>
               </button>
             );

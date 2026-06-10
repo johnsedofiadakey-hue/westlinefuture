@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { X, Check, DollarSign, SplitSquareHorizontal, Bell, Search } from 'lucide-react';
+import { X, Check, DollarSign, SplitSquareHorizontal, Bell, Search, CheckCheck, Info, AlertCircle, MessageSquare, CreditCard, Star } from 'lucide-react';
 
 const PRINT_CSS = `body{font-family:'DM Sans',sans-serif;color:#111;background:white;}
 .ph{background:var(--accent-secondary);color:white;padding:36px 44px;display:flex;justify-content:space-between;align-items:flex-start;}
@@ -12,6 +12,10 @@ table{width:100%;border-collapse:collapse;margin-bottom:28px;} th{background:#F5
 .tot td{font-weight:700;font-size:14px;background:#F9F9F7;} .terms{font-size:11px;color:#888;line-height:1.7;padding:18px;background:#F9F9F7;border-radius:6px;}
 .foot{margin-top:40px;padding-top:20px;border-top:1px solid #E0E0E0;display:flex;justify-content:space-between;font-size:11px;color:#AAA;}
 .stamp{display:inline-block;border:3px solid #4ADE80;color:#16A34A;padding:5px 16px;border-radius:3px;font-size:18px;font-weight:800;transform:rotate(-8deg);opacity:.65;}`;
+
+// Canonical paid-status check — normalises "Paid", "paid", "Paid in Full", "paid in full"
+export const isPaidStatus = (status) =>
+  ['paid', 'paid in full'].includes(String(status || '').toLowerCase().trim());
 
 export const Av = ({ i, s = 36, c = `var(--accent-secondary)` }) => (
   <div style={{
@@ -213,54 +217,143 @@ export const PModal = Modal;
 
 export const Spinner = () => <div style={{ width: 15, height: 15, border: '2px solid currentColor', borderTopColor: 'transparent', borderRadius: '50%' }} className="spin" />;
 
-export function NotificationBell({ notifications = [], onMarkRead }) {
+function notifIcon(type) {
+  const s = { flexShrink: 0, marginTop: 1 };
+  if (type === 'message')       return <MessageSquare size={14} color="#6366F1" style={s} />;
+  if (type === 'payment')       return <CreditCard size={14} color="#16A34A" style={s} />;
+  if (type === 'quote_approved')return <Star size={14} color="#D97706" style={s} />;
+  if (type === 'success')       return <Check size={14} color="#16A34A" style={s} />;
+  if (type === 'warning')       return <AlertCircle size={14} color="#D97706" style={s} />;
+  return <Info size={14} color="var(--accent-secondary)" style={s} />;
+}
+
+function notifTime(ts) {
+  if (!ts) return '';
+  const d = ts?.toDate?.() || (ts?.seconds ? new Date(ts.seconds * 1000) : new Date(ts));
+  const diff = Date.now() - d.getTime();
+  if (diff < 60000)   return 'Just now';
+  if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
+  if (diff < 86400000)return `${Math.floor(diff / 3600000)}h ago`;
+  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+}
+
+export function NotificationBell({ notifications = [], onMarkRead, navigate }) {
   const [open, setOpen] = useState(false);
-  const unread = notifications.filter(n => !n.read).length;
+  const ref = useRef(null);
+  const unreadList = notifications.filter(n => !n.read);
+  const unread = unreadList.length;
+
+  // Close on outside click
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  const handleClick = (n) => {
+    if (!n.read) onMarkRead?.(n.id);
+    if (n.link && navigate) { navigate(n.link); setOpen(false); }
+  };
+
+  const markAll = () => unreadList.forEach(n => onMarkRead?.(n.id));
 
   return (
-    <div style={{ position: 'relative' }}>
-      <button 
-        onClick={() => setOpen(!open)}
-        className="glass-btn" 
-        style={{ padding: '8px 12px', display: 'flex', alignItems: 'center', gap: 6, position: 'relative' }}
+    <div ref={ref} style={{ position: 'relative' }}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        style={{
+          width: 38, height: 38, borderRadius: 10,
+          background: open ? 'var(--bg-secondary)' : 'transparent',
+          border: '1.5px solid var(--border-color)',
+          cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+          position: 'relative', transition: 'all .15s',
+        }}
+        onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-secondary)'}
+        onMouseLeave={e => { if (!open) e.currentTarget.style.background = 'transparent'; }}
       >
-        <Bell size={18} color="var(--accent-secondary)" />
+        <Bell size={17} color={unread > 0 ? '#EF4444' : 'var(--text-secondary)'} fill={unread > 0 ? '#EF4444' : 'none'} />
         {unread > 0 && (
-          <span style={{ 
-            position: 'absolute', top: 4, right: 4, background: '#EF4444', color: 'white', 
-            fontSize: 9, fontWeight: 700, padding: '2px 5px', borderRadius: 10, minWidth: 16, textAlign: 'center' 
-          }}>{unread}</span>
+          <div style={{
+            position: 'absolute', top: -5, right: -5,
+            minWidth: 18, height: 18, borderRadius: 9,
+            background: '#EF4444', color: '#fff',
+            fontSize: 10, fontWeight: 900,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            padding: '0 4px', border: '2px solid #fff',
+            lineHeight: 1,
+          }}>
+            {unread > 99 ? '99+' : unread}
+          </div>
         )}
       </button>
 
       {open && (
-        <div className="glass-panel" style={{ 
-          position: 'absolute', top: '100%', right: 0, width: 320, marginTop: 12, 
-          zIndex: 1000, maxHeight: 400, overflowY: 'auto', padding: 12, border: '1px solid rgba(92, 58, 33,.2)' 
+        <div style={{
+          position: 'absolute', top: 'calc(100% + 10px)', right: 0,
+          width: 360, maxHeight: 480, overflowY: 'auto',
+          background: '#fff', borderRadius: 16,
+          border: '1.5px solid var(--border-color)',
+          boxShadow: '0 20px 60px rgba(0,0,0,0.12)',
+          zIndex: 2000,
         }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-            <span style={{ fontSize: 12, fontWeight: 600, color: `var(--accent-secondary)`, textTransform: 'uppercase', letterSpacing: '.05em' }}>Notifications</span>
-            <button onClick={() => setOpen(false)} style={{ background: 'none', border: 'none', color: '#666' }}><X size={14} /></button>
-          </div>
-          {notifications.length === 0 ? (
-            <div style={{ padding: '24px 0', textAlign: 'center', color: '#666', fontSize: 13 }}>No notifications</div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {notifications.map(n => (
-                <div 
-                  key={n.id} 
-                  onClick={() => { onMarkRead(n.id); if (!n.read) setOpen(false); }}
-                  style={{ 
-                    padding: 12, background: n.read ? 'rgba(255,255,255,.02)' : 'rgba(92, 58, 33,.08)', 
-                    borderRadius: 8, cursor: 'pointer', border: n.read ? '1px solid transparent' : '1px solid rgba(92, 58, 33,.15)',
-                    transition: 'all .2s'
-                  }}
-                >
-                  <div style={{ fontSize: 13, color: '#DDD', marginBottom: 4, lineHeight: 1.4 }}>{n.message}</div>
-                  <div style={{ fontSize: 10, color: '#666' }}>{new Date(n.createdAt).toLocaleString()}</div>
-                </div>
-              ))}
+          {/* Header */}
+          <div style={{ padding: '14px 16px 12px', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'sticky', top: 0, background: '#fff', borderRadius: '16px 16px 0 0', zIndex: 1 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Bell size={14} color="var(--accent-secondary)" />
+              <span style={{ fontSize: 13, fontWeight: 800, color: 'var(--accent-secondary)' }}>Notifications</span>
+              {unread > 0 && (
+                <span style={{ fontSize: 10, fontWeight: 700, background: '#FEF2F2', color: '#EF4444', padding: '2px 7px', borderRadius: 20 }}>{unread} new</span>
+              )}
             </div>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              {unread > 0 && (
+                <button onClick={markAll} style={{ fontSize: 11, fontWeight: 700, color: 'var(--accent-secondary)', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <CheckCheck size={12} /> Mark all read
+                </button>
+              )}
+              <button onClick={() => setOpen(false)} style={{ width: 24, height: 24, borderRadius: 6, background: 'var(--bg-secondary)', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <X size={12} />
+              </button>
+            </div>
+          </div>
+
+          {/* Notification list */}
+          {notifications.length === 0 ? (
+            <div style={{ padding: '48px 20px', textAlign: 'center' }}>
+              <Bell size={32} color="var(--border-color)" style={{ marginBottom: 12 }} />
+              <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-secondary)' }}>No notifications yet</div>
+              <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 4 }}>Project updates and alerts will appear here.</div>
+            </div>
+          ) : (
+            notifications.slice(0, 30).map((n, i) => (
+              <div
+                key={n.id}
+                onClick={() => handleClick(n)}
+                style={{
+                  padding: '12px 16px', cursor: n.link ? 'pointer' : 'default',
+                  background: n.read ? '#fff' : '#FAFAF0',
+                  borderBottom: i < notifications.length - 1 ? '1px solid var(--border-color)' : 'none',
+                  display: 'flex', gap: 12, alignItems: 'flex-start',
+                  transition: 'background .15s',
+                }}
+                onMouseEnter={e => { if (n.link) e.currentTarget.style.background = 'var(--bg-secondary)'; }}
+                onMouseLeave={e => e.currentTarget.style.background = n.read ? '#fff' : '#FAFAF0'}
+              >
+                <div style={{ width: 28, height: 28, borderRadius: 8, background: 'var(--bg-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 1 }}>
+                  {notifIcon(n.type)}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 12.5, color: 'var(--accent-secondary)', lineHeight: 1.5, fontWeight: n.read ? 500 : 700 }}>
+                    {n.message || n.msg || 'System notification'}
+                  </div>
+                  <div style={{ fontSize: 10, color: 'var(--text-secondary)', marginTop: 3 }}>{notifTime(n.createdAt)}</div>
+                </div>
+                {!n.read && (
+                  <div style={{ width: 7, height: 7, borderRadius: '50%', background: '#EF4444', flexShrink: 0, marginTop: 6 }} />
+                )}
+              </div>
+            ))
           )}
         </div>
       )}

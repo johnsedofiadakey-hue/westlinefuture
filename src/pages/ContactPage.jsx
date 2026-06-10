@@ -3,18 +3,19 @@ import { useSearchParams } from 'react-router-dom';
 import { useWindowWidth, isMob, DARK_TEXT, AC } from './sharedHelpers';
 import { sanitizeText } from '../lib/sanitize';
 import { AlertCircle, CheckCircle, MapPin, Clock, Phone, Mail, ArrowRight } from 'lucide-react';
+import { usePublicTranslation } from '../components/PubLayout';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const PHONE_RE = /^[\+\d][\d\s\-\(\)]{6,20}$/;
 
 const SERVICES = [
-  'Glass Facades & Windows',
-  'Shower Enclosures',
-  'Glass Partitions & Feature Walls',
-  'Kitchen Glass & Cabinet Fronts',
-  'Wardrobes & Interior Joinery',
-  'Staircases & Balustrades',
-  'Commercial Glazing',
+  'Full Interior Decoration (complete home)',
+  'Custom 3D Interior Design',
+  'Surface Finishes & Fixtures (tiles, flooring, doors, sanitary ware)',
+  'Fixed Custom Carpentry (kitchen cabinets, wardrobes, vanities)',
+  'Home Furniture (sofas, dining sets, beds)',
+  'Home Appliances (fridges, washing machines, TVs)',
+  'Décor & Accessories (curtains, lighting, mirrors)',
   'Other / Not Sure Yet',
 ];
 
@@ -53,10 +54,12 @@ export default function ContactPage({ brand, submitContact }) {
   const winW = useWindowWidth();
   const mob = isMob(winW);
   const ac = brand?.color || AC;
-  const wa = (brand?.whatsapp || '233598455012').replace(/\D/g, '');
-  const phone = brand?.phone || '+233 59 845 5012';
+  const wa = (brand?.whatsapp || '233247319778').replace(/\D/g, '');
+  const phone = brand?.phone || '0247319778';
   const email = brand?.email || 'admin@westlinefuture.com';
   const location = brand?.location || 'Spintex Road Industrial Area, Accra';
+
+  usePublicTranslation();
 
   const [form, setForm] = useState({
     firstName: '', lastName: '',
@@ -318,7 +321,7 @@ export default function ContactPage({ brand, submitContact }) {
                     <label style={labelStyle}>Phone / WhatsApp *</label>
                     <input
                       value={form.phone} onChange={set('phone')} maxLength={25}
-                      style={inp('phone')} placeholder="+233 59 845 5012"
+                      style={inp('phone')} placeholder="+233 24 731 9778"
                       type="tel"
                       onFocus={() => setFocused('phone')} onBlur={() => setFocused(null)}
                     />

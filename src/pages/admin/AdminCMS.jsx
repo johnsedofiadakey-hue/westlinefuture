@@ -224,15 +224,16 @@ function CMSServices({ services, onSave, ac, notify }) {
   const [view, setView] = useState('list'); // 'list', 'add', 'cats'
   const [uploading, setUploading] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [confirmDeleteProductId, setConfirmDeleteProductId] = useState(null);
 
   // Edit states
   const [isEditing, setIsEditing] = useState(false);
   const [editingId, setEditingId] = useState(null);
 
   // Form states
-  const [newItem, setNewItem] = useState({ 
-    name: '', tagline: '', desc: '', img: '', cat: '', specs: '', 
-    fobPrice: '', landedCost: '', status: 'Available', stock: 10, threshold: 2,
+  const [newItem, setNewItem] = useState({
+    name: '', tagline: '', desc: '', img: '', cat: '', specs: '',
+    fobPrice: '', landedCost: '', retailPrice: '', status: 'Available', stock: 10, threshold: 2,
     colors: '', options: ''
   });
   const [newCat, setNewCat] = useState({ id: '', label: '', icon: '📦', groupId: 'aluminum', desc: '' });
@@ -301,6 +302,7 @@ function CMSServices({ services, onSave, ac, notify }) {
       specs: specsStr,
       fobPrice: p.fobPrice || '',
       landedCost: p.landedCost || '',
+      retailPrice: p.retailPrice || '',
       status: p.status || 'Available',
       stock: p.stock || 10,
       threshold: p.threshold || 2,
@@ -314,7 +316,7 @@ function CMSServices({ services, onSave, ac, notify }) {
   const handleBackToList = () => {
     setNewItem({ 
       name: '', tagline: '', desc: '', img: cats?.[0]?.id || '', cat: '', specs: '', 
-      fobPrice: '', landedCost: '', status: 'Available', stock: 10, threshold: 2,
+      fobPrice: '', landedCost: '', retailPrice: '', status: 'Available', stock: 10, threshold: 2,
       colors: '', options: ''
     });
     setIsEditing(false);
@@ -350,6 +352,7 @@ function CMSServices({ services, onSave, ac, notify }) {
       options: parsedOptions.length > 0 ? parsedOptions : null,
       fobPrice: newItem.fobPrice || '',
       landedCost: newItem.landedCost || '',
+      retailPrice: newItem.retailPrice || '',
       status: newItem.status,
       stock: Number(newItem.stock || 0),
       threshold: Number(newItem.threshold || 2),
@@ -367,7 +370,7 @@ function CMSServices({ services, onSave, ac, notify }) {
     // Reset states
     setNewItem({ 
       name: '', tagline: '', desc: '', img: cats?.[0]?.id || '', cat: '', specs: '', 
-      fobPrice: '', landedCost: '', status: 'Available', stock: 10, threshold: 2,
+      fobPrice: '', landedCost: '', retailPrice: '', status: 'Available', stock: 10, threshold: 2,
       colors: '', options: ''
     });
     setIsEditing(false);
@@ -375,12 +378,14 @@ function CMSServices({ services, onSave, ac, notify }) {
     setView('list');
   };
 
-  const removeProduct = async (id) => {
+  const removeProduct = (id) => setConfirmDeleteProductId(id);
+
+  const confirmDeleteProduct = async () => {
+    const id = confirmDeleteProductId;
+    setConfirmDeleteProductId(null);
     if (!db) return;
-    if (window.confirm('Delete this asset permanently?')) {
-      await deleteDoc(doc(db, 'products', id));
-      notify?.('success', 'Asset deleted');
-    }
+    await deleteDoc(doc(db, 'products', id));
+    notify?.('success', 'Asset deleted');
   };
 
   const saveCategory = async () => {
@@ -518,9 +523,12 @@ function CMSServices({ services, onSave, ac, notify }) {
                </PFormField>
              </div>
 
-             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16 }}>
-               <PFormField label="FOB Price"><input className="p-inp" placeholder="$0.00" value={newItem.fobPrice} onChange={e => setNewItem({...newItem, fobPrice: e.target.value})} /></PFormField>
-               <PFormField label="Landed Cost"><input className="p-inp" placeholder="$0.00" value={newItem.landedCost} onChange={e => setNewItem({...newItem, landedCost: e.target.value})} /></PFormField>
+             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 16 }}>
+               <PFormField label="FOB Price USD (China cost — internal)" sub="Cost from factory in China, USD"><input className="p-inp" placeholder="USD 0.00" value={newItem.fobPrice} onChange={e => setNewItem({...newItem, fobPrice: e.target.value})} /></PFormField>
+               <PFormField label="Landed Cost GH₵ (after duties — internal)" sub="Total cost after shipping & import duties"><input className="p-inp" placeholder="GH₵ 0.00" value={newItem.landedCost} onChange={e => setNewItem({...newItem, landedCost: e.target.value})} /></PFormField>
+               <PFormField label="Retail Price GHS (Public)" sub="Shown to clients — enables Buy Now">
+                 <input className="p-inp" placeholder="GH₵ 0.00" value={newItem.retailPrice} onChange={e => setNewItem({...newItem, retailPrice: e.target.value})} />
+               </PFormField>
                <PFormField label="Stock Qty"><input type="number" className="p-inp" value={newItem.stock} onChange={e => setNewItem({...newItem, stock: parseInt(e.target.value)})} /></PFormField>
                <PFormField label="Status">
                  <select className="p-inp" value={newItem.status} onChange={e => setNewItem({...newItem, status: e.target.value})}>
@@ -607,6 +615,20 @@ function CMSServices({ services, onSave, ac, notify }) {
            </div>
          </>
        )}
+
+      {confirmDeleteProductId && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+          <div style={{ background: 'var(--bg-primary)', borderRadius: 20, padding: 32, maxWidth: 360, width: '100%', textAlign: 'center', boxShadow: '0 24px 64px rgba(0,0,0,0.18)' }}>
+            <div style={{ fontSize: 28, marginBottom: 12 }}>🗑️</div>
+            <div style={{ fontSize: 15, fontWeight: 800, marginBottom: 8 }}>Delete Asset?</div>
+            <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 24 }}>This product will be permanently removed from the catalog.</div>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={() => setConfirmDeleteProductId(null)} style={{ flex: 1, height: 44, borderRadius: 12, border: '1.5px solid var(--border-color)', background: 'transparent', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Cancel</button>
+              <button onClick={confirmDeleteProduct} style={{ flex: 1, height: 44, borderRadius: 12, border: 'none', background: '#ef4444', color: '#fff', fontSize: 13, fontWeight: 800, cursor: 'pointer' }}>Delete</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -652,54 +674,52 @@ function CMSAbout({ about, onSave, ac, notify }) {
 }
 
 function CMSShowroom({ showcase, onSave, ac, notify }) {
-  const [url, setUrl] = useState(showcase?.videoUrl || 'https://yun.kujiale.com/design/3FO3I392SC87/show');
-  
-  // Extract YouTube ID if it's a YouTube link
-  let isYouTube = url.includes('youtube.com') || url.includes('youtu.be');
-  let previewId = '';
-  if (isYouTube) {
-    previewId = url.split('v=')[1]?.split('&')[0] || url.split('/').pop() || '';
-  }
+  // Fallback URL — only shown on the public Showroom page if there are NO scenes
+  // with a videoUrl in the Showcase Hub. Full scene management is in Showcase Hub.
+  const [url, setUrl] = useState(showcase?.videoUrl || '');
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 28 }}>
-      <div>
-        <h3 className="lxfh" style={{ fontSize: 20, marginBottom: 8 }}>Showroom Embed URL</h3>
-        <p style={{ fontSize: 13, color: `var(--text-secondary)`, marginBottom: 24 }}>
-          Paste any external URL (e.g., Kujiale 3D view, YouTube). The showroom page will automatically embed it as the walkthrough tour.
-        </p>
-        <PFormField label="Embed URL or Video ID">
-          <input
-            className="p-inp"
-            placeholder="e.g. https://yun.kujiale.com/design/..."
-            value={url}
-            onChange={e => setUrl(e.target.value)}
-          />
-        </PFormField>
-        <button
-          onClick={() => {
-            onSave({ ...showcase, videoUrl: url });
-            notify?.('success', 'Showroom video updated');
-          }}
-          className="p-btn-dark lxf" style={{ padding: '12px 32px', marginTop: 16 }}
-        >
-          Update Showroom View
-        </button>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+      <h3 className="lxfh" style={{ fontSize: 20, marginBottom: 4 }}>Showroom Settings</h3>
+
+      {/* Primary info card */}
+      <div style={{ padding: '20px 24px', borderRadius: 16, background: `${ac}10`, border: `1.5px solid ${ac}30`, display: 'flex', gap: 16, alignItems: 'flex-start' }}>
+        <div style={{ width: 40, height: 40, borderRadius: 12, background: ac, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 18 }}>🎬</div>
+        <div>
+          <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--accent-secondary)', marginBottom: 6 }}>Scenes are managed in Showcase Hub</div>
+          <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.7 }}>
+            To add, edit, reorder, or delete 3D tour scenes on the public Showroom page, go to <strong>Showcase Hub</strong> in the left sidebar.<br />
+            Each scene has a <strong>Display Order</strong> field — set it to <strong>1</strong> to make that scene appear first.
+          </div>
+          <div style={{ marginTop: 12, display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+            <a href="/admin/showcase" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 18px', borderRadius: 10, background: ac, color: '#fff', textDecoration: 'none', fontSize: 12, fontWeight: 700 }}>
+              Open Showcase Hub →
+            </a>
+            <a href="/showcase" target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 18px', borderRadius: 10, background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', color: 'var(--accent-secondary)', textDecoration: 'none', fontSize: 12, fontWeight: 700 }}>
+              Preview Public Showroom ↗
+            </a>
+          </div>
+        </div>
       </div>
 
-      <div>
-        <div style={{ fontSize: 11, fontWeight: 800, color: `var(--text-secondary)`, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 12 }}>Live Preview</div>
-        <div style={{ aspectRatio: '16/9', borderRadius: 16, overflow: 'hidden', border: '1px solid var(--border-color)', maxWidth: 700 }}>
-          <iframe
-            key={url}
-            src={isYouTube ? `https://www.youtube.com/embed/${previewId}?rel=0&modestbranding=1&controls=1` : url}
-            title="Showroom preview"
-            allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-            allowFullScreen
-            style={{ width: '100%', height: '100%', border: 'none' }}
+      {/* Fallback URL — only used if Showcase Hub has no scenes with videoUrl */}
+      <div style={{ padding: '16px 20px', borderRadius: 14, border: '1px solid var(--border-color)', background: 'var(--bg-secondary)' }}>
+        <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 6 }}>Fallback Embed URL <span style={{ fontWeight: 400, fontSize: 11 }}>(only shown if Showcase Hub has no 3D scenes)</span></div>
+        <div style={{ display: 'flex', gap: 10 }}>
+          <input
+            className="p-inp"
+            placeholder="https://yun.kujiale.com/design/..."
+            value={url}
+            onChange={e => setUrl(e.target.value)}
+            style={{ flex: 1 }}
           />
+          <button
+            onClick={() => { onSave({ ...showcase, videoUrl: url }); notify?.('success', 'Fallback URL saved'); }}
+            className="p-btn-dark lxf" style={{ padding: '10px 20px', whiteSpace: 'nowrap' }}
+          >
+            Save
+          </button>
         </div>
-        {isYouTube && <div style={{ marginTop: 8, fontSize: 11, color: `var(--text-secondary)` }}>Video ID: <code>{previewId}</code></div>}
       </div>
     </div>
   );
@@ -733,21 +753,39 @@ function CMSTestimonials({ list, onSave, ac }) {
 
 function CMSFooter({ data, onSave, ac }) {
   const [links, setLinks] = useState(withId(data?.links || []));
+  const [description, setDescription] = useState(data?.description || '');
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
        <h3 className="lxfh" style={{ fontSize: 20 }}>Footer Information</h3>
+
+       {/* Footer description */}
+       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+         <div className="lxf" style={{ fontSize: 13, fontWeight: 600 }}>Footer Description</div>
+         <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Shown beneath the logo in the footer. Leave blank to use the company tagline from Branding settings.</div>
+         <textarea
+           className="p-inp"
+           rows={3}
+           placeholder="e.g. Global precision meets local delivery. Premium interior solutions..."
+           value={description}
+           onChange={e => setDescription(e.target.value)}
+           style={{ resize: 'vertical', fontFamily: 'inherit' }}
+         />
+       </div>
+
+       {/* Policy links */}
        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
          <div className="lxf" style={{ fontSize: 13, fontWeight: 600 }}>Policy Links</div>
+         <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Links shown in the footer bottom bar (e.g. Privacy Policy, Terms of Service).</div>
          {links.map((l, i) => (
            <div key={l._id} style={{ display: 'flex', gap: 12 }}>
-             <input className="p-inp" placeholder="Label" value={l.label} onChange={e => { const nl = [...links]; nl[i].label = e.target.value; setLinks(nl); }} />
+             <input className="p-inp" placeholder="Label (e.g. Privacy Policy)" value={l.label} onChange={e => { const nl = [...links]; nl[i].label = e.target.value; setLinks(nl); }} />
              <input className="p-inp" placeholder="URL" value={l.url} onChange={e => { const nl = [...links]; nl[i].url = e.target.value; setLinks(nl); }} />
              <button onClick={() => setLinks(links.filter((_, idx) => idx !== i))} style={{ color: '#ff4444', border: 'none', background: 'none', cursor: 'pointer' }}><X size={16} /></button>
            </div>
          ))}
          <button onClick={() => setLinks([...links, { _id: newId(), label: '', url: '#' }])} className="lxf" style={{ fontSize: 11, color: ac, background: 'none', border: 'none', padding: 0, textAlign: 'left', cursor: 'pointer', fontWeight: 600 }}>+ Add Link</button>
        </div>
-       <button onClick={() => onSave({ links })} className="p-btn-dark lxf" style={{ alignSelf: 'flex-start', padding: '10px 24px' }}>Save Footer</button>
+       <button onClick={() => onSave({ description, links })} className="p-btn-dark lxf" style={{ alignSelf: 'flex-start', padding: '10px 24px' }}>Save Footer</button>
     </div>
   );
 }
@@ -1244,7 +1282,15 @@ export default function AdminCMS({ content, syncCMS, brand, onPreview, notify, .
       case 'products':     return <CMSProducts products={content?.products} categories={content?.categories} onSave={val => syncCMS('products', val)} ac={ac} syncCMS={syncCMS} notify={notify} />;
       case 'productSync':  return <AdminProductSync brand={brand} notify={notify} user={props.user} />;
       case 'gallery':      return <CMSGallery portfolio={content?.portfolio} onSave={val => syncCMS('portfolio', val)} ac={ac} notify={notify} />;
-      case 'showroom':     return <CMSShowroom showcase={content?.showcase} onSave={val => syncCMS('showcase', val)} ac={ac} notify={notify} />;
+      case 'showroom':     return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 40 }}>
+          <CMSShowroom showcase={content?.showcase} onSave={val => syncCMS('showcase', val)} ac={ac} notify={notify} />
+          <div style={{ borderTop: '1.5px solid var(--border-color)', paddingTop: 40 }}>
+            <div style={{ fontSize: 10, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '.1em', color: 'var(--text-secondary)', marginBottom: 20 }}>Scene Library</div>
+            <AdminShowcase brand={brand} notify={notify} />
+          </div>
+        </div>
+      );
       case 'about':        return <CMSAbout about={content?.about} onSave={val => syncCMS('about', val)} ac={ac} notify={notify} />;
       case 'testimonials': return <CMSTestimonials list={content?.testimonials} onSave={val => syncCMS('testimonials', val)} ac={ac} />;
       case 'footer':       return <CMSFooter data={content?.footer} onSave={val => syncCMS('footer', val)} ac={ac} />;

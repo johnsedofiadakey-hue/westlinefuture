@@ -7,6 +7,7 @@ export default function AdminAddOnManager({ project, brand, addOns = [], invoice
   const ac = brand?.color || 'var(--accent-secondary)';
   const [loading, setLoading] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
+  const [confirmDeleteId, setConfirmDeleteId] = useState(null);
   
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -57,8 +58,11 @@ export default function AdminAddOnManager({ project, brand, addOns = [], invoice
     }
   };
 
-  const handleDelete = async (id) => {
-    if (!window.confirm("Delete this add-on? Make sure to also delete the associated invoice if needed.")) return;
+  const handleDelete = (id) => setConfirmDeleteId(id);
+
+  const confirmDelete = async () => {
+    const id = confirmDeleteId;
+    setConfirmDeleteId(null);
     try {
       await deleteDoc(doc(db, 'addOns', id));
     } catch(e) { console.error(e); }
@@ -108,7 +112,7 @@ export default function AdminAddOnManager({ project, brand, addOns = [], invoice
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           {projectAddOns.map(addon => {
             const linkedInv = invoices.find(i => i.id === addon.linkedInvoiceId);
-            const isPaid = linkedInv && linkedInv.status === 'Paid';
+            const isPaid = linkedInv && ['paid', 'paid in full'].includes(String(linkedInv.status || '').toLowerCase().trim());
             const statusColor = isPaid ? '#10B981' : '#F59E0B';
 
             return (
@@ -135,6 +139,19 @@ export default function AdminAddOnManager({ project, brand, addOns = [], invoice
               </div>
             );
           })}
+        </div>
+      )}
+      {confirmDeleteId && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+          <div style={{ background: 'var(--bg-primary)', borderRadius: 20, padding: 32, maxWidth: 360, width: '100%', textAlign: 'center', boxShadow: '0 24px 64px rgba(0,0,0,0.18)' }}>
+            <div style={{ fontSize: 28, marginBottom: 12 }}>🗑️</div>
+            <div style={{ fontSize: 15, fontWeight: 800, marginBottom: 8 }}>Delete Add-On?</div>
+            <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 24 }}>Make sure to also delete the associated invoice if it was already created.</div>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={() => setConfirmDeleteId(null)} style={{ flex: 1, height: 44, borderRadius: 12, border: '1.5px solid var(--border-color)', background: 'transparent', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Cancel</button>
+              <button onClick={confirmDelete} style={{ flex: 1, height: 44, borderRadius: 12, border: 'none', background: '#ef4444', color: '#fff', fontSize: 13, fontWeight: 800, cursor: 'pointer' }}>Delete</button>
+            </div>
+          </div>
         </div>
       )}
     </div>

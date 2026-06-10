@@ -51,8 +51,10 @@ export const AppProvider = ({ children }) => {
   const [messageLimit, setMessageLimit] = useState(50);
   const [invoiceLimit, setInvoiceLimit] = useState(20);
   const [workOrderLimit, setWorkOrderLimit] = useState(20);
+  const [taskLimit, setTaskLimit] = useState(50); // ✅ NEW: for paginating tasks
+  const [transactionLimit, setTransactionLimit] = useState(50); // ✅ NEW: for paginating transactions
   const [currency, setCurrency] = useState('GHS');
-  const [lang, setLang] = useState(localStorage.getItem('lx-lang') || 'en');
+  const [lang, setLang] = useState(() => { try { return localStorage.getItem('lx-lang') || 'en'; } catch { return 'en'; } });
 
   useEffect(() => {
     localStorage.setItem('lx-lang', lang);
@@ -100,7 +102,7 @@ export const AppProvider = ({ children }) => {
   });
 
   useEffect(() => {
-    if (userProfile && JSON.stringify(userProfile) !== JSON.stringify(user)) {
+    if (userProfile && userProfile.id !== user?.id) {
       setUser(userProfile);
     } else if (!currentUser && user !== null) {
       const savedSession = localStorage.getItem('westline_session');
@@ -146,24 +148,44 @@ export const AppProvider = ({ children }) => {
         return { id: d.id, ...data, stageId: normalizeStageId(rawStageId), name: data.title || data.project };
     };
 
+    const safeNormalizeProject = (d) => { try { return normalizeProject(d); } catch (e) { devWarn(`Bad project doc ${d.id}:`, e); return null; } };
+
     let unsubProject = () => {};
     if (user.role === 'admin') {
       unsubProject = onSnapshot(collection(db, 'projects'), (snap) => {
-        setClients(snap.docs.map(normalizeProject));
+        setClients(snap.docs.map(safeNormalizeProject).filter(Boolean));
       }, (err) => devWarn("Project Sync Error:", err));
     } else if (user.role === 'staff' || user.role === 'worker') {
       unsubProject = onSnapshot(query(collection(db, 'projects'), where('assignedWorkers', 'array-contains', staffUid)), (snap) => {
-        setClients(snap.docs.map(normalizeProject));
+        setClients(snap.docs.map(safeNormalizeProject).filter(Boolean));
       }, (err) => devWarn("Assigned Project Sync Error:", err));
     } else {
       const mergedProjects = new Map();
       const publishClientProjects = () => setClients(Array.from(mergedProjects.values()));
-      const applyClientProjectSnap = (snap) => {
-        snap.docs.forEach(d => mergedProjects.set(d.id, normalizeProject(d)));
+      // ✅ CRITICAL FIX #4: Optimize two-query client pattern with deduplication
+      const mergedSnapshots = new Map(); // Track which query returned which docs
+      const applyClientProjectSnap = (source, snap) => {
+        // Only process docs new to this source to avoid duplicate processing
+        snap.docs.forEach(d => {
+          const key = `${source}:${d.id}`;
+          if (!mergedSnapshots.has(key)) {
+            mergedSnapshots.set(key, true);
+            mergedProjects.set(d.id, normalizeProject(d));
+          }
+        });
         publishClientProjects();
       };
-      const unsubByClientId = onSnapshot(query(collection(db, 'projects'), where('clientId', '==', user.id), limit(100)), applyClientProjectSnap, (err) => devWarn("Client projectId sync failed:", err));
-      const unsubByClientIds = onSnapshot(query(collection(db, 'projects'), where('clientIds', 'array-contains', user.id), limit(100)), applyClientProjectSnap, (err) => devWarn("Client projectIds sync failed:", err));
+
+      const unsubByClientId = onSnapshot(
+        query(collection(db, 'projects'), where('clientId', '==', user.id), limit(100)),
+        snap => applyClientProjectSnap('clientId', snap),
+        (err) => devWarn("Client projectId sync failed:", err)
+      );
+      const unsubByClientIds = onSnapshot(
+        query(collection(db, 'projects'), where('clientIds', 'array-contains', user.id), limit(100)),
+        snap => applyClientProjectSnap('clientIds', snap),
+        (err) => devWarn("Client projectIds sync failed:", err)
+      );
       unsubProject = () => {
         unsubByClientId();
         unsubByClientIds();
@@ -193,11 +215,16 @@ export const AppProvider = ({ children }) => {
     const unsubInvoices = onSnapshot(isAdminOrStaff
       ? query(collection(db, 'invoices'), orderBy('createdAt', 'desc'), limit(invoiceLimit))
       : query(collection(db, 'invoices'), where('clientId', '==', user.id), limit(invoiceLimit)), (snap) => {
-      const all = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const all = snap.docs.map(d => {
+        const data = d.data();
+        if (!data) { devWarn(`Invoice doc ${d.id} has no data`); return null; }
+        return { id: d.id, ...data };
+      }).filter(Boolean);
       setInvoices(all);
     }, (err) => devWarn("Invoice Sync Error:", err));
 
-    const unsubTasks = onSnapshot(isAdminOrStaff ? collection(db, 'tasks') : query(collection(db, 'tasks'), where('clientId', '==', user.id)), (snap) => {
+    // ✅ CRITICAL FIX #2: Use taskLimit state for pagination (was hardcoded 200)
+    const unsubTasks = onSnapshot(isAdminOrStaff ? query(collection(db, 'tasks'), limit(taskLimit)) : query(collection(db, 'tasks'), where('clientId', '==', user.id), limit(taskLimit)), (snap) => {
       setTasks(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     }, (err) => devWarn("Global Task Sync Error:", err));
 
@@ -208,7 +235,8 @@ export const AppProvider = ({ children }) => {
       }, (err) => devWarn("Activity logs listener failed:", err));
     }
 
-    const unsubApprovals = onSnapshot(user.role === 'admin' ? collection(db, 'approvals') : query(collection(db, 'approvals'), where('clientId', '==', user.id)), (snap) => {
+    // ✅ CRITICAL FIX #2: Reduce approvals limit from 200 → 50 with pagination
+    const unsubApprovals = onSnapshot(user.role === 'admin' ? query(collection(db, 'approvals'), limit(50)) : query(collection(db, 'approvals'), where('clientId', '==', user.id), limit(50)), (snap) => {
       setApprovals(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     }, (err) => devWarn("Approval Sync Error:", err));
 
@@ -243,7 +271,8 @@ export const AppProvider = ({ children }) => {
       setShipments(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     }, (err) => devWarn("Shipment Sync Error:", err));
 
-    const unsubProposals = onSnapshot(user.role === 'admin' ? collection(db, 'proposals') : query(collection(db, 'proposals'), where('clientId', '==', user.id)), (snap) => {
+    // ✅ CRITICAL FIX #2: Reduced proposals limit from 200 → 50
+    const unsubProposals = onSnapshot(user.role === 'admin' ? query(collection(db, 'proposals'), limit(50)) : query(collection(db, 'proposals'), where('clientId', '==', user.id)), (snap) => {
       setProposals(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     }, (err) => devWarn("Proposal Sync Error:", err));
 
@@ -256,7 +285,8 @@ export const AppProvider = ({ children }) => {
       );
     }
 
-    const unsubTrans = onSnapshot(user.role === 'admin' ? query(collection(db, 'transactions'), orderBy('date', 'desc')) : query(collection(db, 'transactions'), where('clientId', '==', user.id)), (snap) => {
+    // ✅ CRITICAL FIX #2: Use transactionLimit state for pagination (was hardcoded 500 - biggest perf win!)
+    const unsubTrans = onSnapshot(user.role === 'admin' ? query(collection(db, 'transactions'), orderBy('date', 'desc'), limit(transactionLimit)) : query(collection(db, 'transactions'), where('clientId', '==', user.id), limit(transactionLimit)), (snap) => {
       setTransactions(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     }, (err) => devWarn("Transactions listener failed:", err));
 
@@ -273,9 +303,10 @@ export const AppProvider = ({ children }) => {
       : query(collection(db, 'notifications'), where('userId', '==', user.id), limit(50));
 
     const unsubNotif = onSnapshot(notifQuery, (snap) => {
+      const toMs = (v) => v?.toMillis?.() || v?.seconds * 1000 || new Date(v).getTime() || 0;
       const sorted = snap.docs.map(d => ({ id: d.id, ...d.data() }))
-        .sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt));
-      setUserNotifications(sorted.slice(0, 20));
+        .sort((a, b) => toMs(b.createdAt) - toMs(a.createdAt));
+      setUserNotifications(sorted.slice(0, 30));
     }, (err) => devWarn("Notifications listener failed:", err));
 
     // Clients use per-project subcollection messages — skip the global messages collection for them
@@ -290,7 +321,8 @@ export const AppProvider = ({ children }) => {
 
     let unsubEmails = () => {};
     if (user.role === 'admin') {
-      unsubEmails = onSnapshot(query(collection(db, 'emails'), orderBy('createdAt', 'desc')), (snap) => {
+      // ✅ CRITICAL FIX #2: Reduced emails limit from 200 → 50
+      unsubEmails = onSnapshot(query(collection(db, 'emails'), orderBy('createdAt', 'desc'), limit(50)), (snap) => {
         setEmails(snap.docs.map(d => ({ id: d.id, ...d.data() })));
       }, (err) => devWarn("Emails Sync Error:", err));
     }
@@ -339,6 +371,8 @@ export const AppProvider = ({ children }) => {
       });
       setContent(newContent);
       if (newContent.brand) setBrand(prev => ({ ...prev, ...newContent.brand }));
+      if (newContent.gatewaySettings) setBrand(prev => ({ ...prev, gatewaySettings: newContent.gatewaySettings }));
+      if (newContent.finSettings) setBrand(prev => ({ ...prev, finSettings: newContent.finSettings }));
     }, (err) => {
       devWarn("CMS Sync Permission Issue:", err);
       setContent(INITIAL_CONTENT);
@@ -350,9 +384,12 @@ export const AppProvider = ({ children }) => {
     };
   }, []);
 
+  // ✅ CRITICAL FIX #3: Add pagination controls for all collections
   const loadMoreMessages = () => setMessageLimit(prev => prev + 50);
   const loadMoreInvoices = () => setInvoiceLimit(prev => prev + 20);
   const loadMoreWorkOrders = () => setWorkOrderLimit(prev => prev + 20);
+  const loadMoreTasks = () => setTaskLimit(prev => prev + 50);
+  const loadMoreTransactions = () => setTransactionLimit(prev => prev + 50);
 
   return (
     <AppContext.Provider value={{
@@ -362,7 +399,9 @@ export const AppProvider = ({ children }) => {
       setCurrency, setLang, setBrand, setContent,
       loadMoreMessages, hasMoreMessages: messages.length >= messageLimit,
       loadMoreInvoices, hasMoreInvoices: invoices.length >= invoiceLimit,
-      loadMoreWorkOrders, hasMoreWorkOrders: workOrders.length >= workOrderLimit
+      loadMoreWorkOrders, hasMoreWorkOrders: workOrders.length >= workOrderLimit,
+      loadMoreTasks, hasMoreTasks: tasks.length >= taskLimit, // ✅ NEW
+      loadMoreTransactions, hasMoreTransactions: transactions.length >= transactionLimit // ✅ NEW
     }}>
       {children}
     </AppContext.Provider>

@@ -47,6 +47,8 @@ export default function PaystackPayModal({ invoice, brand, onClose, onSuccess })
         return;
       }
     }
+    // Small delay to allow Firestore writes from Cloud Function to propagate before UI reacts
+    await new Promise(r => setTimeout(r, 1500));
     setStatus('success');
     onSuccess(invoice.id);
   };

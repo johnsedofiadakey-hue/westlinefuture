@@ -4,7 +4,7 @@ import {
   Wrench, Scan, MapPin, Box, Anchor, Ship, ShieldAlert,
   Download, ExternalLink, Share2, FileText, CheckCircle2, Clock
 } from 'lucide-react';
-import { FF as PFormField, PSBadge } from '../../components/Shared';
+import { FF as PFormField, PSBadge, isPaidStatus } from '../../components/Shared';
 import EmptyState from '../../components/ui/EmptyState';
 
 const LOGISTICS_MILESTONES = [
@@ -64,7 +64,7 @@ export default function AdminLogistics({ containers = [], workOrders = [], clien
              inv.parentId === wo.id || inv.parentId === container.id ||
              inv.projectId === wo.id || inv.projectId === container.id
            );
-           return woInv && woInv.status !== 'Paid' && woInv.status !== 'paid';
+           return woInv && !isPaidStatus(woInv.status);
         });
 
         if (unpaidItems.length > 0) {

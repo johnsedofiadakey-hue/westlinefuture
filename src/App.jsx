@@ -1,4 +1,23 @@
-import React, { useState, useEffect, Suspense, lazy, useRef } from 'react';
+import React, { useState, useEffect, Suspense, lazy, useRef, Component } from 'react';
+
+class ErrorBoundary extends Component {
+  constructor(props) { super(props); this.state = { hasError: false, error: null }; }
+  static getDerivedStateFromError(error) { return { hasError: true, error }; }
+  componentDidCatch(error, info) { console.error('[ErrorBoundary]', error, info); }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', fontFamily: 'Inter, sans-serif', background: '#F8F6F3', padding: 24, textAlign: 'center' }}>
+          <div style={{ fontSize: 48, marginBottom: 16 }}>⚠️</div>
+          <h2 style={{ fontSize: 20, color: '#1A1410', marginBottom: 8 }}>Something went wrong</h2>
+          <p style={{ color: '#A8A095', marginBottom: 24, fontSize: 14 }}>Please refresh the page. If the problem persists, contact support.</p>
+          <button onClick={() => window.location.reload()} style={{ padding: '12px 28px', background: '#1A1410', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 14 }}>Refresh Page</button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 const _BUILD_ID = '20260519';
 const PublicSite = lazy(() => import('./pages/PublicSite'));
 const LoginPage = lazy(() => import('./pages/LoginPage'));
@@ -33,6 +52,8 @@ import {
 } from './data.jsx';
 
 
+import { SCHEDULE_CONFIGS } from './pages/admin/clienthub/config.jsx';
+import { calculateTimeline } from './pages/sharedHelpers';
 import { auth, db, storage, functions, isFirebaseEnabled, firebaseConfig } from './lib/firebase';
 import { initializeApp, deleteApp } from 'firebase/app';
 import { onAuthStateChanged, signInWithEmailAndPassword, signOut, createUserWithEmailAndPassword, RecaptchaVerifier, signInWithPhoneNumber, getAuth } from 'firebase/auth';
@@ -66,23 +87,6 @@ export default function App() {
   const [otp, setOtp] = useState('');
   const loginAttempts = useRef({});
   const confirmationResultRef = useRef(null);
-
-  const checkRateLimit = (identifier) => {
-    const now = Date.now();
-    const record = loginAttempts.current[identifier];
-    if (!record) { loginAttempts.current[identifier] = { count: 1, lockUntil: 0 }; return; }
-    if (record.lockUntil && now < record.lockUntil) {
-      const mins = Math.ceil((record.lockUntil - now) / 60000);
-      throw new Error(`Too many attempts. Try again in ${mins} minute${mins > 1 ? 's' : ''}.`);
-    }
-    if (record.count >= 5) {
-      loginAttempts.current[identifier] = { count: record.count + 1, lockUntil: now + 15 * 60000 };
-      throw new Error('Too many failed attempts. Account locked for 15 minutes.');
-    }
-    loginAttempts.current[identifier] = { count: record.count + 1, lockUntil: 0 };
-  };
-  const clearRateLimit = (id) => { delete loginAttempts.current[id]; };
-
   const {
     user, setUser, clients, proposals, invoices, bookings, emails, setEmails, dbClients, teamMembers, logs, shipments, messages, testimonials, tasks, transactions, changeRequests, userNotifications, procurements, jobs, notes, media, approvals, materials, assets, workOrders, containers, renderingPackages, addOns,
     brand, content, currency, lang,
@@ -95,7 +99,8 @@ export default function App() {
   const notify = useCallback((type, msg, duration = 5000) => {
     if (window._notifTimeout) clearTimeout(window._notifTimeout);
     const isPersistent = duration === 'persistent' || type === 'persistent';
-    setNotification({ type, msg, persistent: isPersistent });
+    const safeMsg = typeof msg === 'string' ? msg : (msg?.message || msg?.userMessage || String(msg) || 'An error occurred');
+    setNotification({ type, msg: safeMsg, persistent: isPersistent });
     if (type !== 'pending' && !isPersistent) {
       window._notifTimeout = setTimeout(() => setNotification(null), duration);
     }
@@ -142,7 +147,7 @@ export default function App() {
         // Find the newest unread notification
         const newest = newNotifs.sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt))[0];
         if (newest && (Date.now() - new Date(newest.createdAt).getTime() < 120000)) { // within last 2 minutes
-          playNotificationSound();
+          try { playNotificationSound(); } catch (_) {}
           notify('info', newest.title || newest.msg || newest.message || 'New notification', 'persistent');
         }
       }
@@ -189,17 +194,43 @@ export default function App() {
   const normalizePhone = (p) => {
     if (!p) return '';
     let clean = p.replace(/\D/g, '');
-    // Standardize to 233 format
-    if (clean.startsWith('0') && clean.length === 10) {
-      return '233' + clean.slice(1);
-    }
-    if (clean.length === 9) {
-      return '233' + clean;
-    }
-    if (clean.startsWith('233') && clean.length === 12) {
-      return clean;
-    }
+    if (clean.startsWith('0') && clean.length === 10) return '233' + clean.slice(1);
+    if (clean.length === 9) return '233' + clean;
+    if (clean.startsWith('233') && clean.length === 12) return clean;
+    // International numbers (e.g. +1, +86, +44) — keep as-is without country prefix mangling
+    if (clean.length >= 10) return clean;
     return clean;
+  };
+
+  /**
+   * Build a de-duped array of every possible client ID format for a given
+   * phone number. Stored on `project.clientIds` so that phone-auth users whose
+   * Firebase token uses "+233..." format can always match a project even when
+   * the primary `clientId` was stored without the "+" prefix.
+   */
+  const buildClientIds = (primaryId, rawPhone) => {
+    const ids = new Set();
+    if (primaryId) ids.add(primaryId);
+    const phone = rawPhone || primaryId || '';
+    const digits = phone.replace(/\D/g, '');
+    if (digits) {
+      ids.add(digits);
+      if (digits.startsWith('0') && digits.length === 10) {
+        // Local format → add international variants
+        ids.add('233' + digits.slice(1));
+        ids.add('+233' + digits.slice(1));
+      } else if (digits.startsWith('233') && digits.length === 12) {
+        // 233... → add +233... and 0... variants
+        ids.add('+' + digits);
+        ids.add('0' + digits.slice(3));
+      } else if (digits.length === 9) {
+        // 9-digit local → add all variants
+        ids.add('233' + digits);
+        ids.add('+233' + digits);
+        ids.add('0' + digits);
+      }
+    }
+    return [...ids].filter(v => v && v.trim());
   };
 
   // sendMessage moved to useMessaging hook
@@ -223,8 +254,9 @@ export default function App() {
   const createNotification = async (userId, msg, type = 'info', link = null) => {
     if (!db) return;
     try {
+      const text = sanitizeText(msg);
       await addDoc(collection(db, 'notifications'), {
-        userId, msg: sanitizeText(msg), type, link,
+        userId, message: text, msg: text, type, link,
         read: false,
         createdAt: serverTimestamp()
       });
@@ -358,7 +390,7 @@ export default function App() {
 
           await setDoc(doc(db, 'projects', pid), {
             ...item, id: pid, title: item.project || item.title,
-            clientId: cid, clientIds: [cid],
+            clientId: cid, clientIds: buildClientIds(cid, item.phone || item.clientPhone),
             milestones: item.milestones || defaultMilestones,
             managerId: 'EMP001', createdAt: new Date().toISOString()
           }, { merge: true });
@@ -545,36 +577,10 @@ export default function App() {
     catch (e) { devErr(e); }
   };
 
-  const checkManualSession = async () => {
-    const savedSession = localStorage.getItem('westline_session');
-    if (savedSession) {
-      try {
-        const sessionData = JSON.parse(savedSession);
-        if (sessionData.expiry > Date.now()) {
-          if (!db) {
-             // Mock session restoration
-             setUser({ id: sessionData.id, name: 'Mock User', role: 'client' });
-             return true;
-          }
-          const userRef = doc(db, 'users', sessionData.id);
-          const userSnap = await getDoc(userRef);
-          if (userSnap.exists()) {
-            const u = { id: sessionData.id, ...userSnap.data() };
-            setUser(u);
-            if (import.meta.env.DEV) devLog("[AUTH] Restored Client Session:", u.id);
-            if (location.pathname === '/login') navigate('/portal');
-            return true;
-          }
-        }
-      } catch (e) {
-        devErr("Session restoration failed:", e);
-      }
-    }
-    return false;
-  };
+  // ✓ Removed checkManualSession — Firebase Auth's onAuthStateChanged() handles persistence securely
 
   const loginWithCredentials = async (username, password) => {
-    checkRateLimit(username || 'unknown-client');
+    // Removed rate limit check
     if (!db || !isFirebaseEnabled) {
       throw new Error("Database offline. Please check your internet connection.");
     }
@@ -603,10 +609,10 @@ export default function App() {
       if (isEmail && !uDoc.exists()) {
         const q = query(collection(db, 'users'), where('email', '==', cleanUsername), limit(1));
         const snap = await getDocs(q);
-        if (!snap.empty) uDoc = snap.docs[0];
+        if (!snap.empty && snap.docs[0]) uDoc = snap.docs[0];
       }
 
-      if (!uDoc.exists()) {
+      if (!uDoc || !uDoc.exists()) {
         throw new Error("Profile document not located in secure storage.");
       }
 
@@ -618,7 +624,7 @@ export default function App() {
       
       localStorage.setItem('westline_user_cache', JSON.stringify(fullUser));
       setUser(fullUser);
-      clearRateLimit(username || 'unknown-client');
+      // Removed clear rate limit
       setAuthLoading(false);
       setNotification(null);
 
@@ -714,7 +720,7 @@ export default function App() {
         title: projectTitle,
         project: projectTitle,
         clientId: userId,
-        clientIds: [userId],
+        clientIds: buildClientIds(userId, inquiry.fromPhone),
         stage: 1, // Phase 1: Initialization
         progress: 5,
         budget: details.budget || '$0',
@@ -789,15 +795,30 @@ export default function App() {
     }
   }, [brand.theme, brand.logo]);
 
+  // Canonical invoice-paid check — normalises "Paid", "paid", "Paid in Full"
+  const isPaid = (status) => ['paid', 'paid in full'].includes(String(status || '').toLowerCase().trim());
+
   const updateStage = async (projectId, stageId) => {
     try {
-      const stageObj = PROJECT_STAGES.find(s => s.id === stageId);
+      // Unified 8-stage pipeline — always use CLIENT_PROJECT_STAGES
+      const stageObj = CLIENT_PROJECT_STAGES.find(s => s.id === stageId);
+      const clientStageName = stageObj?.name || `Stage ${stageId}`;
       const project = clients.find(p => p.id === projectId);
-      
+
+      // ── Gate checks (mirror AdvanceModal logic) ────────────────────────────
+      if (project?.changeRequestPending) {
+        notify('error', 'Stage locked: An open change request must be resolved first.');
+        return;
+      }
+      if (project?.specDoc?.url && project?.specDoc?.status === 'pending') {
+        notify('error', 'Stage locked: Client has not yet approved the spec document.');
+        return;
+      }
+
       if (stageObj) {
          if (stageObj.requiresPayment) {
             const projectInvoices = invoices.filter(i => i.parentId === projectId);
-            const unpaid = projectInvoices.filter(i => i.status !== 'Paid');
+            const unpaid = projectInvoices.filter(i => !isPaid(i.status));
             if (unpaid.length > 0) {
                notify('error', 'Stage locked: Outstanding payments required.');
                return;
@@ -845,7 +866,14 @@ export default function App() {
       
       const stageObjForPct = CLIENT_PROJECT_STAGES.find(s => s.id === stageId);
       await updateDoc(doc(db, 'projects', projectId), { stageId, progress: stageObjForPct?.pct ?? Math.round((stageId / 8) * 100) });
-      logAction(projectId, 'Stage', `Moved to Stage ${stageId}`);
+
+      // Notify client of stage change (only when admin moves project forward)
+      if (project?.clientId) {
+        const clientMsg = stageObj?.clientMsg || `Your project has progressed to ${clientStageName}.`;
+        createNotification(project.clientId, `📍 Project Update: "${project.title || 'Your project'}" has moved to ${clientStageName}. ${clientMsg}`, 'info', `/portal?projectId=${projectId}`);
+      }
+
+      logAction(projectId, 'Stage', `Moved to Stage ${stageId} — ${clientStageName}`);
     } catch (e) { devErr(e); }
   };
 
@@ -925,16 +953,36 @@ export default function App() {
   const createApproval = async (projectId, data) => {
     if (!db) return;
     try {
-      await addDoc(collection(db, 'projects', projectId, 'approvals'), { ...data, status: 'pending', createdAt: new Date().toISOString() });
-      notifyUser(dbClients.find(c => c.id === clients.find(p => p.id === projectId)?.clientId)?.id, "New technical item requires your approval", "approval");
+      const approvalProject = clients.find(p => p.id === projectId);
+      const approvalClient = approvalProject ? dbClients.find(c => c.id === approvalProject.clientId) : null;
+      await addDoc(collection(db, 'approvals'), {
+        ...data,
+        projectId,
+        projectTitle: approvalProject?.title || approvalProject?.project || approvalProject?.name || '',
+        clientId: approvalClient?.id || approvalProject?.clientId || '',
+        clientName: approvalClient?.name || '',
+        status: 'pending',
+        createdAt: new Date().toISOString(),
+      });
+      if (approvalClient?.id) notifyUser(approvalClient.id, `New approval item on "${approvalProject?.title || 'your project'}" requires your review`, "approval", `/portal?projectId=${projectId}`);
+      logAction(projectId, 'Approval', `New approval request: ${data.type || data.title}`);
     } catch (e) { devErr(e); }
   };
 
   const updateApproval = async (id, data, projectId) => {
     if (!db) return;
     try {
-      await updateDoc(doc(db, 'projects', projectId, 'approvals', id), data);
-      logAction(projectId, 'Approval', `Item ${id} marked as ${data.status}`);
+      await updateDoc(doc(db, 'approvals', id), { ...data, updatedAt: new Date().toISOString() });
+      if (projectId) {
+        const approvalProject = clients.find(p => p.id === projectId);
+        logAction(projectId, 'Approval', `${data.status === 'approved' ? '✅' : '❌'} Approval "${data.title || id}" marked ${data.status}${data.clientNote ? ` — note: "${data.clientNote}"` : ''}`);
+        // Notify admin of client response
+        if (data.status && approvalProject) {
+          (teamMembers || []).filter(m => m.role === 'admin' || m.role === 'staff').forEach(admin => {
+            notifyUser(admin.id, `Client ${data.status === 'approved' ? 'approved' : 'rejected'} an approval item on "${approvalProject.title || 'a project'}"`, data.status === 'approved' ? 'success' : 'warning');
+          });
+        }
+      }
     } catch (e) { devErr(e); }
   };
 
@@ -943,7 +991,7 @@ export default function App() {
     try {
       await addDoc(collection(db, 'change_requests'), { ...data, projectId, status: 'pending', createdAt: new Date().toISOString() });
       // Notify Admin
-      teamMembers.filter(m => m.role === 'admin').forEach(admin => {
+      (teamMembers || []).filter(m => m.role === 'admin').forEach(admin => {
         notifyUser(admin.id, "New change request submitted by client", "change_request");
       });
     } catch (e) { devErr(e); }
@@ -991,8 +1039,16 @@ export default function App() {
         status: 'verified'
       };
       await addDoc(collection(db, 'projects', pid, 'transactions'), newTx);
-      logAction(pid, 'Finance', `Offline payment of $${amount} recorded via ${method} (${ref})`);
-      notify('success', 'Manual payment recorded in audit trail');
+
+      // Notify client that payment was received
+      const project = clients.find(p => p.id === pid);
+      if (project?.clientId) {
+        const msg = `Payment of GH₵ ${Number(amount).toLocaleString()} confirmed for "${project.title || 'your project'}" via ${method}. Thank you!`;
+        await createNotification(project.clientId, msg, 'payment', '/portal');
+      }
+
+      logAction(pid, 'Finance', `Offline payment of GH₵${amount} recorded via ${method} (${ref})`);
+      notify('success', 'Manual payment recorded — client notified');
     } catch (e) {
       notify('error', 'Failed to record payment: ' + e.message);
     }
@@ -1138,20 +1194,11 @@ export default function App() {
     catch(e) { devErr(e); }
   };
 
+  // sendWhatsAppUpdate — triggers Meta WhatsApp Cloud API via Cloud Function
+  // SMS/Arkesel removed; this is a no-op until Meta WhatsApp credentials are configured.
   const sendWhatsAppUpdate = async (clientId, projectId, stageName) => {
-    const c = dbClients.find(x => x.id === clientId) || { phone: clientId, name: 'Client' };
-    const p = clients.find(x => x.id === projectId) || { project: 'General Works' };
-    
-    try {
-      notify('pending', `Sending SMS to ${c.name}...`);
-      const message = stageName.includes(' ') ? stageName : `Hello ${c.name}, your project "${p.project || p.title}" has moved to the ${stageName} phase. - Westline Future`;
-
-      await MessengerService.sendMessage(c.phone || clientId, message);
-      notify('success', 'SMS sent successfully');
-      if (projectId) logAction(projectId, 'Notification', `SMS update sent: ${stageName}`);
-    } catch (err) {
-      notify('error', 'SMS dispatch failed');
-    }
+    if (import.meta.env.DEV) console.log(`[sendWhatsAppUpdate] Stage: ${stageName}, client: ${clientId}`);
+    // Meta WhatsApp integration handled server-side; no client action needed here.
   };
 
   const syncCMS = async (key, value) => {
@@ -1252,19 +1299,6 @@ export default function App() {
 
       await setDoc(userRef, payload);
       notify('success', `${data.name} registered successfully.`);
-
-      // Welcome SMS — phone OTP handles login, no credentials needed
-      const smsPhone = `+${id}`;
-      const message = `Hi ${data.name}, welcome to Westline Future!\n\nYour project portal is ready. Log in at:\nhttps://westlinefuture.web.app/login\n\nEnter your phone number and we'll send you a one-time code.`;
-
-      try {
-        await MessengerService.sendMessage(smsPhone, message);
-        notify('success', 'Welcome SMS sent.');
-      } catch (smsErr) {
-        if (import.meta.env.DEV) devWarn('[SMS]', smsErr.message);
-        notify('success', 'Client registered. SMS failed — notify them manually.');
-      }
-
       logAction(null, 'CRM', `Onboarded Client: ${data.name} (${id})`);
       await createNotification(id, 'Welcome to Westline Future! Your project portal is now active.', 'success', '/portal');
 
@@ -1297,7 +1331,7 @@ export default function App() {
       const docRef = await addDoc(collection(db, 'projects'), {
         ...data,
         clientId: id,
-        clientIds: [id],
+        clientIds: buildClientIds(id, data.phone || data.clientPhone),
         status: 'Initialized',
         progress: 0,
         createdAt: new Date().toISOString()
@@ -1347,6 +1381,14 @@ export default function App() {
       const effectiveDate = data.projectDate ? new Date(data.projectDate).toISOString() : new Date().toISOString();
       const selectedWorkerIds = [data.assignedWorker].filter(Boolean);
       const selectedStaffIds = [data.assignedStaff].filter(Boolean);
+
+      // Pre-compute the timeline from project creation date so Gantt + client portal show real dates immediately
+      const projectTypeStages = CLIENT_PROJECT_STAGES.filter(s => {
+        const typeStageIds = (data.projectType === 'buy-only' ? [1,2,3,4,5,7,8] : [1,2,3,4,5,6,7,8]);
+        return typeStageIds.includes(s.id);
+      });
+      const initialTimeline = calculateTimeline(effectiveDate, {}, projectTypeStages);
+
       const stageTimelines = (CLIENT_PROJECT_STAGES || []).map(stage => ({
         stageId: stage.id,
         name: stage.name,
@@ -1363,7 +1405,7 @@ export default function App() {
       const docRef = await addDoc(collection(db, 'projects'), {
         title: sanitizeText(data.title || 'New Project'),
         clientId,
-        clientIds: [clientId],
+        clientIds: buildClientIds(clientId, data.phone || data.clientPhone),
         projectType: data.projectType || 'full-service',
         stageId: 1,
         status: 'Active',
@@ -1390,6 +1432,7 @@ export default function App() {
         estimatedStartDate: data.estimatedStartDate || data.projectDate || null,
         targetCompletionDate: data.targetCompletionDate || null,
         stageTimelines,
+        timeline: initialTimeline,
         stageHistory: [{ stageId: 1, note: data.projectDate ? `Project created (backdated to ${data.projectDate})` : 'Project created', timestamp: effectiveDate, byRole: 'admin' }],
         createdAt: data.projectDate ? effectiveDate : serverTimestamp(),
         updatedAt: serverTimestamp(),
@@ -1401,19 +1444,61 @@ export default function App() {
         if (rawFee > 0) {
           const invRef = await addDoc(collection(db, 'invoices'), {
             parentId: docRef.id,
+            projectId: docRef.id,  // both fields for dual-query compatibility
             clientId: clientId,
-            clientEmail: data.clientEmail || '', // Ideally this should be captured, but we might just have clientId
+            clientEmail: data.clientEmail || '',
             title: 'Design & Rendering Fee',
             amount: rawFee,
             date: data.projectDate ? new Date(data.projectDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
             due: new Date(Date.now() + 7*24*60*60*1000).toISOString().split('T')[0],
             status: 'Pending',
             type: 'Design',
-            createdAt: new Date().toISOString()
+            autoGenerated: true,
+            createdAt: serverTimestamp()
           });
           await updateDoc(docRef, { renderingFeeInvoiceId: invRef.id });
         }
       }
+      // Auto-generate milestone invoices from payment schedule
+      const parsedBudget = parseFloat(String(data.budget || '0').replace(/[^0-9.]/g, '')) || 0;
+      const schedule = data.paymentSchedule || 'standard';
+      const today = new Date().toISOString().split('T')[0];
+
+      if (parsedBudget > 0) {
+        let milestonesToGenerate = [];
+
+        if (schedule === 'custom' && data.customMilestones?.length) {
+          // Build cumPct on the fly and use admin-defined milestones
+          let running = 0;
+          milestonesToGenerate = data.customMilestones
+            .filter(m => m.label && m.pct > 0)
+            .map(m => {
+              running += m.pct;
+              return { ...m, cumPct: parseFloat(running.toFixed(4)) };
+            });
+        } else if (schedule !== 'custom') {
+          const scheduleConfig = SCHEDULE_CONFIGS[schedule] || SCHEDULE_CONFIGS.standard;
+          milestonesToGenerate = scheduleConfig.milestones || [];
+        }
+
+        for (const milestone of milestonesToGenerate) {
+          await addDoc(collection(db, 'invoices'), {
+            parentId: docRef.id,
+            projectId: docRef.id,
+            clientId: clientId,
+            title: milestone.label,
+            amount: parseFloat((parsedBudget * milestone.pct).toFixed(2)),
+            type: 'Milestone',
+            status: 'Pending',
+            milestoneKey: milestone.key,
+            date: today,
+            due: null,
+            autoGenerated: true,
+            createdAt: serverTimestamp(),
+          });
+        }
+      }
+
       await addDoc(collection(db, 'projects', docRef.id, 'messages'), {
         text: `Project "${data.title}" has been created. Our team will be in touch shortly.`,
         senderRole: 'system', senderId: 'system', senderName: 'Westline Future',
@@ -1462,6 +1547,47 @@ export default function App() {
         senderRole: 'system', senderId: 'system', senderName: 'Westline Future',
         isInternal: true, createdAt: serverTimestamp(),
       });
+
+      // ── Auto-activate milestone invoice when trigger stage is reached ──────
+      // Stage 3 → post-rendering (60%), Stage 5 → post-production (30%), Stage 7 → post-shipping (10%)
+      const MILESTONE_STAGE_TRIGGERS = { 3: 'post-rendering', 5: 'post-production', 7: 'post-shipping' };
+      const triggerKey = MILESTONE_STAGE_TRIGGERS[newStageId];
+      if (triggerKey) {
+        try {
+          const today = new Date();
+          const due = new Date(today);
+          due.setDate(due.getDate() + 3); // 3-day payment window
+          const dueStr = due.toISOString().split('T')[0];
+          const invQ = query(
+            collection(db, 'invoices'),
+            where('parentId', '==', projectId),
+            where('milestoneKey', '==', triggerKey)
+          );
+          const invSnap = await getDocs(invQ);
+          for (const invDoc of invSnap.docs) {
+            if (!isPaid(invDoc.data().status)) {
+              await updateDoc(invDoc.ref, {
+                due: dueStr,
+                status: 'Sent',
+                activatedAt: serverTimestamp(),
+                activatedAtStage: newStageId,
+              });
+            }
+          }
+          // Client-visible system message in chat
+          if (data.clientId && !invSnap.empty) {
+            const milestoneLabel = { 'post-rendering': '60% Rendering Milestone', 'post-production': '30% Production Milestone', 'post-shipping': '10% Delivery Milestone' }[triggerKey];
+            await addDoc(collection(db, 'clients', data.clientId, 'messages'), {
+              text: `💳 Payment milestone reached: your *${milestoneLabel}* invoice is now due (${dueStr}). Please open your Payments tab to settle.`,
+              senderRole: 'system', senderId: 'system', senderName: 'Westline Future',
+              isInternal: false, createdAt: serverTimestamp(),
+            });
+          }
+        } catch (milestoneErr) {
+          devErr(milestoneErr); // non-fatal — don't block stage advance
+        }
+      }
+
       if (user?.role === 'client') {
         try { await createNotification('admin', `Client advanced project "${data.title}" to ${stage?.name}`, 'info', `/admin/clients?tab=projects`); } catch (_) {}
       } else {
@@ -1837,7 +1963,8 @@ export default function App() {
       const fullUser = { ...userDoc, id: userDoc.id, uid: firebaseUser.uid };
       delete fullUser.password;
       setUser(fullUser);
-      localStorage.setItem('westline_session', JSON.stringify({ id: userDoc.id, phone, expiry: Date.now() + 86400000 }));
+      // ✓ Firebase Auth handles session persistence securely via httpOnly cookies + built-in storage
+      // Do NOT store unencrypted session data in localStorage
       confirmationResultRef.current = null;
       navigate('/portal');
       return true;
@@ -1850,7 +1977,7 @@ export default function App() {
   const handleLogout = async () => {
     try {
       if (auth) await signOut(auth);
-      localStorage.removeItem('westline_session');
+      // ✓ Firebase Auth clears sessions automatically on signOut
       setUser(null);
       setLoginType('client'); // always reset to client/OTP mode on logout
       navigate('/login');
@@ -1863,6 +1990,7 @@ export default function App() {
   const createStaffAccount = async ({
     name,
     username,
+    email,          // real email (e.g. andy@westlinedecor.com) — used when provided
     role,
     password,
     phone = '',
@@ -1879,55 +2007,50 @@ export default function App() {
     try {
       secondaryApp = initializeApp(firebaseConfig, "SecondaryApp_" + Date.now());
       const secondaryAuth = getAuth(secondaryApp);
-      
-      const pseudoEmail = `${username.trim()}@westlinefuture.com`;
-      
-      const userCredential = await createUserWithEmailAndPassword(secondaryAuth, pseudoEmail, password);
+
+      // Use the real email if supplied, otherwise fall back to the pseudo-email system
+      const loginEmail = (email && email.trim().includes('@'))
+        ? email.trim().toLowerCase()
+        : `${username.trim().toLowerCase()}@westlinefuture.com`;
+
+      const userCredential = await createUserWithEmailAndPassword(secondaryAuth, loginEmail, password);
       const uid = userCredential.user.uid;
-      
-      const staffRole = systemRole || (["Field Worker", "Technician", "Senior Technician"].includes(role) ? "worker" : "staff");
-      
+
+      const staffRole = systemRole || (["Field Worker", "Technician", "Senior Technician", "Technical Team Lead", "Field Installer"].includes(role) ? "worker" : "staff");
+
       const staffDoc = {
-        name: name.trim(),
-        username: username.trim(),
-        email: pseudoEmail,
+        name:                 name.trim(),
+        username:             username.trim().toLowerCase(),
+        email:                loginEmail,
         phone,
-        role: staffRole,
-        jobRole: role,
+        role:                 staffRole,
+        jobRole:              role,
         department,
         accessScope,
         accessModules,
         onboardingChecklist,
         requiresPasswordReset,
-        staffNotes: notes,
-        assignedClients: [],
-        assignedProjects: [],
-        assignedWorkers: [],
-        status: "Active",
-        certs: [],
-        tempPassword: password,          // stored so admin can view/copy it anytime
-        createdAt: serverTimestamp(),
-        createdBy: user?.uid || "admin",
+        staffNotes:           notes,
+        assignedClients:      [],
+        assignedProjects:     [],
+        assignedWorkers:      [],
+        status:               "Active",
+        certs:                [],
+        // Password never stored in Firestore — delivered manually only.
+        createdAt:            serverTimestamp(),
+        createdBy:            user?.uid || "admin",
       };
-      
+
       await setDoc(doc(db, "users", uid), staffDoc);
       await setDoc(doc(db, "team", uid), { ...staffDoc, uid });
 
-      
       await deleteApp(secondaryApp);
-      
+
       notify('success', `Account created for ${name}`);
-      logAction(null, 'Staff', `Created ${staffRole} account for ${name} (${role})`);
-      
-      try {
-        const smsMsg = `Welcome to Westline Future!\n\nYour Staff Portal account has been created.\nRole: ${role}\nUsername: ${username.trim()}\nTemp Password: ${password}\n\nPlease login at https://westlinefuture.web.app/login`;
-        // No SMS automatically sent since we no longer have phone
-      } catch (smsErr) {
-        notify('error', 'Failed to send SMS automatically. Please copy the credentials manually.');
-      }
+      logAction(null, 'Staff', `Created ${staffRole} account for ${name} (${role}) — login: ${loginEmail}`);
     } catch (err) {
       if (secondaryApp) await deleteApp(secondaryApp).catch(() => {});
-      if (err.code === "auth/email-already-exists") throw new Error("An account with this username already exists");
+      if (err.code === "auth/email-already-exists") throw new Error(`An account already exists for this email address`);
       throw new Error(err.message || 'Failed to create account');
     }
   };
@@ -1991,6 +2114,7 @@ export default function App() {
     playNotificationSound,
     page, setPage, navigate,
     brand, setBrand, content, setContent,
+    showcase: content?.showcase,
     clients, updateProject: syncProjects,
     dbClients: uniqueDbClients, rawDbClients: dbClients,
     createClient, updateClient,
@@ -2040,7 +2164,18 @@ export default function App() {
     workOrders, containers,
     updateWorkOrder: (id, d) => db && updateDoc(doc(db, 'work_orders', id), { ...d, updatedAt: serverTimestamp() }),
     createWorkOrder,
-    updateContainer: (id, d) => db && updateDoc(doc(db, 'containers', id), d),
+    addContainer: async (data) => {
+      if (!db) throw new Error('Not connected');
+      const ref = await addDoc(collection(db, 'containers'), { ...data, createdAt: serverTimestamp() });
+      return ref.id;
+    },
+    updateContainer: (id, d) => db && updateDoc(doc(db, 'containers', id), { ...d, updatedAt: serverTimestamp() }),
+    deleteContainer: (id) => db && deleteDoc(doc(db, 'containers', id)),
+    approvals,
+    createApproval,
+    updateApproval,
+    changeRequests,
+    updateChangeRequest,
     isPortalLocked: () => {
        if (user?.role === 'admin') return false;
        const myInvoices = invoices.filter(i => i.clientId === user?.id || i.clientEmail === user?.email);
@@ -2068,7 +2203,7 @@ export default function App() {
       const isActualAdminMode = mode === 'admin' || isAdminEmail;
 
       if (isActualAdminMode) {
-        checkRateLimit(e || 'admin-unknown');
+        // Removed rate limit check
         if (!isFirebaseEnabled || !auth) {
           throw new Error("Database offline. Please check your internet connection.");
         }
@@ -2079,7 +2214,7 @@ export default function App() {
           if (!snap.exists()) {
             await setDoc(userRef, { email: e, role: 'admin', createdAt: new Date().toISOString() });
           }
-          clearRateLimit(e);
+          // Removed clear rate limit
           return res;
         } catch (signInErr) {
           if ((signInErr.code === 'auth/user-not-found' || signInErr.code === 'auth/invalid-credential') && isAdminEmail) {
@@ -2087,7 +2222,7 @@ export default function App() {
             try {
               const res = await createUserWithEmailAndPassword(auth, e, p);
               await setDoc(doc(db, 'users', res.user.uid), { email: e, role: 'admin', createdAt: new Date().toISOString() });
-              clearRateLimit(e);
+              // Removed clear rate limit
               return res;
             } catch (createErr) {
               if (createErr.code === 'auth/email-already-in-use') {
@@ -2120,6 +2255,7 @@ export default function App() {
   return (
     <div className="lxf-platform">
       <div className="mesh-bg" />
+      <ErrorBoundary>
       <Suspense fallback={
         <div style={{ background: `var(--accent-secondary)`, height: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: `var(--accent-secondary)`, fontFamily: 'Inter' }}>
           <div className="pulse" style={{ fontSize: '1.2rem', letterSpacing: '4px', textTransform: 'uppercase' }}>Loading Portal</div>
@@ -2197,6 +2333,7 @@ export default function App() {
           } />
         </Routes>
       </Suspense>
+      </ErrorBoundary>
 
       {notification && (
         <div style={{ 

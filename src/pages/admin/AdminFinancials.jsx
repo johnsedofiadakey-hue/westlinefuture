@@ -6,9 +6,12 @@ import {
   Plus, Search, Trash2, CheckCircle,
   Printer, Landmark, ShieldCheck, ArrowUpRight,
   TrendingUp, Wallet, ArrowDownRight, History,
-  Settings, CreditCard, Eye, Save, X, Layers, Briefcase, Package
+  Settings, CreditCard, Eye, Save, X, Layers, Briefcase, Package,
+  Zap, AlertCircle, CheckCircle2, Loader2, ExternalLink
 } from 'lucide-react';
-import { SBadge, FF as PFormField, Modal } from '../../components/Shared';
+import { functions } from '../../lib/firebase';
+import { httpsCallable } from 'firebase/functions';
+import { SBadge, FF as PFormField, Modal, isPaidStatus } from '../../components/Shared';
 import EmptyState from '../../components/ui/EmptyState';
 import PulseTargetCard from '../../components/PulseTargetCard';
 import InvoiceDocument from '../../components/InvoiceDocument';
@@ -24,6 +27,8 @@ export default function AdminFinancials({ invoices = [], transactions = [], clie
   const [tab, setTab] = useState('overview');
   const [showAdd, setShowAdd] = useState(null); // 'invoice' | 'quotation' | 'receipt'
   const [viewInvoice, setViewInvoice] = useState(null);
+  const [confirmDeleteItem, setConfirmDeleteItem] = useState(null); // { id, type, label }
+  const [updatePaymentModal, setUpdatePaymentModal] = useState(null); // { item, totalAmt, inputVal }
   const ac = brand.color || 'var(--accent-secondary)';
   const notify = props.notify || ((type, msg) => { if (import.meta.env.DEV) console.warn(`[Financials] ${type}: ${msg}`); });
 
@@ -54,26 +59,76 @@ export default function AdminFinancials({ invoices = [], transactions = [], clie
 
   // ─── Gateway Settings ─────────────────────────────────────────────────────
   const [gatewayLoading, setGatewayLoading] = useState(false);
+  const [gatewaySettingsDirty, setGatewaySettingsDirty] = useState(false);
   const [gatewaySettings, setGatewaySettings] = useState(
     brand.gatewaySettings || {
       enableHubtel:        false,
       enablePaystack:      true,
+      paystackPublicKey:   '',
+      paystackSecretKey:   '',
       hubtelClientId:      '',
       hubtelClientSecret:  '',
       hubtelMerchantId:    '',
     }
   );
 
+  // Sync gateway settings from Firebase when brand loads (handles async load after mount)
+  // Only sync if admin hasn't made local edits yet (dirty flag)
+  useEffect(() => {
+    if (!gatewaySettingsDirty && brand.gatewaySettings) {
+      setGatewaySettings(prev => ({ ...prev, ...brand.gatewaySettings }));
+    }
+  }, [brand.gatewaySettings]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Wrapper: mark dirty on every gateway field change so the Firebase sync doesn't clobber edits
+  const updateGateway = (updater) => {
+    setGatewaySettingsDirty(true);
+    setGatewaySettings(updater);
+  };
+
   const saveGatewaySettings = async () => {
     setGatewayLoading(true);
     try {
       if (props.syncCMS) await props.syncCMS('gatewaySettings', gatewaySettings);
       notify('success', 'Gateway settings saved');
+      setHubtelTest(null); // reset test result after saving new creds
+      setGatewaySettingsDirty(false); // allow Firebase sync to update form if needed
     } catch (err) {
       console.error('[Gateway] Save failed:', err);
       notify('error', 'Could not save gateway settings');
     } finally {
       setGatewayLoading(false);
+    }
+  };
+
+  // ─── Hubtel Connection Test ───────────────────────────────────────────────
+  const [hubtelTest, setHubtelTest] = useState(null); // null | 'testing' | { ok, message }
+  const testHubtelConnection = async () => {
+    setHubtelTest('testing');
+    try {
+      const fn = httpsCallable(functions, 'testHubtelConnection');
+      // Pass live form values directly — no need to save first
+      const res = await fn({
+        hubtelClientId:     gatewaySettings.hubtelClientId     || '',
+        hubtelClientSecret: gatewaySettings.hubtelClientSecret || '',
+        hubtelMerchantId:   gatewaySettings.hubtelMerchantId   || '',
+        enableHubtel:       true,
+      });
+      setHubtelTest({ ok: true, message: res.data?.message || 'Credentials verified — Hubtel connection is working.' });
+    } catch (err) {
+      // Parse the Firebase HttpsError message
+      const raw = err?.message || '';
+      let friendly = raw;
+      if (raw.includes('401') || raw.toLowerCase().includes('unauthorized')) {
+        friendly = 'Hubtel rejected the credentials (401 Unauthorized). Check that your Client ID and Client Secret are correct for the Hubtel Merchant Checkout API. Log in to merchants.hubtel.com → Settings → API Keys.';
+      } else if (raw.toLowerCase().includes('not enabled')) {
+        friendly = 'Hubtel is not enabled. Toggle "Enable Hubtel" on and save first.';
+      } else if (raw.toLowerCase().includes('incomplete') || raw.toLowerCase().includes('credentials')) {
+        friendly = 'One or more Hubtel fields are empty. Fill in Client ID, Client Secret, and Merchant Account Number.';
+      } else if (raw.includes('400')) {
+        friendly = 'Hubtel returned a Bad Request (400). Check that the Merchant Account Number is your Hubtel-registered mobile money number (e.g. 0550000000).';
+      }
+      setHubtelTest({ ok: false, message: friendly });
     }
   };
 
@@ -136,7 +191,7 @@ export default function AdminFinancials({ invoices = [], transactions = [], clie
   const parseAmount = (val) => parseFloat(String(val || '0').replace(/[^0-9.]/g, '')) || 0;
 
   const stats = {
-    revenue:      (invoices || []).filter(i => i.status === 'Paid').reduce((a, b) => a + parseAmount(b.amount), 0),
+    revenue:      (invoices || []).filter(i => isPaidStatus(i.status)).reduce((a, b) => a + parseAmount(b.amount), 0),
     pending:      (invoices || []).filter(i => i.status === 'Pending').reduce((a, b) => a + parseAmount(b.amount), 0),
     oneTimeSales: (invoices || []).filter(i => i.oneTimeClient || i.customerType === 'one-time').reduce((a, b) => a + parseAmount(b.amount), 0),
     receipts:     (invoices || []).filter(i => i.type === 'Receipt' || i.documentKind === 'receipt').length,
@@ -187,7 +242,25 @@ export default function AdminFinancials({ invoices = [], transactions = [], clie
         const printContent = document.getElementById('invoice-studio-preview');
         if (printContent) {
           const safeTitle = DOMPurify.sanitize(draft.title || docType);
-          const safeBody  = DOMPurify.sanitize(printContent.innerHTML, { ADD_ATTR: ['style', 'class', 'target'], ADD_TAGS: ['img', 'style'] });
+          // ⚠ Sanitize for print: only allow safe styling, not background URLs or event handlers
+          const safeBody  = DOMPurify.sanitize(printContent.innerHTML, {
+            ADD_ATTR: ['class'],  // Only classes (safer than inline style)
+            ADD_TAGS: ['img', 'style'],
+            ALLOWED_STYLES: {
+              '*': {
+                'color': [/^#[0-9a-f]{6}$/i, /^rgb\(/],
+                'background-color': [/^#[0-9a-f]{6}$/i, /^rgb\(/],
+                'font-size': [/^\d+px$/, /^\d+em$/, /^\d+%$/],
+                'font-weight': [/^(bold|normal|\d{3})$/],
+                'padding': [/^\d+(px|em|%|mm)(\s+\d+(px|em|%|mm))*$/],
+                'margin': [/^\d+(px|em|%|mm)(\s+\d+(px|em|%|mm))*$/],
+                'width': [/^\d+%$/, /^\d+mm$/],
+                'height': [/^\d+mm$/],
+                'text-align': [/^(left|center|right)$/],
+                'border': [/^\d+px\s+(solid|dashed|dotted)\s+#[0-9a-f]{6}$/i],
+              }
+            }
+          });
           const html = `<!DOCTYPE html><html><head><base href="${window.location.origin}/" /><meta charset="UTF-8"><title>${safeTitle}</title><style>@page{size:A4;margin:0}body{margin:0;background:#f0f0f0;font-family:sans-serif}#invoice-studio-preview{width:210mm!important;min-height:297mm!important;border:none!important;margin:40px auto!important;padding:40px!important;box-shadow:0 0 60px rgba(0,0,0,0.12);background:#fff}@media print{body{background:#fff}#invoice-studio-preview{margin:0 auto!important;box-shadow:none!important}button{display:none!important}}</style></head><body><div id="invoice-studio-preview">${safeBody}</div><script>window.onload=()=>{setTimeout(()=>{window.print();},600);};</script></body></html>`;
           const iframe = document.createElement('iframe');
           Object.assign(iframe.style, { position: 'fixed', right: '0', bottom: '0', width: '0', height: '0', border: '0' });
@@ -302,6 +375,27 @@ export default function AdminFinancials({ invoices = [], transactions = [], clie
         </div>
       </div>
 
+      <div className="p-card" style={{ padding: 28, display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <SectionHead title="Contract Template" sub="Default contract shown to clients before they can approve their quote. Clients must read, tick acceptance, and sign before quote approval is unlocked. Override per-project from the Kanban board." />
+        <div style={{ padding: '10px 14px', borderRadius: 10, background: '#F0F9FF', border: '1px solid #BAE6FD', fontSize: 12, color: '#0369A1', lineHeight: 1.6, marginBottom: 4 }}>
+          <strong>Leave blank</strong> to use the built-in default contract clauses (Scope of Work, Payment Terms, 3D Design Approval, Site Readiness, Materials, Warranty, Change Requests, Governing Law). Fill this in when your legal team provides the final contract wording.
+        </div>
+        <textarea
+          className="p-inp"
+          rows={14}
+          placeholder={`INTERIOR DECORATION CONTRACT\n\nThis agreement is entered into on {{date}} between {{company}} ("Contractor") and {{clientName}} ("Client").\n\nPROJECT: {{projectTitle}}\nCONTRACT VALUE: {{budget}}\nESTIMATED COMPLETION: {{completionDate}}\n\n1. SCOPE OF WORK\n[Describe the full scope of interior works here...]\n\n2. PAYMENT TERMS\n[Describe the payment schedule here...]\n\n3. DESIGN APPROVAL\n[Terms around 3D design and change requests...]\n\n4. WARRANTY\n[Warranty terms...]\n\n5. GOVERNING LAW\nThis agreement is governed by the laws of the Republic of Ghana.\n\n— Paste your full contract text here. Use the variables below to auto-fill client and project details. —`}
+          value={finSettings.contractTemplate || ''}
+          onChange={e => setFinSettings({ ...finSettings, contractTemplate: e.target.value })}
+          style={{ resize: 'vertical', fontFamily: 'monospace', fontSize: 12, lineHeight: 1.8 }}
+        />
+        <div style={{ fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.8 }}>
+          <strong>Supported variables</strong> — these are auto-replaced when clients view the contract:{' '}
+          {['{{clientName}}', '{{projectTitle}}', '{{budget}}', '{{company}}', '{{date}}', '{{completionDate}}'].map(v => (
+            <code key={v} style={{ background: 'var(--bg-secondary)', padding: '2px 6px', borderRadius: 4, marginRight: 6 }}>{v}</code>
+          ))}
+        </div>
+      </div>
+
       <div className="p-card" style={{ padding: 28, display: 'flex', flexDirection: 'column', gap: 16 }}>
         <SectionHead title="Document Footer & Signature" sub="Text and signatory name shown at the bottom of all documents" />
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
@@ -322,35 +416,127 @@ export default function AdminFinancials({ invoices = [], transactions = [], clie
       </div>
 
       <div className="p-card" style={{ padding: 28, display: 'flex', flexDirection: 'column', gap: 16 }}>
-        <SectionHead title="Secure Payment Gateways" sub="Configure Hubtel & Paystack API Keys. These are stored securely and never exposed to the client." />
+        <SectionHead title="Secure Payment Gateways" sub="Configure payment APIs. Keys are stored securely and never exposed to clients." />
         {gatewayLoading ? (
-          <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Loading secure settings...</div>
+          <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Loading secure settings…</div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, padding: 16, background: 'var(--bg-secondary)', borderRadius: 12 }}>
               <div>
-                <ToggleRow label="Enable Hubtel" sub="Show Hubtel as a payment option" checked={gatewaySettings.enableHubtel} onChange={e => setGatewaySettings(s => ({ ...s, enableHubtel: e.target.checked }))} />
+                <ToggleRow label="Enable Hubtel" sub="Mobile Money checkout via Hubtel POS API" checked={gatewaySettings.enableHubtel} onChange={e => updateGateway(s => ({ ...s, enableHubtel: e.target.checked }))} />
               </div>
               <div>
-                <ToggleRow label="Enable Paystack" sub="Show Paystack as a payment option" checked={gatewaySettings.enablePaystack} onChange={e => setGatewaySettings(s => ({ ...s, enablePaystack: e.target.checked }))} />
+                <ToggleRow label="Enable Paystack" sub="Card & bank payments via Paystack" checked={gatewaySettings.enablePaystack} onChange={e => updateGateway(s => ({ ...s, enablePaystack: e.target.checked }))} />
               </div>
             </div>
 
-            {gatewaySettings.enableHubtel && (
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
-                <PFormField label="Hubtel Client ID">
-                  <input className="p-inp" type="password" value={gatewaySettings.hubtelClientId || ''} onChange={e => setGatewaySettings(s => ({ ...s, hubtelClientId: e.target.value }))} placeholder="Enter Client ID" />
-                </PFormField>
-                <PFormField label="Hubtel Client Secret">
-                  <input className="p-inp" type="password" value={gatewaySettings.hubtelClientSecret || ''} onChange={e => setGatewaySettings(s => ({ ...s, hubtelClientSecret: e.target.value }))} placeholder="Enter Client Secret" />
-                </PFormField>
-                <PFormField label="Hubtel Merchant Account #">
-                  <input className="p-inp" value={gatewaySettings.hubtelMerchantId || ''} onChange={e => setGatewaySettings(s => ({ ...s, hubtelMerchantId: e.target.value }))} placeholder="e.g. HM00000" />
-                </PFormField>
-              </div>
+            {gatewaySettings.enablePaystack && (
+              <>
+                {/* Live status chip — immediately shows whether keys are saved */}
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  {gatewaySettings.paystackPublicKey ? (
+                    <span style={{ fontSize: 11, fontWeight: 800, padding: '4px 10px', borderRadius: 999, background: '#D1FAE5', color: '#065F46' }}>✓ Public Key Set</span>
+                  ) : (
+                    <span style={{ fontSize: 11, fontWeight: 800, padding: '4px 10px', borderRadius: 999, background: '#FEF3C7', color: '#92400E' }}>⚠ Public Key Missing — clients will see "gateway not configured"</span>
+                  )}
+                  {gatewaySettings.paystackSecretKey ? (
+                    <span style={{ fontSize: 11, fontWeight: 800, padding: '4px 10px', borderRadius: 999, background: '#D1FAE5', color: '#065F46' }}>✓ Secret Key Set</span>
+                  ) : (
+                    <span style={{ fontSize: 11, fontWeight: 800, padding: '4px 10px', borderRadius: 999, background: '#FEE2E2', color: '#991B1B' }}>✗ Secret Key Missing — payments will fail at verification</span>
+                  )}
+                </div>
+                <div style={{ padding: '12px 16px', borderRadius: 10, background: '#F0FDF4', border: '1.5px solid #BBF7D0', fontSize: 12, lineHeight: 1.7, color: '#15803D' }}>
+                  <strong>Where to find these keys:</strong> Log in to{' '}
+                  <a href="https://dashboard.paystack.com/#/settings/developer" target="_blank" rel="noreferrer" style={{ color: '#15803D', fontWeight: 700 }}>
+                    dashboard.paystack.com <ExternalLink size={10} style={{ verticalAlign: 'middle' }} />
+                  </a>{' '}
+                  → Settings → API Keys &amp; Webhooks. Use <strong>Test keys</strong> while testing, <strong>Live keys</strong> for real payments.
+                  Public key starts with <code style={{ background: '#DCFCE7', padding: '1px 4px', borderRadius: 3 }}>pk_</code>, Secret key starts with <code style={{ background: '#DCFCE7', padding: '1px 4px', borderRadius: 3 }}>sk_</code>.
+                </div>
+                {/* Key format warnings — shown inline next to the field */}
+                {gatewaySettings.paystackPublicKey && !gatewaySettings.paystackPublicKey.startsWith('pk_') && (
+                  <div style={{ padding: '10px 14px', borderRadius: 8, background: '#FEF3C7', border: '1.5px solid #FDE68A', fontSize: 12, color: '#92400E', fontWeight: 700 }}>
+                    ⚠ Public Key should start with <code>pk_</code>. It looks like you may have entered the Secret Key here. Please double-check.
+                  </div>
+                )}
+                {gatewaySettings.paystackSecretKey && !gatewaySettings.paystackSecretKey.startsWith('sk_') && (
+                  <div style={{ padding: '10px 14px', borderRadius: 8, background: '#FEF3C7', border: '1.5px solid #FDE68A', fontSize: 12, color: '#92400E', fontWeight: 700 }}>
+                    ⚠ Secret Key should start with <code>sk_</code>. Please double-check.
+                  </div>
+                )}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                  <PFormField label="Paystack Public Key" sub="Shown to clients — safe to expose. Must start with pk_">
+                    <input
+                      className="p-inp"
+                      value={gatewaySettings.paystackPublicKey || ''}
+                      onChange={e => updateGateway(s => ({ ...s, paystackPublicKey: e.target.value.trim() }))}
+                      placeholder="pk_test_... or pk_live_..."
+                      autoComplete="off"
+                      style={{ borderColor: gatewaySettings.paystackPublicKey && !gatewaySettings.paystackPublicKey.startsWith('pk_') ? '#F59E0B' : undefined }}
+                    />
+                  </PFormField>
+                  <PFormField label="Paystack Secret Key" sub="Server-side only — never shared. Must start with sk_">
+                    <input
+                      className="p-inp"
+                      type="password"
+                      value={gatewaySettings.paystackSecretKey || ''}
+                      onChange={e => updateGateway(s => ({ ...s, paystackSecretKey: e.target.value.trim() }))}
+                      placeholder="sk_test_... or sk_live_..."
+                      autoComplete="off"
+                      style={{ borderColor: gatewaySettings.paystackSecretKey && !gatewaySettings.paystackSecretKey.startsWith('sk_') ? '#F59E0B' : undefined }}
+                    />
+                  </PFormField>
+                </div>
+              </>
             )}
+
+            {gatewaySettings.enableHubtel && (
+              <>
+                {/* Hubtel setup guidance */}
+                <div style={{ padding: '14px 16px', borderRadius: 10, background: '#F0F9FF', border: '1.5px solid #BAE6FD', fontSize: 12, lineHeight: 1.9, color: '#0369A1' }}>
+                  <div style={{ fontWeight: 800, marginBottom: 6, fontSize: 13 }}>📋 Exactly where to get each field:</div>
+                  <div>① <strong>Client ID</strong> → Log into <a href="https://developers.hubtel.com" target="_blank" rel="noreferrer" style={{ color: '#0284C7', fontWeight: 700 }}>developers.hubtel.com</a> → <strong>Programmable API Keys → Payment Keys</strong> → copy the <strong>API ID</strong> (e.g. <code style={{ background: '#E0F2FE', padding: '1px 5px', borderRadius: 3 }}>Z4ZBlYQ</code>)</div>
+                  <div>② <strong>Client Secret</strong> → Same page → copy the <strong>API Key</strong> (the long hex string)</div>
+                  <div>③ <strong>Merchant Account Number</strong> → Same portal → <strong>Programmable API Keys → Account ID tab</strong> → copy the <strong>Collection Account number</strong> (e.g. <code style={{ background: '#E0F2FE', padding: '1px 5px', borderRadius: 3 }}>2039233</code>). This is the account that receives payments.</div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+                  <PFormField label="Hubtel Client ID (API Key)" sub="From merchants.hubtel.com → Settings → App Integrations">
+                    <input className="p-inp" type="password" value={gatewaySettings.hubtelClientId || ''} onChange={e => { updateGateway(s => ({ ...s, hubtelClientId: e.target.value })); setHubtelTest(null); }} placeholder="API Client ID" autoComplete="off" />
+                  </PFormField>
+                  <PFormField label="Hubtel Client Secret (API Secret)" sub="From the same App Integrations page">
+                    <input className="p-inp" type="password" value={gatewaySettings.hubtelClientSecret || ''} onChange={e => { updateGateway(s => ({ ...s, hubtelClientSecret: e.target.value })); setHubtelTest(null); }} placeholder="API Client Secret" autoComplete="off" />
+                  </PFormField>
+                  <PFormField label="Merchant Account Number" sub="Collection Account number from developers.hubtel.com → Account ID tab (e.g. 2039233)">
+                    <input className="p-inp" value={gatewaySettings.hubtelMerchantId || ''} onChange={e => { updateGateway(s => ({ ...s, hubtelMerchantId: e.target.value })); setHubtelTest(null); }} placeholder="e.g. 2039233" autoComplete="off" />
+                  </PFormField>
+                </div>
+
+                {/* Test Connection */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                  <button
+                    onClick={testHubtelConnection}
+                    disabled={hubtelTest === 'testing' || !gatewaySettings.hubtelClientId || !gatewaySettings.hubtelClientSecret || !gatewaySettings.hubtelMerchantId}
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 18px', borderRadius: 10, border: '1.5px solid var(--border-color)', background: 'var(--bg-secondary)', fontSize: 12, fontWeight: 700, cursor: 'pointer', opacity: (!gatewaySettings.hubtelClientId || !gatewaySettings.hubtelClientSecret || !gatewaySettings.hubtelMerchantId) ? 0.5 : 1 }}
+                  >
+                    {hubtelTest === 'testing' ? <><Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> Testing…</> : <><Zap size={13} /> Test Connection</>}
+                  </button>
+
+                  {hubtelTest && hubtelTest !== 'testing' && (
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '9px 14px', borderRadius: 10, background: hubtelTest.ok ? '#F0FDF4' : '#FFF8F0', border: `1.5px solid ${hubtelTest.ok ? '#BBF7D0' : '#FED7AA'}`, color: hubtelTest.ok ? '#15803D' : '#92400E', fontSize: 12, lineHeight: 1.5, flex: 1, maxWidth: 540 }}>
+                      {hubtelTest.ok ? <CheckCircle2 size={14} style={{ marginTop: 1, flexShrink: 0 }} /> : <AlertCircle size={14} style={{ marginTop: 1, flexShrink: 0 }} />}
+                      <span>{hubtelTest.message}</span>
+                    </div>
+                  )}
+                </div>
+                <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+              </>
+            )}
+
             <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
-               <button onClick={saveGatewaySettings} className="p-btn-gold" style={{ padding: '10px 24px', fontSize: 13 }}>Save Gateway Settings</button>
+              <button onClick={saveGatewaySettings} disabled={gatewayLoading} className="p-btn-gold" style={{ padding: '10px 24px', fontSize: 13, display: 'inline-flex', alignItems: 'center', gap: 7 }}>
+                {gatewayLoading ? <><Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> Saving…</> : <><Save size={13} /> Save Gateway Settings</>}
+              </button>
             </div>
           </div>
         )}
@@ -670,30 +856,19 @@ export default function AdminFinancials({ invoices = [], transactions = [], clie
                         {tab === 'sales' && props.updateInvoice && (
                           <button
                             onClick={() => {
-                              const curAmt   = item.amountPaid || 0;
+                              const curAmt  = item.amountPaid || 0;
                               const totalAmt = parseFloat(String(item.amount || '0').replace(/[^0-9.]/g, '')) || 0;
-                              const res = prompt(`Enter Total Amount Paid (GHS)\n\nTotal Invoice: ${totalAmt}`, curAmt);
-                              if (res !== null) {
-                                const newPaid  = Number(res.replace(/[^0-9.]/g, ''));
-                                if (!isNaN(newPaid)) {
-                                  let newStatus = item.status;
-                                  if (newPaid >= totalAmt && totalAmt > 0) newStatus = 'Paid';
-                                  else if (newPaid > 0) newStatus = 'Partially Paid';
-                                  else newStatus = 'Pending';
-                                  props.updateInvoice(item.id, { amountPaid: newPaid, status: newStatus });
-                                }
-                              }
+                              setUpdatePaymentModal({ item, totalAmt, inputVal: String(curAmt) });
                             }}
                             style={{ width: 34, height: 34, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8, background: '#ECFDF5', border: '1px solid #A7F3D0', cursor: 'pointer', color: '#059669', transition: 'background .15s' }} title="Update Payment"
                           ><DollarSign size={14}/></button>
                         )}
                         <button
-                          onClick={() => {
-                            if (!window.confirm(`Delete this ${tab === 'sales' ? 'invoice' : 'quotation'}? This cannot be undone.`)) return;
-                            if (tab === 'sales') deleteInvoice?.(item.id);
-                            else if (item._sourceCollection === 'invoices') deleteInvoice?.(item.id);
-                            else deleteProposal?.(item.id);
-                          }}
+                          onClick={() => setConfirmDeleteItem({
+                            id: item.id,
+                            type: (tab === 'sales' || item._sourceCollection === 'invoices') ? 'invoice' : 'quotation',
+                            label: tab === 'sales' ? 'invoice' : 'quotation',
+                          })}
                           style={{ width: 34, height: 34, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8, background: '#FEF2F2', border: '1px solid #FECACA', cursor: 'pointer', color: '#DC2626', transition: 'background .15s' }} title="Delete"
                         ><Trash2 size={14}/></button>
                       </div>
@@ -1015,7 +1190,25 @@ export default function AdminFinancials({ invoices = [], transactions = [], clie
                   const printContent = document.getElementById('printable-financial-view');
                   if (!printContent) return;
                   const safeTitle = DOMPurify.sanitize(viewInvoice.title || viewInvoice.type || 'Invoice');
-                  const safeBody  = DOMPurify.sanitize(printContent.innerHTML, { ADD_ATTR: ['style', 'class', 'target'], ADD_TAGS: ['img', 'style'] });
+                  // ⚠ Sanitize for print: only allow safe styling, not background URLs or event handlers
+          const safeBody  = DOMPurify.sanitize(printContent.innerHTML, {
+            ADD_ATTR: ['class'],  // Only classes (safer than inline style)
+            ADD_TAGS: ['img', 'style'],
+            ALLOWED_STYLES: {
+              '*': {
+                'color': [/^#[0-9a-f]{6}$/i, /^rgb\(/],
+                'background-color': [/^#[0-9a-f]{6}$/i, /^rgb\(/],
+                'font-size': [/^\d+px$/, /^\d+em$/, /^\d+%$/],
+                'font-weight': [/^(bold|normal|\d{3})$/],
+                'padding': [/^\d+(px|em|%|mm)(\s+\d+(px|em|%|mm))*$/],
+                'margin': [/^\d+(px|em|%|mm)(\s+\d+(px|em|%|mm))*$/],
+                'width': [/^\d+%$/, /^\d+mm$/],
+                'height': [/^\d+mm$/],
+                'text-align': [/^(left|center|right)$/],
+                'border': [/^\d+px\s+(solid|dashed|dotted)\s+#[0-9a-f]{6}$/i],
+              }
+            }
+          });
                   const html = `<html><head><base href="${window.location.origin}/" /><title>${safeTitle}</title><style>@page{size:A4;margin:0}body{margin:0;font-family:sans-serif}#printable-financial-view{width:210mm!important;min-height:297mm!important;border:none!important;margin:0!important;box-shadow:none!important;padding:40px!important;zoom:1!important}@media print{button{display:none!important}}</style></head><body><div id="printable-financial-view" style="width:210mm;margin:0 auto">${safeBody}</div></body></html>`;
                   const iframe = document.createElement('iframe');
                   Object.assign(iframe.style, { position: 'fixed', right: '0', bottom: '0', width: '0', height: '0', border: '0' });
@@ -1033,6 +1226,82 @@ export default function AdminFinancials({ invoices = [], transactions = [], clie
             </div>
           </div>
         </Modal>
+      )}
+
+      {/* Update Payment modal — replaces window.prompt (blocked by ad blockers) */}
+      {updatePaymentModal && createPortal(
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+          <div style={{ background: 'var(--bg-primary)', borderRadius: 20, padding: 32, maxWidth: 380, width: '100%', boxShadow: '0 24px 64px rgba(0,0,0,0.18)' }}>
+            <div style={{ fontWeight: 800, fontSize: 16, marginBottom: 4 }}>Update Amount Paid</div>
+            <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 20 }}>
+              Invoice total: <strong>GHS {updatePaymentModal.totalAmt.toLocaleString()}</strong>
+            </div>
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              value={updatePaymentModal.inputVal}
+              onChange={e => setUpdatePaymentModal(s => ({ ...s, inputVal: e.target.value }))}
+              placeholder="Amount paid (GHS)"
+              style={{ width: '100%', height: 44, borderRadius: 12, border: '1.5px solid var(--border-color)', padding: '0 14px', fontSize: 14, background: 'var(--bg-secondary)', boxSizing: 'border-box', marginBottom: 16 }}
+              autoFocus
+              onKeyDown={e => {
+                if (e.key === 'Enter') {
+                  const newPaid = parseFloat(String(updatePaymentModal.inputVal || '0').replace(/[^0-9.]/g, '')) || 0;
+                  const { item, totalAmt } = updatePaymentModal;
+                  let newStatus = item.status;
+                  if (newPaid >= totalAmt && totalAmt > 0) newStatus = 'Paid';
+                  else if (newPaid > 0) newStatus = 'Partially Paid';
+                  else newStatus = 'Pending';
+                  props.updateInvoice(item.id, { amountPaid: newPaid, status: newStatus });
+                  setUpdatePaymentModal(null);
+                }
+                if (e.key === 'Escape') setUpdatePaymentModal(null);
+              }}
+            />
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={() => setUpdatePaymentModal(null)} style={{ flex: 1, height: 44, borderRadius: 12, border: '1.5px solid var(--border-color)', background: 'transparent', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Cancel</button>
+              <button
+                onClick={() => {
+                  const newPaid = parseFloat(String(updatePaymentModal.inputVal || '0').replace(/[^0-9.]/g, '')) || 0;
+                  const { item, totalAmt } = updatePaymentModal;
+                  let newStatus = item.status;
+                  if (newPaid >= totalAmt && totalAmt > 0) newStatus = 'Paid';
+                  else if (newPaid > 0) newStatus = 'Partially Paid';
+                  else newStatus = 'Pending';
+                  props.updateInvoice(item.id, { amountPaid: newPaid, status: newStatus });
+                  setUpdatePaymentModal(null);
+                }}
+                style={{ flex: 1, height: 44, borderRadius: 12, border: 'none', background: '#059669', color: '#fff', fontSize: 13, fontWeight: 800, cursor: 'pointer' }}
+              >Save Payment</button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Delete confirmation modal — replaces window.confirm (blocked by ad blockers) */}
+      {confirmDeleteItem && createPortal(
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+          <div style={{ background: 'var(--bg-primary)', borderRadius: 20, padding: 32, maxWidth: 360, width: '100%', textAlign: 'center', boxShadow: '0 24px 64px rgba(0,0,0,0.18)' }}>
+            <div style={{ fontSize: 28, marginBottom: 12 }}>🗑️</div>
+            <div style={{ fontSize: 15, fontWeight: 800, marginBottom: 8, textTransform: 'capitalize' }}>Delete this {confirmDeleteItem.label}?</div>
+            <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 24 }}>This cannot be undone. The document will be permanently removed.</div>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={() => setConfirmDeleteItem(null)} style={{ flex: 1, height: 44, borderRadius: 12, border: '1.5px solid var(--border-color)', background: 'transparent', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Cancel</button>
+              <button
+                onClick={() => {
+                  const { id, type } = confirmDeleteItem;
+                  setConfirmDeleteItem(null);
+                  if (type === 'invoice') deleteInvoice?.(id);
+                  else deleteProposal?.(id);
+                }}
+                style={{ flex: 1, height: 44, borderRadius: 12, border: 'none', background: '#ef4444', color: '#fff', fontSize: 13, fontWeight: 800, cursor: 'pointer' }}
+              >Delete</button>
+            </div>
+          </div>
+        </div>,
+        document.body
       )}
     </div>
   );

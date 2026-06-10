@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, Trash2, ShieldCheck, Award, HardHat, Heart, UserPlus, Eye, EyeOff, Copy, Check, X, Users, UserCog, Search, KeyRound } from 'lucide-react';
+import { Plus, Trash2, ShieldCheck, Award, HardHat, Heart, UserPlus, Eye, EyeOff, Copy, Check, X, Users, UserCog, Search, KeyRound, MessageCircle, AlertTriangle, Loader2 } from 'lucide-react';
 import { PAv, PSBadge, CountryPicker, COUNTRIES } from '../../components/Shared';
 import { db, firebaseConfig, functions } from '../../lib/firebase';
 import { initializeApp, deleteApp } from 'firebase/app';
@@ -95,7 +95,7 @@ function genPassword() {
 }
 
 // ─── Assign Clients Modal ─────────────────────────────────────────────────────
-function AssignClientsModal({ member, clients, onClose, updateMember }) {
+function AssignClientsModal({ member, clients, onClose, updateMember, notify }) {
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState(new Set(member.assignedClients || []));
   const [saving, setSaving] = useState(false);
@@ -128,6 +128,7 @@ function AssignClientsModal({ member, clients, onClose, updateMember }) {
       setTimeout(onClose, 700);
     } catch (e) {
       if (import.meta.env.DEV) console.error('[AssignClients]', e);
+      notify?.('error', e.message || 'Failed to save client assignments');
     }
     setSaving(false);
   };
@@ -229,25 +230,147 @@ export default function AdminStaff({ team = [], brand, createStaffAccount, clien
   const [repairing, setRepairing] = useState(false);
   const [repairResult, setRepairResult] = useState(null);
   // Password management per staff member
-  const [pwPanel, setPwPanel] = useState(null);      // member id whose panel is open
-  const [pwVisible, setPwVisible] = useState({});     // { [id]: true } if revealed
-  const [newPwInputs, setNewPwInputs] = useState({}); // { [id]: 'newpassword' }
-  const [pwSaving, setPwSaving] = useState({});       // { [id]: true } if saving
+  const [pwPanel, setPwPanel]       = useState(null);
+  const [pwVisible, setPwVisible]   = useState({});
+  const [newPwInputs, setNewPwInputs] = useState({});
+  const [pwSaving, setPwSaving]     = useState({});
+
+  // Delete / deactivate confirmation modal
+  const [deleteConfirm, setDeleteConfirm] = useState(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+
+  // ── Bulk Import ───────────────────────────────────────────────────────────
+  const [showBulkImport, setShowBulkImport]   = useState(false);
+  const [bulkRows, setBulkRows]               = useState([]);   // { name, email, username, role, password, status, error }
+  const [bulkRunning, setBulkRunning]         = useState(false);
+  const [bulkDone, setBulkDone]               = useState(false);
+  const [bulkCredsCopied, setBulkCredsCopied] = useState(false);
+
+  const parseBulkEmails = (raw) => {
+    return raw
+      .split(/[\n,]+/)
+      .map(e => e.trim().toLowerCase())
+      .filter(e => e.includes('@'))
+      .map(email => {
+        const local    = email.split('@')[0];
+        const name     = local.charAt(0).toUpperCase() + local.slice(1);
+        const username = local.replace(/[^a-z0-9]/g, '');
+        return { name, email, username, role: 'Technician', password: genPassword(), status: 'pending', error: null };
+      });
+  };
+
+  const openBulkImport = () => {
+    const preset = [
+      'andy@westlinedecor.com',
+      'summer@westlinedecor.com',
+      'amy@westlinedecor.com',
+      'nancy@westlinedecor.com',
+      'hannah@westlinedecor.com',
+      'daniel@westlinedecor.com',
+      'info@westlinedecor.com',
+      'Anna@westlinedecor.com',
+      'Richard@westlinedecor.com',
+      'Lucas@westlinedecor.com',
+    ].join('\n');
+    setBulkRows(parseBulkEmails(preset));
+    setBulkRunning(false);
+    setBulkDone(false);
+    setBulkCredsCopied(false);
+    setShowBulkImport(true);
+  };
+
+  const runBulkImport = async () => {
+    if (!createStaffAccount) { notify?.('error', 'createStaffAccount not available'); return; }
+    setBulkRunning(true);
+    const updated = [...bulkRows];
+    for (let i = 0; i < updated.length; i++) {
+      const row = updated[i];
+      if (row.status === 'success') continue;
+      setBulkRows(prev => prev.map((r, idx) => idx === i ? { ...r, status: 'creating' } : r));
+      try {
+        const roleProfile = ROLE_PROFILES[row.role] || ROLE_PROFILES.Technician;
+        await createStaffAccount({
+          name:               row.name,
+          email:              row.email,
+          username:           row.username,
+          role:               row.role,
+          password:           row.password,
+          phone:              '',
+          department:         'Operations',
+          accessScope:        'assigned',
+          notes:              '',
+          systemRole:         roleProfile.systemRole,
+          accessModules:      roleProfile.modules,
+          onboardingChecklist: roleProfile.onboarding.map(item => ({ item, done: false })),
+          requiresPasswordReset: true,
+        });
+        updated[i] = { ...row, status: 'success' };
+        setBulkRows([...updated]);
+      } catch (e) {
+        const msg = e?.message || 'Failed';
+        updated[i] = { ...row, status: 'error', error: msg.includes('already exists') ? 'Email already in use' : msg };
+        setBulkRows([...updated]);
+      }
+    }
+    setBulkRunning(false);
+    setBulkDone(true);
+  };
+
+  const copyBulkCredentials = () => {
+    const lines = bulkRows
+      .filter(r => r.status === 'success')
+      .map(r => `Name: ${r.name} | Email: ${r.email} | Password: ${r.password} | Role: ${r.role}`)
+      .join('\n');
+    navigator.clipboard.writeText(`Staff Credentials — Westline Future\n\n${lines}\n\nLogin: ${window.location.origin}/login`);
+    setBulkCredsCopied(true);
+    setTimeout(() => setBulkCredsCopied(false), 3000);
+  };
 
   const updateM = (id, fields) => {
     if (props.updateMember) props.updateMember(id, fields);
     else if (props.onUpdateMember) props.onUpdateMember(id, fields);
   };
 
+  // Opens the modal — no window.confirm (blocked by ad blockers → ERR_BLOCKED_BY_CLIENT)
   const deleteM = (member) => {
     if (!member?.id) return;
-    if (window.confirm(`Deactivate ${member.name || 'this staff member'}? Their account history remains, but they should no longer receive new assignments.`)) {
-      updateM(member.id, {
+    setDeleteConfirm(member);
+  };
+
+  const handleDeactivate = async () => {
+    if (!deleteConfirm) return;
+    setDeleteLoading(true);
+    try {
+      await updateM(deleteConfirm.id, {
         status: 'Inactive',
         deactivatedAt: new Date().toISOString(),
-        deactivationReason: 'Deactivated from Staff Governance'
+        deactivationReason: 'Deactivated from Staff Governance',
       });
-      notify?.('success', `${member.name || 'Staff member'} deactivated`);
+      notify?.('success', `${deleteConfirm.name || 'Staff member'} deactivated`);
+      setDeleteConfirm(null);
+    } catch (e) {
+      notify?.('error', e.message || 'Failed to deactivate account');
+    } finally {
+      setDeleteLoading(false);
+    }
+  };
+
+  const handlePermanentDelete = async () => {
+    if (!deleteConfirm) return;
+    setDeleteLoading(true);
+    try {
+      if (props.deleteMember) {
+        await props.deleteMember(deleteConfirm.id);
+      } else {
+        // Fallback: just deactivate if deleteMember isn't wired
+        await updateM(deleteConfirm.id, { status: 'Inactive', deactivatedAt: new Date().toISOString() });
+        notify?.('success', `${deleteConfirm.name || 'Staff member'} deactivated`);
+      }
+      setDeleteConfirm(null);
+    } catch (e) {
+      notify?.('error', e.message || 'Failed to delete account');
+    } finally {
+      setDeleteLoading(false);
     }
   };
 
@@ -277,7 +400,7 @@ export default function AdminStaff({ team = [], brand, createStaffAccount, clien
         requiresPasswordReset: true,
         accessScope: form.accessScope
       });
-      setCreated({ name: form.name, username: cleanUsername, password: tempPw, role: form.role, modules: roleProfile.modules });
+      setCreated({ name: form.name, username: cleanUsername, password: tempPw, role: form.role, modules: roleProfile.modules, phone: normalizedPhone });
       setForm({ name: '', username: '', role: 'Project Manager', countryCode: defaultCountry.code, phone: '', department: 'Operations', accessScope: 'assigned', notes: '' });
     } catch (e) {
       notify?.('error', e.message || 'Failed to create account');
@@ -295,35 +418,20 @@ export default function AdminStaff({ team = [], brand, createStaffAccount, clien
   const handleSetPassword = async (m, newPw) => {
     if (!m.id) { notify?.('error', 'Cannot identify staff account.'); return; }
     if (!newPw || newPw.trim().length < 6) { notify?.('error', 'Password must be at least 6 characters.'); return; }
-    
+
     setPwSaving(s => ({ ...s, [m.id]: true }));
-    let secondaryApp;
     try {
-      if (!m.tempPassword) {
-        throw new Error("Missing initial password in database. Cannot reset without cloud function.");
-      }
-      
-      // Try to update using a secondary client instance (old reliable method)
-      secondaryApp = initializeApp(firebaseConfig, 'PwReset_' + Date.now());
-      const secondaryAuth = getAuth(secondaryApp);
-      const cred = await signInWithEmailAndPassword(secondaryAuth, m.email, m.tempPassword);
-      await updatePassword(cred.user, newPw.trim());
-      await updateDoc(doc(db, 'users', m.id), {
-        tempPassword: newPw.trim(),
-        passwordUpdatedAt: new Date().toISOString(),
-      }).catch(() => {});
-      
+      // Use setStaffPassword cloud function — updates Firebase Auth via Admin SDK.
+      // Password is never stored in Firestore.
+      const fn = httpsCallable(functions, 'setStaffPassword');
+      await fn({ uid: m.id, newPassword: newPw.trim() });
+
       notify?.('success', `Password updated for ${m.name}`);
       setNewPwInputs(s => ({ ...s, [m.id]: '' }));
       setPwPanel(null);
     } catch (e) {
-      if (e.code === 'auth/wrong-password' || e.code === 'auth/invalid-credential') {
-        notify?.('error', "Initial password mismatch. You may need to delete and recreate this account.");
-      } else {
         notify?.('error', e.message || 'Failed to update password');
-      }
     } finally {
-      if (secondaryApp) await deleteApp(secondaryApp).catch(() => {});
       setPwSaving(s => ({ ...s, [m.id]: false }));
     }
   };
@@ -358,6 +466,9 @@ export default function AdminStaff({ team = [], brand, createStaffAccount, clien
           </button>
           <button onClick={() => { setForm(f => ({ ...f, role: 'Field Installer', department: 'Installations' })); setShowModal(true); setCreated(null); }} style={{ padding: '10px 20px', fontSize: 13, gap: 8, display: 'flex', alignItems: 'center', borderRadius: 12, border: '1px solid var(--border-color)', background: '#fff', cursor: 'pointer', fontWeight: 700, color: `var(--accent-secondary)`, fontFamily: 'inherit' }}>
             <HardHat size={16} /> Add Technical Team
+          </button>
+          <button onClick={openBulkImport} style={{ padding: '10px 18px', fontSize: 13, gap: 8, display: 'flex', alignItems: 'center', borderRadius: 12, border: '1.5px solid var(--border-color)', background: 'var(--bg-secondary)', cursor: 'pointer', fontWeight: 700, color: 'var(--text-secondary)', fontFamily: 'inherit' }}>
+            <Users size={15} /> Bulk Import
           </button>
           <button onClick={() => { setForm(f => ({ ...f, role: 'Project Manager', department: 'Operations' })); setShowModal(true); setCreated(null); }} className="p-btn-dark lxf" style={{ padding: '10px 20px', fontSize: 13, gap: 8, display: 'flex', alignItems: 'center' }}>
             <UserPlus size={16} /> Create Staff Account
@@ -460,7 +571,7 @@ export default function AdminStaff({ team = [], brand, createStaffAccount, clien
                     {/* Password manage button */}
                     <button
                       onClick={() => setPwPanel(pwPanel === m.id ? null : m.id)}
-                      title="View / reset password"
+                      title="Set or reset password"
                       style={{
                         display: 'flex', alignItems: 'center', gap: 5, padding: '6px 10px', borderRadius: 8,
                         background: pwPanel === m.id ? `${ac}15` : `var(--bg-secondary)`,
@@ -469,8 +580,8 @@ export default function AdminStaff({ team = [], brand, createStaffAccount, clien
                         color: pwPanel === m.id ? ac : `var(--text-secondary)`,
                       }}
                     >
-                      <Eye size={12} />
-                      Password
+                      <KeyRound size={12} />
+                      Set Password
                     </button>
                     {/* Delete */}
                     <button onClick={() => deleteM(m)} title="Deactivate staff account" style={{ background: 'none', border: 'none', cursor: 'pointer', color: `var(--text-secondary)`, padding: 6 }}>
@@ -502,6 +613,7 @@ export default function AdminStaff({ team = [], brand, createStaffAccount, clien
           clients={allClients}
           onClose={() => setAssignTarget(null)}
           updateMember={updateM}
+          notify={notify}
         />
       )}
 
@@ -570,6 +682,230 @@ export default function AdminStaff({ team = [], brand, createStaffAccount, clien
               </>
             )}
           </div>
+        </div>
+      )}
+
+      {/* ── BULK IMPORT MODAL ────────────────────────────────────────────────── */}
+      {showBulkImport && (
+        <div className="overlay-modal" onClick={() => !bulkRunning && setShowBulkImport(false)} style={{ zIndex: 9999, alignItems: 'flex-start', paddingTop: 32 }}>
+          <div className="modal-box lxf" style={{ maxWidth: 860, width: '100%', maxHeight: '92vh', display: 'flex', flexDirection: 'column' }} onClick={e => e.stopPropagation()}>
+
+            {/* Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16, flexShrink: 0 }}>
+              <div>
+                <h3 className="lxfh" style={{ fontSize: 22, marginBottom: 4 }}>Bulk Import Staff</h3>
+                <p className="lxf" style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+                  {bulkDone
+                    ? `${bulkRows.filter(r => r.status === 'success').length} of ${bulkRows.length} accounts created successfully`
+                    : 'Set the right role for each person — roles control where they log in and what they can see.'}
+                </p>
+              </div>
+              {!bulkRunning && (
+                <button onClick={() => setShowBulkImport(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', flexShrink: 0 }}>
+                  <X size={20} />
+                </button>
+              )}
+            </div>
+
+            {/* Role access guide — only shown before running */}
+            {!bulkDone && !bulkRunning && (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 16, flexShrink: 0 }}>
+                <div style={{ padding: '11px 14px', borderRadius: 10, background: '#EFF6FF', border: '1.5px solid #BFDBFE' }}>
+                  <div style={{ fontSize: 11, fontWeight: 800, color: '#1E40AF', textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 5 }}>🏢 Office / Management Portal</div>
+                  <div style={{ fontSize: 12, color: '#1D4ED8', lineHeight: 1.6 }}>
+                    <strong>Project Manager · Finance Officer · Procurement Lead · Site Supervisor · Admin Assistant</strong><br />
+                    → Log in to the <em>Admin Portal</em>. Can manage assigned clients, projects, invoices and messages.
+                  </div>
+                </div>
+                <div style={{ padding: '11px 14px', borderRadius: 10, background: '#F0FDF4', border: '1.5px solid #BBF7D0' }}>
+                  <div style={{ fontSize: 11, fontWeight: 800, color: '#166534', textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 5 }}>🔧 Field / Worker Portal</div>
+                  <div style={{ fontSize: 12, color: '#15803D', lineHeight: 1.6 }}>
+                    <strong>Technician · Senior Technician · Field Installer · Technical Team Lead · Field Worker</strong><br />
+                    → Log in to the <em>Worker Portal</em>. Can only see their assigned jobs, tasks, and work orders.
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Table */}
+            <div style={{ flex: 1, overflowY: 'auto', borderRadius: 12, border: '1.5px solid var(--border-color)' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                <thead>
+                  <tr style={{ background: 'var(--bg-secondary)', borderBottom: '1.5px solid var(--border-color)', position: 'sticky', top: 0 }}>
+                    <th style={{ padding: '10px 14px', textAlign: 'left', fontWeight: 800, fontSize: 11, textTransform: 'uppercase', letterSpacing: '.06em', color: 'var(--text-secondary)' }}>Name</th>
+                    <th style={{ padding: '10px 14px', textAlign: 'left', fontWeight: 800, fontSize: 11, textTransform: 'uppercase', letterSpacing: '.06em', color: 'var(--text-secondary)' }}>Login Email</th>
+                    <th style={{ padding: '10px 14px', textAlign: 'left', fontWeight: 800, fontSize: 11, textTransform: 'uppercase', letterSpacing: '.06em', color: 'var(--text-secondary)' }}>Role</th>
+                    <th style={{ padding: '10px 14px', textAlign: 'left', fontWeight: 800, fontSize: 11, textTransform: 'uppercase', letterSpacing: '.06em', color: 'var(--text-secondary)' }}>Access</th>
+                    <th style={{ padding: '10px 14px', textAlign: 'left', fontWeight: 800, fontSize: 11, textTransform: 'uppercase', letterSpacing: '.06em', color: 'var(--text-secondary)' }}>Temp Password</th>
+                    <th style={{ padding: '10px 14px', textAlign: 'center', fontWeight: 800, fontSize: 11, textTransform: 'uppercase', letterSpacing: '.06em', color: 'var(--text-secondary)' }}>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {bulkRows.map((row, i) => {
+                    const roleProfile = ROLE_PROFILES[row.role] || ROLE_PROFILES.Technician;
+                    const isWorkerRole = roleProfile.systemRole === 'worker';
+                    return (
+                      <tr key={row.email} style={{ borderBottom: '1px solid var(--border-color)', background: row.status === 'success' ? '#F0FDF4' : row.status === 'error' ? '#FFF8F0' : 'transparent' }}>
+                        {/* Name — editable */}
+                        <td style={{ padding: '8px 14px' }}>
+                          <input
+                            value={row.name}
+                            disabled={bulkRunning || bulkDone}
+                            onChange={e => setBulkRows(prev => prev.map((r, idx) => idx === i ? { ...r, name: e.target.value } : r))}
+                            style={{ border: '1px solid var(--border-color)', borderRadius: 8, padding: '5px 9px', fontSize: 13, fontWeight: 700, width: 88, background: 'transparent', fontFamily: 'inherit' }}
+                          />
+                        </td>
+                        {/* Email — shown as-is, this is the login email */}
+                        <td style={{ padding: '8px 14px', color: 'var(--text-secondary)', fontSize: 12 }}>{row.email}</td>
+                        {/* Role dropdown */}
+                        <td style={{ padding: '8px 14px' }}>
+                          <select
+                            value={row.role}
+                            disabled={bulkRunning || bulkDone}
+                            onChange={e => setBulkRows(prev => prev.map((r, idx) => idx === i ? { ...r, role: e.target.value } : r))}
+                            style={{ border: '1px solid var(--border-color)', borderRadius: 8, padding: '5px 9px', fontSize: 12, fontWeight: 700, background: 'transparent', cursor: 'pointer', fontFamily: 'inherit', minWidth: 160 }}
+                          >
+                            <optgroup label="— Office / Management">
+                              {['Project Manager','Site Supervisor','Finance Officer','Procurement Lead','Admin Assistant'].map(r => <option key={r} value={r}>{r}</option>)}
+                            </optgroup>
+                            <optgroup label="— Field / Technical">
+                              {['Technical Team Lead','Senior Technician','Technician','Field Installer','Field Worker'].map(r => <option key={r} value={r}>{r}</option>)}
+                            </optgroup>
+                          </select>
+                        </td>
+                        {/* Access level badge */}
+                        <td style={{ padding: '8px 14px' }}>
+                          <span style={{ fontSize: 11, fontWeight: 800, padding: '3px 8px', borderRadius: 6, background: isWorkerRole ? '#F0FDF4' : '#EFF6FF', color: isWorkerRole ? '#16A34A' : '#1D4ED8' }}>
+                            {isWorkerRole ? '🔧 Worker Portal' : '🏢 Admin Portal'}
+                          </span>
+                        </td>
+                        {/* Password */}
+                        <td style={{ padding: '8px 14px' }}>
+                          <code style={{ fontSize: 11, background: 'var(--bg-secondary)', padding: '3px 7px', borderRadius: 6, letterSpacing: '.04em' }}>
+                            {row.password}
+                          </code>
+                        </td>
+                        {/* Status */}
+                        <td style={{ padding: '8px 14px', textAlign: 'center' }}>
+                          {row.status === 'pending'  && <span style={{ fontSize: 11, color: 'var(--text-secondary)', fontWeight: 700 }}>—</span>}
+                          {row.status === 'creating' && <Loader2 size={15} style={{ animation: 'spin 1s linear infinite', color: ac }} />}
+                          {row.status === 'success'  && <span style={{ fontSize: 11, color: '#16A34A', fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}><Check size={13} /> Created</span>}
+                          {row.status === 'error'    && <span style={{ fontSize: 11, color: '#DC2626', fontWeight: 700 }} title={row.error}>✗ {row.error?.includes('already') ? 'Already exists' : 'Failed'}</span>}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Footer */}
+            <div style={{ flexShrink: 0, paddingTop: 16, display: 'flex', gap: 10, justifyContent: 'flex-end', alignItems: 'center', flexWrap: 'wrap' }}>
+              {!bulkDone && !bulkRunning && (
+                <p className="lxf" style={{ fontSize: 12, color: 'var(--text-secondary)', flex: 1 }}>
+                  Staff log in with their email and the temp password shown. You can change roles any time after.
+                </p>
+              )}
+              {bulkDone && (
+                <button
+                  onClick={copyBulkCredentials}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '10px 20px', borderRadius: 12, border: '1.5px solid var(--border-color)', background: 'var(--bg-secondary)', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}
+                >
+                  {bulkCredsCopied ? <><Check size={14} color="#16A34A" /> Copied!</> : <><Copy size={14} /> Copy All Credentials</>}
+                </button>
+              )}
+              {!bulkDone && (
+                <button
+                  onClick={runBulkImport}
+                  disabled={bulkRunning || bulkRows.length === 0}
+                  className="p-btn-dark lxf"
+                  style={{ padding: '11px 28px', fontSize: 13, display: 'inline-flex', alignItems: 'center', gap: 8, opacity: bulkRunning ? 0.7 : 1 }}
+                >
+                  {bulkRunning
+                    ? <><Loader2 size={15} style={{ animation: 'spin 1s linear infinite' }} /> Creating accounts…</>
+                    : <><UserPlus size={15} /> Create {bulkRows.length} Accounts</>}
+                </button>
+              )}
+              {bulkDone && (
+                <button onClick={() => setShowBulkImport(false)} className="p-btn-dark lxf" style={{ padding: '11px 28px', fontSize: 13 }}>
+                  Done
+                </button>
+              )}
+            </div>
+          </div>
+          <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+        </div>
+      )}
+
+      {/* DELETE / DEACTIVATE CONFIRMATION MODAL */}
+      {deleteConfirm && (
+        <div
+          className="overlay-modal"
+          onClick={() => !deleteLoading && setDeleteConfirm(null)}
+          style={{ zIndex: 9999 }}
+        >
+          <div
+            className="modal-box lxf"
+            style={{ maxWidth: 420 }}
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Icon */}
+            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 20 }}>
+              <div style={{ width: 56, height: 56, borderRadius: 16, background: '#FEF2F2', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <AlertTriangle size={26} color="#DC2626" />
+              </div>
+            </div>
+
+            <h3 className="lxfh" style={{ fontSize: 20, textAlign: 'center', marginBottom: 8 }}>
+              Remove Staff Member?
+            </h3>
+            <p className="lxf" style={{ fontSize: 13, color: 'var(--text-secondary)', textAlign: 'center', marginBottom: 24, lineHeight: 1.6 }}>
+              You're about to remove <strong>{deleteConfirm.name || 'this staff member'}</strong>.
+              Choose how to remove the account:
+            </p>
+
+            {/* Option cards */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 20 }}>
+              {/* Deactivate */}
+              <div style={{ padding: '14px 16px', borderRadius: 12, background: '#FFFBEB', border: '1.5px solid #FDE68A' }}>
+                <div style={{ fontSize: 13, fontWeight: 800, color: '#92400E', marginBottom: 3 }}>Deactivate Account</div>
+                <div style={{ fontSize: 12, color: '#B45309', lineHeight: 1.5 }}>
+                  Account is marked inactive. Login is blocked. All history, assignments, and data are kept. Can be re-activated later.
+                </div>
+                <button
+                  onClick={handleDeactivate}
+                  disabled={deleteLoading}
+                  style={{ marginTop: 12, padding: '9px 18px', borderRadius: 9, border: 'none', background: '#92400E', color: '#fff', fontSize: 12, fontWeight: 800, cursor: deleteLoading ? 'default' : 'pointer', opacity: deleteLoading ? 0.7 : 1, display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                >
+                  {deleteLoading ? <><Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} /> Working…</> : 'Deactivate Only'}
+                </button>
+              </div>
+
+              {/* Permanent delete */}
+              <div style={{ padding: '14px 16px', borderRadius: 12, background: '#FEF2F2', border: '1.5px solid #FECACA' }}>
+                <div style={{ fontSize: 13, fontWeight: 800, color: '#991B1B', marginBottom: 3 }}>Permanently Delete</div>
+                <div style={{ fontSize: 12, color: '#B91C1C', lineHeight: 1.5 }}>
+                  Removes the account from the staff register and Firebase Auth. Login is permanently revoked. <strong>This cannot be undone.</strong>
+                </div>
+                <button
+                  onClick={handlePermanentDelete}
+                  disabled={deleteLoading}
+                  style={{ marginTop: 12, padding: '9px 18px', borderRadius: 9, border: 'none', background: '#DC2626', color: '#fff', fontSize: 12, fontWeight: 800, cursor: deleteLoading ? 'default' : 'pointer', opacity: deleteLoading ? 0.7 : 1, display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                >
+                  {deleteLoading ? <><Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} /> Working…</> : <><Trash2 size={12} /> Delete Permanently</>}
+                </button>
+              </div>
+            </div>
+
+            <button
+              onClick={() => setDeleteConfirm(null)}
+              disabled={deleteLoading}
+              style={{ width: '100%', padding: '12px 0', borderRadius: 12, border: '1.5px solid var(--border-color)', background: 'var(--bg-secondary)', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}
+            >
+              Cancel
+            </button>
+          </div>
+          <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
         </div>
       )}
 
@@ -695,11 +1031,29 @@ export default function AdminStaff({ team = [], brand, createStaffAccount, clien
                     ))}
                   </div>
                 </div>
-                <div style={{ display: 'flex', gap: 10 }}>
-                  <button onClick={copyCredentials} className="p-btn-gold lxf" style={{ flex: 1, padding: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-                    {copied ? <><Check size={15} /> Copied!</> : <><Copy size={15} /> Copy Credentials</>}
-                  </button>
-                  <button onClick={() => { setCreated(null); setShowModal(false); }} className="p-btn-dark lxf" style={{ flex: 1, padding: 12 }}>Done</button>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <div style={{ display: 'flex', gap: 10 }}>
+                    <button onClick={copyCredentials} className="p-btn-gold lxf" style={{ flex: 1, padding: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                      {copied ? <><Check size={15} /> Copied!</> : <><Copy size={15} /> Copy Credentials</>}
+                    </button>
+                    <button
+                      onClick={() => {
+                        const msg = encodeURIComponent(
+                          `*Westline Future — Staff Portal Access*\n\nName: ${created.name}\nUsername: ${created.username}\nTemp Password: ${created.password}\nLogin: ${window.location.origin}/login\n\n_Change your password after first login._`
+                        );
+                        const phone = (created.phone || '').replace(/\D/g, '');
+                        window.open(phone ? `https://wa.me/${phone}?text=${msg}` : `https://wa.me/?text=${msg}`, '_blank');
+                      }}
+                      style={{
+                        flex: 1, padding: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                        borderRadius: 12, border: 'none', background: '#25D366', color: '#fff',
+                        fontSize: 13, fontWeight: 800, cursor: 'pointer', fontFamily: 'inherit',
+                      }}
+                    >
+                      <MessageCircle size={15} /> Send via WhatsApp
+                    </button>
+                  </div>
+                  <button onClick={() => { setCreated(null); setShowModal(false); }} className="p-btn-dark lxf" style={{ width: '100%', padding: 12 }}>Done</button>
                 </div>
               </>
             )}
@@ -726,64 +1080,155 @@ export default function AdminStaff({ team = [], brand, createStaffAccount, clien
   );
 }
 function StaffPasswordModal({ member, ac, onClose, handleSetPassword, notify, pwVisible, setPwVisible, newPwInputs, setNewPwInputs, pwSaving }) {
+  const [showPw, setShowPw] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [savedPw, setSavedPw] = useState('');
+  const [waCopied, setWaCopied] = useState(false);
+
+  const currentPw = newPwInputs[member?.id] || '';
+  const pwReady = currentPw.length >= 6;
+
+  const doGenerate = () => {
+    const pw = genPassword();
+    setNewPwInputs(s => ({ ...s, [member.id]: pw }));
+    setShowPw(true); // reveal so admin can see + share
+    setSaved(false);
+  };
+
+  const doSet = async () => {
+    if (!pwReady || pwSaving[member?.id]) return;
+    // Capture before the parent clears it
+    const pwToSave = currentPw;
+    await handleSetPassword(member, pwToSave);
+    // Show the share row
+    setSavedPw(pwToSave);
+    setSaved(true);
+  };
+
+  const shareViaWhatsApp = () => {
+    const msg = encodeURIComponent(
+      `*Westline Future — Staff Portal Access*\n\nName: ${member.name}\nUsername: ${member.username || member.email || '—'}\nNew Password: ${savedPw}\nLogin: ${window.location.origin}/login`
+    );
+    const phone = (member.phone || '').replace(/\D/g, '');
+    window.open(phone ? `https://wa.me/${phone}?text=${msg}` : `https://wa.me/?text=${msg}`, '_blank');
+  };
+
+  const copySavedPw = () => {
+    navigator.clipboard.writeText(savedPw);
+    setWaCopied(true);
+    setTimeout(() => setWaCopied(false), 2000);
+  };
+
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-      <div style={{ background: '#fff', borderRadius: 24, width: '100%', maxWidth: 400, boxShadow: '0 32px 80px rgba(0,0,0,.2)', padding: 24 }}>
+      <div style={{ background: '#fff', borderRadius: 24, width: '100%', maxWidth: 420, boxShadow: '0 32px 80px rgba(0,0,0,.2)', padding: 24 }}>
+
+        {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-          <div style={{ fontSize: 18, fontWeight: 800 }}>Manage Password</div>
+          <div>
+            <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--accent-secondary)' }}>Set Password</div>
+            <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>{member?.name}</div>
+          </div>
           <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer' }}><X size={20} color="var(--text-secondary)" /></button>
         </div>
-        
-        {member.tempPassword ? (
-          <div style={{ marginBottom: 20 }}>
-            <div style={{ fontSize: 11, fontWeight: 800, color: `var(--text-secondary)`, textTransform: 'uppercase', marginBottom: 8 }}>Current Password</div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <code style={{
-                flex: 1, padding: '10px 14px', borderRadius: 12,
-                background: 'var(--bg-secondary)', border: '1px solid var(--border-color)',
-                fontSize: 14, fontFamily: 'monospace', letterSpacing: 1,
-                filter: pwVisible[member.id] ? 'none' : 'blur(5px)',
-                userSelect: pwVisible[member.id] ? 'text' : 'none',
-                transition: 'filter .2s'
-              }}>{member.tempPassword}</code>
-              <button onClick={() => setPwVisible(s => ({ ...s, [member.id]: !s[member.id] }))} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 8 }}>
-                {pwVisible[member.id] ? <EyeOff size={18} /> : <Eye size={18} />}
+
+        {/* Security note */}
+        <div style={{ marginBottom: 20, padding: '12px 14px', borderRadius: 12, background: '#F0FDF4', border: '1px solid #BBF7D0', display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+          <div style={{ fontSize: 18, flexShrink: 0 }}>🔒</div>
+          <div>
+            <div style={{ fontSize: 12, fontWeight: 800, color: '#15803D', marginBottom: 2 }}>Never stored in database</div>
+            <div style={{ fontSize: 11, color: '#166534', lineHeight: 1.5 }}>
+              Set a password below, then share it with the staff member in person or via WhatsApp. Firebase Auth holds the credential — not Firestore.
+            </div>
+          </div>
+        </div>
+
+        {/* Password input row */}
+        <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--text-secondary)', textTransform: 'uppercase', marginBottom: 8 }}>New Password</div>
+        <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+          <div style={{ flex: 1, position: 'relative' }}>
+            <input
+              type={showPw ? 'text' : 'password'}
+              placeholder="Min. 6 characters"
+              value={currentPw}
+              onChange={e => { setNewPwInputs(s => ({ ...s, [member.id]: e.target.value })); setSaved(false); }}
+              style={{
+                width: '100%', height: 44, padding: '0 40px 0 14px', borderRadius: 12,
+                border: '2px solid var(--border-color)', fontSize: 14,
+                fontFamily: 'monospace', outline: 'none', boxSizing: 'border-box',
+              }}
+            />
+            <button
+              onClick={() => setShowPw(p => !p)}
+              style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: 'var(--text-secondary)' }}
+            >
+              {showPw ? <EyeOff size={14} /> : <Eye size={14} />}
+            </button>
+          </div>
+          {/* Generate */}
+          <button
+            onClick={doGenerate}
+            style={{
+              height: 44, padding: '0 14px', borderRadius: 12,
+              border: '1.5px solid var(--border-color)', background: 'var(--bg-secondary)',
+              fontSize: 12, fontWeight: 700, cursor: 'pointer', color: 'var(--accent-secondary)',
+              whiteSpace: 'nowrap', fontFamily: 'inherit',
+            }}
+          >
+            Generate
+          </button>
+          {/* Set */}
+          <button
+            onClick={doSet}
+            disabled={pwSaving[member?.id] || !pwReady}
+            style={{
+              height: 44, padding: '0 20px', borderRadius: 12, border: 'none',
+              background: pwReady ? ac : 'var(--border-color)',
+              color: pwReady ? 'var(--accent-secondary)' : 'var(--text-secondary)',
+              fontSize: 13, fontWeight: 800, cursor: pwReady ? 'pointer' : 'default',
+              fontFamily: 'inherit',
+            }}
+          >
+            {pwSaving[member?.id] ? 'Saving…' : 'Set'}
+          </button>
+        </div>
+
+        {/* Share row — shown after successful set */}
+        {saved && savedPw && (
+          <div style={{ padding: 16, borderRadius: 14, background: '#F0FDF4', border: '1px solid #BBF7D0' }}>
+            <div style={{ fontSize: 12, fontWeight: 800, color: '#15803D', marginBottom: 10 }}>
+              ✓ Password updated — share it now
+            </div>
+            <div style={{ fontFamily: 'monospace', fontSize: 15, fontWeight: 800, color: 'var(--accent-secondary)', letterSpacing: 1, marginBottom: 12 }}>
+              {savedPw}
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                onClick={shareViaWhatsApp}
+                style={{
+                  flex: 1, height: 40, borderRadius: 10, border: 'none', background: '#25D366', color: '#fff',
+                  fontSize: 12, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontFamily: 'inherit',
+                }}
+              >
+                <MessageCircle size={14} /> Send via WhatsApp
               </button>
-              <button onClick={() => { navigator.clipboard.writeText(member.tempPassword); notify?.('success', 'Password copied!'); }} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 8 }} title="Copy">
-                <Copy size={18} />
+              <button
+                onClick={copySavedPw}
+                style={{
+                  flex: 1, height: 40, borderRadius: 10, border: '1.5px solid var(--border-color)', background: '#fff', color: 'var(--accent-secondary)',
+                  fontSize: 12, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontFamily: 'inherit',
+                }}
+              >
+                {waCopied ? <><Check size={13} /> Copied!</> : <><Copy size={13} /> Copy</>}
               </button>
             </div>
           </div>
-        ) : (
-          <div style={{ fontSize: 13, color: `var(--text-secondary)`, marginBottom: 20, fontStyle: 'italic', padding: 12, background: 'var(--bg-secondary)', borderRadius: 8 }}>No stored password — use the field below to set one.</div>
         )}
 
-        <div style={{ fontSize: 11, fontWeight: 800, color: `var(--text-secondary)`, textTransform: 'uppercase', marginBottom: 8 }}>Set New Password</div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <input
-            type="text"
-            placeholder="Min. 6 characters"
-            value={newPwInputs[member.id] || ''}
-            onChange={e => setNewPwInputs(s => ({ ...s, [member.id]: e.target.value }))}
-            style={{
-              flex: 1, height: 44, padding: '0 14px', borderRadius: 12,
-              border: '2px solid var(--border-color)', fontSize: 14,
-              fontFamily: 'monospace', outline: 'none'
-            }}
-          />
-          <button
-            onClick={() => handleSetPassword(member, newPwInputs[member.id] || '')}
-            disabled={pwSaving[member.id] || (newPwInputs[member.id] || '').length < 6}
-            style={{
-              height: 44, padding: '0 20px', borderRadius: 12, border: 'none',
-              background: (newPwInputs[member.id] || '').length >= 6 ? ac : `var(--border-color)`,
-              color: (newPwInputs[member.id] || '').length >= 6 ? `var(--accent-secondary)` : `var(--text-secondary)`,
-              fontSize: 13, fontWeight: 800, cursor: 'pointer'
-            }}
-          >
-            {pwSaving[member.id] ? 'Saving…' : 'Set'}
-          </button>
-        </div>
+        {/* Done */}
+        {saved && (
+          <button onClick={onClose} className="p-btn-dark lxf" style={{ width: '100%', marginTop: 12, padding: 12 }}>Done</button>
+        )}
       </div>
     </div>
   );

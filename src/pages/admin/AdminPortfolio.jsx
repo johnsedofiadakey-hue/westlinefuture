@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Plus, Trash2, Upload } from 'lucide-react';
 import { FF as PFormField } from '../../components/Shared';
 import { uploadFile } from '../../lib/firebase';
@@ -7,6 +7,7 @@ import { compressImage } from '../../lib/image-utils';
 export default function AdminPortfolio({ content, syncCMS, brand, notify }) {
   const ac = brand?.color || `var(--accent-secondary)`;
   const portfolio = content?.portfolio || [];
+  const [confirmDeleteIdx, setConfirmDeleteIdx] = useState(null);
   
   const onSave = (newList) => {
     if (syncCMS) syncCMS('portfolio', newList);
@@ -41,11 +42,12 @@ export default function AdminPortfolio({ content, syncCMS, brand, notify }) {
   };
 
 
-  const deleteProj = (idx) => {
-    if (window.confirm('Are you sure you want to delete this project?')) {
-      const newP = portfolio.filter((_, i) => i !== idx);
-      onSave(newP);
-    }
+  const deleteProj = (idx) => setConfirmDeleteIdx(idx);
+
+  const confirmDeleteProj = () => {
+    const newP = portfolio.filter((_, i) => i !== confirmDeleteIdx);
+    onSave(newP);
+    setConfirmDeleteIdx(null);
   };
 
 
@@ -113,6 +115,20 @@ export default function AdminPortfolio({ content, syncCMS, brand, notify }) {
           </div>
         ))}
       </div>
+
+      {confirmDeleteIdx !== null && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+          <div style={{ background: 'var(--bg-primary)', borderRadius: 20, padding: 32, maxWidth: 360, width: '100%', textAlign: 'center', boxShadow: '0 24px 64px rgba(0,0,0,0.18)' }}>
+            <div style={{ fontSize: 28, marginBottom: 12 }}>🗑️</div>
+            <div style={{ fontSize: 15, fontWeight: 800, marginBottom: 8 }}>Delete Project?</div>
+            <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 24 }}>This portfolio entry will be permanently removed from the public showcase.</div>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={() => setConfirmDeleteIdx(null)} style={{ flex: 1, height: 44, borderRadius: 12, border: '1.5px solid var(--border-color)', background: 'transparent', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Cancel</button>
+              <button onClick={confirmDeleteProj} style={{ flex: 1, height: 44, borderRadius: 12, border: 'none', background: '#ef4444', color: '#fff', fontSize: 13, fontWeight: 800, cursor: 'pointer' }}>Delete</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useContext } from 'react';
+import React, { useState, useEffect, useContext, useCallback } from 'react';
 import { AppContext } from '../context/AppContext';
 import {
   Menu, X, Layers, AppWindow, ShowerHead, ChefHat, Shirt, LayoutGrid, DoorOpen, Zap, Droplets
@@ -151,10 +151,264 @@ const PUBLIC_ZH = {
   'Rendering Need': '效果图需求',
   'Measurements': '测量信息',
   'Message': '留言',
+
+  // ── New service categories ─────────────────────────────────────────────────
+  'Surface Finishes & Fixtures': '表面装修与洁具',
+  'Fixed Custom Carpentry': '定制固装木作',
+  'Home Furniture': '家居家具',
+  'Home Appliances': '家用电器',
+  'Décor & Accessories': '软装与配件',
+  'Tiles · Flooring · Doors · Sanitary ware · Countertops': '瓷砖·地板·门·洁具·台面',
+  'Kitchen cabinets · Wardrobes · Vanities · TV units': '橱柜·衣柜·浴室柜·电视柜',
+  'Sofas · Dining sets · Beds · Coffee tables · Sideboards': '沙发·餐桌椅·床·茶几·餐边柜',
+  'Fridges · Washing machines · Hoods · Hobs · Water heaters · TVs': '冰箱·洗衣机·抽油烟机·灶具·热水器·电视',
+  'Curtains · Lighting · Mirrors · Decorative trims': '窗帘·灯具·镜子·装饰线条',
+  'Surface Finishes & Fixtures (tiles, flooring, doors, sanitary ware)': '表面装修与洁具（瓷砖、地板、门、卫浴）',
+  'Fixed Custom Carpentry (kitchen cabinets, wardrobes, vanities)': '定制固装木作（橱柜、衣柜、浴室柜）',
+  'Home Furniture (sofas, dining sets, beds)': '家居家具（沙发、餐桌椅、床）',
+  'Home Appliances (fridges, washing machines, TVs)': '家用电器（冰箱、洗衣机、电视）',
+  'Décor & Accessories (curtains, lighting, mirrors)': '软装与配件（窗帘、灯具、镜子）',
+  'EVERYTHING YOUR HOME NEEDS': '家居所需，一应俱全',
+  'Surface finishes, custom carpentry, furniture, appliances and décor — every product your home interior needs, sourced from China and installed by our team.': '表面装修、定制木作、家具、电器与软装——您家居所需的一切产品，由我们从中国采购并完成安装。',
+  'Ready to furnish your home?': '准备好装饰您的家了吗？',
+  'Start with a paid 3D design — we handle everything from there.': '从付费三维设计开始——之后的一切都由我们来处理。',
+  // ── Updated service names ───────────────────────────────────────────────────
+  'Full Interior Decoration': '全案室内装修',
+  'Custom 3D Interior Design': '定制三维室内设计',
+  'Plasterboard & Ceiling': '石膏板与天花',
+  'Furniture & Fittings': '家具与配件',
+  'Full Interior Design': '全案室内设计',
+  'OUR SERVICE': '我们的服务',
+  'One company,': '一家公司，',
+  'your complete home.': '您的全案家居。',
+  'Design → Source → Install': '设计 → 采购 → 安装',
+  'Our flagship service — Design → Source → Install': '我们的旗舰服务 — 设计 → 采购 → 安装',
+  'End-to-end full-house interior finishing for newly completed residential buildings across Ghana.': '为加纳各地新竣工住宅提供端对端全屋室内精装服务。',
+  'STEP 01': '第一步',
+  'STEP 02': '第二步',
+  'STEP 03': '第三步',
+  'Pre-Interior Site Prep Support': '室内前期场地准备支持',
+  'Paid Custom 3D Interior Design': '付费定制三维室内设计',
+  'Full Material Sourcing + Turnkey Installation': '全材料采购 + 交钥匙安装',
+  'Full Interior Decoration · Design → Source → Install': '全案室内装修 · 设计 → 采购 → 安装',
+  'Start Your Project': '开始您的项目',
+  'Continue': '继续',
+
+  // ── Why us / reasons section ───────────────────────────────────────────────
+  'Custom 3D Design': '定制三维设计',
+  'End-to-End Sourcing': '端对端采购',
+  'Turnkey Installation': '交钥匙安装',
+  'Global Materials': '全球材料',
+
+  // ── About page ─────────────────────────────────────────────────────────────
+  'About Westline Future': '关于西线未来',
+  'One company.': '一家公司。',
+  'Your complete home.': '您的全案家居。',
+  'Leadership': '领导团队',
+  'The people behind the vision': '愿景背后的人',
+  'CEO & Founding Partner': '首席执行官兼创始合伙人',
+  'Founding Partner': '创始合伙人',
+  'Accra Office': '阿克拉办公室',
+  'China Headquarters': '中国总部',
+  'Our People': '我们的团队',
+  'The team behind the work': '工作背后的团队',
+  'Ready to transform your home?': '准备好改造您的家居了吗？',
+  'From 3D design to full installation — we handle every detail so you don\'t have to.': '从三维设计到全套安装，我们处理每一个细节，让您无后顾之忧。',
+  'Contact Us': '联系我们',
+  'Our Services': '我们的服务',
+  '20+': '20+',
+  'Years Combined Experience': '年综合经验',
+  '100%': '100%',
+  'Full-Home Projects': '全屋项目',
+  '2': '2',
+  'Office Locations': '办公地点',
+  '5★': '5★',
+  'Client Satisfaction': '客户满意度',
+
+  // ── Contact page fields ────────────────────────────────────────────────────
+  'First Name *': '名字 *',
+  'Last Name': '姓氏',
+  'Phone / WhatsApp *': '电话 / WhatsApp *',
+  'Email Address': '电子邮件',
+  'Main Service / Project Type *': '主要服务 / 项目类型 *',
+  'Property Type': '物业类型',
+  'Project Location *': '项目地点 *',
+  'Approximate Budget': '预算范围',
+  'Target Timeline': '目标时间',
+  'Measurements Available?': '是否已有尺寸？',
+  'Need CAD / 3D Rendering?': '是否需要三维效果图？',
+  'Preferred Next Step': '首选下一步',
+  'Inspiration Links / References': '参考链接 / 灵感图',
+  'Project Description *': '项目描述 *',
+  'Submit Project Intake': '提交项目需求',
+  'Message received!': '消息已收到！',
+  'Select a service…': '选择服务…',
+  'Select budget range…': '选择预算范围…',
+  'Select option…': '选择选项…',
+  'Select preference…': '选择偏好…',
+  'Select property type…': '选择物业类型…',
+  'Select timeline…': '选择时间…',
+  'Direct Contact': '直接联系',
+  'Opening Hours': '营业时间',
+  'Our Response Promise': '我们的响应承诺',
+  'Usually replies within 1 hour': '通常在1小时内回复',
+  'WhatsApp': 'WhatsApp',
+  'Calls & SMS': '电话与短信',
+  'Site visits by appointment': '预约现场参观',
+  'Just ask.': '随时咨询。',
+
+  // ── Services page ──────────────────────────────────────────────────────────
+  'WHAT WE DO': '我们的服务',
+  'What we cover': '服务范围',
+  'OUR REACH': '我们的覆盖',
+  'Serving all of Ghana': '服务于加纳全境',
+  'Primary Location': '主要地点',
+  'Engineering Scope': '工程范围',
+  'Get Started': '立即开始',
+
+  // ── Portfolio page ─────────────────────────────────────────────────────────
+  'Selected Case Studies.': '精选案例。',
+  'Case Studies.': '案例研究。',
+  'AFTER': '完工后',
+  'BEFORE': '施工前',
+  'PLAN SIMILAR PROJECT': '规划类似项目',
+
+  // ── Products / Order modal ─────────────────────────────────────────────────
+  'Place Order': '下订单',
+  'Confirm & Pay': '确认并付款',
+  'Order Received!': '订单已收到！',
+  'Your Name *': '您的姓名 *',
+  'Your Name': '您的姓名',
+  'Phone Number *': '电话号码 *',
+  'Phone Number': '电话号码',
+  'Delivery Address': '配送地址',
+  'Notes (optional)': '备注（可选）',
+  'Quantity': '数量',
+  'Order via WhatsApp': '通过WhatsApp下单',
+  'Submit Order Request': '提交订单请求',
+  'Preparing checkout…': '正在准备结账…',
+  'We\'ll call you within 24 hours to confirm.': '我们将在24小时内致电确认。',
+  'Order Summary': '订单摘要',
+  'Order Now': '立即订购',
+  'Continue': '继续',
+  'Building a full package?': '在筹备整套方案？',
+  'Favorites Hub': '收藏中心',
+  'Review and source your curated materials': '审核并采购您精选的材料',
+  'Your Selected Items': '您选中的项目',
+  'Items Selected': '项目已选中',
+  'No products in this category yet': '此类别暂无产品',
+  'Syncing Global Catalog...': '正在同步全球目录...',
+  'Image Unavailable': '图片不可用',
+  'Additional Sourcing Notes (Optional)': '附加采购备注（可选）',
+  'Sourcing Information': '采购信息',
+  'Technical Comparison': '技术对比',
+  'Structural Glass Configuration': '结构玻璃配置',
+  'Standard Westline specifications apply.': '适用西线未来标准规格。',
+  'We can source any material from China — contact us for a custom order.': '我们可以从中国采购任何材料——请联系我们定制订单。',
+  'Finish Selection': '表面处理选择',
+  'Specifications': '规格参数',
+  'Specs': '规格',
+  'Product Overview': '产品概述',
+  'From': '起',
+  'Performance': '性能',
+  'Email Address': '电子邮件',
+  'Done': '完成',
+
+  // ── Footer ─────────────────────────────────────────────────────────────────
+  'Contact': '联系',
+  'Select a tour': '选择参观',
+
+  // ── General public UI ──────────────────────────────────────────────────────
+  'Book Site Measurement': '预约现场测量',
+
+  // ── Contact page — hero & intro ───────────────────────────────────────────
+  'Get in Touch': '联系我们',
+  "Let's build something": '让我们共同创造',
+  'exceptional together.': '非凡之作。',
+  'Submit a structured brief for design, sourcing, installation, or full project delivery. A technical specialist will qualify the next step within 24 hours.': '请提交设计、采购、安装或全项目交付的结构化需求表。技术专家将在24小时内评估下一步。',
+  'Message on WhatsApp': '通过WhatsApp留言',
+  'Project Enquiry': '项目咨询',
+  'Complete the intake so we can assess scope, rendering needs, timeline, and budget before issuing any formal quote.': '请完整填写需求表，以便我们在出具正式报价前评估范围、渲染需求、时间计划和预算。',
+  "We'll follow up within 24 hours. For urgent projects, WhatsApp us directly.": '我们将在24小时内跟进。紧急项目请直接通过WhatsApp联系我们。',
+  'Failed to send. Please try WhatsApp or call us directly.': '发送失败。请通过WhatsApp或直接致电我们。',
+  'Sending…': '发送中…',
+  'Send via WhatsApp': '通过WhatsApp发送',
+  'Your details are used only to respond to this enquiry.': '您的信息仅用于回复本次咨询。',
+
+  // ── Contact page — form validation ────────────────────────────────────────
+  'First name is required': '请输入名字',
+  'Phone number is required': '请输入电话号码',
+  'Enter a valid phone number': '请输入有效的电话号码',
+  'Enter a valid email address': '请输入有效的电子邮件地址',
+  'Select the main service or project type': '请选择主要服务或项目类型',
+  'Project location is required': '请输入项目地点',
+  'Tell us about your project': '请描述您的项目',
+  'Message too long (max 2000 characters)': '消息过长（最多2000字符）',
+  '(optional)': '（可选）',
+
+  // ── Contact page — info panel ─────────────────────────────────────────────
+  'Location': '地点',
+  'Monday – Friday': '周一 – 周五',
+  'Saturday': '周六',
+  'Sunday': '周日',
+  'Closed': '休息',
+  'All enquiries receive a personal response within 24 hours — not an automated reply. For urgent projects, WhatsApp us directly for the fastest service.': '所有咨询均在24小时内获得个人回复，而非自动回复。紧急项目请直接通过WhatsApp联系我们，获得最快服务。',
+
+  // ── Contact page — service & property options ──────────────────────────────
+  'Full Interior Decoration (complete home)': '全案室内装修（完整家居）',
+  'Other / Not Sure Yet': '其他 / 暂不确定',
+  'Private Residence': '私人住宅',
+  'Apartment / Rental Unit': '公寓 / 租赁单元',
+  'Commercial Space': '商业空间',
+  'Hotel / Hospitality': '酒店 / 餐饮',
+  'Office / Corporate': '办公室 / 企业',
+  'Developer / Multi-unit Project': '开发商 / 多单元项目',
+  'Other': '其他',
+  'Urgent — within 2 weeks': '紧急 — 2周内',
+  '1 month': '1个月',
+  '2–3 months': '2–3个月',
+  '3–6 months': '3–6个月',
+  'Flexible / planning stage': '灵活 / 规划阶段',
+  'Yes': '是',
+  'No': '否',
+  'Not sure yet': '暂不确定',
+  'Phone consultation': '电话咨询',
+  'WhatsApp follow-up': 'WhatsApp跟进',
+  'Site visit': '现场参观',
+  'Showroom appointment': '展厅预约',
+  'Below GH₵ 50,000': 'GH₵ 50,000以下',
+  'Above GH₵ 1,000,000': 'GH₵ 1,000,000以上',
+  'Prefer not to say': '不便透露',
+  'Paste Pinterest, Instagram, product links, or notes about the style you want.': '粘贴Pinterest、Instagram、产品链接，或描述您想要的风格。',
+  "Describe what you're looking to install — room type, dimensions if known, preferred finish, timeline…": '请描述您希望安装的内容——房间类型、已知尺寸、偏好材质、时间计划……',
+
+  // ── Services page extra ───────────────────────────────────────────────────
+  'Structural Glazing': '结构玻璃',
+  'Aluminium Systems': '铝合金系统',
+  'Full Bathroom Fit-out': '完整浴室装修',
+  'Custom Kitchen': '定制厨房',
+  'Wardrobe & Storage': '衣柜与收纳',
+  'Tiles & Flooring Supply': '瓷砖与地面供应',
+  'Door Systems': '门类系统',
+  'Electrical & Smart': '电气与智能',
+  'Plumbing & Sanitary': '管道与卫浴',
+  'Accra': '阿克拉',
+  'Kumasi': '库马西',
+  'Takoradi': '塔科拉迪',
+  'Koforidua': '科福里杜阿',
+  'All of Ghana': '加纳全境',
+  'Project Brief': '项目需求',
+
+  // ── About page extra ──────────────────────────────────────────────────────
+  'Our People': '我们的团队',
+  'The team behind the work': '工作背后的团队',
+  'Ready to transform your home?': '准备好改造您的家居了吗？',
+  'From 3D design to full installation — we handle every detail so you don\'t have to.': '从三维设计到全套安装，我们处理每一个细节，让您无后顾之忧。',
+  'Contact Us': '联系我们',
+  'Our Services': '我们的服务',
 };
 
 const PUBLIC_ZH_ENTRIES = Object.entries(PUBLIC_ZH).sort((a, b) => b[0].length - a[0].length);
-const ORIGINAL_TEXT_NODES = new WeakMap();
 
 function translatePublicText(value, lang) {
   if (lang !== 'zh') return value;
@@ -173,7 +427,7 @@ function translatePublicText(value, lang) {
   return translated;
 }
 
-function translatePublicDom(lang) {
+export function translatePublicDom(lang) {
   if (typeof document === 'undefined') return;
   const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
     acceptNode(node) {
@@ -190,9 +444,11 @@ function translatePublicDom(lang) {
   const nodes = [];
   while (walker.nextNode()) nodes.push(walker.currentNode);
   nodes.forEach(node => {
-    if (!ORIGINAL_TEXT_NODES.has(node)) ORIGINAL_TEXT_NODES.set(node, node.nodeValue);
-    const original = ORIGINAL_TEXT_NODES.get(node);
-    node.nodeValue = translatePublicText(original, lang);
+    if (node.__publicOriginalText === undefined) {
+      node.__publicOriginalText = node.nodeValue;
+    }
+    const nextVal = translatePublicText(node.__publicOriginalText, lang);
+    if (node.nodeValue !== nextVal) node.nodeValue = nextVal;
   });
 
   document.querySelectorAll('[placeholder], [aria-label], [title]').forEach(el => {
@@ -200,9 +456,28 @@ function translatePublicDom(lang) {
       if (!el.hasAttribute(attr)) return;
       const key = `publicOriginal${attr.replace(/-([a-z])/g, (_, c) => c.toUpperCase())}`;
       if (!el.dataset[key]) el.dataset[key] = el.getAttribute(attr);
-      el.setAttribute(attr, translatePublicText(el.dataset[key], lang));
+      const nextVal = translatePublicText(el.dataset[key], lang);
+      if (el.getAttribute(attr) !== nextVal) el.setAttribute(attr, nextVal);
     });
   });
+}
+
+/**
+ * Drop this hook into any public page component that is lazy-loaded inside
+ * a Suspense boundary. It guarantees the DOM-walker translation fires after
+ * React finishes painting — even when the page first renders while lang is
+ * already 'zh'.
+ */
+export function usePublicTranslation() {
+  const { lang } = useContext(AppContext);
+  useEffect(() => {
+    const apply = () => translatePublicDom(lang === 'zh' ? 'zh' : 'en');
+    // Two-pass: first after React commits, then a short delay to catch
+    // any async content that renders in a second wave (images, Firestore data).
+    const raf = requestAnimationFrame(apply);
+    const t = setTimeout(apply, 120);
+    return () => { cancelAnimationFrame(raf); clearTimeout(t); };
+  }, [lang]);
 }
 
 export function PubNav({ brand, setPage, activePage, onPortal, menuOpen, setMenuOpen, navigate }) {
@@ -261,6 +536,22 @@ export function PubNav({ brand, setPage, activePage, onPortal, menuOpen, setMenu
     { n: copy.contact, id: 'contact' }
   ];
 
+  const navigateToPublicPage = (pageId) => {
+    setMenuOpen(false);
+
+    const routeByPage = {
+      home: '/',
+      products: '/products',
+      showcase: '/showcase',
+      portfolio: '/portfolio',
+      workflow: '/workflow',
+    };
+
+    const destination = routeByPage[pageId] || `/?page=${encodeURIComponent(pageId)}`;
+    navigate(destination);
+    if (setPage) setPage(pageId);
+  };
+
   const forceSolid = activePage !== 'home';
   const isScrolled = scrolled || forceSolid;
 
@@ -280,7 +571,7 @@ export function PubNav({ brand, setPage, activePage, onPortal, menuOpen, setMenu
         
         {/* LOGO */}
         <div 
-          onClick={() => { navigate('/'); if (setPage) setPage('home'); setMenuOpen(false); }} 
+          onClick={() => navigateToPublicPage('home')}
           style={{ 
             cursor: 'pointer', 
             zIndex: 1001,
@@ -327,16 +618,17 @@ export function PubNav({ brand, setPage, activePage, onPortal, menuOpen, setMenu
           <div style={{ display: 'flex', alignItems: 'center', gap: 48 }}>
             <div style={{ display: 'flex', gap: 36, alignItems: 'center' }}>
               {links.map(l => (
-                <button key={l.id} onClick={() => {
-                  if (l.id === 'home') { navigate('/'); if (setPage) setPage('home'); }
-                  else if (l.id === 'products') navigate('/products');
-                  else if (l.id === 'showcase') navigate('/showcase');
-                  else if (l.id === 'portfolio') navigate('/portfolio');
-                  else if (setPage) {
-                    if (window.location.pathname !== '/') navigate('/?page=' + l.id);
-                    else setPage(l.id);
-                  }
-                }} style={{
+                <button key={l.id}
+                  onMouseEnter={() => {
+                    // Prefetch lazy page chunks on hover — makes click feel instant
+                    if (l.id === 'contact') import('../pages/ContactPage');
+                    else if (l.id === 'about') import('../pages/AboutPage');
+                    else if (l.id === 'services') import('../pages/ServicesPage');
+                    else if (l.id === 'portfolio') import('../pages/Portfolio');
+                    else if (l.id === 'showcase') import('../pages/Showcase');
+                  }}
+                  onClick={() => navigateToPublicPage(l.id)}
+                  style={{
                   background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, fontWeight: 700,
                   color: activePage === l.id ? '#ffffff' : 'rgba(255,255,255,0.65)',
                   textTransform: 'uppercase', letterSpacing: '0.22em', transition: 'all 0.3s',
@@ -436,7 +728,7 @@ export function PubNav({ brand, setPage, activePage, onPortal, menuOpen, setMenu
             borderBottom: '1px solid rgba(255,255,255,0.07)',
             position: 'relative', zIndex: 2, flexShrink: 0
           }}>
-            <div onClick={() => { setMenuOpen(false); navigate('/'); if (setPage) setPage('home'); }} style={{ cursor: 'pointer' }}>
+            <div onClick={() => navigateToPublicPage('home')} style={{ cursor: 'pointer' }}>
               {brand.logo ? (
                 <img src={brand.logo} alt={brand.name}
                   style={{ height: 38, width: 'auto', objectFit: 'contain', filter: 'brightness(0) invert(1)', display: 'block' }} />
@@ -466,17 +758,7 @@ export function PubNav({ brand, setPage, activePage, onPortal, menuOpen, setMenu
               return (
                 <button
                   key={l.id}
-                  onClick={() => {
-                    setMenuOpen(false);
-                    if (l.id === 'home') { navigate('/'); if (setPage) setPage('home'); }
-                    else if (l.id === 'products') navigate('/products');
-                    else if (l.id === 'showcase') navigate('/showcase');
-                    else if (l.id === 'portfolio') navigate('/portfolio');
-                    else if (setPage) {
-                      if (window.location.pathname !== '/') navigate('/?page=' + l.id);
-                      else setPage(l.id);
-                    }
-                  }}
+                  onClick={() => navigateToPublicPage(l.id)}
                   style={{
                     width: '100%', background: 'none', border: 'none',
                     borderLeft: isActive ? '3px solid #C8A96E' : '3px solid transparent',
@@ -556,6 +838,40 @@ export function Footer({ brand, setPage, onPortal, navigate }) {
   const ac = `var(--accent-primary)`;
   const winW = useWindowWidth();
   const mob = isMob(winW);
+  const { content } = useContext(AppContext);
+
+  // CMS-driven capabilities list — falls back to hardcoded defaults
+  const cmsServices = (content?.services || []).filter(s => s?.title);
+  const capabilityIcons = [Layers, AppWindow, ShowerHead, ChefHat, Shirt, LayoutGrid, DoorOpen, Zap, Droplets];
+  const capabilities = cmsServices.length > 0
+    ? cmsServices.slice(0, 9).map((s, i) => ({ Icon: capabilityIcons[i % capabilityIcons.length], label: s.title }))
+    : [
+        { Icon: LayoutGrid, label: 'Surface Finishes & Fixtures' },
+        { Icon: ChefHat,    label: 'Fixed Custom Carpentry'      },
+        { Icon: Shirt,      label: 'Home Furniture'              },
+        { Icon: Zap,        label: 'Home Appliances'             },
+        { Icon: Layers,     label: 'Décor & Accessories'         },
+      ];
+
+  // CMS footer description — falls back to brand tagline then a generic line
+  const footerDesc = content?.footer?.description
+    || brand?.tagline
+    || brand?.description
+    || 'Global precision meets local delivery. Premium interior solutions for the world\'s most ambitious projects.';
+
+  const navigateToPublicPage = (pageId) => {
+    const routeByPage = {
+      home: '/',
+      products: '/products',
+      showcase: '/showcase',
+      portfolio: '/portfolio',
+      workflow: '/workflow',
+    };
+
+    const destination = routeByPage[pageId] || `/?page=${encodeURIComponent(pageId)}`;
+    navigate(destination);
+    if (setPage) setPage(pageId);
+  };
 
   return (
     <footer style={{ background: `var(--footer-bg)`, color: '#ffffff', padding: mob ? '60px 24px' : '100px 5vw 60px' }}>
@@ -583,7 +899,7 @@ export function Footer({ brand, setPage, onPortal, navigate }) {
                 <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', letterSpacing: '0.2em', marginTop: 2 }}>GLOBAL TRADING CO., LTD</div>
               </div>
             )}
-            <p style={{ color: 'rgba(255,255,255,0.5)', lineHeight: 1.8, fontSize: 14 }}>Global precision meets local delivery. Premium structural glass, aluminum works, and interior finishing solutions for the world's most ambitious architectural projects.</p>
+            <p style={{ color: 'rgba(255,255,255,0.5)', lineHeight: 1.8, fontSize: 14 }}>{footerDesc}</p>
           </div>
           <div>
             <h4 style={{ fontSize: 12, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.2em', marginBottom: 24 }}>Navigation</h4>
@@ -591,13 +907,7 @@ export function Footer({ brand, setPage, onPortal, navigate }) {
               {['Home', 'Services', 'Products', 'Showroom', 'Portfolio', 'About', 'Contact'].map(n => (
                 <button key={n} onClick={() => {
                   const id = n === 'Showroom' ? 'showcase' : n.toLowerCase();
-                  if (id === 'products') navigate('/products');
-                  else if (id === 'showcase') navigate('/showcase');
-                  else if (id === 'portfolio') navigate('/portfolio');
-                  else if (setPage) {
-                    if (window.location.pathname !== '/') navigate('/?page=' + id);
-                    else setPage(id);
-                  }
+                  navigateToPublicPage(id);
                 }} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.5)', cursor: 'pointer', textAlign: 'left', fontSize: 14 }}>{n}</button>
               ))}
             </div>
@@ -605,17 +915,7 @@ export function Footer({ brand, setPage, onPortal, navigate }) {
           <div>
             <h4 style={{ fontSize: 12, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.2em', marginBottom: 24 }}>Capabilities</h4>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 11 }}>
-              {[
-                { Icon: Layers,     label: 'Glass & Glazing'       },
-                { Icon: AppWindow,  label: 'Aluminium Windows'      },
-                { Icon: ShowerHead, label: 'Bathroom Installation'  },
-                { Icon: ChefHat,    label: 'Kitchen Renovation'     },
-                { Icon: Shirt,      label: 'Wardrobes & Storage'    },
-                { Icon: LayoutGrid, label: 'Tiles & Flooring'       },
-                { Icon: DoorOpen,   label: 'Doors'                  },
-                { Icon: Zap,        label: 'Electrical Works'       },
-                { Icon: Droplets,   label: 'Plumbing Works'         },
-              ].map(({ Icon, label }) => (
+              {capabilities.map(({ Icon, label }) => (
                 <button
                   key={label}
                   onClick={() => navigate('/?page=services')}
@@ -654,8 +954,18 @@ export function Footer({ brand, setPage, onPortal, navigate }) {
             </div>
           </div>
         </div>
-        <div style={{ paddingTop: 40, borderTop: '1px solid rgba(255,255,255,0.05)', textAlign: 'center', fontSize: 12, color: 'rgba(255,255,255,0.3)', display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'center' }}>
-          <span>© 2026 Westline Future Ltd. All rights reserved.</span>
+        <div style={{ paddingTop: 40, borderTop: '1px solid rgba(255,255,255,0.05)', fontSize: 12, color: 'rgba(255,255,255,0.3)', display: 'flex', flexDirection: mob ? 'column' : 'row', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+          <span>© {new Date().getFullYear()} {brand?.name || 'Westline Future'} Ltd. All rights reserved.</span>
+          {(content?.footer?.links || []).filter(l => l.label && l.url).length > 0 && (
+            <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', justifyContent: 'center' }}>
+              {(content.footer.links).filter(l => l.label && l.url).map((l, i) => (
+                <a key={i} href={l.url} target="_blank" rel="noopener noreferrer" style={{ color: 'rgba(255,255,255,0.3)', textDecoration: 'none', fontSize: 11 }}
+                  onMouseOver={e => e.currentTarget.style.color = 'rgba(255,255,255,0.6)'}
+                  onMouseOut={e => e.currentTarget.style.color = 'rgba(255,255,255,0.3)'}
+                >{l.label}</a>
+              ))}
+            </div>
+          )}
           <button onClick={() => navigate('/login')} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.1)', cursor: 'pointer', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.1em' }}>Management Portal</button>
         </div>
 

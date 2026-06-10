@@ -2,6 +2,17 @@ import React, { useMemo, useState } from 'react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
 import { Download, TrendingUp, Users, DollarSign, Activity, Receipt, FileText } from 'lucide-react';
 import { CLIENT_PROJECT_STAGES } from '../../data';
+import { isPaidStatus } from '../../components/Shared';
+
+// Format money values to fit inside narrow KPI cards
+// ≥1M → "1.2M", ≥1k → "222.5k", else full number
+function fmtMoney(val) {
+  const n = Number(val) || 0;
+  if (n >= 1_000_000) return `GH₵${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 10_000)    return `GH₵${(n / 1_000).toFixed(1)}k`;
+  if (n >= 1_000)     return `GH₵${(n / 1_000).toFixed(2)}k`;
+  return `GH₵${n.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+}
 
 function exportCSV(rows, filename) {
   const header = Object.keys(rows[0] || {}).join(',');
@@ -44,7 +55,7 @@ export default function AdminAnalytics({ invoices = [], transactions = [], clien
       const amount = parseFloat(String(row.amount || '0').replace(/[^0-9.]/g, '')) || 0;
       if (!map[key]) map[key] = { month: key, revenue: 0, paid: 0 };
       map[key].revenue += amount;
-      const isPaid = transactions.length > 0 ? true : row.status === 'Paid';
+      const isPaid = transactions.length > 0 ? true : isPaidStatus(row.status);
       if (isPaid) map[key].paid += amount;
     });
     const filtered = selectedQuarter !== 'All' ? quarterMonths[selectedQuarter].map(i => months[i]) : months;
@@ -71,7 +82,7 @@ export default function AdminAnalytics({ invoices = [], transactions = [], clien
   // Use actual received payments (transactions) when available, else fall back to paid invoices
   const totalRevenue = transactions.length > 0
     ? transactions.reduce((a, b) => a + (parseFloat(String(b.amount || '0').replace(/[^0-9.]/g, '')) || 0), 0)
-    : invoices.filter(i => i.status === 'Paid').reduce((a, b) => a + (parseFloat(String(b.amount || '0').replace(/[^0-9.]/g, '')) || 0), 0);
+    : invoices.filter(i => isPaidStatus(i.status)).reduce((a, b) => a + (parseFloat(String(b.amount || '0').replace(/[^0-9.]/g, '')) || 0), 0);
 
   const pendingRevenue = clients
     .filter(p => p.budget && (p.stageId || 0) < 7)
@@ -151,22 +162,45 @@ export default function AdminAnalytics({ invoices = [], transactions = [], clien
       </div>
 
       {/* KPI CARDS */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 20, marginBottom: 32 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 16, marginBottom: 32 }}>
         {[
-          { label: 'Total Revenue', value: `GH₵${totalRevenue.toLocaleString(undefined, { maximumFractionDigits: 0 })}`, icon: <DollarSign size={20} />, dark: true },
-          { label: 'Outstanding', value: `GH₵${pendingRevenue.toLocaleString(undefined, { maximumFractionDigits: 0 })}`, icon: <TrendingUp size={20} /> },
-          { label: 'Active Projects', value: clients.filter(c => (c.stageId || 0) < 7).length, icon: <Users size={20} /> },
-          { label: 'Open Quotes', value: `GH₵${openQuoteValue.toLocaleString(undefined, { maximumFractionDigits: 0 })}`, icon: <FileText size={20} /> },
-          { label: 'One-Time Sales', value: `GH₵${oneTimeRevenue.toLocaleString(undefined, { maximumFractionDigits: 0 })}`, icon: <Receipt size={20} /> },
-          { label: 'Active Staff', value: activeStaff, icon: <Users size={20} /> },
-          { label: 'Field Workers', value: workers, icon: <Activity size={20} /> },
+          { label: 'Total Revenue',    value: fmtMoney(totalRevenue),                               raw: totalRevenue,    icon: <DollarSign size={18} />, dark: true },
+          { label: 'Outstanding',      value: fmtMoney(pendingRevenue),                             raw: pendingRevenue,  icon: <TrendingUp size={18} /> },
+          { label: 'Active Projects',  value: clients.filter(c => (c.stageId || 0) < 7).length,    raw: null,            icon: <Users size={18} /> },
+          { label: 'Open Quotes',      value: fmtMoney(openQuoteValue),                             raw: openQuoteValue,  icon: <FileText size={18} /> },
+          { label: 'One-Time Sales',   value: fmtMoney(oneTimeRevenue),                             raw: oneTimeRevenue,  icon: <Receipt size={18} /> },
+          { label: 'Active Staff',     value: activeStaff,                                           raw: null,            icon: <Users size={18} /> },
+          { label: 'Field Workers',    value: workers,                                               raw: null,            icon: <Activity size={18} /> },
         ].map(card => (
-          <div key={card.label} className="p-card" style={{ padding: 20, border: '1px solid var(--border-color)', background: card.dark ? `var(--accent-secondary)` : '#fff', color: card.dark ? '#fff' : `var(--accent-secondary)` }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
-              <div style={{ fontSize: 11, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.1em', opacity: card.dark ? 0.5 : 0.6 }}>{card.label}</div>
-              <div style={{ color: ac }}>{card.icon}</div>
+          <div
+            key={card.label}
+            className="p-card"
+            title={card.raw != null ? `GH₵${Number(card.raw).toLocaleString()}` : undefined}
+            style={{
+              padding: '18px 16px', minWidth: 0, overflow: 'hidden',
+              border: '1px solid var(--border-color)',
+              background: card.dark ? `var(--accent-secondary)` : '#fff',
+              color: card.dark ? '#fff' : `var(--accent-secondary)`,
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12, gap: 4 }}>
+              <div style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.08em', opacity: card.dark ? 0.55 : 0.6, lineHeight: 1.3 }}>{card.label}</div>
+              <div style={{ color: ac, flexShrink: 0 }}>{card.icon}</div>
             </div>
-            <div className="lxfh" style={{ fontSize: 28, fontWeight: 900, color: card.dark ? ac : `var(--accent-secondary)` }}>{card.value}</div>
+            <div
+              className="lxfh"
+              style={{
+                fontSize: 'clamp(17px, 1.6vw, 26px)',
+                fontWeight: 900,
+                color: card.dark ? ac : `var(--accent-secondary)`,
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                letterSpacing: '-0.02em',
+              }}
+            >
+              {card.value}
+            </div>
           </div>
         ))}
       </div>
@@ -220,13 +254,15 @@ export default function AdminAnalytics({ invoices = [], transactions = [], clien
             </div>
           )}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginTop: 12 }}>
-            <div style={{ padding: 14, background: `var(--bg-secondary)`, borderRadius: 12 }}>
+            <div style={{ padding: 14, background: `var(--bg-secondary)`, borderRadius: 12, minWidth: 0 }}>
               <div style={{ fontSize: 10, fontWeight: 800, color: `var(--text-secondary)`, textTransform: 'uppercase' }}>Quote Conversion</div>
               <div style={{ fontSize: 22, fontWeight: 900, color: `var(--accent-secondary)`, marginTop: 4 }}>{quoteConversion}%</div>
             </div>
-            <div style={{ padding: 14, background: `var(--bg-secondary)`, borderRadius: 12 }}>
+            <div style={{ padding: 14, background: `var(--bg-secondary)`, borderRadius: 12, minWidth: 0, overflow: 'hidden' }}>
               <div style={{ fontSize: 10, fontWeight: 800, color: `var(--text-secondary)`, textTransform: 'uppercase' }}>Open Quote Value</div>
-              <div style={{ fontSize: 22, fontWeight: 900, color: `var(--accent-secondary)`, marginTop: 4 }}>GH₵{openQuoteValue.toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>
+              <div style={{ fontSize: 20, fontWeight: 900, color: `var(--accent-secondary)`, marginTop: 4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={`GH₵${openQuoteValue.toLocaleString()}`}>
+                {fmtMoney(openQuoteValue)}
+              </div>
             </div>
           </div>
         </div>

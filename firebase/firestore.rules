@@ -1,7 +1,7 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    
+
     // Block all access by default
     match /{document=**} {
       allow read, write: if false;
@@ -26,17 +26,53 @@ service cloud.firestore {
 
     function isClient(clientId) {
       return isAuthenticated() && (
-        request.auth.uid == clientId || 
+        request.auth.uid == clientId ||
         (request.auth.token.email != null && request.auth.token.email.replace("@clients.westlinefuture.com", "") == clientId) ||
-        (request.auth.token.phone_number != null && request.auth.token.phone_number == ("+" + clientId))
+        (request.auth.token.phone_number != null && (
+          request.auth.token.phone_number == clientId ||
+          request.auth.token.phone_number == ("+" + clientId)
+        ))
       );
+    }
+
+    // Check if the authenticated user is the client of a specific project.
+    // Uses the project's clientIds array (multi-format) so phone-auth users
+    // match regardless of whether the stored format has a "+" prefix or not.
+    function isClientOfProject(projectId) {
+      let d = get(/databases/$(database)/documents/projects/$(projectId)).data;
+      return isAuthenticated()
+        && projectId is string
+        && projectId.size() > 0
+        && d != null
+        && (
+          isClient(d.clientId) ||
+          (d.clientIds is list && request.auth.uid in d.clientIds) ||
+          (d.clientIds is list && request.auth.token.phone_number != null
+            && request.auth.token.phone_number in d.clientIds)
+        );
     }
 
     // --- USER PROFILES ---
     match /users/{userId} {
       allow get: if isAdmin() || isClient(userId);
       allow list: if isAdmin();
-      allow write: if isAdmin() || isClient(userId);
+      // Clients can update their own non-sensitive profile fields only
+      allow update: if isAdmin() || (
+        isClient(userId) &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'name', 'address', 'preferredPaymentMethod', 'onboarded', 'updatedAt'
+        ])
+      );
+      allow create, delete: if isAdmin();
+    }
+
+    // --- UNIFIED CLIENT CHATS ---
+    match /clients/{clientId} {
+      allow read, write: if isAdmin() || isClient(clientId);
+
+      match /{subcollection}/{docId} {
+        allow read, write: if isAdmin() || isClient(clientId);
+      }
     }
 
     match /team/{memberId} {
@@ -57,12 +93,26 @@ service cloud.firestore {
     // --- PROJECTS & CLIENT DATA ---
     match /projects/{projectId} {
       allow get: if isAdmin() || isClient(resource.data.clientId) || (isAuthenticated() && request.auth.token.email == resource.data.email);
-      allow list: if isAdmin() || (isAuthenticated() && (request.query.limit <= 100));
+      // ⚠ CRITICAL: list restricted to admin/staff only — clients query by clientIds instead
+      allow list: if isAdmin();
       allow update: if isAdmin() || (
         isClient(resource.data.clientId) &&
         request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-          'quoteApproved', 'quoteApprovedAt', 'stageId', 'status', 'stageHistory', 'updatedAt'
-        ])
+          // Quote approval
+          'quoteApproved', 'quoteApprovedAt',
+          // Change requests
+          'changeRequestPending',
+          // Contract signing — client writes these fields when they sign
+          'contractAccepted', 'contractSignedName',
+          'quoteSignature', 'quoteSignedAt', 'quoteSignedByPhone', 'quoteVerificationStamp',
+          // Spec/brief approval — client updates status and review note
+          'specDoc'
+        ]) &&
+        // Quote approval only when project is at Stage 3 and quote has been sent
+        (
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['quoteApproved', 'quoteApprovedAt']) ||
+          (resource.data.stageId == 3 && resource.data.quoteSentAt != null)
+        )
       );
       allow create, delete: if isAdmin();
 
@@ -72,10 +122,10 @@ service cloud.firestore {
         allow update: if isAdmin() || isClient(get(/databases/$(database)/documents/projects/$(projectId)).data.clientId);
         allow delete: if isAdmin();
       }
-      // Typing presence — any authenticated participant can write
-      match /typing/{userId} {
+      // Typing presence — any authenticated participant can write their own doc
+      match /typing/{typingUserId} {
         allow read: if isAdmin() || isClient(get(/databases/$(database)/documents/projects/$(projectId)).data.clientId);
-        allow write: if isAuthenticated() && request.auth.uid == userId || isAdmin();
+        allow write: if (isAuthenticated() && request.auth.uid == typingUserId) || isAdmin();
         allow delete: if isAuthenticated();
       }
       match /{subcollection}/{docId} {
@@ -85,10 +135,10 @@ service cloud.firestore {
     }
 
     match /bookings/{bookingId} { allow read: if isAdmin(); allow create: if isAuthenticated(); }
-    match /proposals/{proposalId} { 
-      allow read: if isAdmin() || isClient(resource.data.clientId); 
-      allow write: if isAdmin() || isClient(resource.data.clientId); 
-    }    
+    match /proposals/{proposalId} {
+      allow read: if isAdmin() || isClient(resource.data.clientId);
+      allow write: if isAdmin() || isClient(resource.data.clientId);
+    }
     match /cms_content/{docId} { allow read: if true; allow write: if isAdmin(); }
     match /settings/{docId} { allow read: if true; allow write: if isAdmin(); }
     match /system_settings/{docId} { allow read, write: if isAdmin(); }
@@ -96,20 +146,22 @@ service cloud.firestore {
     match /scraped_products/{productId} { allow read, write: if isAdmin(); }
     match /price_history_log/{logId} { allow read, write: if isAdmin(); }
     match /sync_runs/{runId} { allow read, write: if isAdmin(); }
-    
+
     match /notifications/{notifId} {
       allow read: if isAdmin() || (isAuthenticated() && (request.auth.uid == resource.data.userId || isClient(resource.data.userId)));
-      allow create: if isAuthenticated(); 
+      allow create: if isAuthenticated();
       allow update, delete: if isAdmin() || (isAuthenticated() && (request.auth.uid == resource.data.userId || isClient(resource.data.userId)));
     }
 
+    // Public showcase, portfolio, products — readable by anyone
+    match /showcase/{sceneId} { allow read: if true; allow write: if isAdmin(); }
     match /portfolio/{projId} { allow read: if true; allow write: if isAdmin(); }
     match /products/{prodId} { allow read: if true; allow write: if isAdmin(); }
     match /categories/{catId} { allow read: if true; allow write: if isAdmin(); }
-    match /testimonials/{testId} { 
-      allow read: if true; 
-      allow create: if request.resource.data.status == 'pending'; 
-      allow update, delete: if isAdmin(); 
+    match /testimonials/{testId} {
+      allow read: if true;
+      allow create: if request.resource.data.status == 'pending';
+      allow update, delete: if isAdmin();
     }
 
     match /messages/{msgId} {
@@ -118,27 +170,67 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
-    match /showcase/{sceneId} { allow read: if true; allow write: if isAdmin(); }
     match /emails/{emailId} {
       allow read: if isAdmin() || (isAuthenticated() && request.auth.token.email == resource.data.to);
       allow write: if isAdmin();
-      allow create: if request.resource.data.status == 'pending'; 
+      allow create: if request.resource.data.status == 'pending';
     }
+
+    match /materials/{id} { allow read: if isAdmin(); allow write: if isAdmin(); }
 
     match /work_orders/{id} { allow read: if isAdmin() || isClient(resource.data.clientId) || (isAuthenticated() && resource.data.clientEmail == request.auth.token.email); allow write: if isAdmin(); }
     match /containers/{id} { allow read: if isAdmin() || isClient(resource.data.clientId) || (isAuthenticated() && resource.data.clientEmail == request.auth.token.email); allow write: if isAdmin(); }
     match /transactions/{id} { allow read: if isAdmin() || isClient(resource.data.clientId) || (isAuthenticated() && resource.data.clientEmail == request.auth.token.email); allow write: if isAdmin(); }
-    match /invoices/{id} { allow read: if isAuthenticated(); allow write: if isAuthenticated() && (isAdmin() || request.auth.token.email != null); }
+    match /invoices/{id} {
+      // Clients may read their own invoices — matched by clientId, email, OR project membership.
+      // isClientOfProject() uses the project's clientIds array which contains all phone format
+      // variants (+233, 233, 0...) so phone-auth users always match.
+      allow read: if isAdmin()
+        || isClient(resource.data.clientId)
+        || (isAuthenticated() && resource.data.clientEmail == request.auth.token.email)
+        || (resource.data.projectId is string && isClientOfProject(resource.data.projectId))
+        || (resource.data.parentId is string && isClientOfProject(resource.data.parentId));
+      allow create, delete: if isAdmin();
+      allow update: if isAdmin() || (
+        (
+          isClient(resource.data.clientId) ||
+          (isAuthenticated() && resource.data.clientEmail == request.auth.token.email) ||
+          (resource.data.projectId is string && isClientOfProject(resource.data.projectId))
+        ) &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'awaitingConfirmation', 'paymentMethodSubmitted', 'paymentSubmittedAt'
+        ])
+      );
+    }
     match /tasks/{id} { allow read: if isAdmin() || isClient(resource.data.clientId) || (isAuthenticated() && resource.data.clientEmail == request.auth.token.email); allow write: if isAdmin(); }
     match /procurements/{id} { allow read: if isAdmin() || isClient(resource.data.clientId) || (isAuthenticated() && resource.data.clientEmail == request.auth.token.email); allow write: if isAdmin(); }
     match /activity_logs/{id} { allow read: if isAdmin(); allow write: if isAdmin(); }
-    match /approvals/{id} { allow read: if isAdmin() || isClient(resource.data.clientId) || (isAuthenticated() && resource.data.clientEmail == request.auth.token.email); allow write: if isAdmin(); }
-    match /change_requests/{id} { allow read: if isAdmin() || isClient(resource.data.clientId) || (isAuthenticated() && resource.data.clientEmail == request.auth.token.email); allow write: if isAdmin() || isClient(request.resource.data.clientId); }
+    match /approvals/{id} {
+      allow read: if isAdmin() || isClient(resource.data.clientId) || (isAuthenticated() && resource.data.clientEmail == request.auth.token.email);
+      allow create, delete: if isAdmin();
+      allow update: if isAdmin() || (
+        isClient(resource.data.clientId) &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'clientNote', 'updatedAt'])
+      );
+    }
     match /notes/{id} { allow read: if isAdmin() || isClient(resource.data.clientId) || (isAuthenticated() && resource.data.clientEmail == request.auth.token.email); allow write: if isAdmin(); }
     match /media/{id} { allow read: if isAdmin() || isClient(resource.data.clientId) || (isAuthenticated() && resource.data.clientEmail == request.auth.token.email); allow write: if isAdmin(); }
     match /shipments/{id} { allow read: if isAdmin() || isClient(resource.data.clientId) || (isAuthenticated() && resource.data.clientEmail == request.auth.token.email); allow write: if isAdmin(); }
-    match /renderingPackages/{id} { allow read: if isAdmin() || isClient(resource.data.clientId) || (isAuthenticated() && resource.data.clientEmail == request.auth.token.email); allow write: if isAdmin() || isClient(resource.data.clientId); }
-    match /addOns/{id} { allow read: if isAdmin() || isClient(resource.data.clientId) || (isAuthenticated() && resource.data.clientEmail == request.auth.token.email); allow write: if isAdmin(); }
+    match /renderingPackages/{id} {
+      allow read: if isAdmin() || isClient(resource.data.clientId) || (isAuthenticated() && resource.data.clientEmail == request.auth.token.email);
+      allow create, delete: if isAdmin();
+      allow update: if isAdmin() || (
+        isClient(resource.data.clientId) &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'usedRevisions'])
+      );
+    }
+    match /addOns/{id} {
+      allow read: if isAdmin()
+        || isClient(resource.data.clientId)
+        || (isAuthenticated() && resource.data.clientEmail == request.auth.token.email)
+        || (resource.data.projectId is string && isClientOfProject(resource.data.projectId));
+      allow write: if isAdmin();
+    }
 
     // Logs written by Cloud Functions (Admin SDK bypasses rules, but good to have for reads)
     match /whatsapp_log/{id} { allow read: if isAdmin(); allow write: if false; }
@@ -149,7 +241,10 @@ service cloud.firestore {
     // Change requests — clients can create for their own projects, admin manages
     match /change_requests/{id} {
       allow read: if isAdmin() || isClient(resource.data.clientId) || (isAuthenticated() && resource.data.clientEmail == request.auth.token.email);
-      allow create: if isAuthenticated() && request.resource.data.keys().hasAll(['projectId', 'clientId', 'status']) && request.resource.data.status == 'pending';
+      allow create: if isAuthenticated()
+        && request.resource.data.keys().hasAll(['projectId', 'clientId', 'status'])
+        && request.resource.data.status == 'pending'
+        && isClient(request.resource.data.clientId);
       allow update, delete: if isAdmin();
     }
   }

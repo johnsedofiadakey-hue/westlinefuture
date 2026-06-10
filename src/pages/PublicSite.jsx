@@ -6,7 +6,8 @@ import {
   Hammer, Palette, Package, Mail, Truck, CreditCard, Building,
   CheckCircle, Send, Sparkles, MapPin, Calendar, Menu, Bell,
   ShieldCheck, Clock, Globe2, Wrench, Quote,
-  AppWindow, ShowerHead, ChefHat, Shirt, LayoutGrid, DoorOpen, Droplets, PlugZap
+  AppWindow, ShowerHead, ChefHat, Shirt, LayoutGrid, DoorOpen, Droplets, PlugZap,
+  Sofa, Refrigerator
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useSearchParams } from 'react-router-dom';
@@ -68,7 +69,7 @@ export function Hero({ slides, brand, navigate, setPage }) {
         muted
         playsInline
         controls={false}
-        preload="auto"
+        preload="none"
         style={{
           position: 'absolute', inset: 0, width: '100%', height: '100%',
           objectFit: 'cover', zIndex: 0, pointerEvents: 'none'
@@ -249,62 +250,154 @@ function PortalPromise({ brand, navigate }) {
   );
 }
 
+// Service icon map for homepage preview
+const SVC_ICONS = {
+  'surface-finishes':  LayoutGrid,
+  'custom-carpentry':  Hammer,
+  'home-furniture':    Sofa,
+  'home-appliances':   Zap,
+  'decor-accessories': Sparkles,
+};
+
+const DEFAULT_SVCS = [
+  {
+    id: 'surface-finishes',
+    emoji: '🪟',
+    name: 'Surface Finishes & Fixtures',
+    tagline: 'Tiles · Flooring · Doors · Sanitary ware · Countertops',
+    short: 'Premium wall & floor tiles, wood and vinyl flooring, interior doors, sanitary ware, bathroom fixtures, countertops and all cabinet hardware — sourced and installed.',
+  },
+  {
+    id: 'custom-carpentry',
+    emoji: '🪚',
+    name: 'Fixed Custom Carpentry',
+    tagline: 'Kitchen cabinets · Wardrobes · Vanities · TV units',
+    short: 'Bespoke built-in cabinetry crafted to your exact 3D layout — kitchen cabinet sets, fitted wardrobes, vanity cabinets, TV wall units and entrance shoe cabinets.',
+  },
+  {
+    id: 'home-furniture',
+    emoji: '🛋️',
+    name: 'Home Furniture',
+    tagline: 'Sofas · Dining sets · Beds · Coffee tables · Sideboards',
+    short: 'Factory-direct furniture from China — coordinated with your interior design so every piece belongs. Sofas, dining sets, bed frames, coffee tables and sideboards.',
+  },
+  {
+    id: 'home-appliances',
+    emoji: '🏠',
+    name: 'Home Appliances',
+    tagline: 'Fridges · Washing machines · Hoods · Hobs · Water heaters · TVs',
+    short: 'Every appliance your home needs, integrated seamlessly with your kitchen and bathroom design — refrigerators, washing machines, range hoods, hobs and televisions.',
+  },
+  {
+    id: 'decor-accessories',
+    emoji: '✨',
+    name: 'Décor & Accessories',
+    tagline: 'Curtains · Lighting · Mirrors · Decorative trims',
+    short: 'The finishing touches that complete a room — custom curtains, pendant lights, LED systems, bathroom mirrors, decorative trims and coordinated accent pieces.',
+  },
+];
+
 export function ServicesPreview({ brand, navigate, services }) {
   const winW = useWindowWidth();
   const mob = isMob(winW);
   const ac = brand.color || AC;
+  const [hovered, setHovered] = useState(null);
 
-  const DEFAULT_SVCS = [
-    { Icon: Layers,     name: 'Glass & Glazing',       short: 'Frameless glass, balustrades, curtain walls, glass partitions & shopfronts.', id: 'glass' },
-    { Icon: AppWindow,  name: 'Aluminium Windows',      short: 'Casement, sliding & louvre aluminium windows and doors — fabricated to spec.', id: 'aluminium' },
-    { Icon: ShowerHead, name: 'Bathroom Installation',  short: 'Full bathroom fit-out — shower cubicles, vanities, WC, tiles & plumbing.', id: 'washroom' },
-    { Icon: ChefHat,    name: 'Kitchen Renovation',     short: 'Custom kitchen cabinets, worktops, sinks — modular kitchen supply & install.', id: 'kitchen' },
-    { Icon: Shirt,      name: 'Wardrobes & Storage',    short: 'Sliding wardrobes, walk-in closets & fitted storage systems for every room.', id: 'wardrobe' },
-    { Icon: LayoutGrid, name: 'Tiles Supply & Fixing',  short: 'Porcelain, ceramic & outdoor tiles — supply only or full supply-and-fix.', id: 'tiles' },
-    { Icon: DoorOpen,   name: 'Doors Installation',     short: 'Timber, WPC & security doors — frames, handles & complete door systems.', id: 'doors' },
-    { Icon: Zap,        name: 'Electrical Works',        short: 'Full wiring, LED lighting, smart switches, DB boards & socket installations.', id: 'electrical' },
-    { Icon: Droplets,   name: 'Plumbing Works',          short: 'Plumbing installations, sanitary fittings, water heaters & pipe systems.', id: 'plumbing' },
-  ];
-  const items = (services && services.length >= 6) ? services : DEFAULT_SVCS;
+  // Use CMS services if they exist, otherwise defaults
+  const items = (services && services.length >= 3) ? services : DEFAULT_SVCS;
 
   return (
     <section style={{ padding: mob ? '80px 24px' : '120px 5vw', background: `var(--bg-primary)` }}>
       <div style={{ maxWidth: 1400, margin: '0 auto' }}>
+
+        {/* Header */}
         <div style={{ marginBottom: mob ? 48 : 64, display: 'flex', flexDirection: mob ? 'column' : 'row', justifyContent: 'space-between', alignItems: mob ? 'flex-start' : 'flex-end', gap: 24 }}>
           <div>
-            <span style={{ color: ac, fontSize: 10, fontWeight: 800, letterSpacing: '0.3em', textTransform: 'uppercase' }}>EVERYTHING INTERIOR</span>
-            <h2 style={{ fontSize: mob ? 36 : 64, fontWeight: 800, letterSpacing: '-0.04em', margin: '16px 0 0', color: DARK_TEXT, lineHeight: 1.05 }}>
+            <span style={{ color: ac, fontSize: 10, fontWeight: 800, letterSpacing: '0.3em', textTransform: 'uppercase' }}>EVERYTHING YOUR HOME NEEDS</span>
+            <h2 style={{ fontSize: mob ? 36 : 64, fontWeight: 800, letterSpacing: '-0.04em', margin: '16px 0 16px', color: DARK_TEXT, lineHeight: 1.05 }}>
               One company,<br />
-              <em style={{ fontStyle: 'italic', fontWeight: 400, color: ac }}>every service.</em>
+              <em style={{ fontStyle: 'italic', fontWeight: 400, color: ac }}>your complete home.</em>
             </h2>
+            <p style={{ fontSize: mob ? 14 : 17, color: 'rgba(92,58,33,0.55)', maxWidth: 640, lineHeight: 1.75, margin: 0 }}>
+              Surface finishes, custom carpentry, furniture, appliances and décor — every product your home interior needs, sourced from China and installed by our team.
+            </p>
+          </div>
+          <div style={{ display: 'flex', gap: 12, flexShrink: 0, flexWrap: 'wrap' }}>
+            <button
+              onClick={() => navigate('/?page=services')}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '14px 28px', background: DARK_TEXT, color: '#fff', border: 'none', borderRadius: 14, fontWeight: 800, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}
+            >
+              All Services <ChevronRight size={15} />
+            </button>
+          </div>
+        </div>
+
+        {/* 5-service grid */}
+        <div style={{ display: 'grid', gridTemplateColumns: mob ? '1fr' : 'repeat(5, 1fr)', gap: mob ? 16 : 20 }}>
+          {items.slice(0, 5).map((s, i) => {
+            const IconComp = SVC_ICONS[s.id] || Layers;
+            const isHov = hovered === s.id;
+            return (
+              <div
+                key={s.id || i}
+                onClick={() => navigate('/?page=services')}
+                onMouseEnter={() => setHovered(s.id)}
+                onMouseLeave={() => setHovered(null)}
+                style={{
+                  background: isHov ? DARK_TEXT : '#fff',
+                  border: `1.5px solid ${isHov ? DARK_TEXT : 'var(--border-color)'}`,
+                  borderRadius: 22,
+                  padding: mob ? '24px 20px' : '32px 24px',
+                  cursor: 'pointer',
+                  transition: 'all .25s ease',
+                  transform: isHov && !mob ? 'translateY(-4px)' : 'none',
+                  boxShadow: isHov ? '0 20px 48px rgba(0,0,0,0.12)' : '0 2px 12px rgba(0,0,0,0.03)',
+                  display: 'flex', flexDirection: 'column', gap: 16,
+                }}
+              >
+                {/* Icon */}
+                <div style={{
+                  width: 48, height: 48, borderRadius: 14,
+                  background: isHov ? `${ac}25` : `${ac}12`,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  flexShrink: 0,
+                }}>
+                  <IconComp size={22} color={ac} strokeWidth={1.75} />
+                </div>
+
+                {/* Text */}
+                <div>
+                  <div style={{ fontSize: mob ? 14 : 15, fontWeight: 800, color: isHov ? '#fff' : DARK_TEXT, marginBottom: 8, lineHeight: 1.25 }}>
+                    {s.name || s.title}
+                  </div>
+                  <div style={{ fontSize: 11, color: isHov ? 'rgba(255,255,255,0.5)' : 'rgba(92,58,33,0.45)', lineHeight: 1.6, fontWeight: 600 }}>
+                    {s.tagline || s.short}
+                  </div>
+                </div>
+
+                {/* Arrow */}
+                <div style={{ marginTop: 'auto', display: 'flex', alignItems: 'center', gap: 5, color: ac, fontWeight: 800, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                  Learn more <ChevronRight size={12} />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* CTA strip */}
+        <div style={{ marginTop: mob ? 32 : 48, padding: mob ? '24px 24px' : '28px 40px', borderRadius: 18, background: `${ac}10`, border: `1.5px solid ${ac}30`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16 }}>
+          <div>
+            <div style={{ fontSize: mob ? 15 : 17, fontWeight: 800, color: DARK_TEXT, marginBottom: 4 }}>Ready to furnish your home?</div>
+            <div style={{ fontSize: 13, color: 'rgba(92,58,33,0.55)', lineHeight: 1.6 }}>Start with a paid 3D design — we handle everything from there.</div>
           </div>
           <button
-            onClick={() => navigate('/?page=services')}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '14px 28px', background: DARK_TEXT, color: '#fff', border: 'none', borderRadius: 14, fontWeight: 800, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}
+            onClick={() => navigate('/?page=contact')}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '14px 28px', background: ac, color: '#fff', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 14, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}
           >
-            All Services <ChevronRight size={15} />
+            Start Your Project <ChevronRight size={15} />
           </button>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: mob ? '1fr 1fr' : 'repeat(3, 1fr)', gap: mob ? 12 : 20 }}>
-          {items.slice(0, 9).map((s, i) => (
-            <div
-              key={s.id || s.name || i}
-              onClick={() => navigate('/?page=services')}
-              style={{ padding: mob ? '20px 16px' : '36px 32px', background: '#fff', border: '1px solid rgba(0,0,0,0.05)', borderRadius: 20, boxShadow: '0 4px 16px rgba(0,0,0,0.02)', transition: 'transform 0.25s ease, box-shadow 0.25s ease', cursor: 'pointer' }}
-              onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-4px)'; e.currentTarget.style.boxShadow = '0 20px 40px rgba(0,0,0,0.08)'; }}
-              onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 4px 16px rgba(0,0,0,0.02)'; }}
-            >
-              <div style={{ width: 44, height: 44, borderRadius: 14, background: `${ac}15`, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: mob ? 16 : 24, color: ac }}>
-                {s.Icon ? <s.Icon size={20} strokeWidth={1.75} /> : <Layers size={20} strokeWidth={1.75} />}
-              </div>
-              <h3 style={{ fontSize: mob ? 14 : 18, fontWeight: 800, marginBottom: 10, color: DARK_TEXT, lineHeight: 1.2 }}>{s.name || s.title}</h3>
-              {!mob && <p style={{ color: 'rgba(92, 58, 33,0.55)', lineHeight: 1.7, marginBottom: 20, fontSize: 13 }}>{s.short || s.desc}</p>}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: ac, fontWeight: 800, fontSize: 11, textTransform: 'uppercase' }}>
-                Learn more <ChevronRight size={12} />
-              </div>
-            </div>
-          ))}
-        </div>
+
       </div>
     </section>
   );
@@ -635,7 +728,7 @@ export default function PublicSite({ brand, setPage, page, onPortal, user, conte
       
       {/* FLOATING WHATSAPP SUPPORT */}
       <a 
-        href={`https://wa.me/${brand.whatsapp || '233598455012'}?text=${encodeURIComponent("Hi, I'm interested in a glass installation quote from Westline Future.")}`}
+        href={`https://wa.me/${brand.whatsapp || '233247319778'}?text=${encodeURIComponent("Hi Westline Future, I'm interested in a quote for interior decoration / furnishing. Please get in touch.")}`}
         target="_blank" 
         rel="noopener noreferrer"
         style={{

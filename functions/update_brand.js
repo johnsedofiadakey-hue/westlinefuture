@@ -1,6 +1,7 @@
 const admin = require('firebase-admin');
-const serviceAccount = require('./serviceAccountKey.json'); // wait, I don't have serviceAccountKey.json
 
+// Uses Application Default Credentials — run `firebase login` or set GOOGLE_APPLICATION_CREDENTIALS
+// before executing this script locally.
 admin.initializeApp({
   credential: admin.credential.applicationDefault()
 });

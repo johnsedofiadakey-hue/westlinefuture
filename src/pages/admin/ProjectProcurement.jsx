@@ -103,7 +103,7 @@ export default function ProjectProcurement({ clients = [], procurements = [], br
                        <div style={{ fontSize: 11, color: `var(--text-secondary)` }}>ID: {p.id.slice(-6).toUpperCase()}</div>
                     </td>
                     <td style={{ padding: '14px 16px' }}>
-                       <div className="lxf" style={{ fontSize: 13, fontWeight: 700 }}>${p.unitCost}</div>
+                       <div className="lxf" style={{ fontSize: 13, fontWeight: 700 }}>GH₵{p.unitCost}</div>
                     </td>
                     <td style={{ padding: '14px 16px' }}><div className="lxf" style={{ fontSize: 12 }}>{p.supplier || p.source}</div></td>
                     <td style={{ padding: '14px 16px' }}>
@@ -188,11 +188,11 @@ export default function ProjectProcurement({ clients = [], procurements = [], br
                  <thead style={{ background: `var(--bg-secondary)` }}><tr style={{ textAlign: 'left' }}><th style={{ padding: 12 }}>Component List</th><th style={{ padding: 12, textAlign: 'right' }}>Specs</th><th style={{ padding: 12, textAlign: 'right' }}>Unit Cost</th></tr></thead>
                  <tbody>
                     {activeProcs.filter(p => selectedIds.includes(p.id)).map(p => (
-                      <tr key={p.id} style={{ borderBottom: '1px solid #eee' }}><td style={{ padding: 12 }}>{p.item}</td><td style={{ padding: 12, textAlign: 'right' }}>{p.type}</td><td style={{ padding: 12, textAlign: 'right', fontWeight: 700 }}>${p.unitCost}</td></tr>
+                      <tr key={p.id} style={{ borderBottom: '1px solid #eee' }}><td style={{ padding: 12 }}>{p.item}</td><td style={{ padding: 12, textAlign: 'right' }}>{p.type}</td><td style={{ padding: 12, textAlign: 'right', fontWeight: 700 }}>GH₵{p.unitCost}</td></tr>
                     ))}
                     <tr style={{ background: `var(--bg-secondary)` }}>
-                       <td colSpan={2} style={{ padding: 12, fontWeight: 800 }}>TOTAL (USD)</td>
-                       <td style={{ padding: 12, textAlign: 'right', fontWeight: 800 }}>${activeProcs.filter(p => selectedIds.includes(p.id)).reduce((acc, curr) => acc + parseFloat(curr.unitCost), 0).toFixed(2)}</td>
+                       <td colSpan={2} style={{ padding: 12, fontWeight: 800 }}>TOTAL</td>
+                       <td style={{ padding: 12, textAlign: 'right', fontWeight: 800 }}>GH₵{activeProcs.filter(p => selectedIds.includes(p.id)).reduce((acc, curr) => acc + parseFloat(curr.unitCost), 0).toFixed(2)}</td>
                     </tr>
                  </tbody>
               </table>

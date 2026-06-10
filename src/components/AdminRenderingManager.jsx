@@ -9,6 +9,7 @@ import {
   orderBy, serverTimestamp, deleteDoc
 } from 'firebase/firestore';
 import blueprintImg from '../assets/architectural_blueprint.png';
+import { formatDateTime } from '../lib/formatTime'; // ✅ PHASE 3: Use consistent timestamp formatting
 
 export default function AdminRenderingManager({
   project,
@@ -450,7 +451,7 @@ export default function AdminRenderingManager({
                       <div style={{ fontSize: 12, color: '#1E40AF', lineHeight: 1.5 }}>
                         Method: <strong>{linkedInv?.paymentMethodSubmitted === 'bank' ? 'Bank Transfer' : 'Offline / In-Person'}</strong>
                         {linkedInv?.paymentSubmittedAt?.seconds && (
-                          <> &middot; {new Date(linkedInv.paymentSubmittedAt.seconds * 1000).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</>
+                          <> &middot; {formatDateTime(linkedInv.paymentSubmittedAt?.seconds ? new Date(linkedInv.paymentSubmittedAt.seconds * 1000) : new Date(), 'short', '24h')}</>
                         )}
                       </div>
                     </div>
@@ -614,7 +615,7 @@ export default function AdminRenderingManager({
                         </div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid var(--border-color)', paddingTop: 10, marginTop: 4 }}>
                           <div style={{ fontSize: 10, color: 'var(--text-secondary)' }}>
-                            By {activePin.authorName} &middot; {activePin.createdAt?.seconds ? new Date(activePin.createdAt.seconds * 1000).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : ''}
+                            By {activePin.authorName} &middot; {activePin.createdAt?.seconds ? formatDateTime(activePin.createdAt?.seconds ? new Date(activePin.createdAt.seconds * 1000) : new Date(), 'short', '24h') : ''}
                           </div>
                           <button
                             onClick={() => handleResolvePin(activePin)}

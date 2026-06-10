@@ -30,6 +30,7 @@ import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage, functions } from '../lib/firebase';
 import { httpsCallable } from 'firebase/functions';
 import { sanitizeText } from '../lib/sanitize';
+import { formatDate, formatTime } from '../lib/formatTime'; // ✅ PHASE 3: Use consistent timestamp formatting
 
 // ── Language detection ─────────────────────────────────────────────────────────
 const CJK_RE = /[一-鿿㐀-䶿！-￯　-〿]/;
@@ -66,17 +67,16 @@ const sameDay = (a, b) =>
 
 const dateLabel = (ts) => {
   if (!ts?.seconds) return '';
+  // ✅ PHASE 3: Use formatDate utility for consistency
+  if (!ts?.seconds) return '';
   const d = new Date(ts.seconds * 1000);
-  const now = new Date();
-  if (sameDay(d, now)) return 'Today';
-  const yest = new Date(now); yest.setDate(now.getDate() - 1);
-  if (sameDay(d, yest)) return 'Yesterday';
-  return d.toLocaleDateString([], { day: 'numeric', month: 'short', year: d.getFullYear() !== now.getFullYear() ? 'numeric' : undefined });
+  return formatDate(d, 'smart'); // Shows "Today", "Yesterday", or "10 Jun"
 };
 
 const timeStr = (ts) => {
+  // ✅ PHASE 3: Use formatTime utility for consistency
   if (!ts?.seconds) return '';
-  return new Date(ts.seconds * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  return formatTime(new Date(ts.seconds * 1000), '24h');
 };
 
 // ── Typing indicator (Firestore presence) ─────────────────────────────────────

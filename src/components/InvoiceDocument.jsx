@@ -1,5 +1,6 @@
 import React from 'react';
 import { Landmark } from 'lucide-react';
+import { getInvoiceTypeConfig } from '../lib/invoiceTypes'; // ✅ PHASE 3: Use invoice types registry
 
 /* ─── helpers ──────────────────────────────────────────────────── */
 const lineTotal = (item = {}) => {
@@ -30,11 +31,17 @@ const fmtDate = (d) => {
 /* ─── component ─────────────────────────────────────────────────── */
 export default function InvoiceDocument({ inv = {}, isQuote = false, finSettings = {}, brand = {} }) {
   /* Document type */
+  // ✅ PHASE 3: Determine document type using registry
   // Determine document type strictly from documentKind/invoiceType/type —
   // NOT from status, so a paid Invoice still reads "Invoice" not "Sales Receipt"
   const isReceipt   = inv.documentKind === 'receipt' || inv.invoiceType === 'receipt' || inv.type === 'Receipt';
   const isQuotation = isQuote || inv.documentKind === 'quotation' || inv.type === 'Quotation';
-  const docLabel    = isReceipt ? 'Sales Receipt' : isQuotation ? 'Quotation' : 'Invoice';
+
+  // Get type config from registry (for future styling consistency)
+  const typeConfig = getInvoiceTypeConfig(
+    isReceipt ? 'RECEIPT' : isQuotation ? 'QUOTATION' : 'INVOICE'
+  );
+  const docLabel    = typeConfig?.name || (isReceipt ? 'Sales Receipt' : isQuotation ? 'Quotation' : 'Invoice');
 
   /* Palette */
   const accent  = brand?.color || '#C8A96E';

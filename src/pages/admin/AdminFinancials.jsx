@@ -84,6 +84,22 @@ export default function AdminFinancials({ invoices = [], transactions = [], clie
     return enabled.filter(Boolean);
   };
 
+  // ✅ PHASE 3: Helper to get invoice type config for display
+  // Maps document type to invoice type config (for colors, styling, etc.)
+  const getTypeConfig = (documentType) => {
+    const typeMap = {
+      'Invoice': 'INVOICE',
+      'Quotation': 'QUOTATION',
+      'Quote': 'QUOTATION',
+      'Receipt': 'RECEIPT',
+      'invoice': 'INVOICE',
+      'quotation': 'QUOTATION',
+      'receipt': 'RECEIPT',
+    };
+    const mappedType = typeMap[documentType] || 'INVOICE';
+    return getInvoiceTypeConfig(mappedType);
+  };
+
   // Sync gateway settings from Firebase when brand loads (handles async load after mount)
   // Only sync if admin hasn't made local edits yet (dirty flag)
   useEffect(() => {

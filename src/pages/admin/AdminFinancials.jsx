@@ -18,6 +18,7 @@ import InvoiceDocument from '../../components/InvoiceDocument';
 import { GLASS_CATALOG_DATA } from '../../data.jsx';
 import { getInvoiceTypeConfig, getAllInvoiceTypes } from '../../lib/invoiceTypes'; // ✅ PHASE 3: Use registry instead of hardcoded types
 import { getFirebaseErrorMessage, logError } from '../../lib/errorMessages'; // ✅ PHASE 3: User-friendly error messages
+import { getPaymentMethod, getAllPaymentMethods, getEnabledPaymentMethods } from '../../lib/paymentMethods'; // ✅ PHASE 3: Payment methods registry
 
 // A4 at 96dpi
 const A4W = 794;
@@ -73,6 +74,15 @@ export default function AdminFinancials({ invoices = [], transactions = [], clie
       hubtelMerchantId:    '',
     }
   );
+
+  // ✅ PHASE 3: Helper to get enabled payment methods from gatewaySettings
+  // This bridges old format (enablePaystack/enableHubtel flags) with new registry pattern
+  const getEnabledGatewayMethods = () => {
+    const enabled = [];
+    if (gatewaySettings.enablePaystack) enabled.push(getPaymentMethod('paystack'));
+    if (gatewaySettings.enableHubtel) enabled.push(getPaymentMethod('hubtel'));
+    return enabled.filter(Boolean);
+  };
 
   // Sync gateway settings from Firebase when brand loads (handles async load after mount)
   // Only sync if admin hasn't made local edits yet (dirty flag)

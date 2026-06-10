@@ -77,30 +77,7 @@ export const registerPaymentMethod = (method) => {
 };
 
 /**
- * PAYMENT METHOD COMPONENTS - Lazy load per method
- * Each component receives: { brand, onSuccess, onError }
+ * NOTE: Component imports are handled in their respective files
+ * (UnifiedPaymentGateway.jsx, etc.) to avoid circular dependencies
+ * and allow lazy loading where needed.
  */
-export const getPaymentComponent = async (methodId) => {
-  const method = getPaymentMethod(methodId);
-  if (!method) throw new Error(`Unknown payment method: ${methodId}`);
-
-  if (methodId === PAYMENT_METHODS.PAYSTACK) {
-    const { UnifiedPaymentGateway } = await import('../components/UnifiedPaymentGateway');
-    return UnifiedPaymentGateway;
-  }
-
-  if (methodId === PAYMENT_METHODS.HUBTEL) {
-    const { HubtelPaymentGateway } = await import('../components/HubtelPaymentGateway');
-    return HubtelPaymentGateway;
-  }
-
-  if (methodId === PAYMENT_METHODS.BANK_TRANSFER) {
-    const { BankTransferForm } = await import('../components/BankTransferForm');
-    return BankTransferForm;
-  }
-
-  if (methodId === PAYMENT_METHODS.CASH_IN_PERSON) {
-    const { CashPaymentForm } = await import('../components/CashPaymentForm');
-    return CashPaymentForm;
-  }
-};

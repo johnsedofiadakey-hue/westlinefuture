@@ -17,6 +17,7 @@ import PulseTargetCard from '../../components/PulseTargetCard';
 import InvoiceDocument from '../../components/InvoiceDocument';
 import { GLASS_CATALOG_DATA } from '../../data.jsx';
 import { getInvoiceTypeConfig, getAllInvoiceTypes } from '../../lib/invoiceTypes'; // ✅ PHASE 3: Use registry instead of hardcoded types
+import { getFirebaseErrorMessage, logError } from '../../lib/errorMessages'; // ✅ PHASE 3: User-friendly error messages
 
 // A4 at 96dpi
 const A4W = 794;
@@ -95,8 +96,8 @@ export default function AdminFinancials({ invoices = [], transactions = [], clie
       setHubtelTest(null); // reset test result after saving new creds
       setGatewaySettingsDirty(false); // allow Firebase sync to update form if needed
     } catch (err) {
-      console.error('[Gateway] Save failed:', err);
-      notify('error', 'Could not save gateway settings');
+      logError(err, 'saveGatewaySettings');
+      notify('error', getFirebaseErrorMessage(err));
     } finally {
       setGatewayLoading(false);
     }
@@ -277,8 +278,8 @@ export default function AdminFinancials({ invoices = [], transactions = [], clie
         setDraft(blankDraft());
       }
     } catch (e) {
-      console.error(e);
-      notify('error', 'Issuance failed');
+      logError(e, 'createInvoice');
+      notify('error', getFirebaseErrorMessage(e));
     }
   };
 

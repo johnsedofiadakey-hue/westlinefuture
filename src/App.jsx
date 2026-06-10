@@ -33,6 +33,7 @@ const WorkerView = lazy(() => import('./pages/WorkerView'));
 import ProtectedRoute from './components/ProtectedRoute';
 import { sanitizeText } from './lib/sanitize';
 import { mapFirebaseError } from './lib/firebaseErrors';
+import { checkStageGates } from './lib/projectGates'; // ✅ PHASE 3: Centralize stage validation
 const _dev = import.meta.env.DEV;
 const devLog = (...a) => { if (_dev) console.log(...a); };
 const devWarn = (...a) => { if (_dev) console.warn(...a); };
@@ -805,13 +806,10 @@ export default function App() {
       const clientStageName = stageObj?.name || `Stage ${stageId}`;
       const project = clients.find(p => p.id === projectId);
 
-      // ── Gate checks (mirror AdvanceModal logic) ────────────────────────────
-      if (project?.changeRequestPending) {
-        notify('error', 'Stage locked: An open change request must be resolved first.');
-        return;
-      }
-      if (project?.specDoc?.url && project?.specDoc?.status === 'pending') {
-        notify('error', 'Stage locked: Client has not yet approved the spec document.');
+      // ✅ PHASE 3 FIX #13: Use centralized stage gate validation (was scattered in 2 places)
+      const gates = checkStageGates(project, stageId, { invoices, changeRequests: [] });
+      if (!gates.canAdvance) {
+        gates.blockers.forEach(b => notify('error', `Stage locked: ${b.message}`));
         return;
       }
 

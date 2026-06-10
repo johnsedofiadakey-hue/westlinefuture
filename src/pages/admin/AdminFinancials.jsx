@@ -16,6 +16,7 @@ import EmptyState from '../../components/ui/EmptyState';
 import PulseTargetCard from '../../components/PulseTargetCard';
 import InvoiceDocument from '../../components/InvoiceDocument';
 import { GLASS_CATALOG_DATA } from '../../data.jsx';
+import { getInvoiceTypeConfig, getAllInvoiceTypes } from '../../lib/invoiceTypes'; // ✅ PHASE 3: Use registry instead of hardcoded types
 
 // A4 at 96dpi
 const A4W = 794;

@@ -10,8 +10,6 @@
  *   // If network fails and user retries, same invoice won't be created twice
  */
 
-import { generateId } from './utils';
-
 // In-memory cache of recent keys (prevents duplicates within 60 seconds)
 const recentKeys = new Map();
 const CACHE_TTL = 60 * 1000; // 60 seconds

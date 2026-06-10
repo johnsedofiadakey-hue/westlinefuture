@@ -34,6 +34,9 @@ import ProtectedRoute from './components/ProtectedRoute';
 import { sanitizeText } from './lib/sanitize';
 import { mapFirebaseError } from './lib/firebaseErrors';
 import { checkStageGates } from './lib/projectGates'; // ✅ PHASE 3: Centralize stage validation
+import { generateIdempotencyKey, saveIdempotencyKey } from './lib/idempotency'; // ✅ PHASE 4: Prevent duplicates
+import { getFirebaseErrorMessage, logError as logFirebaseError } from './lib/errorMessages'; // ✅ PHASE 4: User-friendly errors
+import { formatDateTime } from './lib/formatTime'; // ✅ PHASE 4: Consistent timestamps
 const _dev = import.meta.env.DEV;
 const devLog = (...a) => { if (_dev) console.log(...a); };
 const devWarn = (...a) => { if (_dev) console.warn(...a); };
@@ -902,29 +905,36 @@ export default function App() {
     }
   };
 
+  // ✅ PHASE 4: Add idempotency + error handling to prevent duplicate invoices
   const createInvoice = async (data) => {
     if (!db) return;
     try {
+      const idempotencyKey = generateIdempotencyKey('invoice');
+      saveIdempotencyKey(idempotencyKey, 'invoice');
+
       const docRef = await addDoc(collection(db, 'invoices'), {
         ...data,
+        idempotencyKey, // Track to prevent duplicates
         createdAt: new Date().toISOString(),
         status: data.status || 'Pending'
       });
       notify('success', 'Official Invoice Issued');
       return docRef.id;
     } catch (err) {
-      devErr(err);
-      notify('error', 'Issuance failed');
+      logFirebaseError(err, 'createInvoice');
+      notify('error', getFirebaseErrorMessage(err));
     }
   };
 
+  // ✅ PHASE 4: Better error messages
   const updateInvoice = async (id, updates) => {
     if (!db || !id) return;
     try {
       await updateDoc(doc(db, 'invoices', id), updates);
       notify('success', 'Invoice updated');
     } catch (err) {
-      notify('error', 'Failed to update invoice');
+      logFirebaseError(err, 'updateInvoice');
+      notify('error', getFirebaseErrorMessage(err));
     }
   };
 
@@ -934,7 +944,8 @@ export default function App() {
       await deleteDoc(doc(db, 'invoices', id));
       notify('success', 'Invoice deleted');
     } catch (err) {
-      notify('error', 'Failed to delete invoice');
+      logFirebaseError(err, 'deleteInvoice');
+      notify('error', getFirebaseErrorMessage(err));
     }
   };
 

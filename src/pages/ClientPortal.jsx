@@ -969,12 +969,10 @@ function ContractAgreementModal({ project, user, brand, onClose, onSigned, isMob
         .then(r => r.json()).then(d => d.ip).catch(() => 'unavailable');
       const now = new Date().toISOString();
       const sigDataUrl = drawnSig || nameToSignatureDataUrl(name, ac);
-      const timeline = project.timeline || {};
-      if (project.stageId && project.stageId < 4) {
-        timeline[project.stageId] = { ...(timeline[project.stageId] || {}), endDate: now, status: 'completed' };
-        timeline[4] = { startDate: now, status: 'active', note: 'Contract signed, automatically advancing to production' };
-      }
 
+      // Only write fields allowed by Firestore client rules.
+      // stageId/timeline must NOT be included here — server rejects them and reverts
+      // the whole write, causing the gate to loop. Stage advance is handled by admin/CF.
       await updateDoc(doc(db, 'projects', project.id), {
         contractAccepted:       true,
         contractSignedName:     name || 'Drawn Signature',
@@ -982,10 +980,7 @@ function ContractAgreementModal({ project, user, brand, onClose, onSigned, isMob
         quoteSignedAt:          serverTimestamp(),
         quoteSignedByPhone:     user?.phone || '',
         quoteVerificationStamp: { ipAddress: ip, userAgent: navigator.userAgent, timestamp: now },
-        // Contract signing is always the final kickoff gate step — persist this
-        // here where the client already has write permission for this project doc.
         kickoffGateCleared:     true,
-        ...(project.stageId < 4 ? { stageId: 4, timeline } : {})
       });
 
       // Notify admin that contract has been signed
@@ -4704,11 +4699,14 @@ function KickoffGate({ project, user, brand, isMobile, invoices = [], hasUnlocke
   // Step 1 = rendering fee (rendering-first only), Step 2 = contract signing
   const step = needsRenderingPayment ? 1 : needsContract ? 2 : null;
 
-  // Gate cleared — kickoffGateCleared is written during contract signing
-  if (step === null) {
-    onGateCleared?.();
-    return null;
-  }
+  // Notify parent when gate clears — must be in an effect, not the render body,
+  // to avoid calling setState on parent during KickoffGate's own render.
+  useEffect(() => {
+    if (step === null) onGateCleared?.();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step]);
+
+  if (step === null) return null;
 
   const stepLabel = step === 1 ? 'Step 1 of 2 — 3D Rendering Fee' : 'Step 2 of 2 — Project Agreement';
   const totalSteps = requiresRendering ? 2 : 1;
@@ -4925,7 +4923,7 @@ function KickoffGate({ project, user, brand, isMobile, invoices = [], hasUnlocke
           brand={brand}
           isMobile={isMobile}
           onClose={() => setShowContract(false)}
-          onSigned={() => { setContractJustSigned(true); setShowContract(false); }}
+          onSigned={() => { setContractJustSigned(true); setShowContract(false); onGateCleared?.(); }}
         />
       )}
     </div>
@@ -4935,7 +4933,16 @@ function KickoffGate({ project, user, brand, isMobile, invoices = [], hasUnlocke
 // ─── Contract Gate ────────────────────────────────────────────────────────
 function ContractGate({ project, user, brand, isMobile }) {
   const [showContract, setShowContract] = useState(false);
+  const [signed, setSigned] = useState(false);
   const ac = brand?.color || AC;
+
+  if (signed) return (
+    <div style={{ padding: '24px 32px', background: '#F0FDF4', border: '1.5px solid #86EFAC', borderRadius: 20, textAlign: 'center' }}>
+      <div style={{ fontSize: 28, marginBottom: 8 }}>✅</div>
+      <div style={{ fontSize: 16, fontWeight: 900, color: '#15803D' }}>Contract Signed!</div>
+      <div style={{ fontSize: 13, color: '#166534', marginTop: 4 }}>Your project agreement has been recorded. The team will be in touch shortly.</div>
+    </div>
+  );
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -4999,7 +5006,7 @@ function ContractGate({ project, user, brand, isMobile }) {
           brand={brand}
           isMobile={isMobile}
           onClose={() => setShowContract(false)}
-          onSigned={() => setShowContract(false)}
+          onSigned={() => { setSigned(true); setShowContract(false); }}
         />
       )}
     </div>

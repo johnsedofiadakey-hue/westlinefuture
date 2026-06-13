@@ -28,17 +28,24 @@ export default function AdminClients({ dbClients, createClient, updateClient, de
   const PHONE_RE = /^\+?[\d\s\-().]{7,20}$/;
 
   const ac = brand.color || `var(--accent-secondary)`;
-  const { invoices = [], workOrders = [] } = props;
+  const { invoices = [], workOrders = [], clients: projects = [] } = props;
 
-  const toggleSelect = (id) => {
-    setSelectedIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
+  // Use actual project records (props.clients = Firestore projects with stageId)
+  // falling back to workOrders for legacy data
+  const getLatestProject = (client) => {
+    const fromProjects = projects.filter(p => p.clientId === client.id || p.clientIds?.includes(client.id));
+    if (fromProjects.length) return fromProjects[fromProjects.length - 1];
+    const fromWOs = workOrders.filter(wo => wo.clientId === client.id);
+    return fromWOs[fromWOs.length - 1] || null;
   };
 
   const getClientStatus = (client) => {
-    const myProjects = (workOrders || []).filter(wo => wo.clientId === client.id);
-    const latest = myProjects[myProjects.length - 1];
-    const isCompleted = latest?.status === 'Completed' || (latest?.stageId || 0) >= 8;
-    return isCompleted;
+    const latest = getLatestProject(client);
+    return latest?.stageId >= 8 || latest?.status === 'Completed';
+  };
+
+  const toggleSelect = (id) => {
+    setSelectedIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
   };
 
   const toggleAll = () => {
@@ -206,8 +213,7 @@ export default function AdminClients({ dbClients, createClient, updateClient, de
               </td></tr>
             )}
             {filtered.map(client => {
-              const myProjects = (workOrders || []).filter(wo => wo.clientId === client.id);
-              const latestProject = myProjects[myProjects.length - 1];
+              const latestProject = getLatestProject(client);
               const clientInvoices = invoices.filter(inv => inv.clientId === client.id);
               const stageId = latestProject?.stageId || 0;
               const stageLabel = STAGE_LABELS[stageId] || latestProject?.status || 'Initiation';

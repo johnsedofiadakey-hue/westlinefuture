@@ -4916,7 +4916,7 @@ function KickoffGate({ project, user, brand, isMobile, invoices = [], hasUnlocke
       )}
 
       {showContract && (
-        <ContractModal project={project} user={user} brand={brand} isMobile={isMobile} onClose={() => setShowContract(false)} />
+        <ContractAgreementModal project={project} user={user} brand={brand} isMobile={isMobile} onClose={() => setShowContract(false)} />
       )}
     </div>
   );

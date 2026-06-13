@@ -4643,9 +4643,12 @@ function KickoffGate({ project, user, brand, isMobile, invoices = [], hasUnlocke
   const [paidLocally, setPaidLocally] = useState(false);
   // Pending verification state — payment went through Paystack but CF hasn't confirmed yet
   const [pendingRef, setPendingRef] = useState(null);
+  // Optimistic contract signed — set immediately on onSigned so the gate
+  // clears without waiting for the Firestore snapshot to propagate.
+  const [contractJustSigned, setContractJustSigned] = useState(false);
 
   const requiresRendering = project.kickoffMode === 'rendering-first';
-  const contractSigned = !!project.contractAccepted;
+  const contractSigned = !!project.contractAccepted || contractJustSigned;
 
   // Check rendering paid: either the flag is set, the linked invoice is "Paid", OR Paystack just confirmed it locally
   const renderingInvoiceObj = invoices.find(inv =>
@@ -4916,7 +4919,14 @@ function KickoffGate({ project, user, brand, isMobile, invoices = [], hasUnlocke
       )}
 
       {showContract && (
-        <ContractAgreementModal project={project} user={user} brand={brand} isMobile={isMobile} onClose={() => setShowContract(false)} />
+        <ContractAgreementModal
+          project={project}
+          user={user}
+          brand={brand}
+          isMobile={isMobile}
+          onClose={() => setShowContract(false)}
+          onSigned={() => { setContractJustSigned(true); setShowContract(false); }}
+        />
       )}
     </div>
   );

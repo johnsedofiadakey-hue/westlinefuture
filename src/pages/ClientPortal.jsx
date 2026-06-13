@@ -4695,18 +4695,21 @@ function KickoffGate({ project, user, brand, isMobile, invoices = [], hasUnlocke
   const renderingPaid = !!project.renderingFeePaid || paidLocally || (renderingInvoiceObj && renderingInvoiceObj.status === 'Paid') || hasUnlockedDesign;
 
   const needsRenderingPayment = requiresRendering && !renderingPaid;
+  const needsContract = !contractSigned;
   const renderingInvoice = renderingInvoiceObj;
 
-  const step = needsRenderingPayment ? 1 : null;
+  // Step 1 = rendering fee (rendering-first only), Step 2 = contract signing
+  const step = needsRenderingPayment ? 1 : needsContract ? 2 : null;
 
-  // Gate cleared — kickoffGateCleared is now written during contract signing
-  // so it's always persisted with the same write permission as contractAccepted.
+  // Gate cleared — kickoffGateCleared is written during contract signing
   if (step === null) {
     onGateCleared?.();
     return null;
   }
 
-  const stepLabel = 'Required before we begin';
+  const stepLabel = step === 1 ? 'Step 1 of 2 — 3D Rendering Fee' : 'Step 2 of 2 — Project Agreement';
+  const totalSteps = requiresRendering ? 2 : 1;
+  const currentStep = requiresRendering ? step : (step === 2 ? 1 : null);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -4720,11 +4723,24 @@ function KickoffGate({ project, user, brand, isMobile, invoices = [], hasUnlocke
           {project.title}
         </div>
         <div style={{ fontSize: isMobile ? 22 : 26, fontWeight: 900, marginBottom: 6 }}>
-          3D Rendering Fee
+          {step === 1 ? '3D Rendering Fee' : 'Sign Project Agreement'}
         </div>
         <div style={{ fontSize: 13, opacity: .75, lineHeight: 1.5 }}>
-          Your project requires a 3D rendering design before we proceed. Please complete this payment to unlock your portal's design vault.
+          {step === 1
+            ? 'Pay the rendering fee to receive your photorealistic 3D design previews. Your portal unlocks after signing the contract in the next step.'
+            : requiresRendering
+              ? 'Your 3D rendering fee is confirmed. Now read and sign the project agreement to officially begin — your full portal unlocks immediately after.'
+              : 'Please read and sign the project agreement to unlock your portal and begin the project journey.'}
         </div>
+        {/* Step progress dots */}
+        {totalSteps > 1 && (
+          <div style={{ display: 'flex', gap: 6, marginTop: 16 }}>
+            {Array.from({ length: totalSteps }, (_, i) => (
+              <div key={i} style={{ height: 4, borderRadius: 2, flex: 1, background: (i + 1) <= (currentStep || 1) ? '#fff' : 'rgba(255,255,255,0.3)' }} />
+            ))}
+          </div>
+        )}
+        <div style={{ fontSize: 11, opacity: .55, marginTop: 6 }}>{stepLabel}</div>
       </div>
 
       {/* Step content */}
@@ -4755,6 +4771,14 @@ function KickoffGate({ project, user, brand, isMobile, invoices = [], hasUnlocke
             <strong style={{ color: 'var(--accent-secondary)', display: 'block', marginBottom: 6 }}>What you'll receive:</strong>
             Photorealistic 3D renders of your interior design, allowing you to visualise exactly how your space will look before any fabrication begins. Revisions are included based on your package.
           </div>
+
+          {/* Completed step 1 badge — shown when rendering paid and now on step 2 */}
+          {requiresRendering && renderingPaid && step === 2 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', borderRadius: 10, background: '#F0FDF4', border: '1px solid #BBF7D0', marginBottom: 16 }}>
+              <CheckCircle2 size={15} color="#16A34A" />
+              <span style={{ fontSize: 12, fontWeight: 700, color: '#15803D' }}>3D Rendering fee paid ✓</span>
+            </div>
+          )}
 
           {renderingInvoice ? (
             <>
@@ -4838,6 +4862,61 @@ function KickoffGate({ project, user, brand, isMobile, invoices = [], hasUnlocke
             </div>
           )}
         </div>
+      )}
+
+      {/* ── Step 2: Contract Signing ── */}
+      {step === 2 && (
+        <div style={{
+          padding: isMobile ? '24px 20px' : '28px 32px',
+          background: '#fff', borderRadius: 20,
+          border: '1px solid var(--border-color)',
+          boxShadow: '0 4px 20px rgba(0,0,0,.05)',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 20 }}>
+            <div style={{ width: 48, height: 48, borderRadius: 14, background: `${ac}15`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <FileCheck size={22} color={ac} />
+            </div>
+            <div>
+              <div style={{ fontSize: 16, fontWeight: 900, color: 'var(--accent-secondary)' }}>Project Agreement</div>
+              <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>Read and sign electronically — takes about 2 minutes</div>
+            </div>
+          </div>
+
+          {/* What you're agreeing to */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 20 }}>
+            {[
+              { icon: '📐', text: 'Scope of work and design specifications' },
+              { icon: '💳', text: 'Payment schedule and milestone amounts' },
+              { icon: '📅', text: 'Project timeline and delivery expectations' },
+              { icon: '🔒', text: 'Confidentiality and intellectual property terms' },
+            ].map((item, i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderRadius: 10, background: 'var(--bg-secondary)' }}>
+                <span style={{ fontSize: 15 }}>{item.icon}</span>
+                <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{item.text}</span>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ padding: '12px 16px', borderRadius: 12, background: '#FFFBEB', border: '1px solid #FDE68A', fontSize: 12, color: '#92400E', marginBottom: 20 }}>
+            💡 <strong>After signing:</strong> Your full portal unlocks immediately. You'll be able to review your project brief, track progress, view designs, and manage payments — all in one place.
+          </div>
+
+          <button
+            onClick={() => setShowContract(true)}
+            style={{
+              width: '100%', padding: '16px', borderRadius: 14, border: 'none',
+              background: `var(--accent-secondary)`, color: '#fff',
+              fontSize: 15, fontWeight: 800, cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
+            }}
+          >
+            <PenLine size={18} /> Read & Sign Project Agreement
+          </button>
+        </div>
+      )}
+
+      {showContract && (
+        <ContractModal project={project} user={user} brand={brand} isMobile={isMobile} onClose={() => setShowContract(false)} />
       )}
     </div>
   );
@@ -5447,7 +5526,9 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
                   const renderingPaidByInvoice = gateInvoices.some(inv => (inv.id === selected.renderingFeeInvoiceId || ['rendering','design','rendering fee','renderingfee'].includes((inv.type||'').toLowerCase())) && inv.status === 'Paid');
                   const hasUnlockedDesignLocal = (props.renderingPackages || []).some(pkg => pkg.projectId === selected.id && (pkg.unlocked || pkg.status === 'Paid / Unlocked'));
                   const renderingPaid = renderingPaidByFlag || renderingPaidByInvoice || hasUnlockedDesignLocal;
-                  const gateActive = !isCleared && requiresRendering && !renderingPaid;
+                  const contractSigned = !!selected.contractAccepted || isCleared;
+                  // Gate is active until BOTH rendering fee (if required) AND contract are done
+                  const gateActive = !isCleared && (!contractSigned || (requiresRendering && !renderingPaid));
                   if (!gateActive) return null;
                   return (
                     <KickoffGate
@@ -5492,9 +5573,7 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
                 })()}
 
                 {/* Hide tabs and content while kickoff gate is active */}
-                {(selected.kickoffGateCleared || gateCleared[selected.id] || (
-                  selected.kickoffMode === 'rendering-first' && (!!selected.renderingFeePaid || gateInvoices.some(inv => (inv.id === selected.renderingFeeInvoiceId || ['rendering','design','rendering fee','renderingfee'].includes((inv.type||'').toLowerCase())) && inv.status === 'Paid') || (props.renderingPackages || []).some(pkg => pkg.projectId === selected.id && (pkg.unlocked || pkg.status === 'Paid / Unlocked')))
-                )) && (
+                {(selected.kickoffGateCleared || gateCleared[selected.id] || !!selected.contractAccepted) && (
                 <>
 
 
@@ -5570,36 +5649,91 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
 
                       <ProjectHeaderCard project={selected} isMobile={isMobile} ac={ac} brand={props.brand} />
 
-                      {!portalWelcomeDismissed && !localStorage.getItem(`portal_welcomed_${user?.id}_${selected?.id}`) && (
-                      <div style={{ padding: isMobile ? '18px 20px' : '20px 24px', borderRadius: 18, background: 'linear-gradient(135deg, #F4EFE6, #EDE4D8)', border: '1.5px solid var(--accent-secondary)30', display: 'flex', flexDirection: 'column', gap: 12 }}>
-                        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
-                          <div>
-                            <div style={{ fontSize: 16, fontWeight: 900, color: 'var(--accent-secondary)', marginBottom: 4 }}>🎉 You're in! Here's your project portal</div>
-                            <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.5 }}>Everything about your project is in one place. Here's a quick guide:</div>
+                      {/* ── Onboarding Setup Checklist — shown until all setup steps done ── */}
+                      {(() => {
+                        const requiresRend = selected.kickoffMode === 'rendering-first';
+                        const rendPaid = !!selected.renderingFeePaid || (props.renderingPackages || []).some(pkg => pkg.projectId === selected.id && (pkg.unlocked || pkg.status === 'Paid / Unlocked'));
+                        const contSigned = !!selected.contractAccepted || !!selected.kickoffGateCleared;
+                        const specUploaded = !!selected.specDoc?.url;
+                        const specApproved = ['signed', 'approved'].includes(selected.specDoc?.status);
+                        const depositInv = (props.invoices || []).find(i => (i.projectId === selected.id || i.parentId === selected.id) && (i.type || '').toLowerCase().includes('deposit'));
+                        const depositPaid = !!selected.depositPaid || (depositInv && isPaidStatus(depositInv.status));
+                        const allDone = contSigned && (!requiresRend || rendPaid) && (!specUploaded || specApproved) && depositPaid;
+                        const welcomeKey = `portal_welcomed_${user?.id}_${selected?.id}`;
+                        const alreadyDismissed = portalWelcomeDismissed || !!localStorage.getItem(welcomeKey);
+                        if (allDone && alreadyDismissed) return null;
+
+                        const steps = [
+                          ...(requiresRend ? [{ label: '3D rendering fee paid', done: rendPaid, action: null }] : []),
+                          { label: 'Project agreement signed', done: contSigned, action: null },
+                          { label: 'Project brief & spec uploaded by team', done: specUploaded, action: null, waiting: !specUploaded },
+                          { label: 'Review & approve project specification', done: specApproved, action: specUploaded && !specApproved ? () => setActiveTab('documents') : null, actionLabel: 'Review Now →', waiting: !specUploaded },
+                          { label: 'Initial deposit paid — production begins', done: depositPaid, action: !depositPaid ? () => setActiveTab('financials') : null, actionLabel: 'Pay Deposit →' },
+                        ];
+                        const nextStep = steps.find(s => !s.done && !s.waiting);
+                        const setupPct = Math.round((steps.filter(s => s.done).length / steps.length) * 100);
+
+                        return (
+                          <div style={{ padding: isMobile ? '18px 20px' : '22px 26px', borderRadius: 18, background: 'linear-gradient(135deg, #F4EFE6, #EDE4D8)', border: `1.5px solid var(--accent-secondary)30` }}>
+                            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 16 }}>
+                              <div>
+                                <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--accent-secondary)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 4 }}>Project Setup</div>
+                                <div style={{ fontSize: 17, fontWeight: 900, color: 'var(--accent-secondary)' }}>
+                                  {allDone ? '🎉 You\'re all set!' : nextStep ? `Next: ${nextStep.label}` : 'Waiting on the team'}
+                                </div>
+                              </div>
+                              <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                                <div style={{ fontSize: 20, fontWeight: 900, color: 'var(--accent-secondary)' }}>{setupPct}%</div>
+                                <div style={{ fontSize: 10, color: 'var(--text-secondary)', fontWeight: 700 }}>complete</div>
+                              </div>
+                            </div>
+                            {/* Progress bar */}
+                            <div style={{ height: 5, borderRadius: 3, background: 'rgba(200,169,110,0.2)', marginBottom: 16, overflow: 'hidden' }}>
+                              <div style={{ height: '100%', borderRadius: 3, background: 'var(--accent-secondary)', width: `${setupPct}%`, transition: 'width .5s' }} />
+                            </div>
+                            {/* Steps */}
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                              {steps.map((s, i) => (
+                                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', borderRadius: 10, background: s.done ? 'rgba(255,255,255,0.5)' : s.waiting ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.7)' }}>
+                                  <div style={{ width: 20, height: 20, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: s.done ? '#22C55E' : s.waiting ? '#94A3B8' : 'var(--accent-secondary)', color: '#fff', fontSize: 11, fontWeight: 900 }}>
+                                    {s.done ? '✓' : s.waiting ? '⏳' : i + 1}
+                                  </div>
+                                  <span style={{ flex: 1, fontSize: 12, fontWeight: s.done ? 600 : 700, color: s.done ? 'var(--text-secondary)' : s.waiting ? '#94A3B8' : 'var(--accent-secondary)', textDecoration: s.done ? 'line-through' : 'none' }}>{s.label}</span>
+                                  {s.action && (
+                                    <button onClick={s.action} style={{ padding: '4px 10px', borderRadius: 8, background: 'var(--accent-secondary)', color: '#fff', border: 'none', fontSize: 11, fontWeight: 800, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                                      {s.actionLabel}
+                                    </button>
+                                  )}
+                                  {s.waiting && !s.done && (
+                                    <span style={{ fontSize: 10, color: '#94A3B8', fontWeight: 700, whiteSpace: 'nowrap' }}>Waiting on team</span>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                            {allDone && !alreadyDismissed && (
+                              <button onClick={() => { localStorage.setItem(welcomeKey, '1'); setPortalWelcomeDismissed(true); }} style={{ marginTop: 14, alignSelf: 'flex-end', padding: '8px 18px', borderRadius: 10, border: 'none', background: 'var(--accent-secondary)', color: '#fff', fontSize: 12, fontWeight: 800, cursor: 'pointer', display: 'block', marginLeft: 'auto' }}>
+                                Got it — dismiss ✕
+                              </button>
+                            )}
                           </div>
-                          <button onClick={() => { localStorage.setItem(`portal_welcomed_${user?.id}_${selected?.id}`, '1'); setPortalWelcomeDismissed(true); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', flexShrink: 0, padding: 4, marginTop: -2 }}>
-                            <X size={16} />
+                        );
+                      })()}
+
+                      {/* ── Spec Doc Review Banner — shown when admin uploads spec but client hasn't approved ── */}
+                      {selected?.specDoc?.url && !['signed', 'approved'].includes(selected.specDoc?.status) && (
+                        <div style={{ padding: '16px 20px', borderRadius: 16, background: '#FFFBEB', border: '1.5px solid #FDE68A', display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+                            <span style={{ fontSize: 20, marginTop: 2 }}>📋</span>
+                            <div>
+                              <div style={{ fontSize: 14, fontWeight: 900, color: '#92400E', marginBottom: 3 }}>Your Project Brief Is Ready to Review</div>
+                              <div style={{ fontSize: 12, color: '#B45309', lineHeight: 1.5 }}>Your team has uploaded your project specification, scope, and brief. Please review and approve it so production can begin. Go to the <strong>Documents</strong> tab to view it.</div>
+                            </div>
+                          </div>
+                          <button onClick={() => setActiveTab('documents')} style={{ padding: '10px 20px', borderRadius: 10, background: '#D97706', color: '#fff', fontSize: 13, fontWeight: 800, border: 'none', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                            Review Brief →
                           </button>
                         </div>
-                        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(4, 1fr)', gap: 10 }}>
-                          {[
-                            { icon: '📋', tab: 'Overview', desc: 'Track where your project is right now' },
-                            { icon: '💳', tab: 'Financials', desc: 'See invoices and pay milestones' },
-                            { icon: '✅', tab: 'Documents', desc: 'Review designs, quotes and sign-offs' },
-                            { icon: '📸', tab: 'Uploads', desc: 'Upload site photos and inspiration' },
-                          ].map(item => (
-                            <div key={item.tab} style={{ padding: '12px 14px', borderRadius: 12, background: 'rgba(255,255,255,0.7)', border: '1px solid rgba(200,169,110,0.2)' }}>
-                              <div style={{ fontSize: 18, marginBottom: 4 }}>{item.icon}</div>
-                              <div style={{ fontSize: 12, fontWeight: 800, color: 'var(--accent-secondary)', marginBottom: 2 }}>{item.tab}</div>
-                              <div style={{ fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.4 }}>{item.desc}</div>
-                            </div>
-                          ))}
-                        </div>
-                        <button onClick={() => { localStorage.setItem(`portal_welcomed_${user?.id}_${selected?.id}`, '1'); setPortalWelcomeDismissed(true); }} style={{ alignSelf: 'flex-end', padding: '8px 18px', borderRadius: 10, border: 'none', background: 'var(--accent-secondary)', color: '#fff', fontSize: 12, fontWeight: 800, cursor: 'pointer' }}>
-                          Got it →
-                        </button>
-                      </div>
-                    )}
+                      )}
 
                     <ClientNextActionCard
                       project={selected}
@@ -5626,7 +5760,9 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
                       });
                       const depositPaid = initialDepositInvoice && initialDepositInvoice.status === 'Paid';
                       const contractSigned = !!selected.contractAccepted || !!selected.kickoffGateCleared;
-                      const showContractGate = selected.renderingApproved && depositPaid && !contractSigned;
+                      // ContractGate in overview is now only a fallback — the KickoffGate handles contract
+                      // signing as step 2. This only shows if somehow the gate was bypassed.
+                      const showContractGate = !contractSigned && selected.renderingFeePaid;
 
                       if (showContractGate) {
                         return (

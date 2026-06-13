@@ -5776,9 +5776,9 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
                         return t.includes('deposit') || title.includes('deposit');
                       });
                       const depositPaid = initialDepositInvoice && initialDepositInvoice.status === 'Paid';
-                      const contractSigned = !!selected.contractAccepted || !!selected.kickoffGateCleared;
-                      // ContractGate in overview is now only a fallback — the KickoffGate handles contract
-                      // signing as step 2. This only shows if somehow the gate was bypassed.
+                      // Include gateCleared so the overview doesn't re-show ContractGate while
+                      // waiting for the Firestore snapshot to propagate after signing.
+                      const contractSigned = !!selected.contractAccepted || !!selected.kickoffGateCleared || !!gateCleared[selected.id];
                       const showContractGate = !contractSigned && selected.renderingFeePaid;
 
                       if (showContractGate) {

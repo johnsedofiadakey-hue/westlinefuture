@@ -199,8 +199,15 @@ export default function App() {
         
         const permission = await Notification.requestPermission();
         if (permission === 'granted') {
-          // You need to configure a VAPID key in the Firebase Console and replace the placeholder
-          const token = await getToken(messaging, { vapidKey: 'YOUR_PUBLIC_VAPID_KEY_HERE' });
+          // Load VAPID key from Firestore gateway settings (Admin → Financials → Gateway Settings)
+          let vapidKey = '';
+          try {
+            const { getDoc } = await import('firebase/firestore');
+            const gwSnap = await getDoc(doc(db, 'cms_content', 'gatewaySettings'));
+            vapidKey = gwSnap.data()?.content?.vapidKey || gwSnap.data()?.vapidKey || '';
+          } catch (_) {}
+          if (!vapidKey) return; // Skip silently if not configured yet
+          const token = await getToken(messaging, { vapidKey });
           if (token && db) {
             await updateDoc(doc(db, 'users', user.id || user.uid), {
               fcmToken: token

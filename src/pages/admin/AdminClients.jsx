@@ -1,13 +1,17 @@
 import React, { useState } from 'react';
-import { 
-  Search, Plus, X, UserPlus, Trash2, Edit2, Mail, Phone, 
+import {
+  Search, Plus, X, UserPlus, Trash2, Edit2, Mail, Phone,
   Info, ChevronRight, ShieldCheck, Building, Shield, Command,
   Zap, Globe, Settings, Folder, DollarSign, Activity, AlertCircle,
-  Key, MoreVertical, Briefcase, CheckSquare, Square, AlertTriangle
+  Key, MoreVertical, Briefcase, CheckSquare, Square, AlertTriangle,
+  CheckCircle2, Archive
 } from 'lucide-react';
 import { PAv, PSBadge, isPaidStatus } from '../../components/Shared';
 import EmptyState from '../../components/ui/EmptyState';
 import { Users as UsersIcon } from 'lucide-react';
+
+const STAGE_LABELS = ['', 'Initiation', 'Design', 'Quote', 'Specification', 'Production', 'Installation Prep', 'Installation', 'Inspection', 'Handover'];
+const STAGE_COLORS = ['', '#94A3B8', '#8B5CF6', '#F59E0B', '#3B82F6', '#10B981', '#F97316', '#EF4444', '#EC4899', '#22C55E'];
 
 export default function AdminClients({ dbClients, createClient, updateClient, deleteClient, deleteSelectedClients, deleteAllClients, resetUserPassword, brand, ...props }) {
   const [showAdd, setShowAdd] = useState(false);
@@ -19,6 +23,7 @@ export default function AdminClients({ dbClients, createClient, updateClient, de
   const [newC, setNewC] = useState({ name: '', email: '', phone: '', company: '', taxId: '', address: '', clientType: 'Corporate', source: '' });
   const [loading, setLoading] = useState(false);
   const [formErrors, setFormErrors] = useState({});
+  const [directoryTab, setDirectoryTab] = useState('active');
 
   const PHONE_RE = /^\+?[\d\s\-().]{7,20}$/;
 
@@ -27,6 +32,13 @@ export default function AdminClients({ dbClients, createClient, updateClient, de
 
   const toggleSelect = (id) => {
     setSelectedIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
+  };
+
+  const getClientStatus = (client) => {
+    const myProjects = (workOrders || []).filter(wo => wo.clientId === client.id);
+    const latest = myProjects[myProjects.length - 1];
+    const isCompleted = latest?.status === 'Completed' || (latest?.stageId || 0) >= 8;
+    return isCompleted;
   };
 
   const toggleAll = () => {
@@ -87,8 +99,13 @@ export default function AdminClients({ dbClients, createClient, updateClient, de
     setSelectedIds([]);
   };
 
-  const filtered = (dbClients || []).filter(c => 
-    c.name?.toLowerCase().includes(search.toLowerCase()) || 
+  const allClients = dbClients || [];
+  const activeClients = allClients.filter(c => !getClientStatus(c));
+  const completedClients = allClients.filter(c => getClientStatus(c));
+  const sourceList = directoryTab === 'completed' ? completedClients : activeClients;
+
+  const filtered = sourceList.filter(c =>
+    c.name?.toLowerCase().includes(search.toLowerCase()) ||
     c.company?.toLowerCase().includes(search.toLowerCase()) ||
     c.username?.toLowerCase().includes(search.toLowerCase()) ||
     c.email?.toLowerCase().includes(search.toLowerCase()) ||
@@ -117,21 +134,43 @@ export default function AdminClients({ dbClients, createClient, updateClient, de
         </div>
       </div>
 
-      <div style={{ marginBottom: 32, display: 'flex', gap: 16 }}>
+      {/* Tab switcher */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
+        {[
+          { id: 'active', label: 'Active Clients', count: activeClients.length, icon: <Activity size={14} /> },
+          { id: 'completed', label: 'Completed Projects', count: completedClients.length, icon: <CheckCircle2 size={14} /> },
+        ].map(t => (
+          <button
+            key={t.id}
+            onClick={() => { setDirectoryTab(t.id); setSelectedIds([]); }}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 7,
+              padding: '9px 18px', borderRadius: 12, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 700,
+              background: directoryTab === t.id ? ac : 'var(--bg-secondary)',
+              color: directoryTab === t.id ? '#fff' : 'var(--text-secondary)',
+            }}
+          >
+            {t.icon} {t.label}
+            <span style={{ padding: '1px 7px', borderRadius: 999, background: directoryTab === t.id ? 'rgba(255,255,255,0.25)' : 'var(--border-color)', fontSize: 11 }}>{t.count}</span>
+          </button>
+        ))}
+      </div>
+
+      <div style={{ marginBottom: 24, display: 'flex', gap: 16 }}>
          <div style={{ flex: 1, position: 'relative' }}>
             <Search style={{ position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)', color: `var(--text-secondary)` }} size={18} />
-            <input 
-               className="p-inp" 
-               style={{ paddingLeft: 48, height: 56, borderRadius: 16, background: `var(--bg-secondary)`, border: '1px solid var(--border-color)' }} 
-               placeholder="Find client..." 
+            <input
+               className="p-inp"
+               style={{ paddingLeft: 48, height: 52, borderRadius: 14, background: `var(--bg-secondary)`, border: '1px solid var(--border-color)' }}
+               placeholder={directoryTab === 'completed' ? 'Search completed clients...' : 'Find client...'}
                value={search}
                onChange={e => setSearch(e.target.value)}
             />
          </div>
-         <select 
-           value={props.currency} 
+         <select
+           value={props.currency}
            onChange={e => props.setCurrency(e.target.value)}
-           style={{ height: 56, padding: '0 20px', borderRadius: 16, border: '1px solid var(--border-color)', background: '#fff', fontSize: 14, fontWeight: 700 }}
+           style={{ height: 52, padding: '0 20px', borderRadius: 14, border: '1px solid var(--border-color)', background: '#fff', fontSize: 14, fontWeight: 700 }}
          >
            <option value="GHS">GHS (₵)</option>
            <option value="USD">USD ($)</option>
@@ -170,10 +209,12 @@ export default function AdminClients({ dbClients, createClient, updateClient, de
               const myProjects = (workOrders || []).filter(wo => wo.clientId === client.id);
               const latestProject = myProjects[myProjects.length - 1];
               const clientInvoices = invoices.filter(inv => inv.clientId === client.id);
-              // Only count invoices that are actually due:
-              // - Has an explicit due date set by admin (milestone was triggered), OR
-              // - Marked Overdue explicitly.
-              // Auto-generated milestones with due: null are future obligations, not current debt.
+              const stageId = latestProject?.stageId || 0;
+              const stageLabel = STAGE_LABELS[stageId] || latestProject?.status || 'Initiation';
+              const stageColor = STAGE_COLORS[stageId] || '#94A3B8';
+              const stagePct = Math.round(((stageId || 1) / 8) * 100);
+              const isCompleted = latestProject?.status === 'Completed' || stageId >= 8;
+
               const totalOwed = clientInvoices.reduce((sum, inv) => {
                 if (isPaidStatus(inv.status)) return sum;
                 const isActuallyDue = inv.status === 'Overdue' || (inv.due != null && inv.due !== '');
@@ -182,81 +223,87 @@ export default function AdminClients({ dbClients, createClient, updateClient, de
               }, 0);
 
               const unpaidCount = clientInvoices.filter(i => !['Paid', 'paid'].includes(i.status) && (i.status === 'Overdue' || (i.due != null && i.due !== ''))).length;
-              let healthScore = 'Green'; // Green, Yellow, Red
-              let healthText = 'On Track';
-              let nextAction = 'Ready for Intake';
+
+              let healthText = latestProject ? 'On Track' : 'Ready for Intake';
               let healthColor = '#10B981';
+              let nextAction = latestProject ? `Stage ${stageId || 1}: ${stageLabel}` : 'No active project';
 
-              if (unpaidCount > 0) {
-                 healthScore = 'Yellow';
-                 healthText = 'Awaiting Payment';
-                 healthColor = '#F59E0B';
-                 nextAction = 'Client Payment Required';
-              }
-              
-              if (latestProject) {
-                 if (latestProject.status === 'Installation') nextAction = 'Awaiting Worker Photos';
-                 else if (latestProject.status === 'Inspection') nextAction = 'Awaiting Inspection Sign-off';
-                 else if (latestProject.status === 'Completed') {
-                    nextAction = 'Project Closed';
-                    healthScore = 'Green';
-                    healthText = 'Completed';
-                 } else nextAction = `Advance ${latestProject.title}`;
-              }
-
-              if (totalOwed > 10000) {
-                 healthScore = 'Red';
-                 healthText = 'High Outstanding Balance';
-                 healthColor = '#EF4444';
+              if (isCompleted) {
+                healthText = 'Completed'; healthColor = '#6366F1';
+                nextAction = 'Project closed';
+              } else if (unpaidCount > 0) {
+                healthText = 'Awaiting Payment'; healthColor = '#F59E0B';
+                nextAction = 'Client payment required';
+              } else if (totalOwed > 10000) {
+                healthText = 'High Balance'; healthColor = '#EF4444';
+              } else if (latestProject?.status === 'Installation') {
+                nextAction = 'Awaiting worker photos';
+              } else if (latestProject?.status === 'Inspection') {
+                nextAction = 'Awaiting sign-off';
               }
 
               const isSelected = selectedIds.includes(client.id);
+              const currSymbol = props.currency === 'USD' ? '$' : '₵';
 
               return (
                 <tr key={client.id} style={{ borderBottom: '1px solid var(--bg-secondary)', background: isSelected ? `${ac}08` : 'transparent' }} className="table-row-hover">
-                  <td style={{ padding: '20px 24px' }}>
+                  <td style={{ padding: '18px 24px' }}>
                     <button onClick={() => toggleSelect(client.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: isSelected ? ac : `var(--text-secondary)` }}>
                        {isSelected ? <CheckSquare size={20} /> : <Square size={20} />}
                     </button>
                   </td>
-                  <td style={{ padding: '20px 24px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                      <PAv i={client.name?.[0]} s={40} c={ac} />
+                  <td style={{ padding: '18px 24px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                      <PAv i={client.name?.[0]} s={40} c={isCompleted ? '#6366F1' : ac} />
                       <div>
-                        <div className="lxfh" style={{ fontSize: 15, fontWeight: 700 }}>{client.name}</div>
-                        <div style={{ fontSize: 12, color: `var(--text-secondary)` }}>{client.company || 'Private Portfolio'} • {client.phone}</div>
+                        <div className="lxfh" style={{ fontSize: 14, fontWeight: 700 }}>{client.name}</div>
+                        <div style={{ fontSize: 11, color: `var(--text-secondary)` }}>{client.company || 'Private Portfolio'} • {client.phone}</div>
                       </div>
                     </div>
                   </td>
-                  <td style={{ padding: '20px 24px' }}>
-                     <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: `${healthColor}15`, color: healthColor, padding: '4px 10px', borderRadius: 12, fontSize: 11, fontWeight: 700 }}>
-                        <div style={{ width: 6, height: 6, borderRadius: '50%', background: healthColor }} />
-                        {healthText}
-                     </div>
+                  <td style={{ padding: '18px 24px' }}>
+                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: `${healthColor}15`, color: healthColor, padding: '4px 10px', borderRadius: 12, fontSize: 11, fontWeight: 700 }}>
+                      <div style={{ width: 6, height: 6, borderRadius: '50%', background: healthColor }} />
+                      {healthText}
+                    </div>
                   </td>
-                  <td style={{ padding: '20px 24px' }}>
+                  <td style={{ padding: '18px 24px', minWidth: 180 }}>
                     {latestProject ? (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                        <span className="lxfh" style={{ fontSize: 14 }}>{latestProject.title}</span>
-                        <span style={{ fontSize: 11, color: `var(--text-secondary)` }}>Stage: {latestProject.status || 'Initiation'}</span>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                        <span className="lxfh" style={{ fontSize: 13, fontWeight: 700 }}>{latestProject.title}</span>
+                        {isCompleted ? (
+                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, color: '#6366F1', fontWeight: 700 }}>
+                            <CheckCircle2 size={12} /> Project complete
+                          </div>
+                        ) : (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <span style={{ fontSize: 10, fontWeight: 700, color: stageColor }}>Stage {stageId || 1} · {stageLabel}</span>
+                              <span style={{ fontSize: 10, color: 'var(--text-secondary)', fontWeight: 700 }}>{stagePct}%</span>
+                            </div>
+                            <div style={{ height: 4, borderRadius: 4, background: 'var(--border-color)', overflow: 'hidden' }}>
+                              <div style={{ height: '100%', borderRadius: 4, background: stageColor, width: `${stagePct}%`, transition: 'width .4s' }} />
+                            </div>
+                          </div>
+                        )}
                       </div>
                     ) : (
                       <span className="lxf" style={{ fontSize: 12, color: `var(--text-secondary)` }}>No active project</span>
                     )}
                   </td>
-                  <td style={{ padding: '20px 24px' }}>
-                     <div style={{ fontSize: 13, fontWeight: 600, color: `var(--text-secondary)` }}>{nextAction}</div>
+                  <td style={{ padding: '18px 24px' }}>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: `var(--text-secondary)` }}>{nextAction}</div>
                   </td>
-                  <td style={{ padding: '20px 24px' }}>
-                     <div style={{ fontSize: 14, fontWeight: 700, color: totalOwed > 0 ? '#EF4444' : `var(--text-secondary)` }}>
-                        {totalOwed > 0 ? `${props.currency === 'USD' ? '$' : '₵'}${totalOwed.toLocaleString()}` : '-'}
-                     </div>
+                  <td style={{ padding: '18px 24px' }}>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: totalOwed > 0 ? '#EF4444' : `var(--text-secondary)` }}>
+                      {totalOwed > 0 ? `${currSymbol}${totalOwed.toLocaleString()}` : '—'}
+                    </div>
                   </td>
-                  <td style={{ padding: '20px 24px', textAlign: 'right' }}>
+                  <td style={{ padding: '18px 24px', textAlign: 'right' }}>
                     <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-                      <button onClick={() => props.onSelectClient?.(client.id)} className="p-btn-dark" style={{ height: 36, padding: '0 18px', fontSize: 12, fontWeight: 700 }}>Open</button>
-                      <button onClick={() => startEdit(client)} style={{ background: `var(--bg-secondary)`, border: 'none', padding: 10, borderRadius: 8, color: `var(--accent-secondary)`, cursor: 'pointer' }}><Edit2 size={16} /></button>
-                      <button onClick={() => setConfirmDelete({ type: 'single', id: client.id })} style={{ background: '#FFF1F1', border: 'none', padding: 10, borderRadius: 8, color: '#EF4444', cursor: 'pointer' }}><Trash2 size={16} /></button>
+                      <button onClick={() => props.onSelectClient?.(client.id)} className="p-btn-dark" style={{ height: 34, padding: '0 16px', fontSize: 12, fontWeight: 700 }}>Open</button>
+                      <button onClick={() => startEdit(client)} style={{ background: `var(--bg-secondary)`, border: 'none', padding: 8, borderRadius: 8, color: `var(--accent-secondary)`, cursor: 'pointer' }}><Edit2 size={15} /></button>
+                      <button onClick={() => setConfirmDelete({ type: 'single', id: client.id })} style={{ background: '#FFF1F1', border: 'none', padding: 8, borderRadius: 8, color: '#EF4444', cursor: 'pointer' }}><Trash2 size={15} /></button>
                     </div>
                   </td>
                 </tr>

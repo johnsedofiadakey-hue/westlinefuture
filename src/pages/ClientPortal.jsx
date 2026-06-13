@@ -5493,7 +5493,7 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
 
                 {/* Hide tabs and content while kickoff gate is active */}
                 {(selected.kickoffGateCleared || gateCleared[selected.id] || (
-                  selected.kickoffMode !== 'rendering-first' || !!selected.renderingFeePaid || gateInvoices.some(inv => (inv.id === selected.renderingFeeInvoiceId || ['rendering','design','rendering fee','renderingfee'].includes((inv.type||'').toLowerCase())) && inv.status === 'Paid') || (props.renderingPackages || []).some(pkg => pkg.projectId === selected.id && (pkg.unlocked || pkg.status === 'Paid / Unlocked'))
+                  selected.kickoffMode === 'rendering-first' && (!!selected.renderingFeePaid || gateInvoices.some(inv => (inv.id === selected.renderingFeeInvoiceId || ['rendering','design','rendering fee','renderingfee'].includes((inv.type||'').toLowerCase())) && inv.status === 'Paid') || (props.renderingPackages || []).some(pkg => pkg.projectId === selected.id && (pkg.unlocked || pkg.status === 'Paid / Unlocked')))
                 )) && (
                 <>
 

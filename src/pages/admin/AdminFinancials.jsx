@@ -114,6 +114,7 @@ export default function AdminFinancials({ invoices = [], transactions = [], clie
       enablePaystack:      true,
       paystackPublicKey:   '',
       paystackSecretKey:   '',
+      vapidKey:            '',
       hubtelClientId:      '',
       hubtelClientSecret:  '',
       hubtelMerchantId:    '',
@@ -560,6 +561,21 @@ export default function AdminFinancials({ invoices = [], transactions = [], clie
                     />
                   </PFormField>
                 </div>
+                {/* VAPID Key — for push notifications */}
+                <PFormField label="Firebase VAPID Key (Push Notifications)" sub="From Firebase Console → Project Settings → Cloud Messaging → Web Push certificates → Key pair">
+                  <input
+                    className="p-inp"
+                    value={gatewaySettings.vapidKey || ''}
+                    onChange={e => updateGateway(s => ({ ...s, vapidKey: e.target.value.trim() }))}
+                    placeholder="BNxxxxxxx... (Web Push certificate key pair)"
+                    autoComplete="off"
+                  />
+                </PFormField>
+                {!gatewaySettings.vapidKey && (
+                  <div style={{ padding: '10px 14px', borderRadius: 8, background: '#FEF3C7', border: '1.5px solid #FDE68A', fontSize: 12, color: '#92400E' }}>
+                    ⚠ VAPID key not set — clients will not receive browser push notifications. Get it from Firebase Console → Project Settings → Cloud Messaging → Web Push certificates.
+                  </div>
+                )}
               </>
             )}
 

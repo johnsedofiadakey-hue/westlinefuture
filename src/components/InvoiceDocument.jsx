@@ -594,6 +594,19 @@ export default function InvoiceDocument({ inv = {}, isQuote = false, finSettings
         </div>
       </div>
 
+      {/* ══ INSTALLATION ADD-ON NOTICE (quotations only) ════════ */}
+      {isQuotation && (
+        <div style={{ margin: '28px 48px 0', padding: '14px 18px', background: surface, borderRadius: 10, border: `1px solid ${soft}`, display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+          <div style={{ fontSize: 16, lineHeight: 1 }}>ℹ️</div>
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 800, color: dark, marginBottom: 3, textTransform: 'uppercase', letterSpacing: 0.5 }}>Installation Not Included</div>
+            <div style={{ fontSize: 11, color: muted, lineHeight: 1.6 }}>
+              This quotation covers <strong style={{ color: dark }}>supply and fabrication only</strong>. On-site installation and fitting is a separate service and will be quoted as an add-on once the production stage is complete. Your project manager will share the installation quote before works commence.
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ══ FOOTER ═══════════════════════════════════════════════ */}
       <div style={{
         marginTop: 44,

@@ -6,7 +6,7 @@ import {
 import { db } from '../lib/firebase';
 import {
   updateDoc, doc, collection, addDoc, onSnapshot, query, orderBy,
-  serverTimestamp, deleteDoc
+  serverTimestamp, deleteDoc, writeBatch
 } from 'firebase/firestore';
 import UnifiedPaymentGateway from './UnifiedPaymentGateway';
 import blueprintImg from '../assets/architectural_blueprint.png';
@@ -29,6 +29,11 @@ export default function ClientRenderingVault({
   const [newPinText, setNewPinText] = useState('');
   const [selectedCoords, setSelectedCoords] = useState(null);
   const [submittingPin, setSubmittingPin] = useState(false);
+
+  // Simple "Request Changes" modal state
+  const [changeRequestPkg, setChangeRequestPkg] = useState(null); // pkg being requested
+  const [changeRequestNote, setChangeRequestNote] = useState('');
+  const [changeRequestBusy, setChangeRequestBusy] = useState(false);
 
   // Payment method selection per package: { [pkgId]: 'hubtel' | 'bank' | 'offline' | null }
   const [payMethodMap, setPayMethodMap] = useState({});
@@ -70,12 +75,62 @@ export default function ClientRenderingVault({
 
   const handleApprove = async (pkg) => {
     try {
-      await updateDoc(doc(db, 'renderingPackages', pkg.id), { status: 'Approved' });
+      // Mark the rendering package as approved
+      await updateDoc(doc(db, 'renderingPackages', pkg.id), {
+        status: 'Approved',
+        approvedAt: serverTimestamp(),
+      });
+      // Set renderingApproved on the project — this is what the AdvanceModal
+      // gate checks before allowing progression to Stage 3 (Quote & Deposit).
+      // Also clear any pending change request.
+      await updateDoc(doc(db, 'projects', project.id), {
+        renderingApproved: true,
+        renderingApprovedAt: serverTimestamp(),
+        changeRequestPending: false,
+      });
       await postSystemMessage(
-        `✅ ${project.clientName || 'Client'} approved the design rendering "${pkg.title}". The project is cleared to proceed.`
+        `✅ ${project.clientName || 'Client'} approved the design rendering "${pkg.title}". The project is cleared to proceed to quotation.`
       );
     } catch (e) {
       console.error(e);
+    }
+  };
+
+  // ── Simple change request (no pin required) ──────────────────────────────
+  const handleChangeRequest = async () => {
+    if (!changeRequestPkg || !changeRequestNote.trim() || changeRequestBusy) return;
+    setChangeRequestBusy(true);
+    try {
+      const pkg = changeRequestPkg;
+      const newRevCount = (pkg.usedRevisions || 0) + 1;
+      const batch = writeBatch(db);
+      batch.update(doc(db, 'renderingPackages', pkg.id), {
+        status: 'Changes Requested',
+        usedRevisions: newRevCount,
+      });
+      batch.update(doc(db, 'projects', project.id), {
+        changeRequestPending: true,
+        renderingApproved: false,
+      });
+      await batch.commit();
+      await postSystemMessage(
+        `🔄 ${project.clientName || 'Client'} requested changes on "${pkg.title}": "${changeRequestNote.trim()}"`
+      );
+      // Notify admin
+      await addDoc(collection(db, 'notifications'), {
+        userId: 'admin',
+        message: `${project.clientName || 'Client'} requested changes on "${pkg.title}" in "${project.title}": ${changeRequestNote.trim()}`,
+        type: 'change_request',
+        link: '/admin',
+        read: false,
+        createdAt: new Date(),
+      }).catch(() => {});
+      setChangeRequestPkg(null);
+      setChangeRequestNote('');
+    } catch (err) {
+      console.error('[ClientRenderingVault] Change request failed:', err);
+    } finally {
+      setChangeRequestBusy(false);
     }
   };
 
@@ -93,6 +148,27 @@ export default function ClientRenderingVault({
       await postSystemMessage(
         `💳 ${project.clientName || 'Client'} submitted a ${methodLabel} for the rendering fee invoice "${linkedInv.invoiceNumber || 'INV'}" — ${linkedInv.currency || 'GHS'} ${parseAmount(linkedInv.amount || linkedInv.total).toLocaleString()}. Awaiting admin confirmation.`
       );
+
+      // Notify admin
+      await addDoc(collection(db, 'notifications'), {
+        userId: 'admin',
+        message: `${project.clientName || 'Client'} submitted an offline payment (${methodLabel}) for ${linkedInv.currency || 'GHS'} ${parseAmount(linkedInv.amount || linkedInv.total).toLocaleString()}. Please confirm receipt.`,
+        type: 'payment_submitted',
+        link: '/admin',
+        read: false,
+        createdAt: serverTimestamp(),
+      }).catch(() => {});
+      const managerId = project.projectManagerId || project.assignedStaff?.[0];
+      if (managerId) {
+        await addDoc(collection(db, 'notifications'), {
+          userId: managerId,
+          message: `${project.clientName || 'Client'} submitted an offline payment (${methodLabel}) for ${linkedInv.currency || 'GHS'} ${parseAmount(linkedInv.amount || linkedInv.total).toLocaleString()}. Please confirm receipt.`,
+          type: 'payment_submitted',
+          link: '/admin/client-hub',
+          read: false,
+          createdAt: serverTimestamp(),
+        }).catch(() => {});
+      }
     } catch (err) {
       console.error('[ClientRenderingVault] Offline payment submit failed:', err);
     } finally {
@@ -118,7 +194,13 @@ export default function ClientRenderingVault({
     if (!newPinText.trim() || submittingPin || !selectedCoords) return;
     setSubmittingPin(true);
     try {
-      await addDoc(collection(db, 'projects', project.id, 'markups'), {
+      const pkg = projectPackages.find(p => p.id === selectedCoords.packageId);
+      const newRevCount = (pkg?.usedRevisions || 0) + 1;
+
+      // Atomic batch: pin creation + package freeze + project freeze all succeed or all fail
+      const batch = writeBatch(db);
+      const pinRef = doc(collection(db, 'projects', project.id, 'markups'));
+      batch.set(pinRef, {
         packageId: selectedCoords.packageId,
         x: selectedCoords.x,
         y: selectedCoords.y,
@@ -126,27 +208,33 @@ export default function ClientRenderingVault({
         authorName: project.clientName || 'Client',
         authorRole: 'client',
         status: 'Open',
-        createdAt: serverTimestamp()
+        createdAt: serverTimestamp(),
       });
-
-      const pkg = projectPackages.find(p => p.id === selectedCoords.packageId);
-      const newRevCount = (pkg?.usedRevisions || 0) + 1;
       if (pkg) {
-        await updateDoc(doc(db, 'renderingPackages', pkg.id), {
+        batch.update(doc(db, 'renderingPackages', pkg.id), {
           status: 'Changes Requested',
-          usedRevisions: newRevCount
+          usedRevisions: newRevCount,
         });
       }
-
-      // ── HARD FREEZE: set changeRequestPending on the project ──────────────
-      await updateDoc(doc(db, 'projects', project.id), {
+      batch.update(doc(db, 'projects', project.id), {
         changeRequestPending: true,
       });
+      await batch.commit();
 
-      // ── System message for audit trail ────────────────────────────────────
+      // System message visible in client + admin chat
       await postSystemMessage(
         `📌 ${project.clientName || 'Client'} requested changes on the rendering "${pkg?.title || 'design'}" — pin #${newRevCount} placed. Project is on hold pending revision.`
       );
+
+      // Notify admin via notification document
+      await addDoc(collection(db, 'notifications'), {
+        userId: 'admin',
+        message: `${project.clientName || 'Client'} placed a feedback pin on "${pkg?.title || 'design'}" in "${project.title}" — project is now on hold.`,
+        type: 'change_request',
+        link: '/admin',
+        read: false,
+        createdAt: serverTimestamp(),
+      }).catch(() => {});
 
       setShowPinModal(false);
       setSelectedCoords(null);
@@ -166,8 +254,20 @@ export default function ClientRenderingVault({
     const pinId = confirmDeletePin;
     setConfirmDeletePin(null);
     try {
+      const deletedPin = markups.find(m => m.id === pinId);
       await deleteDoc(doc(db, 'projects', project.id, 'markups', pinId));
       setActivePin(null);
+
+      // If no open pins remain, lift the project freeze
+      const remainingOpen = markups.filter(m => m.id !== pinId && m.status === 'Open');
+      if (remainingOpen.length === 0 && project.changeRequestPending) {
+        const batch = writeBatch(db);
+        batch.update(doc(db, 'projects', project.id), { changeRequestPending: false });
+        if (deletedPin?.packageId) {
+          batch.update(doc(db, 'renderingPackages', deletedPin.packageId), { status: 'Pending' });
+        }
+        await batch.commit();
+      }
     } catch (err) {
       console.error('[ClientRenderingVault] Delete pin failed:', err);
     }
@@ -579,12 +679,25 @@ export default function ClientRenderingVault({
             {/* Approval Action Panel */}
             {pkg.status === 'Approved' ? (
               <div style={{ padding: '12px 16px', background: '#F0FDF4', color: '#10B981', borderRadius: 12, fontSize: 13, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8 }}>
-                <CheckCircle2 size={16} /> Design Approved. The final project quote has been verified and issued.
+                <CheckCircle2 size={16} /> Design Approved
+              </div>
+            ) : project.changeRequestPending ? (
+              <div style={{ padding: '12px 16px', background: '#FEF3C7', borderRadius: 12, fontSize: 13, fontWeight: 700, color: '#92400E', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Clock size={15} /> Changes requested — waiting for the team to revise
               </div>
             ) : (
-              <div style={{ display: 'flex', gap: 12, borderTop: '1px solid var(--border-color)', paddingTop: 20 }}>
-                <button onClick={() => handleApprove(pkg)} style={{ flex: 1, padding: '12px 24px', background: '#111', color: '#fff', border: 'none', borderRadius: 12, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-                  <CheckCircle2 size={16} /> Approve Design
+              <div style={{ display: 'flex', gap: 10, borderTop: '1px solid var(--border-color)', paddingTop: 20 }}>
+                <button
+                  onClick={() => handleApprove(pkg)}
+                  style={{ flex: 1, padding: '12px 18px', background: 'var(--accent-secondary)', color: '#fff', border: 'none', borderRadius: 12, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontSize: 13 }}
+                >
+                  <CheckCircle2 size={15} /> Approve
+                </button>
+                <button
+                  onClick={() => { setChangeRequestPkg(pkg); setChangeRequestNote(''); }}
+                  style={{ flex: 1, padding: '12px 18px', background: '#fff', color: '#92400E', border: '1.5px solid #F59E0B', borderRadius: 12, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontSize: 13 }}
+                >
+                  Request Changes
                 </button>
               </div>
             )}
@@ -689,6 +802,41 @@ export default function ClientRenderingVault({
           100% { box-shadow: 0 0 0 0 rgba(197, 160, 89, 0); }
         }
       `}</style>
+
+      {/* ── REQUEST CHANGES MODAL ── */}
+      {changeRequestPkg && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+          <div style={{ background: '#FFFDFB', borderRadius: 24, padding: '32px 28px', maxWidth: 440, width: '100%', boxShadow: '0 24px 64px rgba(62,36,20,0.2)', border: '1.5px solid rgba(92,58,33,0.12)' }}>
+            <div style={{ fontSize: 18, fontWeight: 900, color: 'var(--accent-secondary)', marginBottom: 6 }}>Request Changes</div>
+            <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 20, lineHeight: 1.5 }}>
+              Tell the team what you'd like changed on <strong>{changeRequestPkg.title}</strong>. Be as specific as possible.
+            </div>
+            <textarea
+              autoFocus
+              value={changeRequestNote}
+              onChange={e => setChangeRequestNote(e.target.value)}
+              placeholder="e.g. Please change the wall colour to a warmer beige, and move the sofa to face the window…"
+              rows={4}
+              style={{ width: '100%', padding: '12px 14px', borderRadius: 12, border: '1.5px solid var(--border-color)', fontSize: 13, resize: 'none', boxSizing: 'border-box', fontFamily: 'inherit', lineHeight: 1.6, outline: 'none' }}
+            />
+            <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
+              <button
+                onClick={() => { setChangeRequestPkg(null); setChangeRequestNote(''); }}
+                style={{ flex: 1, height: 46, borderRadius: 12, border: '1.5px solid var(--border-color)', background: 'transparent', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleChangeRequest}
+                disabled={!changeRequestNote.trim() || changeRequestBusy}
+                style={{ flex: 2, height: 46, borderRadius: 12, border: 'none', background: changeRequestNote.trim() ? '#92400E' : 'var(--border-color)', color: changeRequestNote.trim() ? '#fff' : 'var(--text-secondary)', fontSize: 13, fontWeight: 800, cursor: changeRequestNote.trim() ? 'pointer' : 'default' }}
+              >
+                {changeRequestBusy ? 'Sending…' : 'Submit Request'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Pin delete confirmation */}
       {confirmDeletePin && (

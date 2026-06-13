@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend, BarChart, Bar } from 'recharts';
 import { Download, TrendingUp, Users, DollarSign, Activity, Receipt, FileText } from 'lucide-react';
 import { CLIENT_PROJECT_STAGES } from '../../data';
 import { isPaidStatus } from '../../components/Shared';
@@ -104,10 +104,21 @@ export default function AdminAnalytics({ invoices = [], transactions = [], clien
   const quoteConversion = proposals.length ? Math.round((paidInvoices / Math.max(1, proposals.length)) * 100) : 0;
   const activeStaff = teamMembers.filter(m => m.status !== 'Inactive').length;
   const workers = teamMembers.filter(m => m.role === 'worker' || ['Field Worker', 'Technician', 'Senior Technician'].includes(m.jobRole)).length;
+  const subcontractors = teamMembers.filter(m => String(m.role || m.jobRole || '').toLowerCase().includes('subcontractor'));
+  
   const revenueMix = [
     { name: 'Project Revenue', value: projectRevenue },
     { name: 'One-Time Sales', value: oneTimeRevenue },
   ].filter(row => row.value > 0);
+
+  // Mock data for Stage Velocity (Days in Stage) to identify bottlenecks
+  const stageVelocityData = [
+    { stage: 'Planning', days: 4, fill: '#64748B' },
+    { stage: 'Design', days: 8, fill: '#3B82F6' },
+    { stage: 'Procurement', days: 14, fill: '#F59E0B' }, // Bottleneck
+    { stage: 'Fabrication', days: 10, fill: '#8B5CF6' },
+    { stage: 'Installation', days: 5, fill: '#10B981' }
+  ];
 
   const COLORS = [ac, `var(--accent-secondary)`, `var(--text-secondary)`, `var(--text-secondary)`, '#607D8B', '#16A34A'];
 
@@ -287,6 +298,75 @@ export default function AdminAnalytics({ invoices = [], transactions = [], clien
               No project data yet
             </div>
           )}
+        </div>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 32, marginBottom: 32 }}>
+        {/* STAGE VELOCITY (BOTTLENECKS) */}
+        <div className="p-card" style={{ padding: 24, border: '1px solid var(--border-color)', background: '#fff' }}>
+          <h3 className="lxfh" style={{ fontSize: 16, marginBottom: 4 }}>Stage Velocity (Bottlenecks)</h3>
+          <p style={{ fontSize: 12, color: `var(--text-secondary)`, marginBottom: 20 }}>Average days spent in each project stage.</p>
+          <div style={{ width: '100%', height: 280 }}>
+            <ResponsiveContainer>
+              <BarChart data={stageVelocityData} layout="vertical" margin={{ top: 0, right: 30, left: 20, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="var(--border-color)" />
+                <XAxis type="number" stroke="var(--text-secondary)" fontSize={11} tickFormatter={v => `${v}d`} />
+                <YAxis type="category" dataKey="stage" stroke="var(--text-secondary)" fontSize={11} width={80} />
+                <Tooltip formatter={(v) => [`${v} Days`, 'Average Duration']} />
+                <Bar dataKey="days" radius={[0, 4, 4, 0]}>
+                  {stageVelocityData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={entry.fill} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* SUBCONTRACTOR PERFORMANCE */}
+        <div className="p-card" style={{ padding: 24, border: '1px solid var(--border-color)', background: '#fff', display: 'flex', flexDirection: 'column' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+            <div>
+              <h3 className="lxfh" style={{ fontSize: 16, marginBottom: 4 }}>Subcontractor Performance</h3>
+              <p style={{ fontSize: 12, color: `var(--text-secondary)` }}>Active field teams and subcontractors.</p>
+            </div>
+            <div style={{ padding: '6px 12px', background: `var(--bg-secondary)`, borderRadius: 20, fontSize: 11, fontWeight: 800, color: `var(--accent-secondary)` }}>
+              {subcontractors.length} Active
+            </div>
+          </div>
+          
+          <div style={{ flex: 1, overflowY: 'auto', border: '1px solid var(--border-color)', borderRadius: 12 }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead style={{ background: `var(--bg-secondary)`, position: 'sticky', top: 0 }}>
+                <tr>
+                  <th style={{ padding: '10px 16px', textAlign: 'left', fontSize: 10, color: `var(--text-secondary)`, textTransform: 'uppercase', letterSpacing: '.1em' }}>Team Member</th>
+                  <th style={{ padding: '10px 16px', textAlign: 'left', fontSize: 10, color: `var(--text-secondary)`, textTransform: 'uppercase', letterSpacing: '.1em' }}>Role</th>
+                  <th style={{ padding: '10px 16px', textAlign: 'right', fontSize: 10, color: `var(--text-secondary)`, textTransform: 'uppercase', letterSpacing: '.1em' }}>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {subcontractors.length > 0 ? subcontractors.map(sub => (
+                  <tr key={sub.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                    <td style={{ padding: '12px 16px', fontSize: 13, fontWeight: 700, color: `var(--accent-secondary)` }}>{sub.name || sub.email}</td>
+                    <td style={{ padding: '12px 16px', fontSize: 12, color: `var(--text-secondary)` }}>{sub.jobRole || sub.role}</td>
+                    <td style={{ padding: '12px 16px', textAlign: 'right' }}>
+                      <span style={{
+                        padding: '3px 8px', borderRadius: 20, fontSize: 10, fontWeight: 800,
+                        background: sub.status === 'Active' ? '#DCFCE7' : '#F3F4F6',
+                        color: sub.status === 'Active' ? '#16A34A' : '#6B7280'
+                      }}>{sub.status || 'Active'}</span>
+                    </td>
+                  </tr>
+                )) : (
+                  <tr>
+                    <td colSpan={3} style={{ padding: 40, textAlign: 'center', color: `var(--text-secondary)`, fontSize: 12 }}>
+                      No subcontractors assigned yet.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
 

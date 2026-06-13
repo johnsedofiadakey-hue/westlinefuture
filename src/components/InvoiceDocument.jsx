@@ -28,6 +28,22 @@ const fmtDate = (d) => {
   } catch { return d; }
 };
 
+const PAYMENT_SCHEDULES = {
+  standard: [
+    { key: 'post-rendering', label: 'First instalment after rendering approval', pct: 0.60 },
+    { key: 'post-production', label: 'Second instalment after production', pct: 0.30 },
+    { key: 'post-shipping', label: 'Final settlement at delivery and handover', pct: 0.10 },
+  ],
+  '50-50': [
+    { key: 'deposit', label: 'Project mobilisation deposit', pct: 0.50 },
+    { key: 'completion', label: 'Final settlement at completion', pct: 0.50 },
+  ],
+  '70-30': [
+    { key: 'pre-delivery', label: 'Pre-delivery instalment', pct: 0.70 },
+    { key: 'completion', label: 'Final settlement at completion', pct: 0.30 },
+  ],
+};
+
 /* ─── component ─────────────────────────────────────────────────── */
 export default function InvoiceDocument({ inv = {}, isQuote = false, finSettings = {}, brand = {} }) {
   /* Document type */
@@ -55,7 +71,20 @@ export default function InvoiceDocument({ inv = {}, isQuote = false, finSettings
   const cur = inv.currency || finSettings.baseCurrency || 'GHS';
 
   /* Line items */
-  const items    = inv.items || [];
+  const storedInvoiceTotal = parseFloat(inv.total || inv.amount || inv.amountDue || 0) || 0;
+  const items = Array.isArray(inv.items) && inv.items.length > 0
+    ? inv.items
+    : storedInvoiceTotal > 0
+      ? [{
+          id: 'invoice-amount',
+          desc: inv.title || 'Project payment',
+          notes: inv.description || inv.paymentDescription || '',
+          qty: 1,
+          unit: inv.milestoneKey ? 'stage' : 'item',
+          rate: storedInvoiceTotal,
+          discount: 0,
+        }]
+      : [];
   const hasDisc  = items.some(i => parseFloat(i.discount) > 0);
   const subtotal = items.reduce((a, b) => a + lineTotal(b), 0);
 
@@ -72,12 +101,39 @@ export default function InvoiceDocument({ inv = {}, isQuote = false, finSettings
   const grandTotal = taxEnabled && !taxInclusive ? subtotal + taxAmount : subtotal;
 
   /* Payment balance */
-  const amountPaid = parseFloat(inv.amountPaid || 0);
+  const amountPaid = parseFloat(inv.amountPaid || inv.paidAmount || 0);
   const balanceDue  = Math.max(0, grandTotal - amountPaid);
+
+  /* Project contract position and remaining payment plan */
+  const projectTotal = parseFloat(inv.projectBudget || inv.projectTotal || inv.budget || 0) || 0;
+  const projectPaid = parseFloat(inv.projectPaidAmount || inv.projectReceived || 0) || 0;
+  const projectBalance = projectTotal > 0 ? Math.max(0, projectTotal - projectPaid) : 0;
+  const scheduleType = inv.paymentSchedule || 'standard';
+  const schedule = PAYMENT_SCHEDULES[scheduleType] || [];
+  const scheduleRows = schedule.map((item, index) => {
+    const cumulativePct = schedule
+      .slice(0, index + 1)
+      .reduce((sum, scheduleItem) => sum + scheduleItem.pct, 0);
+    return {
+      ...item,
+      amount: projectTotal * item.pct,
+      status:
+        item.key === inv.milestoneKey
+          ? (balanceDue <= 0 ? 'Paid' : amountPaid > 0 ? 'Partially Paid' : 'Due')
+          : projectPaid >= projectTotal * cumulativePct
+            ? 'Paid'
+            : 'Upcoming',
+    };
+  });
 
   /* Text fields */
   const bankDetails  = inv.bankDetails  || finSettings.bankDetails  || '';
   const terms        = inv.terms        || finSettings.terms        || '';
+  const paymentInstructions = inv.paymentInstructions || (
+    bankDetails
+      ? 'Pay securely through the Client Portal using Paystack, or transfer to the bank account below. For bank or in-person payments, submit payment confirmation in the Client Portal so the project manager can verify it.'
+      : 'Pay securely through the Client Portal using Paystack. Bank transfer and in-person payments must be submitted in the Client Portal for project-manager verification.'
+  );
   const footerNote   = finSettings.footerNote   || 'Thank you for your business.';
   const sigName      = finSettings.signatureName || 'Finance Director';
   const sigTitle     = finSettings.signatureTitle || brand?.name || 'Westline Future Ltd.';
@@ -366,7 +422,7 @@ export default function InvoiceDocument({ inv = {}, isQuote = false, finSettings
             borderBottom: amountPaid > 0 ? `1px solid ${soft}` : 'none',
           }}>
             <span style={{ fontSize: 15, fontWeight: 900, textTransform: 'uppercase', letterSpacing: 0.5, color: dark }}>
-              {isReceipt ? 'Total Paid' : 'Total Due'}
+              {isReceipt ? 'Total Paid' : 'Original Amount Due'}
             </span>
             <span style={{ fontSize: 19, fontWeight: 900, color: dark }}>
               {fmtMoney(grandTotal, cur)}
@@ -388,7 +444,7 @@ export default function InvoiceDocument({ inv = {}, isQuote = false, finSettings
                 padding: '14px 0 0',
               }}>
                 <span style={{ fontSize: 14, fontWeight: 900, textTransform: 'uppercase', color: dark }}>
-                  Balance Due
+                  Invoice Balance
                 </span>
                 <span style={{ fontSize: 17, fontWeight: 900, color: balanceDue > 0 ? '#C0392B' : '#16A34A' }}>
                   {fmtMoney(balanceDue, cur)}
@@ -398,6 +454,89 @@ export default function InvoiceDocument({ inv = {}, isQuote = false, finSettings
           )}
         </div>
       </div>
+
+      {/* ══ PAYMENT INSTRUCTIONS + CONTRACT BALANCE ═════════════ */}
+      {!isQuotation && (
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: projectTotal > 0 ? '1fr 1fr' : '1fr',
+          gap: 20,
+          margin: '30px 48px 0',
+          padding: 20,
+          border: `1px solid ${soft}`,
+          borderRadius: 8,
+          background: surface,
+        }}>
+          <div>
+            <div style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: 2, fontWeight: 900, color: accent, marginBottom: 8 }}>
+              How To Pay
+            </div>
+            <div style={{ fontSize: 11, color: muted, lineHeight: 1.75 }}>
+              {paymentInstructions}
+            </div>
+            {inv.method && amountPaid > 0 && (
+              <div style={{ fontSize: 11, color: '#166534', fontWeight: 700, marginTop: 8 }}>
+                Payment recorded via {inv.method}.
+              </div>
+            )}
+          </div>
+
+          {projectTotal > 0 && (
+            <div style={{ borderLeft: `1px solid ${soft}`, paddingLeft: 20 }}>
+              <div style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: 2, fontWeight: 900, color: accent, marginBottom: 8 }}>
+                Project Payment Position
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: muted, marginBottom: 5 }}>
+                <span>Contract total</span>
+                <strong style={{ color: dark }}>{fmtMoney(projectTotal, cur)}</strong>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: muted, marginBottom: 8 }}>
+                <span>Total received</span>
+                <strong style={{ color: '#16A34A' }}>{fmtMoney(projectPaid, cur)}</strong>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: dark, paddingTop: 8, borderTop: `1px solid ${soft}` }}>
+                <strong>Remaining contract balance</strong>
+                <strong style={{ color: projectBalance > 0 ? '#C0392B' : '#16A34A' }}>{fmtMoney(projectBalance, cur)}</strong>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {projectTotal > 0 && scheduleRows.length > 0 && (
+        <div style={{ margin: '18px 48px 0' }}>
+          <div style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: 2, fontWeight: 900, color: muted, marginBottom: 9 }}>
+            Project Payment Schedule
+          </div>
+          <div style={{ border: `1px solid ${soft}`, borderRadius: 8, overflow: 'hidden' }}>
+            {scheduleRows.map((item, index) => (
+              <div
+                key={item.key}
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: '1fr 70px 120px 80px',
+                  gap: 10,
+                  padding: '9px 12px',
+                  borderBottom: index < scheduleRows.length - 1 ? `1px solid ${soft}` : 'none',
+                  background: item.key === inv.milestoneKey ? '#FFFDF7' : white,
+                  fontSize: 10.5,
+                  color: muted,
+                }}
+              >
+                <span style={{ color: dark, fontWeight: item.key === inv.milestoneKey ? 700 : 500 }}>{item.label}</span>
+                <span style={{ textAlign: 'right' }}>{Math.round(item.pct * 100)}%</span>
+                <strong style={{ textAlign: 'right', color: dark }}>{fmtMoney(item.amount, cur)}</strong>
+                <strong style={{
+                  textAlign: 'right',
+                  color: item.status === 'Paid' ? '#16A34A' : item.status === 'Due' || item.status === 'Partially Paid' ? '#C0392B' : muted,
+                }}>
+                  {item.status}
+                </strong>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* ══ BANK DETAILS + TERMS ════════════════════════════════ */}
       {(bankDetails || terms) && (

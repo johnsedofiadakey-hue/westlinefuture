@@ -26,7 +26,7 @@ export default function AdminSystem({ onReset, syncCatalog, brand }) {
                 <Database size={32} />
              </div>
              <div style={{ flex: 1 }}>
-                <h3 className="lxfh" style={{ fontSize: 20, marginBottom: 8 }}>Initialize / Reset Production Data</h3>
+                <h3 className="lxfh" style={{ fontSize: 20, marginBottom: 8 }}>Reset Demo Data</h3>
                 <p className="lxf" style={{ fontSize: 13, color: `var(--text-secondary)`, lineHeight: 1.6, marginBottom: 24 }}>
                    This action will synchronize the Firestore database with the master production template. 
                    It will re-seed default projects, materials, and assets. 
@@ -37,7 +37,7 @@ export default function AdminSystem({ onReset, syncCatalog, brand }) {
                   {!confirm ? (
                     <>
                       <button onClick={() => setConfirm(true)} className="p-btn-dark lxf" style={{ background: `var(--accent-secondary)`, padding: '12px 24px', fontSize: 13, display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <RefreshCw size={16} /> Re-seed Ecosystem
+                        <RefreshCw size={16} /> Reset Data
                       </button>
                       <button onClick={async () => { setLoading(true); await syncCatalog(); setLoading(false); }} disabled={loading} className="p-btn-gold lxf" style={{ padding: '12px 24px', fontSize: 13, display: 'flex', alignItems: 'center', gap: 10 }}>
                         <RefreshCw size={16} /> {loading ? 'Syncing...' : 'Sync Catalog Only'}

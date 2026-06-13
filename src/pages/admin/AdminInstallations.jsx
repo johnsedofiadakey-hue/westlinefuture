@@ -150,7 +150,7 @@ export default function AdminInstallations({ clients = [], updateProject, dbClie
             {/* FINANCIAL AUDIT LEDGER */}
             <div className="p-card" style={{ padding: 24 }}>
                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-                  <h3 className="lxfh" style={{ fontSize: 18 }}>Project Ledger</h3>
+                  <h3 className="lxfh" style={{ fontSize: 18 }}>Payments</h3>
                   <button onClick={() => setShowManual(true)} className="lxf" style={{ fontSize: 11, background: 'none', border: 'none', color: ac, fontWeight: 700, cursor: 'pointer' }}>+ Record External</button>
                </div>
                

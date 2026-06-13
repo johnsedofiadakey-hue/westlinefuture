@@ -6,7 +6,7 @@ import { SCHEDULE_CONFIGS } from './config.jsx';
 import { InvoiceCreatorModal } from './InvoiceCreatorModal';
 
 // ─── Payment Schedule Card (admin) ───────────────────────────────────────────
-export function PaymentScheduleCard({ project, createInvoice, notify, brand }) {
+export function PaymentScheduleCard({ project, createInvoice, notify, brand, invoices }) {
   const budget = Number(project.budget) || 0;
   const scheduleType = project.paymentSchedule || 'standard';
   const config = SCHEDULE_CONFIGS[scheduleType] || SCHEDULE_CONFIGS.standard;
@@ -97,6 +97,16 @@ export function PaymentScheduleCard({ project, createInvoice, notify, brand }) {
   const fmt = v => `GHS ${Number(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
   const getMilestoneStatus = (m) => {
+    // Check explicit invoice status first if we have the invoices array
+    if (invoices && project?.id) {
+      const milestoneInvoice = invoices.find(inv => (inv.projectId === project.id || inv.parentId === project.id) && inv.milestoneKey === m.key);
+      if (milestoneInvoice) {
+        if (milestoneInvoice.awaitingConfirmation === true || milestoneInvoice.status?.toLowerCase() === 'verification pending') {
+          return 'verification pending';
+        }
+      }
+    }
+
     if (budget <= 0) return 'upcoming';
     if (totalPaid >= budget * m.cumPct) return 'paid';
     if (totalPaid >= budget * (m.cumPct - m.pct)) return 'due';
@@ -367,21 +377,23 @@ export function PaymentScheduleCard({ project, createInvoice, notify, brand }) {
               const status = getMilestoneStatus(m);
               const isPaid = status === 'paid';
               const isDue = status === 'due';
+              const isPending = status === 'verification pending';
               return (
                 <div key={m.key} style={{
                   display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', borderRadius: 12,
-                  background: isDue ? '#F0FDF4' : '#FAFAF9',
-                  border: `1.5px solid ${isDue ? '#16A34A40' : isPaid ? '#16A34A20' : 'var(--border-color)'}`,
+                  background: isPending ? '#EFF6FF' : isDue ? '#F0FDF4' : '#FAFAF9',
+                  border: `1.5px solid ${isPending ? '#DBEAFE' : isDue ? '#16A34A40' : isPaid ? '#16A34A20' : 'var(--border-color)'}`,
                 }}>
-                  <div style={{ width: 28, height: 28, borderRadius: 8, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: isPaid ? '#16A34A' : isDue ? '#F0FDF4' : 'var(--border-color)', border: isDue ? '2px solid #16A34A' : 'none' }}>
-                    {isPaid ? <CheckCircle2 size={13} color="#fff" /> : <span style={{ fontSize: 10, fontWeight: 900, color: isDue ? '#16A34A' : 'var(--text-secondary)' }}>{idx + 1}</span>}
+                  <div style={{ width: 28, height: 28, borderRadius: 8, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: isPaid ? '#16A34A' : isPending ? '#DBEAFE' : isDue ? '#F0FDF4' : 'var(--border-color)', border: isPending ? '2px solid #3B82F6' : isDue ? '2px solid #16A34A' : 'none' }}>
+                    {isPaid ? <CheckCircle2 size={13} color="#fff" /> : <span style={{ fontSize: 10, fontWeight: 900, color: isPending ? '#3B82F6' : isDue ? '#16A34A' : 'var(--text-secondary)' }}>{idx + 1}</span>}
                   </div>
                   <div style={{ flex: 1 }}>
                     <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--accent-secondary)' }}>{m.label}</div>
-                    <div style={{ fontSize: 12, fontWeight: 800, color: isPaid ? '#16A34A' : isDue ? '#16A34A' : 'var(--text-secondary)' }}>{fmt(budget * m.pct)}</div>
+                    <div style={{ fontSize: 12, fontWeight: 800, color: isPaid ? '#16A34A' : isPending ? '#3B82F6' : isDue ? '#16A34A' : 'var(--text-secondary)' }}>{fmt(budget * m.pct)}</div>
                   </div>
                   <div>
                     {isPaid && <span style={{ fontSize: 10, fontWeight: 800, color: '#065F46', background: '#D1FAE5', padding: '3px 9px', borderRadius: 20 }}>Paid ✓</span>}
+                    {isPending && <span style={{ fontSize: 10, fontWeight: 800, color: '#1E3A8A', background: '#DBEAFE', padding: '3px 9px', borderRadius: 20, whiteSpace: 'nowrap' }}>Verify Payment</span>}
                     {isDue && <span style={{ fontSize: 10, fontWeight: 800, color: '#92400E', background: '#FEF3C7', padding: '3px 9px', borderRadius: 20 }}>Due</span>}
                     {status === 'upcoming' && <span style={{ fontSize: 10, color: 'var(--text-secondary)', background: 'var(--border-color)', padding: '3px 9px', borderRadius: 20 }}>Upcoming</span>}
                   </div>

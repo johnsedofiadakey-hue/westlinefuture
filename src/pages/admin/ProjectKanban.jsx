@@ -202,7 +202,16 @@ function getProjectHealth(project, invoices = []) {
   const delayed = project.timelineStatus === 'Delayed' || daysInStage > ((stage.days || 7) + 3);
   const blocked = delayed || overdueInvoices.length > 0 || project.projectHealth === 'Red' || String(project.healthStatus || '').toLowerCase() === 'red';
 
-  if (blocked) return { label: 'Blocked', color: '#DC2626', bg: '#FEF2F2', reason: overdueInvoices.length ? `${overdueInvoices.length} overdue invoice${overdueInvoices.length > 1 ? 's' : ''}` : delayed ? `${daysInStage}d in stage` : 'Needs admin review' };
+  // Give specific, actionable labels instead of generic "Blocked"
+  if (blocked) {
+    if (overdueInvoices.length > 0) {
+      return { label: 'Awaiting Payment', color: '#D97706', bg: '#FFF7ED', reason: `${overdueInvoices.length} overdue invoice${overdueInvoices.length > 1 ? 's' : ''}` };
+    }
+    if (delayed) {
+      return { label: 'Needs Attention', color: '#DC2626', bg: '#FEF2F2', reason: `Stuck ${daysInStage} days in this stage` };
+    }
+    return { label: 'Needs Review', color: '#DC2626', bg: '#FEF2F2', reason: 'Admin review required' };
+  }
   if (waitingClient) return { label: 'Waiting Client', color: '#D97706', bg: '#FFF7ED', reason: project.nextAction || stage.clientMsg };
   return { label: 'On Track', color: '#16A34A', bg: '#F0FDF4', reason: project.nextAction || stage.adminPrompt };
 }
@@ -265,8 +274,8 @@ function ProjectCard({ project, ac, onOpen, onDragStart, invoices = [], compact 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
         <div style={{ fontSize: 11, fontWeight: 800, color: `var(--text-secondary)` }}>{project.budget || '—'}</div>
         {daysInStage !== null && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 10, color: `var(--text-secondary)`, fontWeight: 700 }}>
-            <Clock size={10} /> {daysInStage}d here
+          <div title={`Days project has been in ${stage.short} stage`} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 10, color: `var(--text-secondary)`, fontWeight: 700, cursor: 'help' }}>
+            <Clock size={10} /> {daysInStage}d
           </div>
         )}
       </div>
@@ -280,7 +289,7 @@ function ProjectCard({ project, ac, onOpen, onDragStart, invoices = [], compact 
         <div style={{ height: 4, background: `var(--border-color)`, borderRadius: 2, overflow: 'hidden' }}>
           <div style={{ width: `${stage.pct}%`, height: '100%', background: stage.color, transition: 'width 0.6s ease', borderRadius: 2 }} />
         </div>
-        <div style={{ fontSize: 9, color: `var(--text-secondary)`, marginTop: 4, textAlign: 'right', fontWeight: 700 }}>{stage.pct}%</div>
+        <div title="Overall project completion based on current stage" style={{ fontSize: 9, color: `var(--text-secondary)`, marginTop: 4, textAlign: 'right', fontWeight: 700, cursor: 'help' }}>{stage.pct}% complete</div>
       </div>
     </div>
   );
@@ -663,8 +672,12 @@ function ProjectDrawer({ project, ac, onClose, updateProjectStage, updateProject
                 </div>
               ) : (
                 teamMembers.filter(m => m.role !== 'client').map(m => {
-                  const assignedWorkers = project.assignedWorkers || [];
-                  const isAssigned = assignedWorkers.includes(m.id) || assignedWorkers.includes(m.uid);
+                  const assignedTeam = [
+                    ...(project.assignedWorkers || []),
+                    ...(project.assignedStaff || []),
+                    ...(project.projectManagerId ? [project.projectManagerId] : []),
+                  ];
+                  const isAssigned = assignedTeam.includes(m.id) || assignedTeam.includes(m.uid);
                   const isLoading = assigning === (m.id || m.uid);
                   return (
                     <div key={m.id || m.uid} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', background: isAssigned ? '#F0FDF4' : `var(--bg-secondary)`, border: `1px solid ${isAssigned ? '#BBF7D0' : `var(--border-color)`}`, borderRadius: 14, transition: 'all 0.2s' }}>

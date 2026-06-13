@@ -17,7 +17,7 @@
  */
 import React, { useState, useContext } from 'react';
 import { usePaystackPayment } from 'react-paystack';
-import { ArrowRight, Loader2, CheckCircle2, AlertCircle, PhoneCall, ShieldCheck, CreditCard, Smartphone } from 'lucide-react';
+import { ArrowRight, Loader2, CheckCircle2, AlertCircle, PhoneCall, ShieldCheck, CreditCard, Smartphone, Building2, Banknote, X } from 'lucide-react';
 import { functions } from '../lib/firebase';
 import { httpsCallable } from 'firebase/functions';
 import { AppContext } from '../context/AppContext';
@@ -25,6 +25,7 @@ import { AppContext } from '../context/AppContext';
 // ── Paystack button (inner component so hook is always called) ─────────────
 function PaystackOption({ amountGHS, email, invoiceId, projectId, paymentType, description, publicKey, onSuccess, onError }) {
   const [status, setStatus] = useState('idle');
+  const [lastClickTime, setLastClickTime] = React.useState(0);
 
   const amountPesewas = Math.round(parseFloat(amountGHS || 0) * 100);
   const reference     = `WL-${Date.now()}-${Math.random().toString(36).slice(2, 7).toUpperCase()}`;
@@ -35,6 +36,7 @@ function PaystackOption({ amountGHS, email, invoiceId, projectId, paymentType, d
     amount:    amountPesewas,
     currency:  'GHS',
     publicKey: publicKey || import.meta.env.VITE_PAYSTACK_PUBLIC_KEY || '',
+    channels:  ['card', 'mobile_money', 'bank', 'bank_transfer'],
     metadata:  { invoiceId, projectId, paymentType, description },
   };
 
@@ -71,6 +73,13 @@ function PaystackOption({ amountGHS, email, invoiceId, projectId, paymentType, d
   };
 
   const handleClick = () => {
+    // Debounce: prevent rapid clicks (1-second cooldown)
+    const now = Date.now();
+    if (now - lastClickTime < 1000) {
+      return; // Ignore click if less than 1 second since last click
+    }
+    setLastClickTime(now);
+
     setStatus('processing');
     initializePayment(handleSuccess, handleClose);
   };
@@ -116,8 +125,16 @@ function PaystackOption({ amountGHS, email, invoiceId, projectId, paymentType, d
 // ── Hubtel button ───────────────────────────────────────────────────────────
 function HubtelOption({ amountGHS, invoiceId, projectId, paymentType, description, onError }) {
   const [status, setStatus] = useState('idle');
+  const [lastClickTime, setLastClickTime] = React.useState(0);
 
   const handleClick = async () => {
+    // Debounce: prevent rapid clicks (1-second cooldown)
+    const now = Date.now();
+    if (now - lastClickTime < 1000) {
+      return; // Ignore click if less than 1 second since last click
+    }
+    setLastClickTime(now);
+
     setStatus('processing');
     try {
       const init = httpsCallable(functions, 'initializeHubtelPayment');
@@ -187,15 +204,55 @@ export default function UnifiedPaymentGateway({
   disabled     = false,
   contactPhone,
   onSuccess,
+  allowPartial = true, // NEW: Allow client to pay any amount up to the full
 }) {
-  const { brand } = useContext(AppContext);
+  const { brand, user } = useContext(AppContext);
   const [error, setError] = useState(null);
+  const [showPartialModal, setShowPartialModal] = useState(false);
+  const [partialAmount, setPartialAmount] = useState('');
+  const [offlineMethod, setOfflineMethod] = useState(null);
+  const [offlineReference, setOfflineReference] = useState('');
+  const [offlineBusy, setOfflineBusy] = useState(false);
+  const [offlineSubmitted, setOfflineSubmitted] = useState(false);
+  const fullAmount = parseFloat(amountGHS || 0);
 
   const gw             = brand?.gatewaySettings || {};
   const paystackKey    = gw.paystackPublicKey || import.meta.env.VITE_PAYSTACK_PUBLIC_KEY || '';
   const paystackActive = !!(gw.enablePaystack !== false && paystackKey);
   const hubtelActive   = !!(gw.enableHubtel && gw.hubtelClientId && gw.hubtelClientSecret && gw.hubtelMerchantId);
   const neitherActive  = !paystackActive && !hubtelActive;
+
+  // The actual amount that will be charged — partial if set, otherwise full
+  const effectiveAmount = partialAmount && parseFloat(partialAmount) > 0
+    ? Math.min(parseFloat(partialAmount), fullAmount)
+    : fullAmount;
+  const isPartialPayment = effectiveAmount > 0 && effectiveAmount < fullAmount;
+  const bankDetails = brand?.finSettings?.bankDetails || brand?.bankDetails || '';
+  const canSubmitOffline = !!(user && invoiceId && effectiveAmount > 0);
+
+  const submitOfflinePayment = async () => {
+    if (!canSubmitOffline || !offlineMethod || offlineBusy) return;
+    setOfflineBusy(true);
+    setError(null);
+    try {
+      const submit = httpsCallable(functions, 'submitOfflinePayment');
+      await submit({
+        invoiceId,
+        projectId: projectId || '',
+        method: offlineMethod,
+        amount: effectiveAmount,
+        reference: offlineReference.trim(),
+        paymentType,
+        description: description || label,
+      });
+      setOfflineSubmitted(true);
+      setOfflineMethod(null);
+    } catch (err) {
+      setError(err?.message || 'The offline payment notice could not be submitted.');
+    } finally {
+      setOfflineBusy(false);
+    }
+  };
 
   if (disabled) {
     return (
@@ -210,15 +267,50 @@ export default function UnifiedPaymentGateway({
 
       {/* Amount pill */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14, padding: '10px 16px', borderRadius: 10, background: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}>
-        <span style={{ fontSize: 13, color: 'var(--text-secondary)', fontWeight: 600 }}>{label}</span>
-        <span style={{ fontSize: 16, fontWeight: 900, color: 'var(--accent-secondary)' }}>GH₵ {parseFloat(amountGHS || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+        <span style={{ fontSize: 13, color: 'var(--text-secondary)', fontWeight: 600 }}>
+          {isPartialPayment ? 'Paying (partial)' : label}
+        </span>
+        <span style={{ fontSize: 16, fontWeight: 900, color: 'var(--accent-secondary)' }}>
+          GH₵ {effectiveAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+          {isPartialPayment && (
+            <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', marginLeft: 6 }}>
+              of GH₵ {fullAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+            </span>
+          )}
+        </span>
       </div>
+
+      {/* Partial payment option */}
+      {allowPartial && fullAmount > 0 && !isPartialPayment && (
+        <button
+          onClick={() => setShowPartialModal(true)}
+          style={{
+            width: '100%', marginBottom: 10, padding: '8px 14px', borderRadius: 10,
+            border: '1px dashed var(--border-color)', background: 'transparent',
+            color: 'var(--text-secondary)', fontSize: 11, fontWeight: 700, cursor: 'pointer',
+          }}
+        >
+          💵 Pay partial amount instead
+        </button>
+      )}
+      {isPartialPayment && (
+        <button
+          onClick={() => { setPartialAmount(''); }}
+          style={{
+            width: '100%', marginBottom: 10, padding: '8px 14px', borderRadius: 10,
+            border: '1px solid #FCD34D', background: '#FEF3C7',
+            color: '#92400E', fontSize: 11, fontWeight: 700, cursor: 'pointer',
+          }}
+        >
+          ✕ Cancel partial — pay full GH₵ {fullAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+        </button>
+      )}
 
       {/* Gateway options */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {paystackActive && (
           <PaystackOption
-            amountGHS={amountGHS}
+            amountGHS={effectiveAmount}
             email={email}
             invoiceId={invoiceId}
             projectId={projectId}
@@ -232,7 +324,7 @@ export default function UnifiedPaymentGateway({
 
         {hubtelActive && (
           <HubtelOption
-            amountGHS={amountGHS}
+            amountGHS={effectiveAmount}
             invoiceId={invoiceId}
             projectId={projectId}
             paymentType={paymentType}
@@ -253,6 +345,72 @@ export default function UnifiedPaymentGateway({
             )}
           </div>
         )}
+
+        {canSubmitOffline && !offlineSubmitted && (
+          <>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '4px 0' }}>
+              <div style={{ height: 1, flex: 1, background: 'var(--border-color)' }} />
+              <span style={{ fontSize: 10, fontWeight: 800, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Offline alternatives</span>
+              <div style={{ height: 1, flex: 1, background: 'var(--border-color)' }} />
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+              <button
+                onClick={() => setOfflineMethod(offlineMethod === 'bank' ? null : 'bank')}
+                style={{ padding: '11px 12px', borderRadius: 12, border: `1.5px solid ${offlineMethod === 'bank' ? '#16A34A' : 'var(--border-color)'}`, background: offlineMethod === 'bank' ? '#F0FDF4' : '#fff', color: offlineMethod === 'bank' ? '#15803D' : 'var(--accent-secondary)', fontSize: 12, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7 }}
+              >
+                <Building2 size={15} /> Bank Transfer
+              </button>
+              <button
+                onClick={() => setOfflineMethod(offlineMethod === 'cash' ? null : 'cash')}
+                style={{ padding: '11px 12px', borderRadius: 12, border: `1.5px solid ${offlineMethod === 'cash' ? '#7C3AED' : 'var(--border-color)'}`, background: offlineMethod === 'cash' ? '#FAF5FF' : '#fff', color: offlineMethod === 'cash' ? '#6D28D9' : 'var(--accent-secondary)', fontSize: 12, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7 }}
+              >
+                <Banknote size={15} /> Cash / In-Person
+              </button>
+            </div>
+          </>
+        )}
+
+        {canSubmitOffline && offlineMethod && !offlineSubmitted && (
+          <div style={{ padding: '14px 16px', borderRadius: 14, background: offlineMethod === 'bank' ? '#F0FDF4' : '#FAF5FF', border: `1.5px solid ${offlineMethod === 'bank' ? '#BBF7D0' : '#E9D5FF'}` }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start', marginBottom: 10 }}>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 900, color: offlineMethod === 'bank' ? '#15803D' : '#6D28D9' }}>
+                  {offlineMethod === 'bank' ? 'Bank transfer instructions' : 'Cash / in-person payment'}
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 3, lineHeight: 1.5 }}>
+                  {offlineMethod === 'bank'
+                    ? 'Transfer the amount, then submit your bank reference for finance verification.'
+                    : 'Pay at the office or to an authorised representative, then notify the team for verification.'}
+                </div>
+              </div>
+              <button onClick={() => setOfflineMethod(null)} style={{ border: 'none', background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer', padding: 2 }}><X size={15} /></button>
+            </div>
+            {offlineMethod === 'bank' && (
+              <div style={{ padding: '10px 12px', borderRadius: 10, background: 'rgba(255,255,255,.75)', fontSize: 12, color: '#166534', whiteSpace: 'pre-wrap', lineHeight: 1.7, marginBottom: 10 }}>
+                {bankDetails || 'Contact your account manager for the approved Westline Future bank account details.'}
+              </div>
+            )}
+            <input
+              value={offlineReference}
+              onChange={event => setOfflineReference(event.target.value)}
+              placeholder={offlineMethod === 'bank' ? 'Bank transaction reference (recommended)' : 'Receipt, collector, or payment note'}
+              style={{ width: '100%', height: 42, borderRadius: 10, border: '1px solid var(--border-color)', padding: '0 12px', fontSize: 12, boxSizing: 'border-box', marginBottom: 9 }}
+            />
+            <button
+              onClick={submitOfflinePayment}
+              disabled={offlineBusy}
+              style={{ width: '100%', padding: '11px 14px', borderRadius: 10, border: 'none', background: offlineMethod === 'bank' ? '#16A34A' : '#7C3AED', color: '#fff', fontSize: 12, fontWeight: 900, cursor: offlineBusy ? 'default' : 'pointer', opacity: offlineBusy ? .65 : 1 }}
+            >
+              {offlineBusy ? 'Submitting for verification…' : 'Notify Team for Verification'}
+            </button>
+          </div>
+        )}
+
+        {offlineSubmitted && (
+          <div style={{ padding: '13px 15px', borderRadius: 13, background: '#EFF6FF', border: '1.5px solid #BFDBFE', color: '#1D4ED8', fontSize: 12, lineHeight: 1.55 }}>
+            <strong>Payment notice submitted.</strong> Finance and the assigned project team have been notified. The invoice will update after receipt is verified.
+          </div>
+        )}
       </div>
 
       {/* Error banner */}
@@ -267,6 +425,85 @@ export default function UnifiedPaymentGateway({
       )}
 
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+
+      {/* ── Partial Payment Modal ────────────────────────────────────────── */}
+      {showPartialModal && (
+        <div onClick={() => setShowPartialModal(false)} style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 9999,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20
+        }}>
+          <div onClick={e => e.stopPropagation()} style={{
+            background: '#fff', borderRadius: 20, maxWidth: 380, width: '100%', padding: 24
+          }}>
+            <div style={{ fontSize: 17, fontWeight: 900, color: 'var(--accent-secondary)', marginBottom: 6 }}>
+              Pay Partial Amount
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 16, lineHeight: 1.5 }}>
+              Enter the amount you'd like to pay now. The remaining balance will stay on this invoice until cleared.
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 6, fontWeight: 700 }}>
+              Total invoice: GH₵ {fullAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+            </div>
+            <input
+              type="number"
+              value={partialAmount}
+              onChange={e => setPartialAmount(e.target.value)}
+              placeholder={`Up to ${fullAmount.toFixed(2)}`}
+              max={fullAmount}
+              min={1}
+              step="0.01"
+              autoFocus
+              style={{
+                width: '100%', padding: '14px 16px', borderRadius: 12,
+                border: '1.5px solid var(--border-color)', fontSize: 18, fontWeight: 800,
+                color: 'var(--accent-secondary)', outline: 'none', marginBottom: 12,
+              }}
+            />
+            <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+              {[0.25, 0.5, 0.75].map(pct => (
+                <button
+                  key={pct}
+                  onClick={() => setPartialAmount((fullAmount * pct).toFixed(2))}
+                  style={{
+                    flex: 1, padding: '8px 12px', borderRadius: 10,
+                    border: '1px solid var(--border-color)', background: 'var(--bg-secondary)',
+                    fontSize: 11, fontWeight: 800, cursor: 'pointer', color: 'var(--text-secondary)',
+                  }}
+                >
+                  {Math.round(pct * 100)}% (GH₵ {(fullAmount * pct).toFixed(0)})
+                </button>
+              ))}
+            </div>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button
+                onClick={() => { setShowPartialModal(false); setPartialAmount(''); }}
+                style={{ flex: 1, padding: '12px', borderRadius: 12, border: '1.5px solid var(--border-color)', background: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  const amt = parseFloat(partialAmount);
+                  if (!amt || amt <= 0 || amt > fullAmount) {
+                    alert(`Enter an amount between 1 and ${fullAmount.toFixed(2)}`);
+                    return;
+                  }
+                  setShowPartialModal(false);
+                }}
+                disabled={!partialAmount || parseFloat(partialAmount) <= 0 || parseFloat(partialAmount) > fullAmount}
+                style={{
+                  flex: 1, padding: '12px', borderRadius: 12, border: 'none',
+                  background: (!partialAmount || parseFloat(partialAmount) <= 0 || parseFloat(partialAmount) > fullAmount) ? 'var(--border-color)' : 'var(--accent-secondary)',
+                  color: '#fff', fontSize: 13, fontWeight: 800,
+                  cursor: (!partialAmount || parseFloat(partialAmount) <= 0 || parseFloat(partialAmount) > fullAmount) ? 'not-allowed' : 'pointer',
+                }}
+              >
+                Confirm
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

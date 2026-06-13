@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Plus, Calendar, ChevronRight, CheckCircle2, Loader2 } from 'lucide-react';
+import { X, Plus, Calendar, ChevronDown, CheckCircle2, Loader2 } from 'lucide-react';
 import { PROJECT_TYPES } from '../../../data';
 import { AC, SCHEDULE_CONFIGS, BD_ITEMS_CONFIG } from './config.jsx';
 
@@ -24,6 +24,7 @@ export function NewProjectModal({ client, teamMembers = [], onClose, onCreate })
     cat: '',
   });
   const [showBackdate, setShowBackdate] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const [showBreakdown, setShowBreakdown] = useState(false);
   // Custom payment milestone builder
   const [customMilestones, setCustomMilestones] = useState([
@@ -103,7 +104,7 @@ export function NewProjectModal({ client, teamMembers = [], onClose, onCreate })
     <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20, overflowY: 'auto' }}>
       <div style={{ background: '#fff', borderRadius: 24, width: '100%', maxWidth: 880, padding: 40, position: 'relative', boxShadow: '0 32px 80px rgba(0,0,0,.2)', margin: '20px auto' }}>
         <button onClick={onClose} style={{ position: 'absolute', top: 20, right: 20, width: 36, height: 36, borderRadius: 10, border: '1px solid var(--border-color)', background: `var(--bg-secondary)`, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><X size={16} /></button>
-        <div style={{ fontSize: 11, fontWeight: 800, color: AC, textTransform: 'uppercase', letterSpacing: '.1em', marginBottom: 6 }}>Project Launch Console</div>
+        <div style={{ fontSize: 11, fontWeight: 800, color: AC, textTransform: 'uppercase', letterSpacing: '.1em', marginBottom: 6 }}>New Project</div>
         <div style={{ fontSize: 22, fontWeight: 900, color: `var(--accent-secondary)`, marginBottom: 28 }}>{client.name}</div>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.2fr) 280px', gap: 24, alignItems: 'start' }}>
@@ -115,29 +116,19 @@ export function NewProjectModal({ client, teamMembers = [], onClose, onCreate })
             <input value={form.title} onChange={e => set('title', e.target.value)} placeholder="e.g. East Legon Villa — Curtain Wall" style={iS} />
           </div>
 
-          {/* Work Category + Site Coordinates */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16 }}>
-            <div>
-              <label style={lS}>Work Category *</label>
-              <select value={form.cat} onChange={e => set('cat', e.target.value)} style={iS}>
-                <option value="">— Select Category —</option>
-                <option value="glass">Glass & Glazing</option>
-                <option value="shower">Shower & Washroom</option>
-                <option value="partition">Glass Partition & Balustrade</option>
-                <option value="pergola">Pergola & Canopy</option>
-                <option value="cladding">ACP Cladding & Facade</option>
-                <option value="kitchen">Kitchen & Interiors</option>
-                <option value="general">General / Other</option>
-              </select>
-            </div>
-            <div>
-              <label style={lS}>Site Latitude (GPS)</label>
-              <input value={form.latitude} onChange={e => set('latitude', e.target.value)} placeholder="e.g. 5.6037" style={iS} />
-            </div>
-            <div>
-              <label style={lS}>Site Longitude (GPS)</label>
-              <input value={form.longitude} onChange={e => set('longitude', e.target.value)} placeholder="e.g. -0.1870" style={iS} />
-            </div>
+          {/* Work Category */}
+          <div>
+            <label style={lS}>Work Category *</label>
+            <select value={form.cat} onChange={e => set('cat', e.target.value)} style={iS}>
+              <option value="">— Select Category —</option>
+              <option value="glass">Glass & Glazing</option>
+              <option value="shower">Shower & Washroom</option>
+              <option value="partition">Glass Partition & Balustrade</option>
+              <option value="pergola">Pergola & Canopy</option>
+              <option value="cladding">ACP Cladding & Facade</option>
+              <option value="kitchen">Kitchen & Interiors</option>
+              <option value="general">General / Other</option>
+            </select>
           </div>
 
           <div>
@@ -352,28 +343,44 @@ export function NewProjectModal({ client, teamMembers = [], onClose, onCreate })
             <textarea value={form.description} onChange={e => set('description', e.target.value)} placeholder="Describe the scope, site location, and any special requirements..." rows={3} style={{ width: '100%', padding: '12px 16px', borderRadius: 12, border: '1.5px solid var(--border-color)', fontSize: 13, outline: 'none', resize: 'vertical', boxSizing: 'border-box', fontFamily: 'inherit', lineHeight: 1.6 }} />
           </div>
 
-          {/* Backdate */}
+          {/* Advanced Options (GPS + Backdate) */}
           <div>
             <button
               type="button"
-              onClick={() => setShowBackdate(p => !p)}
-              style={{ fontSize: 11, fontWeight: 800, color: showBackdate ? '#DC2626' : `var(--text-secondary)`, background: 'transparent', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', gap: 5 }}
+              onClick={() => setShowAdvanced(p => !p)}
+              style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
             >
-              <Calendar size={12} />
-              {showBackdate ? 'Remove backdate' : 'Backdate this project'}
+              <ChevronDown size={13} style={{ transform: showAdvanced ? 'rotate(180deg)' : 'none', transition: 'transform .2s' }} />
+              {showAdvanced ? 'Hide' : 'Show'} advanced options
             </button>
-            {showBackdate && (
-              <div style={{ marginTop: 10, padding: '14px 16px', background: '#FEF2F2', borderRadius: 12, border: '1.5px solid #FCA5A530' }}>
-                <div style={{ fontSize: 10, fontWeight: 800, color: '#DC2626', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 8 }}>Project Start Date</div>
-                <input
-                  type="date"
-                  value={form.projectDate}
-                  onChange={e => set('projectDate', e.target.value)}
-                  max={new Date().toISOString().slice(0, 10)}
-                  style={{ padding: '9px 12px', borderRadius: 10, border: '1.5px solid #FECACA', fontSize: 13, outline: 'none', fontFamily: 'inherit', background: '#fff' }}
-                />
-                <div style={{ fontSize: 11, color: '#DC2626', marginTop: 6, lineHeight: 1.5 }}>
-                  Sets the project creation date. Use for historical projects only.
+            {showAdvanced && (
+              <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 14 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                  <div>
+                    <label style={lS}>Site Latitude (GPS)</label>
+                    <input value={form.latitude} onChange={e => set('latitude', e.target.value)} placeholder="e.g. 5.6037" style={iS} />
+                  </div>
+                  <div>
+                    <label style={lS}>Site Longitude (GPS)</label>
+                    <input value={form.longitude} onChange={e => set('longitude', e.target.value)} placeholder="e.g. -0.1870" style={iS} />
+                  </div>
+                </div>
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => setShowBackdate(p => !p)}
+                    style={{ fontSize: 11, fontWeight: 800, color: showBackdate ? '#DC2626' : 'var(--text-secondary)', background: 'transparent', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', gap: 5 }}
+                  >
+                    <Calendar size={12} />
+                    {showBackdate ? 'Remove backdate' : 'Backdate this project'}
+                  </button>
+                  {showBackdate && (
+                    <div style={{ marginTop: 10, padding: '14px 16px', background: '#FEF2F2', borderRadius: 12, border: '1.5px solid #FCA5A530' }}>
+                      <label style={{ fontSize: 10, fontWeight: 800, color: '#DC2626', textTransform: 'uppercase', letterSpacing: '.06em', display: 'block', marginBottom: 8 }}>Project Start Date</label>
+                      <input type="date" value={form.projectDate} onChange={e => set('projectDate', e.target.value)} max={new Date().toISOString().slice(0, 10)} style={{ padding: '9px 12px', borderRadius: 10, border: '1.5px solid #FECACA', fontSize: 13, outline: 'none', fontFamily: 'inherit', background: '#fff' }} />
+                      <div style={{ fontSize: 11, color: '#DC2626', marginTop: 6 }}>Use for historical projects only.</div>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -399,21 +406,6 @@ export function NewProjectModal({ client, teamMembers = [], onClose, onCreate })
             ))}
           </div>
 
-          <div style={{ padding: 18, borderRadius: 18, background: '#fff', border: '1.5px solid var(--border-color)' }}>
-            <div style={{ fontSize: 12, fontWeight: 900, color: `var(--accent-secondary)`, marginBottom: 10 }}>What happens after create</div>
-            {[
-              'Project opens at intake stage.',
-              ...(form.kickoffMode === 'rendering-first'
-                ? ['Rendering/design access starts locked.', 'Rendering fee remains separate from project value.']
-                : ['No rendering required — client goes straight to quotation.']),
-              'Quote and deposit gates are prepared for the client journey.',
-              'Timeline records are initialized for audit tracking.',
-            ].map(step => (
-              <div key={step} style={{ display: 'flex', gap: 8, marginBottom: 8, fontSize: 11, color: `var(--text-secondary)`, lineHeight: 1.45 }}>
-                <ChevronRight size={13} color={AC} style={{ flexShrink: 0, marginTop: 1 }} /> {step}
-              </div>
-            ))}
-          </div>
         </div>
         </div>
 

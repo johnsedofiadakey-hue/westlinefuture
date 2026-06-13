@@ -38,7 +38,7 @@ export default function ProjectProcurement({ clients = [], procurements = [], br
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
-           <h2 className="lxfh" style={{ fontSize: 32, fontWeight: 400 }}>Operational Procurement</h2>
+           <h2 className="lxfh" style={{ fontSize: 32, fontWeight: 400 }}>Procurement</h2>
            <p className="lxf" style={{ color: `var(--text-secondary)`, fontSize: 13 }}>Tracking every component from global source to final site arrival.</p>
         </div>
         <div style={{ display: 'flex', gap: 12 }}>

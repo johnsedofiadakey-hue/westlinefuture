@@ -2,11 +2,11 @@ import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Lock, Download, X, Loader2, CheckCircle2, CreditCard, Trash2 } from 'lucide-react';
 import { db } from '../../../lib/firebase';
-import { collection, addDoc, serverTimestamp, doc, updateDoc } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, doc, updateDoc, setDoc, increment } from 'firebase/firestore';
 import { printInvoiceOrReceipt, printSignedContractDoc } from './print';
 
 // ─── Project Invoices & Billing Ledger ───────────────────────────────────────
-export function ProjectInvoicesLedger({ project, client, invoices, brand, updateInvoice, deleteInvoice, notify, user }) {
+export function ProjectInvoicesLedger({ project, client, invoices, brand, updateInvoice, deleteInvoice, notify, user, updateProjectStage, updateProject }) {
   const [payingInvoice, setPayingInvoice] = useState(null);
   const [payAmt, setPayAmt] = useState('');
   const [payDate, setPayDate] = useState(new Date().toISOString().split('T')[0]);
@@ -14,7 +14,7 @@ export function ProjectInvoicesLedger({ project, client, invoices, brand, update
   const [savingPayment, setSavingPayment] = useState(false);
   const [confirmDeleteInvId, setConfirmDeleteInvId] = useState(null);
 
-  const projectInvoices = (invoices || []).filter(inv => inv.parentId === project.id);
+  const projectInvoices = (invoices || []).filter(inv => inv.parentId === project.id || inv.projectId === project.id);
 
   // Project-level financial totals for the "Project Financial Position" strip in the PDF
   const projBudget   = Number(project.budget || project.projectTotal || 0);
@@ -23,9 +23,14 @@ export function ProjectInvoicesLedger({ project, client, invoices, brand, update
 
   const openPaymentModal = (inv) => {
     setPayingInvoice(inv);
-    const balance = Math.max(0, Number(inv.amount || inv.total || 0) - Number(inv.paidAmount || 0));
+    const balance = Math.max(0, Number(inv.amount || inv.total || 0) - Number(inv.amountPaid || inv.paidAmount || 0));
     setPayAmt(balance.toString());
-    setPayNote(`Payment received against Invoice WF-${(inv.id || '').slice(-8).toUpperCase()}`);
+    if (inv.awaitingConfirmation === true || inv.status === 'Verification Pending') {
+      const methodStr = inv.paymentMethodSubmitted ? `via ${inv.paymentMethodSubmitted}` : '';
+      setPayNote(`Verified offline payment ${methodStr}`);
+    } else {
+      setPayNote(`Payment received against Invoice WF-${(inv.id || '').slice(-8).toUpperCase()}`);
+    }
   };
 
   const handleRecordPayment = async () => {
@@ -36,26 +41,107 @@ export function ProjectInvoicesLedger({ project, client, invoices, brand, update
       const fxRate = Number(brand?.exchangeRate) || 15.5;
       const amountInGhs = payingInvoice.currency === 'USD' ? amount * fxRate : amount;
 
-      await addDoc(collection(db, 'projects', project.id, 'transactions'), {
+      const transactionData = {
         amount: amountInGhs,
         description: payNote.trim() || 'Payment received',
         date: payDate,
         projectId: project.id,
+        parentId: project.id,
+        clientId: project.clientId,
+        invoiceId: payingInvoice.id,
+        method: payingInvoice.paymentMethodSubmitted || 'Offline',
+        status: 'verified',
         type: 'payment',
         createdAt: serverTimestamp(),
+      };
+      const transactionRef = await addDoc(collection(db, 'projects', project.id, 'transactions'), transactionData);
+      await setDoc(doc(db, 'transactions', transactionRef.id), {
+        ...transactionData,
+        projectTransactionId: transactionRef.id,
       });
 
-      const newPaid = Number(payingInvoice.paidAmount || 0) + amount;
-      const newStatus = newPaid >= Number(payingInvoice.total || 0) ? 'Paid' : newPaid > 0 ? 'Partially Paid' : 'Pending';
+      const currentPaid = Number(payingInvoice.amountPaid || payingInvoice.paidAmount || 0);
+      const invoiceTotal = Number(payingInvoice.amount || payingInvoice.total || 0);
+      const newPaid = currentPaid + amount;
+      const newStatus = invoiceTotal <= 0 || newPaid >= invoiceTotal ? 'Paid' : newPaid > 0 ? 'Partially Paid' : 'Pending';
 
       await updateInvoice(payingInvoice.id, {
+        amountPaid: newPaid,
         paidAmount: newPaid,
-        status: newStatus
+        status: newStatus,
+        awaitingConfirmation: false,
+        paymentConfirmedAt: serverTimestamp(),
+        paymentConfirmedBy: user?.uid || user?.id || 'admin',
       });
 
       await updateDoc(doc(db, 'projects', project.id), {
-        paidAmount: (Number(project.paidAmount) || 0) + amountInGhs
+        paidAmount: increment(amountInGhs),
+        updatedAt: serverTimestamp(),
       });
+
+      // Notify client via bell
+      await addDoc(collection(db, 'notifications'), {
+        userId: project.clientId,
+        title: 'Payment Received',
+        message: `We've successfully recorded your payment of GHS ${amountInGhs.toLocaleString()} against Invoice WF-${(payingInvoice.id || '').slice(-8).toUpperCase()}.`,
+        type: 'payment_received',
+        link: `/portal`,
+        read: false,
+        createdAt: serverTimestamp()
+      });
+
+      // System message in chat
+      await addDoc(collection(db, 'clients', project.clientId, 'messages'), {
+        text: `💰 **Payment Received**\nWe have recorded your payment of **GHS ${amountInGhs.toLocaleString()}** against Invoice WF-${(payingInvoice.id || '').slice(-8).toUpperCase()}. Thank you!`,
+        senderRole: 'system',
+        senderName: 'Billing System',
+        isInternal: false,
+        createdAt: serverTimestamp(),
+        projectId: project.id,
+        projectTitle: project.title
+      });
+
+      // Admin notification if large amount or final
+      if (amountInGhs > 10000 || (payingInvoice.type || '').toLowerCase().includes('final')) {
+        await addDoc(collection(db, 'notifications'), {
+          userId: 'admin',
+          title: `Large/Final Payment Recorded`,
+          message: `GHS ${amountInGhs.toLocaleString()} recorded for ${project.title}`,
+          type: 'payment_received',
+          link: `/admin/clients?id=${project.clientId}`,
+          read: false,
+          createdAt: serverTimestamp()
+        });
+      }
+
+      if (newStatus === 'Paid') {
+        const type = (payingInvoice.type || '').toLowerCase();
+        // If it's a rendering fee, unlock client portal and move to stage 2
+        if (type === 'rendering fee' || type === 'renderingfee' || type === 'rendering' || type === 'design' || project.renderingFeeInvoiceId === payingInvoice.id) {
+          if (updateProject) {
+            await updateProject(project.id, { renderingFeePaid: true, renderingFeeUnlockedAt: new Date().toISOString() });
+          }
+          if (project.stageId < 2 && updateProjectStage) {
+            await updateProjectStage(project.id, 2, 'Rendering fee paid, advancing to Design & Rendering stage', { silent: true });
+          }
+        }
+        // The initial project payment clears the deposit gate. Production starts
+        // only after the client separately signs the final project specification.
+        else if (
+          payingInvoice.milestoneKey === 'post-rendering'
+          || payingInvoice.title?.toLowerCase().includes('deposit')
+          || payingInvoice.title?.toLowerCase().includes('first instalment')
+          || payingInvoice.title?.toLowerCase().includes('first installment')
+        ) {
+          if (updateProject) {
+            await updateProject(project.id, {
+              depositPaid: true,
+              depositPaidAt: new Date().toISOString(),
+              initialDepositInvoiceId: payingInvoice.id,
+            });
+          }
+        }
+      }
 
       notify?.('success', 'Payment logged and project economics reconciled successfully');
       setPayingInvoice(null);
@@ -141,11 +227,13 @@ export function ProjectInvoicesLedger({ project, client, invoices, brand, update
                 const paid = Number(inv.paidAmount || inv.amountPaid || 0);
                 const balance = Math.max(0, total - paid);
 
-                const status = (inv.status || 'Pending').toLowerCase();
+                const status = (inv.awaitingConfirmation ? 'Verification Pending' : inv.status || 'Pending').toLowerCase();
                 const badgeStyle = status === 'paid'
                   ? { background: '#D1FAE5', color: '#065F46' }
                   : status === 'partially paid'
                     ? { background: '#FEF3C7', color: '#92400E' }
+                  : status === 'verification pending'
+                    ? { background: '#DBEAFE', color: '#1E3A8A', border: '1px solid #93C5FD' }
                     : { background: '#F3F4F6', color: '#374151' };
 
                 return (
@@ -203,10 +291,15 @@ export function ProjectInvoicesLedger({ project, client, invoices, brand, update
                         {balance > 0 && (
                           <button
                             onClick={() => openPaymentModal(inv)}
-                            title="Quick Settle / Record Payment"
-                            style={{ border: 'none', background: '#D1FAE5', padding: '6px 8px', borderRadius: 8, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                            title={status === 'verification pending' ? "Verify & Log Payment" : "Quick Settle / Record Payment"}
+                            style={{
+                              border: 'none',
+                              background: status === 'verification pending' ? '#2563EB' : '#D1FAE5',
+                              padding: '6px 8px', borderRadius: 8, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              animation: status === 'verification pending' ? 'pulse 2s infinite' : 'none'
+                            }}
                           >
-                            <CreditCard size={13} color="#065F46" />
+                            {status === 'verification pending' ? <CheckCircle2 size={13} color="#FFF" /> : <CreditCard size={13} color="#065F46" />}
                           </button>
                         )}
 

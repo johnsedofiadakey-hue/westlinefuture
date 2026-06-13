@@ -3,7 +3,7 @@ import { collection, onSnapshot } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 import { useResponsive } from '../../hooks/useResponsive'; // ✅ CRITICAL FIX #7: Use centralized responsive hook
 import {
-  DollarSign, Receipt, Clock, CheckCircle, Plus, Users, FileText, Truck, AlertTriangle, Target, Activity, Sparkles, TrendingUp, MessageSquareDiff
+  DollarSign, Receipt, Clock, CheckCircle, Plus, Users, FileText, Truck, AlertTriangle, Target, Activity, Sparkles, TrendingUp, MessageSquareDiff, ChevronDown
 } from 'lucide-react';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -48,40 +48,43 @@ export default function AdminDashboard({ clients, invoices, proposals, brand, ge
   const activeShipments = (props.procurements || []).filter(p => p?.isShipment && p?.status !== 'Delivered' && p?.status !== 'delivered').length;
 
   const dashboardStats = [
-    { label: 'Settled Revenue', value: fmtMoney(totalRev), raw: totalRev, icon: <DollarSign size={22} />, sub: 'Validated liquidity', color: '#16A34A', trend: 18 },
-    { label: 'Awaiting Capital', value: fmtMoney(totalUnpaid), raw: totalUnpaid, icon: <Receipt size={22} />, sub: `${pendingInvs.length} active invoices`, color: '#B45309', trend: 2 },
-    { label: 'Risk Exposure', value: delayedProjects, icon: <AlertTriangle size={22} />, sub: 'SLA priority alerts', color: '#EF4444', trend: -5 },
-    { label: 'Client Approvals', value: pendingApprovals, icon: <CheckCircle size={22} />, sub: 'Pending quote, rendering, or sign-off decisions', color: ac, trend: 12 },
+    { label: 'Total Collected', value: fmtMoney(totalRev), raw: totalRev, icon: <DollarSign size={22} />, sub: 'Payments received to date', color: '#16A34A', trend: 18 },
+    { label: 'Money Owed', value: fmtMoney(totalUnpaid), raw: totalUnpaid, icon: <Receipt size={22} />, sub: `${pendingInvs.length} unpaid invoice${pendingInvs.length !== 1 ? 's' : ''}`, color: '#B45309', trend: 2 },
+    { label: 'Delayed Projects', value: delayedProjects, icon: <AlertTriangle size={22} />, sub: 'Projects behind schedule', color: '#EF4444', trend: -5 },
+    { label: 'Awaiting Approval', value: pendingApprovals, icon: <CheckCircle size={22} />, sub: 'Quotes, designs, or sign-offs pending', color: ac, trend: 12 },
   ];
 
   // --- DYNAMIC ANALYTICS ENGINE ---
   const getRevenueData = () => {
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    // Key by YYYY-MM to avoid collisions when the 6-month window spans a year boundary
     const revenueMap = {};
+    const keyToLabel = {};
 
-    // Initialize last 6 months
     const now = new Date();
     for (let i = 5; i >= 0; i--) {
-        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-        revenueMap[months[d.getMonth()]] = 0;
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const key = `${d.getFullYear()}-${String(d.getMonth()).padStart(2, '0')}`;
+      revenueMap[key] = 0;
+      keyToLabel[key] = MONTH_LABELS[d.getMonth()];
     }
 
     (invoices || []).forEach(inv => {
-        if (inv?.status?.toLowerCase() === 'paid' && inv?.date) {
-            const date = new Date(inv.date);
-            if (isNaN(date.getTime())) return;
-            const amt = parseFloat(String(inv.amount || '0').replace(/[$,]/g, '') || 0) / 1000;
-            const m = months[date.getMonth()];
-            if (revenueMap[m] !== undefined) {
-                revenueMap[m] += amt;
-            }
+      if (inv?.status?.toLowerCase() === 'paid' && inv?.date) {
+        const date = new Date(inv.date);
+        if (isNaN(date.getTime())) return;
+        const amt = parseFloat(String(inv.amount || '0').replace(/[$,]/g, '') || 0) / 1000;
+        const key = `${date.getFullYear()}-${String(date.getMonth()).padStart(2, '0')}`;
+        if (revenueMap[key] !== undefined) {
+          revenueMap[key] += amt;
         }
+      }
     });
 
-    return Object.keys(revenueMap).map(m => ({ 
-      m, 
-      v: parseFloat(revenueMap[m].toFixed(1)),
-      p: parseFloat((revenueMap[m] * 1.25).toFixed(1)) // Projected
+    return Object.keys(revenueMap).map(key => ({
+      m: keyToLabel[key],
+      v: parseFloat(revenueMap[key].toFixed(1)),
+      p: parseFloat((revenueMap[key] * 1.25).toFixed(1)),
     }));
   };
 
@@ -104,88 +107,91 @@ export default function AdminDashboard({ clients, invoices, proposals, brand, ge
       }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
-            <div className="lxf eyebrow" style={{ fontSize: 10, letterSpacing: '.25em', color: ac, fontWeight: 800, textTransform: 'uppercase', marginBottom: 8 }}>Global Control Center</div>
-            <div className="lxfh" style={{ fontSize: isMobile ? 28 : 40, fontWeight: 300, letterSpacing: '-0.03em' }}>System Oversight</div>
+            <div className="lxf eyebrow" style={{ fontSize: 10, letterSpacing: '.25em', color: ac, fontWeight: 800, textTransform: 'uppercase', marginBottom: 8 }}>At a Glance</div>
+            <div className="lxfh" style={{ fontSize: isMobile ? 28 : 40, fontWeight: 300, letterSpacing: '-0.03em' }}>Dashboard</div>
           </div>
-          <div style={{ display: 'flex', gap: 12 }}>
-               <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', fontWeight: 800 }}>Production Load</div>
-               <div style={{ fontSize: isMobile ? 16 : 18, color: '#fff', fontWeight: 400 }}>{activeJobs} Active Jobs</div>
+          <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+               <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', fontWeight: 800 }}>Active Jobs</div>
+               <div style={{ fontSize: isMobile ? 16 : 18, color: '#fff', fontWeight: 400 }}>{activeJobs}</div>
             </div>
          </div>
       </div>
 
       {/* 1.5 ADMIN WATCHDOG (SYSTEM HEALTH MONITOR) */}
-      <div className="p-card" style={{ 
-        padding: 32, 
-        background: 'linear-gradient(135deg, var(--accent-secondary) 0%, #2A2420 100%)', 
-        borderRadius: 32, 
-        color: '#fff',
+      <div style={{
+        padding: '32px 40px',
+        background: '#fff',
+        borderRadius: 24,
+        border: '1px solid rgba(0,0,0,0.06)',
+        boxShadow: '0 12px 40px rgba(0,0,0,0.04)',
         display: 'grid',
         gridTemplateColumns: isMobile ? '1fr' : 'repeat(4, 1fr)',
         gap: 40,
         position: 'relative',
         overflow: 'hidden'
       }}>
-         <div style={{ position: 'absolute', top: -100, right: -100, width: 300, height: 300, background: `${ac}10`, filter: 'blur(100px)', borderRadius: '50%' }} />
+         <div style={{ position: 'absolute', top: -100, right: -100, width: 300, height: 300, background: `${ac}10`, filter: 'blur(80px)', borderRadius: '50%' }} />
          
          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, minWidth: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-               <div style={{ width: 40, height: 40, borderRadius: 12, background: 'rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: ac, flexShrink: 0 }}>
+               <div style={{ width: 40, height: 40, borderRadius: 12, background: 'rgba(0,0,0,0.03)', border: '1px solid rgba(0,0,0,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: ac, flexShrink: 0 }}>
                   <Target size={20} />
                </div>
-               <div className="lxf eyebrow" style={{ fontSize: 10, letterSpacing: '.1em', color: 'rgba(255,255,255,0.5)', fontWeight: 800 }}>Total Value in Transit</div>
+               <div className="lxf eyebrow" style={{ fontSize: 10, letterSpacing: '.1em', color: 'var(--text-secondary)', fontWeight: 800 }}>Shipments in Transit</div>
             </div>
             <div
               className="lxfh"
               title={`GH₵${(props.containers || []).filter(c => c.status !== 'Delivered').reduce((acc, c) => acc + (c.value || 0), 0).toLocaleString()}`}
-              style={{ fontSize: 'clamp(16px, 1.6vw, 26px)', letterSpacing: '-0.03em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+              style={{ fontSize: 'clamp(16px, 1.6vw, 26px)', color: 'var(--accent-secondary)', letterSpacing: '-0.03em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
             >
               {fmtMoney((props.containers || []).filter(c => c.status !== 'Delivered').reduce((acc, c) => acc + (c.value || 0), 0))}
             </div>
-            <div style={{ fontSize: 11, color: '#16A34A', fontWeight: 700 }}>Active Shipments Risk</div>
+            <div style={{ fontSize: 11, color: 'var(--text-tertiary)', fontWeight: 600 }}>Goods currently shipping</div>
          </div>
 
          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, minWidth: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-               <div style={{ width: 40, height: 40, borderRadius: 12, background: 'rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#16A34A', flexShrink: 0 }}>
+               <div style={{ width: 40, height: 40, borderRadius: 12, background: 'rgba(22,163,74,0.08)', border: '1px solid rgba(22,163,74,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#16A34A', flexShrink: 0 }}>
                   <TrendingUp size={20} />
                </div>
-               <div className="lxf eyebrow" style={{ fontSize: 10, letterSpacing: '.1em', color: 'rgba(255,255,255,0.5)', fontWeight: 800 }}>Settled Liquidity</div>
+               <div className="lxf eyebrow" style={{ fontSize: 10, letterSpacing: '.1em', color: 'var(--text-secondary)', fontWeight: 800 }}>Cash Collected</div>
             </div>
             <div
               className="lxfh"
               title={`GH₵${totalRev.toLocaleString()}`}
-              style={{ fontSize: 'clamp(16px, 1.6vw, 26px)', letterSpacing: '-0.03em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+              style={{ fontSize: 'clamp(16px, 1.6vw, 26px)', color: 'var(--accent-secondary)', letterSpacing: '-0.03em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
             >
                {fmtMoney(totalRev)}
             </div>
-            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>Valid cash on hand</div>
+            <div style={{ fontSize: 11, color: 'var(--text-tertiary)', fontWeight: 600 }}>Revenue received</div>
          </div>
 
          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, minWidth: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-               <div style={{ width: 40, height: 40, borderRadius: 12, background: 'rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#EF4444', flexShrink: 0 }}>
+               <div style={{ width: 40, height: 40, borderRadius: 12, background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#EF4444', flexShrink: 0 }}>
                   <AlertTriangle size={20} />
                </div>
-               <div className="lxf eyebrow" style={{ fontSize: 10, letterSpacing: '.1em', color: 'rgba(255,255,255,0.5)', fontWeight: 800 }}>Open Quote Pipeline</div>
+               <div className="lxf eyebrow" style={{ fontSize: 10, letterSpacing: '.1em', color: 'var(--text-secondary)', fontWeight: 800 }}>Pending Quotes</div>
             </div>
             <div
               className="lxfh"
               title={`GH₵${openQuoteValue.toLocaleString()}`}
-              style={{ fontSize: 'clamp(16px, 1.6vw, 26px)', letterSpacing: '-0.03em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+              style={{ fontSize: 'clamp(16px, 1.6vw, 26px)', color: 'var(--accent-secondary)', letterSpacing: '-0.03em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
             >
-               {fmtMoney(openQuoteValue)}
+              {fmtMoney(openQuoteValue)}
             </div>
-            <div style={{ fontSize: 11, color: '#FBBF24', fontWeight: 700 }}>Quotes waiting for approval</div>
+            <div style={{ fontSize: 11, color: 'var(--text-tertiary)', fontWeight: 700 }}>Awaiting client approval</div>
          </div>
 
          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, justifyContent: 'center' }}>
-            <div className="lxf eyebrow" style={{ fontSize: 9, letterSpacing: '.2em', color: ac, fontWeight: 900, marginBottom: 8 }}>Ecosystem Health</div>
-            <div style={{ height: 40, background: 'rgba(255,255,255,0.05)', borderRadius: 12, display: 'flex', alignItems: 'center', padding: '0 12px', gap: 12 }}>
-               <div style={{ flex: 1, height: 6, background: 'rgba(255,255,255,0.1)', borderRadius: 3, overflow: 'hidden' }}>
+            <div className="lxf eyebrow" style={{ fontSize: 9, letterSpacing: '.2em', color: ac, fontWeight: 900, marginBottom: 8 }}>Collection Rate</div>
+            <div style={{ height: 40, background: 'rgba(0,0,0,0.03)', borderRadius: 12, display: 'flex', alignItems: 'center', padding: '0 12px', gap: 12 }}>
+               <div style={{ flex: 1, height: 6, background: 'rgba(0,0,0,0.05)', borderRadius: 3, overflow: 'hidden' }}>
                   <div style={{ width: `${(totalRev + totalUnpaid) === 0 ? 100 : Math.min(100, (totalRev / (totalRev + totalUnpaid)) * 100)}%`, height: '100%', background: ac }} />
                </div>
-               <span style={{ fontSize: 12, fontWeight: 900 }}>{(totalRev + totalUnpaid) === 0 ? 100 : Math.round((totalRev / (totalRev + totalUnpaid)) * 100)}%</span>
+               <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--accent-secondary)' }}>
+                  {((totalRev + totalUnpaid) === 0 ? 100 : (totalRev / (totalRev + totalUnpaid)) * 100).toFixed(0)}%
+               </div>
             </div>
          </div>
       </div>
@@ -193,10 +199,10 @@ export default function AdminDashboard({ clients, invoices, proposals, brand, ge
       {/* 2. OPERATIONAL SEQUENCE GUIDE */}
       <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(4, 1fr)', gap: 24, marginBottom: 32 }}>
          {[
-           { step: '01', label: 'Onboard', sub: 'Stakeholder Registry', color: ac, icon: <Users size={20} />, view: 'operations', action: 'Add Client' },
-           { step: '02', label: 'Deploy', sub: 'Initialize Project', color: '#B45309', icon: <Plus size={20} />, view: 'operations', action: 'Manage Hubs' },
-           { step: '03', label: 'Execute', sub: 'Production & Logistics', color: `var(--accent-secondary)`, icon: <Activity size={20} />, view: 'operations', action: 'Track Progress' },
-           { step: '04', label: 'Settle', sub: 'Financial Ledger', color: '#16A34A', icon: <DollarSign size={20} />, view: 'financials', action: 'Review Invoices' },
+           { step: '01', label: 'Add Clients', sub: 'Register phone number & details', color: ac, icon: <Users size={20} />, view: 'operations', action: 'Go to Clients →' },
+           { step: '02', label: 'Start Project', sub: 'Create project & send invoice', color: '#B45309', icon: <Plus size={20} />, view: 'operations', action: 'Go to Clients →' },
+           { step: '03', label: 'Track Work', sub: 'Advance stages & manage delivery', color: `var(--accent-secondary)`, icon: <Activity size={20} />, view: 'projects', action: 'Go to Projects →' },
+           { step: '04', label: 'Get Paid', sub: 'Review invoices & collect payment', color: '#16A34A', icon: <DollarSign size={20} />, view: 'financials', action: 'Go to Payments →' },
          ].map(s => (
            <div 
             key={s.step} 
@@ -212,13 +218,7 @@ export default function AdminDashboard({ clients, invoices, proposals, brand, ge
                 <div style={{ width: 48, height: 48, borderRadius: 12, background: s.color, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                    {s.icon}
                 </div>
-                <button 
-                  onClick={() => props.setView(s.view)}
-                  className="p-btn-light" 
-                  style={{ padding: '6px 10px', fontSize: 9, borderRadius: 8, fontWeight: 800, background: 'rgba(0,0,0,0.03)', border: 'none' }}
-                >
-                  GO TO HUB
-                </button>
+                <div style={{ width: 8, height: 8, borderRadius: '50%', background: s.color, opacity: 0.5 }} />
               </div>
               <div style={{ zIndex: 1 }}>
                  <div className="lxf" style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', color: `var(--text-secondary)`, letterSpacing: 1 }}>Step {s.step}</div>
@@ -271,6 +271,82 @@ export default function AdminDashboard({ clients, invoices, proposals, brand, ge
         </div>
       </div>
  
+      {/* 3.4 ACTION BOARD — Waiting on you vs waiting on client */}
+      {clients && clients.length > 0 && (() => {
+        const stageMap = {};
+        CLIENT_PROJECT_STAGES.forEach(s => { stageMap[s.id] = s; });
+        const active = (clients || []).filter(p => p.stageId && p.stageId < 8 && p.status !== 'Completed' && p.status !== 'Archived');
+
+        // Waiting on ADMIN: current stage whoActs === 'admin'
+        const waitingOnAdmin = active.filter(p => {
+          const s = stageMap[p.stageId];
+          return s?.whoActs === 'admin';
+        });
+
+        // Waiting on CLIENT: current stage whoActs === 'client'
+        const waitingOnClient = active.filter(p => {
+          const s = stageMap[p.stageId];
+          return s?.whoActs === 'client';
+        });
+
+        if (waitingOnAdmin.length === 0 && waitingOnClient.length === 0) return null;
+
+        const ProjRow = ({ project, tone }) => {
+          const s = stageMap[project.stageId];
+          return (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', background: 'var(--bg-secondary)', borderRadius: 12 }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--accent-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{project.title || 'Untitled'}</div>
+                <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 1 }}>{s?.name || `Stage ${project.stageId}`}</div>
+              </div>
+              <button
+                onClick={() => { props.onSelectClient?.(project.clientId); props.setView?.('client-hub'); }}
+                style={{ padding: '6px 12px', borderRadius: 8, border: 'none', background: tone, color: '#fff', fontSize: 11, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}
+              >Open →</button>
+            </div>
+          );
+        };
+
+        return (
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 16 }}>
+            {waitingOnAdmin.length > 0 && (
+              <div style={{ background: '#fff', border: '1.5px solid #BFDBFE', borderRadius: 20, padding: 24 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+                  <div style={{ width: 36, height: 36, borderRadius: 10, background: '#EFF6FF', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <Activity size={16} color="#1D4ED8" />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 14, fontWeight: 800, color: '#1D4ED8' }}>Waiting on you</div>
+                    <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{waitingOnAdmin.length} project{waitingOnAdmin.length !== 1 ? 's' : ''} need your action</div>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {waitingOnAdmin.slice(0, 5).map(p => <ProjRow key={p.id} project={p} tone="#1D4ED8" />)}
+                  {waitingOnAdmin.length > 5 && <div style={{ fontSize: 11, color: 'var(--text-secondary)', textAlign: 'center', paddingTop: 4 }}>+{waitingOnAdmin.length - 5} more</div>}
+                </div>
+              </div>
+            )}
+            {waitingOnClient.length > 0 && (
+              <div style={{ background: '#fff', border: '1.5px solid #FDE68A', borderRadius: 20, padding: 24 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+                  <div style={{ width: 36, height: 36, borderRadius: 10, background: '#FFFBEB', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <Clock size={16} color="#B45309" />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 14, fontWeight: 800, color: '#B45309' }}>Waiting on client</div>
+                    <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{waitingOnClient.length} project{waitingOnClient.length !== 1 ? 's' : ''} need client action</div>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {waitingOnClient.slice(0, 5).map(p => <ProjRow key={p.id} project={p} tone="#B45309" />)}
+                  {waitingOnClient.length > 5 && <div style={{ fontSize: 11, color: 'var(--text-secondary)', textAlign: 'center', paddingTop: 4 }}>+{waitingOnClient.length - 5} more</div>}
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
       {/* 3.5 NEEDS ATTENTION */}
       {clients && clients.length > 0 && (() => {
         const getDays = (p) => {
@@ -459,7 +535,7 @@ export default function AdminDashboard({ clients, invoices, proposals, brand, ge
           {/* FINANCIAL LEDGER */}
           <div className="p-card" style={{ padding: 40, background: 'rgba(255,255,255,0.6)', backdropFilter: 'blur(20px)', borderRadius: 32, border: '1px solid rgba(255,255,255,0.5)' }}>
              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 40 }}>
-                <h3 className="lxfh" style={{ fontSize: 24, letterSpacing: '-0.02em' }}>Financial Ledger</h3>
+                <h3 className="lxfh" style={{ fontSize: 24, letterSpacing: '-0.02em' }}>Recent Payments</h3>
                 <div style={{ background: `var(--bg-secondary)`, color: ac, padding: '4px 10px', borderRadius: 100, fontSize: 10, fontWeight: 800 }}>LIVE</div>
              </div>
              
@@ -492,7 +568,7 @@ export default function AdminDashboard({ clients, invoices, proposals, brand, ge
                 onClick={() => typeof props.setMod === 'function' && props.setMod('invoices')}
                 style={{ width: '100%', marginTop: 24, padding: 14, borderRadius: 12, background: ac, color: '#fff', border: 'none', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}
               >
-                View Financial Ledgers
+                View Recent Payments
               </button>
           </div>
         </div>

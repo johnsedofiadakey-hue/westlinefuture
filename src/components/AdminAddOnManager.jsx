@@ -25,10 +25,13 @@ export default function AdminAddOnManager({ project, brand, addOns = [], invoice
         clientId: project.clientId,
         client: project.clientName || 'Client',
         projectId: project.id,
+        parentId: project.id,
         amount: parseFloat(amount),
         total: parseFloat(amount),
-        status: 'Pending',
-        type: 'Invoice',
+        status: 'Sent',
+        type: 'Add-On Invoice',
+        documentKind: 'invoice',
+        paymentPurpose: 'add_on',
         currency: 'GHS',
         items: [{ desc: title, qty: 1, rate: parseFloat(amount), total: parseFloat(amount) }],
         date: new Date().toISOString().slice(0, 10),
@@ -36,7 +39,7 @@ export default function AdminAddOnManager({ project, brand, addOns = [], invoice
       const invId = await createInvoice(invoicePayload);
 
       // 2. Add to addOns collection
-      await addDoc(collection(db, 'addOns'), {
+      const addOnRef = await addDoc(collection(db, 'addOns'), {
         projectId: project.id,
         clientId: project.clientId,
         title,
@@ -46,6 +49,42 @@ export default function AdminAddOnManager({ project, brand, addOns = [], invoice
         status: 'Pending Payment',
         createdAt: serverTimestamp()
       });
+
+      const clientLink = `/portal?projectId=${encodeURIComponent(project.id)}&tab=financials&invoiceId=${encodeURIComponent(invId)}`;
+      const notificationMessage = `A new add-on invoice for "${title}" is ready. Amount due: GH₵ ${parseFloat(amount).toLocaleString()}. Open Financials to review the invoice and pay securely.`;
+
+      if (project.clientId) {
+        await Promise.all([
+          addDoc(collection(db, 'notifications'), {
+            userId: project.clientId,
+            clientId: project.clientId,
+            title: 'New add-on invoice ready',
+            message: notificationMessage,
+            msg: notificationMessage,
+            type: 'add_on_invoice',
+            link: clientLink,
+            projectId: project.id,
+            invoiceId: invId,
+            addOnId: addOnRef.id,
+            read: false,
+            createdAt: serverTimestamp(),
+          }),
+          addDoc(collection(db, 'clients', project.clientId, 'messages'), {
+            text: `🧾 **New add-on invoice ready**\n${title} — **GH₵ ${parseFloat(amount).toLocaleString()}**\nOpen Financials in your portal to review the invoice and pay securely.`,
+            senderRole: 'system',
+            senderId: 'system',
+            senderName: 'Westline Future Billing',
+            isInternal: false,
+            readByAdmin: true,
+            readByClient: false,
+            projectId: project.id,
+            invoiceId: invId,
+            addOnId: addOnRef.id,
+            link: clientLink,
+            createdAt: serverTimestamp(),
+          }),
+        ]);
+      }
 
       setShowAdd(false);
       setTitle('');

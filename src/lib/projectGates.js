@@ -20,7 +20,9 @@ export const checkStageGates = (project, nextStageId, { invoices = [], changeReq
   // ✅ GATE 1: Unpaid invoices block advancement
   if (nextStageId >= STAGE.PRODUCTION) {
     const unpaidInvoices = invoices.filter(
-      i => i.projectId === project.id && !isPaidStatus(i.status)
+      i => (i.projectId === project.id || i.parentId === project.id)
+        && ['sent', 'overdue', 'verification pending'].includes(String(i.status || '').toLowerCase().trim())
+        && !isPaidStatus(i.status)
     );
     if (unpaidInvoices.length > 0) {
       gates.push({
@@ -46,12 +48,12 @@ export const checkStageGates = (project, nextStageId, { invoices = [], changeReq
     canAdvance = false;
   }
 
-  // ✅ GATE 3: Pending spec/brief doc blocks advancement to production
-  if (nextStageId >= STAGE.PRODUCTION && project.specDoc?.status === 'pending') {
+  // ✅ GATE 3: A signed specification/scope is mandatory before production.
+  if (nextStageId >= STAGE.PRODUCTION && (!project.specDoc?.url || project.specDoc?.status !== 'signed')) {
     gates.push({
-      id: 'spec-doc-pending',
-      label: 'Spec/Brief Pending',
-      message: 'Client must approve the brief document before production begins',
+      id: 'spec-doc-unsigned',
+      label: 'Project Specification Unsigned',
+      message: 'Client must sign the final project specification before production begins',
       ok: false,
       priority: 'error',
     });
@@ -59,7 +61,7 @@ export const checkStageGates = (project, nextStageId, { invoices = [], changeReq
   }
 
   // ✅ GATE 4: Contract not signed blocks advancement
-  if (nextStageId >= STAGE.QUOTATION && !project.contractAccepted) {
+  if (nextStageId >= STAGE.QUOTATION && !project.contractAccepted && project.specDoc?.status !== 'signed') {
     gates.push({
       id: 'contract-not-signed',
       label: 'Contract Unsigned',

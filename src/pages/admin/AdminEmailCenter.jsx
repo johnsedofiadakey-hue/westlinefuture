@@ -32,7 +32,7 @@ export default function AdminEmailCenter({ emails = [], projects = [], brand, ..
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
-          <h2 className="lxfh" style={{ fontSize: 32, fontWeight: 400, color: `var(--accent-secondary)`, marginBottom: 4 }}>Inquiry Pipeline</h2>
+          <h2 className="lxfh" style={{ fontSize: 32, fontWeight: 400, color: `var(--accent-secondary)`, marginBottom: 4 }}>Inquiries</h2>
           <p className="lxf" style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
             {emails.length} lead{emails.length !== 1 ? 's' : ''} — convert any inquiry into a live client project
           </p>

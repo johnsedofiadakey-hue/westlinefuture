@@ -1,52 +1,100 @@
 import React from 'react';
 import { DollarSign, Eye, MessageSquare, CheckCircle, Users, Factory, Truck, Layers, AppWindow, ShowerHead, ChefHat, Shirt, LayoutGrid, DoorOpen, Zap, Droplets, Hammer, Sofa, Refrigerator, Sparkles, Grid3x3 } from 'lucide-react';
 
-export const PROJECT_STAGES = [
+// ─── Single Source of Truth: 8-Stage Project Pipeline ────────────────────────
+// Used by BOTH admin portal (PROJECT_STAGES) and client portal (CLIENT_PROJECT_STAGES).
+// Any change here propagates everywhere — Gantt chart, admin client hub, client portal roadmap.
+export const CLIENT_PROJECT_STAGES = [
   {
-    id: 1, name: 'Survey & Measurements', statusLabel: 'Site survey & measurements', days: 7, color: `var(--text-secondary)`,
-    icon: 'palette', description: 'Reviewing requirements and scheduling technical site survey & measurements.',
-    tasks: ['Understand scope', 'Conduct site visits', 'Take measurements', 'Prepare initial quotation and drawings']
+    id: 1, name: 'Survey & Measurements', short: 'Survey', emoji: '🔍',
+    color: `var(--text-secondary)`, pct: 5, days: 7,
+    statusLabel: 'Site survey & measurements', icon: 'search',
+    whoActs: 'admin',
+    clientMsg: 'Our team is conducting a technical site survey and taking precise measurements.',
+    adminPrompt: 'Conduct on-site survey, record all measurements and dimensions before advancing.',
+    tasks: ['Understand scope', 'Conduct site visits', 'Take measurements', 'Prepare initial quotation and drawings'],
   },
   {
-    id: 2, name: 'Quote Approval & Deposit', statusLabel: 'Funds confirmed', days: 5, color: '#F4D6A7', requiresApproval: true, requiresPayment: true, paymentPct: 50,
-    icon: 'dollar-sign', description: 'Reviewing the quotation, signing off, and securing deposit.',
-    tasks: ['Review detailed quotation', 'Sign off technical drawings', 'Submit initial deposit', 'Materials ordered from supplier']
+    id: 2, name: 'Design & Rendering', short: 'Design', emoji: '🎨',
+    color: '#9333EA', pct: 15, days: 7,
+    statusLabel: 'Design & 3D rendering', icon: 'palette',
+    whoActs: 'client',
+    clientMsg: 'Reviewing the 3D rendering and design intent. Rendering fee must be paid before access.',
+    adminPrompt: 'Waiting for client to pay rendering fee and approve design.',
+    tasks: ['Create floor plan', 'Produce 3D renders', 'Client reviews and pins changes', 'Client approves final design'],
+    requiresDesignApproval: true,
   },
   {
-    id: 3, name: 'Procurement & Production', statusLabel: 'Factory is working', days: 21, color: '#3E2414',
-    icon: 'factory', description: 'Procuring materials and fabricating your custom components at our facility.',
-    tasks: ['Procure materials', 'Cutting & processing complete', 'Quality control inspection passed', 'Components packed for dispatch']
+    id: 3, name: 'Quote Approval & Deposit', short: 'Quote', emoji: '💳',
+    color: `var(--accent-primary)`, pct: 25, days: 7,
+    statusLabel: 'Funds confirmed', icon: 'dollar-sign',
+    whoActs: 'client',
+    clientMsg: 'Complete the initial deposit, then review and sign the final project specification to authorise production.',
+    adminPrompt: 'Confirm the initial deposit, upload the final scope/specification, and wait for the client signature.',
+    tasks: ['Approve final quotation', 'Submit initial deposit', 'Review final project specification', 'Sign scope and authorise production'],
+    needsClientApproval: true, requiresPayment: true, paymentPct: 50,
   },
   {
-    id: 4, name: 'Shipping & Delivery', statusLabel: 'In transit to site', days: 30, color: '#A69282',
-    icon: 'ship', description: 'Cargo is in transit from the factory to your site via ocean freight.',
-    tasks: ['Dispatched from factory', 'Ocean freight booking confirmed', 'Customs clearance processed', 'Local delivery to site completed']
+    id: 4, name: 'Procurement & Production', short: 'Production', emoji: '🏭',
+    color: '#3E2414', pct: 45, days: 30,
+    statusLabel: 'Factory is working', icon: 'factory',
+    whoActs: 'admin',
+    clientMsg: 'Procuring materials and fabricating your custom components at our facility.',
+    adminPrompt: 'Procuring materials and fabricating custom components at the facility.',
+    tasks: ['Procure materials', 'Cutting & processing complete', 'Quality control inspection passed', 'Components packed for dispatch'],
   },
   {
-    id: 5, name: 'Installation', statusLabel: 'Active installation', days: 5, color: '#3E2414',
-    icon: 'wrench', description: 'Our technical crew is on-site fitting and finishing all components.',
-    tasks: ['Site prepared and secured', 'Structural installation complete', 'Finishing and sealant applied', 'Upload daily photos']
+    id: 5, name: 'Shipping & Delivery', short: 'Shipping', emoji: '🚛',
+    color: '#A69282', pct: 60, days: 35,
+    statusLabel: 'In transit to site', icon: 'ship',
+    whoActs: 'admin',
+    clientMsg: 'Cargo is in transit from the factory to your site via ocean freight.',
+    adminPrompt: 'Cargo is in transit from the factory to your site via ocean freight.',
+    tasks: ['Dispatched from factory', 'Ocean freight booking confirmed', 'Customs clearance processed', 'Local delivery to site completed'],
   },
   {
-    id: 6, name: 'Inspection & Sign-off', statusLabel: 'Quality Checks', days: 2, color: `var(--accent-primary)`, requiresApproval: true,
-    icon: 'search', description: 'Conducting final quality checks. Please review the work and sign off.',
-    tasks: ['Run through quality checklist', 'Resolve minor defects', 'Client sign-off on completion']
+    id: 6, name: 'Installation', short: 'Install', emoji: '🔧',
+    color: '#3E2414', pct: 80, days: 7,
+    statusLabel: 'Active installation', icon: 'wrench',
+    whoActs: 'worker',
+    clientMsg: 'Our technical crew is on-site fitting and finishing all components.',
+    adminPrompt: 'Our technical crew is on-site fitting and finishing all components.',
+    tasks: ['Site prepared and secured', 'Structural installation complete', 'Finishing and sealant applied', 'Upload daily photos'],
+    fullServiceOnly: true,
   },
   {
-    id: 7, name: 'Handover & Final Settlement', statusLabel: 'Project Handover', days: 1, color: `var(--accent-secondary)`, requiresPayment: true, paymentPct: 50,
-    icon: 'star', description: 'Project complete. Final balance cleared and handover documents issued.',
-    tasks: ['Final payment received', 'Handover documents signed', 'Warranty activated', 'Client satisfaction confirmed']
-  }
+    id: 7, name: 'Inspection & Sign-off', short: 'Inspect', emoji: '🔎',
+    color: `var(--accent-primary)`, pct: 90, days: 3,
+    statusLabel: 'Quality checks', icon: 'search',
+    whoActs: 'both',
+    clientMsg: 'Conducting final quality checks. Please review the work and sign off.',
+    adminPrompt: 'Conducting final quality checks and client sign-off.',
+    tasks: ['Run through quality checklist', 'Resolve minor defects', 'Client sign-off on completion'],
+    needsClientApproval: true, requiresApproval: true,
+  },
+  {
+    id: 8, name: 'Handover & Final Settlement', short: 'Completion', emoji: '🌟',
+    color: `var(--accent-secondary)`, pct: 100, days: 1,
+    statusLabel: 'Project handover', icon: 'star',
+    whoActs: 'done',
+    clientMsg: 'Project complete. Handover documents have been issued. Thank you for choosing Westline Future!',
+    adminPrompt: 'Project complete. Issue handover certificate and close out.',
+    tasks: ['Handover documents issued', 'Warranty activated', 'Client satisfaction confirmed'],
+  },
 ];
 
+// Admin portal alias — same 8 stages, ensuring full consistency across Gantt, ClientHub, and ClientPortal
+export const PROJECT_STAGES = CLIENT_PROJECT_STAGES;
+
 export const KANBAN_COLUMNS = [
-  { id: 'intake',       label: 'Intake',       stages: [1], color: `var(--text-secondary)`, bg: 'rgba(139,115,85,0.07)' },
-  { id: 'quote',        label: 'Quote & Deposit', stages: [2], color: '#F4D6A7', bg: 'rgba(244,214,167,0.07)' },
-  { id: 'production',   label: 'Production',   stages: [3], color: '#3E2414', bg: 'rgba(62,36,20,0.06)' },
-  { id: 'delivery',     label: 'Delivery',     stages: [4], color: '#A69282', bg: 'rgba(166,146,130,0.07)' },
-  { id: 'installation', label: 'Installation', stages: [5], color: '#3E2414', bg: 'rgba(62,36,20,0.07)' },
-  { id: 'inspection',   label: 'Inspection',   stages: [6], color: `var(--accent-primary)`, bg: 'rgba(200,143,67,0.07)' },
-  { id: 'completion',   label: 'Completion',   stages: [7], color: `var(--accent-secondary)`, bg: 'rgba(24,14,6,0.08)' },
+  { id: 'intake',       label: 'Intake',           stages: [1],   color: `var(--text-secondary)`,  bg: 'rgba(139,115,85,0.07)' },
+  { id: 'design',       label: 'Design',            stages: [2],   color: '#9333EA',                bg: 'rgba(147,51,234,0.07)' },
+  { id: 'quote',        label: 'Quote & Deposit',   stages: [3],   color: `var(--accent-primary)`,  bg: 'rgba(200,143,67,0.07)' },
+  { id: 'production',   label: 'Production',        stages: [4],   color: '#3E2414',                bg: 'rgba(62,36,20,0.06)' },
+  { id: 'delivery',     label: 'Delivery',          stages: [5],   color: '#A69282',                bg: 'rgba(166,146,130,0.07)' },
+  { id: 'installation', label: 'Installation',      stages: [6],   color: '#3E2414',                bg: 'rgba(62,36,20,0.07)' },
+  { id: 'inspection',   label: 'Inspection',        stages: [7],   color: `var(--accent-primary)`,  bg: 'rgba(200,143,67,0.07)' },
+  { id: 'completion',   label: 'Completion',        stages: [8],   color: `var(--accent-secondary)`,bg: 'rgba(24,14,6,0.08)' },
 ];
 
 export const LIFE_RIBBON = [
@@ -376,72 +424,15 @@ export const NOTIFS_DATA = [
 
 export const CLIENT_NAMES = ['Westline Future Client', 'AFCFTA Secretariat', 'Airport Hills Dev'];
 
-// ─── Client Project Pipeline ─────────────────────────────────────────────────
-export const CLIENT_PROJECT_STAGES = [
-  {
-    id: 1, name: 'Survey & Measurements', short: 'Survey & Measurements', emoji: '🔍', color: `var(--text-secondary)`, pct: 5, days: 5,
-    whoActs: 'admin',
-    clientMsg: 'Reviewing requirements and scheduling a technical site survey & measurements.',
-    adminPrompt: 'Conduct on-site survey, record all measurements and dimensions before advancing.',
-  },
-  {
-    id: 2, name: 'Design & Rendering', short: 'Design', emoji: '🎨', color: '#9333EA', pct: 15, days: 7,
-    whoActs: 'client',
-    clientMsg: 'Reviewing the 3D rendering and design intent. Rendering fee must be paid before access.',
-    adminPrompt: 'Waiting for client to pay rendering fee, and approve design.',
-    requiresDesignApproval: true,
-  },
-  {
-    id: 3, name: 'Quote Approval & Deposit', short: 'Quote', emoji: '💳', color: `var(--accent-primary)`, pct: 25, days: 7,
-    whoActs: 'client',
-    clientMsg: 'Reviewing the final quotation, signing off, and securing project deposit.',
-    adminPrompt: 'Reviewing the quotation, signing off, and securing deposit.',
-    needsClientApproval: true, requiresPayment: true, paymentPct: 50,
-  },
-  {
-    id: 4, name: 'Procurement & Production', short: 'Production', emoji: '🏭', color: '#3E2414', pct: 45, days: 30,
-    whoActs: 'admin',
-    clientMsg: 'Procuring materials and fabricating your custom components at our facility.',
-    adminPrompt: 'Procuring materials and fabricating your custom components at our facility.',
-  },
-  {
-    id: 5, name: 'Shipping & Delivery', short: 'Shipping', emoji: '🚛', color: '#A69282', pct: 60, days: 35,
-    whoActs: 'admin',
-    clientMsg: 'Cargo is in transit from the factory to your site via ocean freight.',
-    adminPrompt: 'Cargo is in transit from the factory to your site via ocean freight.',
-  },
-  {
-    id: 6, name: 'Installation', short: 'Install', emoji: '🔧', color: '#3E2414', pct: 80, days: 7,
-    whoActs: 'worker',
-    clientMsg: 'Our technical crew is on-site fitting and finishing all components.',
-    adminPrompt: 'Our technical crew is on-site fitting and finishing all components.',
-    fullServiceOnly: true,
-  },
-  {
-    id: 7, name: 'Inspection & Sign-off', short: 'Inspect', emoji: '🔎', color: `var(--accent-primary)`, pct: 90, days: 3,
-    whoActs: 'both',
-    clientMsg: 'Conducting final quality checks. Please review the work and sign off.',
-    adminPrompt: 'Conducting final quality checks. Please review the work and sign off.',
-    needsClientApproval: true,
-  },
-  {
-    id: 8, name: 'Handover & Final Settlement', short: 'Completion', emoji: '🌟', color: `var(--accent-secondary)`, pct: 100, days: 1,
-    whoActs: 'client',
-    clientMsg: 'Project complete. Final balance cleared and handover documents issued.',
-    adminPrompt: 'Project complete. Final balance cleared and handover documents issued.',
-    requiresPayment: true, paymentPct: 50,
-  },
-];
-
-// Maps legacy 12-stage records to the current client pipeline.
-const LEGACY_STAGE_MAP = { 
-  1:1, 2:1, 3:2, 4:2, 5:3, 6:3, 7:3, 8:4, 9:4, 10:5, 11:6, 12:7 
+// Maps legacy 12-stage admin records to the unified 8-stage pipeline.
+const LEGACY_STAGE_MAP = {
+  1:1, 2:1, 3:2, 4:2, 5:3, 6:3, 7:3, 8:4, 9:4, 10:5, 11:6, 12:7
 };
 export function normalizeStageId(id) {
   const n = typeof id === 'number' ? id : parseInt(id, 10);
-  if (!n || n < 1) return 1;
-  if (n <= 7) return n;
-  return LEGACY_STAGE_MAP[n] ?? Math.min(7, Math.ceil((n / 12) * 7));
+  if (isNaN(n) || n < 1) return 1;
+  if (n <= 8) return n;
+  return LEGACY_STAGE_MAP[n] ?? Math.min(8, Math.ceil((n / 12) * 8));
 }
 
 export const PROJECT_TYPES = {

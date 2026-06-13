@@ -34,6 +34,18 @@ export default function AdminFinancials({ invoices = [], transactions = [], clie
   const [updatePaymentModal, setUpdatePaymentModal] = useState(null); // { item, totalAmt, inputVal }
   const ac = brand.color || 'var(--accent-secondary)';
   const notify = props.notify || ((type, msg) => { if (import.meta.env.DEV) console.warn(`[Financials] ${type}: ${msg}`); });
+  const viewInvoiceProject = viewInvoice
+    ? clients.find(project => project.id === (viewInvoice.projectId || viewInvoice.parentId))
+    : null;
+  const viewInvoiceWithProject = viewInvoice
+    ? {
+        ...viewInvoice,
+        projectBudget: Number(viewInvoiceProject?.budget || viewInvoiceProject?.projectTotal || 0),
+        projectPaidAmount: Number(viewInvoiceProject?.paidAmount || 0),
+        paymentSchedule: viewInvoiceProject?.paymentSchedule || viewInvoice.paymentSchedule || 'standard',
+        projectTitle: viewInvoiceProject?.title || viewInvoiceProject?.name || viewInvoice.projectTitle,
+      }
+    : null;
 
   // ─── Financial Settings ──────────────────────────────────────────────────
   const [finSettings, setFinSettings] = useState(brand.finSettings || {
@@ -59,6 +71,39 @@ export default function AdminFinancials({ invoices = [], transactions = [], clie
     companyTagline:    'Global Trading Co, Ltd',
     kpiTargets:        { revenue: 500000, pending: 100000, quotes: 20, conversion: 90 },
   });
+
+  // ─── Payment Reconcile Tool ───────────────────────────────────────────────
+  const [reconcileRef, setReconcileRef] = useState('');
+  const [reconcileInvoiceId, setReconcileInvoiceId] = useState('');
+  const [reconcileProjectId, setReconcileProjectId] = useState('');
+  const [reconcileType, setReconcileType] = useState('payment');
+  const [reconcileStatus, setReconcileStatus] = useState(null); // null | 'loading' | 'success' | 'error'
+  const [reconcileMsg, setReconcileMsg] = useState('');
+
+  const runReconcile = async () => {
+    if (!reconcileRef.trim() || !reconcileProjectId.trim()) {
+      setReconcileStatus('error');
+      setReconcileMsg('Paystack reference and Project ID are required.');
+      return;
+    }
+    setReconcileStatus('loading');
+    setReconcileMsg('');
+    try {
+      const verify = httpsCallable(functions, 'verifyPaystackPayment');
+      await verify({
+        reference: reconcileRef.trim(),
+        projectId: reconcileProjectId.trim(),
+        invoiceId: reconcileInvoiceId.trim() || undefined,
+        type: reconcileType,
+      });
+      setReconcileStatus('success');
+      setReconcileMsg(`Payment ${reconcileRef.trim()} verified and recorded successfully.`);
+      setReconcileRef(''); setReconcileInvoiceId(''); setReconcileProjectId('');
+    } catch (err) {
+      setReconcileStatus('error');
+      setReconcileMsg(err?.message || 'Verification failed. Check the reference and try again.');
+    }
+  };
 
   // ─── Gateway Settings ─────────────────────────────────────────────────────
   const [gatewayLoading, setGatewayLoading] = useState(false);
@@ -332,7 +377,7 @@ export default function AdminFinancials({ invoices = [], transactions = [], clie
   // ─── TABS manifest ─────────────────────────────────────────────────────────
   const TABS = [
     { id: 'overview',   label: 'Dashboard',      icon: <Landmark   size={14}/> },
-    { id: 'sales',      label: 'Sales Ledger',   icon: <TrendingUp size={14}/> },
+    { id: 'sales',      label: 'Sales',   icon: <TrendingUp size={14}/> },
     { id: 'quotations', label: 'Quotations',      icon: <FileText   size={14}/> },
     { id: 'margins',    label: 'Margins & P&L',  icon: <ArrowUpRight size={14}/> },
     { id: 'banking',    label: 'Banking & Audit', icon: <ShieldCheck size={14}/> },
@@ -568,6 +613,62 @@ export default function AdminFinancials({ invoices = [], transactions = [], clie
             </div>
           </div>
         )}
+      </div>
+
+      {/* ── Manual Payment Reconcile ───────────────────────────────────────── */}
+      <div style={{ marginTop: 32 }}>
+        <SectionHead title="Manual Payment Reconciliation" sub="Use this when a client paid via Paystack but the system didn't record it — paste the Paystack reference to verify and reconcile." />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14, padding: 20, background: 'var(--bg-secondary)', borderRadius: 14, border: '1.5px solid var(--border-color)' }}>
+          <div style={{ padding: '10px 14px', borderRadius: 10, background: '#FEF3C7', border: '1.5px solid #FDE68A', fontSize: 12, color: '#92400E', lineHeight: 1.7 }}>
+            <strong>How to find the Paystack reference:</strong> Log into{' '}
+            <a href="https://dashboard.paystack.com/#/transactions" target="_blank" rel="noreferrer" style={{ color: '#92400E', fontWeight: 700 }}>
+              dashboard.paystack.com → Transactions <ExternalLink size={10} style={{ verticalAlign: 'middle' }} />
+            </a>
+            {' '}and find the payment. The reference looks like <code style={{ background: '#FDE68A', padding: '1px 4px', borderRadius: 3 }}>T123456789</code> or a UUID.
+            You can also check the client's browser localStorage key <code style={{ background: '#FDE68A', padding: '1px 4px', borderRadius: 3 }}>wl_pending_ref_*</code> if they're still on the page.
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <PFormField label="Paystack Reference *" sub="From the Paystack dashboard transactions list">
+              <input className="p-inp" value={reconcileRef} onChange={e => { setReconcileRef(e.target.value); setReconcileStatus(null); }} placeholder="T123456789 or UUID" autoComplete="off" />
+            </PFormField>
+            <PFormField label="Project ID *" sub="The Firestore project doc ID (visible in the URL when editing a project)">
+              <input className="p-inp" value={reconcileProjectId} onChange={e => { setReconcileProjectId(e.target.value); setReconcileStatus(null); }} placeholder="abc123xyz..." autoComplete="off" />
+            </PFormField>
+            <PFormField label="Invoice ID (optional)" sub="Leave blank if unknown — system will find the correct invoice">
+              <input className="p-inp" value={reconcileInvoiceId} onChange={e => { setReconcileInvoiceId(e.target.value); setReconcileStatus(null); }} placeholder="invoice doc ID (optional)" autoComplete="off" />
+            </PFormField>
+            <PFormField label="Payment Type" sub="What kind of payment this was">
+              <select className="p-inp" value={reconcileType} onChange={e => setReconcileType(e.target.value)}>
+                <option value="payment">Standard Payment / Milestone</option>
+                <option value="deposit">Deposit (Stage 3)</option>
+                <option value="rendering">Rendering Fee</option>
+                <option value="completion">Final Balance / Completion</option>
+              </select>
+            </PFormField>
+          </div>
+          {reconcileStatus === 'success' && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 16px', borderRadius: 10, background: '#F0FDF4', border: '1.5px solid #BBF7D0', color: '#15803D', fontSize: 13, fontWeight: 700 }}>
+              <CheckCircle2 size={16} /> {reconcileMsg}
+            </div>
+          )}
+          {reconcileStatus === 'error' && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 16px', borderRadius: 10, background: '#FEF2F2', border: '1.5px solid #FECACA', color: '#991B1B', fontSize: 13, fontWeight: 700 }}>
+              <AlertCircle size={16} /> {reconcileMsg}
+            </div>
+          )}
+          <div>
+            <button
+              onClick={runReconcile}
+              disabled={reconcileStatus === 'loading'}
+              className="p-btn-gold"
+              style={{ padding: '10px 24px', fontSize: 13, display: 'inline-flex', alignItems: 'center', gap: 7 }}
+            >
+              {reconcileStatus === 'loading'
+                ? <><Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> Verifying with Paystack…</>
+                : <><CheckCircle size={13} /> Verify & Reconcile Payment</>}
+            </button>
+          </div>
+        </div>
       </div>
 
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 20 }}>
@@ -809,7 +910,7 @@ export default function AdminFinancials({ invoices = [], transactions = [], clie
       {(tab === 'sales' || tab === 'quotations') && (
         <div className="p-card fade-in" style={{ overflow: 'hidden' }}>
           <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
-            <h3 className="lxfh" style={{ fontSize: 17, margin: 0 }}>{tab === 'sales' ? 'Revenue Ledger' : 'Tender Pipeline'}</h3>
+            <h3 className="lxfh" style={{ fontSize: 17, margin: 0 }}>{tab === 'sales' ? 'Revenue' : 'Quotes'}</h3>
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
               <div style={{ position: 'relative' }}>
                 <Search size={13} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)' }} />
@@ -1209,7 +1310,7 @@ export default function AdminFinancials({ invoices = [], transactions = [], clie
           <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
             <div style={{ border: '1px solid #ddd', borderRadius: 12, boxShadow: '0 8px 24px rgba(0,0,0,0.06)', overflow: 'hidden' }}>
               <div id="printable-financial-view" style={{ overflow: 'auto', maxHeight: '62vh', padding: 24, zoom: 0.7 }}>
-                <InvoiceDocument inv={viewInvoice} isQuote={viewInvoice.type === 'Quotation' || viewInvoice.type === 'pending'} finSettings={finSettings} ac={ac} brand={brand} />
+                <InvoiceDocument inv={viewInvoiceWithProject} isQuote={viewInvoice.type === 'Quotation' || viewInvoice.type === 'pending'} finSettings={finSettings} ac={ac} brand={brand} />
               </div>
             </div>
             <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>

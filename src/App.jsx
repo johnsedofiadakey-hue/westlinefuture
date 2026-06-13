@@ -64,7 +64,7 @@ import { onAuthStateChanged, signInWithEmailAndPassword, signOut, createUserWith
 import { httpsCallable } from 'firebase/functions';
 import { 
   collection, query, onSnapshot, getDocs, getDoc, doc, 
-  updateDoc, addDoc, setDoc, deleteDoc, orderBy, collectionGroup, limit, where, serverTimestamp, or
+  updateDoc, addDoc, setDoc, deleteDoc, orderBy, collectionGroup, limit, where, serverTimestamp, increment, or
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { uploadFile } from './lib/firebase';
@@ -102,11 +102,14 @@ export default function App() {
   
   const notify = useCallback((type, msg, duration = 5000) => {
     if (window._notifTimeout) clearTimeout(window._notifTimeout);
-    const isPersistent = duration === 'persistent' || type === 'persistent';
+    // 'persistent' notifications now auto-dismiss after 8 seconds — true persistent toasts
+    // are bad UX. Errors still need to be dismissed manually.
+    const isPersistent = (duration === 'persistent' || type === 'persistent') && type === 'error';
     const safeMsg = typeof msg === 'string' ? msg : (msg?.message || msg?.userMessage || String(msg) || 'An error occurred');
     setNotification({ type, msg: safeMsg, persistent: isPersistent });
     if (type !== 'pending' && !isPersistent) {
-      window._notifTimeout = setTimeout(() => setNotification(null), duration);
+      const effectiveDuration = duration === 'persistent' ? 8000 : duration;
+      window._notifTimeout = setTimeout(() => setNotification(null), effectiveDuration);
     }
   }, []);
 
@@ -181,6 +184,36 @@ export default function App() {
   }, [brand]);
   const fxRate = content?.finSettings?.exchangeRate || brand?.finSettings?.exchangeRate || 15.5;
   const rates = { USD: 1, GHS: fxRate, EUR: 0.93, CNY: 7.25, AED: 3.67 };
+
+  // Push Notifications Setup
+  useEffect(() => {
+    if (!user || !isFirebaseEnabled) return;
+    
+    const requestPushPermission = async () => {
+      try {
+        const { messaging } = await import('./lib/firebase');
+        if (!messaging) return;
+        const { getToken } = await import('firebase/messaging');
+        const { doc, updateDoc } = await import('firebase/firestore');
+        const { db } = await import('./lib/firebase');
+        
+        const permission = await Notification.requestPermission();
+        if (permission === 'granted') {
+          // You need to configure a VAPID key in the Firebase Console and replace the placeholder
+          const token = await getToken(messaging, { vapidKey: 'YOUR_PUBLIC_VAPID_KEY_HERE' });
+          if (token && db) {
+            await updateDoc(doc(db, 'users', user.id || user.uid), {
+              fcmToken: token
+            }).catch(console.warn);
+          }
+        }
+      } catch (e) {
+        console.warn('Push notification setup failed:', e);
+      }
+    };
+
+    requestPushPermission();
+  }, [user]);
 
 
 
@@ -912,11 +945,39 @@ export default function App() {
       const idempotencyKey = generateIdempotencyKey('invoice');
       saveIdempotencyKey(idempotencyKey, 'invoice');
 
-      const docRef = await addDoc(collection(db, 'invoices'), {
+      const resolvedProjectId = data.projectId || data.parentId;
+      const numericAmount = Number(String(data.total ?? data.amount ?? 0).replace(/[^0-9.-]/g, '')) || 0;
+      const normalizedItems = Array.isArray(data.items) && data.items.length > 0
+        ? data.items
+        : numericAmount > 0
+          ? [{
+              desc: data.title || 'Project payment',
+              notes: data.description || '',
+              qty: 1,
+              rate: numericAmount,
+              unit: data.milestoneKey ? 'stage' : 'item',
+              total: numericAmount,
+            }]
+          : [];
+      const currentPaid = Number(data.amountPaid ?? data.paidAmount ?? 0) || 0;
+      const finalData = {
         ...data,
+        amount: numericAmount,
+        total: numericAmount,
+        amountDue: numericAmount,
+        balanceDue: Math.max(0, numericAmount - currentPaid),
+        amountPaid: currentPaid,
+        paidAmount: currentPaid,
+        items: normalizedItems,
+        projectId: resolvedProjectId,
+        parentId: resolvedProjectId,
+      };
+
+      const docRef = await addDoc(collection(db, 'invoices'), {
+        ...finalData,
         idempotencyKey, // Track to prevent duplicates
         createdAt: new Date().toISOString(),
-        status: data.status || 'Pending'
+        status: finalData.status || 'Pending'
       });
       notify('success', 'Official Invoice Issued');
       return docRef.id;
@@ -1017,22 +1078,63 @@ export default function App() {
   const payInvoice = async (id, projectId, method = 'Paystack') => {
     if (!db) return;
     try {
-      await updateDoc(doc(db, 'projects', projectId, 'payments', id), { status: 'Paid', paidAt: new Date().toISOString(), method });
-      
       const inv = invoices.find(i => i.id === id);
+      const project = clients.find(p => p.id === projectId);
+      const invoiceTotal = Number(inv?.amount || inv?.total || 0);
+      const currentPaid = Number(inv?.amountPaid || inv?.paidAmount || 0);
+      const amount = Math.max(0, invoiceTotal - currentPaid) || invoiceTotal;
+      const paidAt = new Date().toISOString();
+      const paymentUpdate = {
+        status: 'Paid',
+        amountPaid: amount,
+        paidAmount: amount,
+        paidAt,
+        method,
+        awaitingConfirmation: false,
+      };
+
+      await updateDoc(doc(db, 'invoices', id), paymentUpdate);
+      await setDoc(doc(db, 'projects', projectId, 'payments', id), paymentUpdate, { merge: true });
+
       const txId = `TX-${Date.now()}`;
       const newTx = {
         id: txId,
         invoiceId: id,
-        amount: inv?.amount?.toString().replace(/[$,]/g, '') || 0,
+        projectId,
+        parentId: projectId,
+        clientId: project?.clientId || inv?.clientId || '',
+        projectManagerId: project?.projectManagerId || project?.assignedStaff?.[0] || null,
+        amount,
         date: new Date().toISOString().split('T')[0],
         method,
-        status: 'verified'
+        status: 'verified',
+        type: inv?.type || 'payment',
+        createdAt: serverTimestamp(),
       };
-      
+
       await setDoc(doc(db, 'projects', projectId, 'transactions', txId), newTx);
-      try { await createNotification('admin', `Payment received: ${inv?.amount || 'amount'} for invoice ${id} via ${method}`, 'payment', `/admin/financials`); } catch (_) {}
-      notify('success', `Payment of ${inv?.amount || ''} confirmed via ${method}`);
+      await setDoc(doc(db, 'transactions', txId), newTx);
+      const invoiceDescriptor = `${inv?.title || ''} ${inv?.type || ''} ${inv?.documentKind || ''}`.toLowerCase();
+      const isInitialDeposit = inv?.milestoneKey === 'post-rendering'
+        || invoiceDescriptor.includes('deposit')
+        || invoiceDescriptor.includes('first instalment')
+        || invoiceDescriptor.includes('first installment');
+      await updateDoc(doc(db, 'projects', projectId), {
+        paidAmount: increment(amount),
+        ...(isInitialDeposit ? {
+          depositPaid: true,
+          depositPaidAt: serverTimestamp(),
+          initialDepositInvoiceId: id,
+        } : {}),
+        updatedAt: serverTimestamp(),
+      });
+
+      const recipients = [...new Set(['admin', project?.projectManagerId, ...(project?.assignedStaff || [])].filter(Boolean))];
+      await Promise.all(recipients.map(recipientId =>
+        createNotification(recipientId, `Payment received: GH₵${amount.toLocaleString()} for invoice ${id} via ${method}`, 'payment', `/admin/client-hub`)
+          .catch(() => null)
+      ));
+      notify('success', `Payment of GH₵${amount.toLocaleString()} confirmed via ${method}`);
     } catch (e) { devErr(e); }
   };
 
@@ -1041,20 +1143,74 @@ export default function App() {
     try {
       const newTx = {
         parentId: pid,
+        projectId: pid,
         invoiceId: ref || 'Manual Entry',
-        amount: String(amount),
+        amount: Number(amount),
         date: new Date().toISOString().split('T')[0],
         method,
-        status: 'verified'
+        status: 'verified',
+        type: 'payment',
+        createdAt: serverTimestamp(),
       };
-      await addDoc(collection(db, 'projects', pid, 'transactions'), newTx);
-
-      // Notify client that payment was received
       const project = clients.find(p => p.id === pid);
+      const matchingInvoice = invoices.find(inv =>
+        inv.id === ref ||
+        inv.invoiceNumber === ref ||
+        ((inv.projectId === pid || inv.parentId === pid) && inv.awaitingConfirmation === true)
+      );
+      const clientId = project?.clientId || matchingInvoice?.clientId || '';
+      const managerId = project?.projectManagerId || project?.assignedStaff?.[0] || null;
+      const enrichedTx = { ...newTx, clientId, projectManagerId: managerId };
+      const projectTxRef = await addDoc(collection(db, 'projects', pid, 'transactions'), enrichedTx);
+      await setDoc(doc(db, 'transactions', projectTxRef.id), {
+        ...enrichedTx,
+        projectTransactionId: projectTxRef.id,
+      });
+      await updateDoc(doc(db, 'projects', pid), {
+        paidAmount: increment(Number(amount)),
+        updatedAt: serverTimestamp(),
+      });
+
+      if (matchingInvoice?.id) {
+        const currentPaid = Number(matchingInvoice.amountPaid || matchingInvoice.paidAmount || 0);
+        const invoiceTotal = Number(matchingInvoice.amount || matchingInvoice.total || 0);
+        const newPaid = currentPaid + Number(amount);
+        await updateDoc(doc(db, 'invoices', matchingInvoice.id), {
+          amountPaid: newPaid,
+          paidAmount: newPaid,
+          status: invoiceTotal > 0 && newPaid < invoiceTotal ? 'Partially Paid' : 'Paid',
+          awaitingConfirmation: false,
+          paidAt: new Date().toISOString(),
+          method,
+          paymentConfirmedAt: serverTimestamp(),
+          paymentConfirmedBy: user?.uid || user?.id || 'admin',
+        });
+
+        const invoiceDescriptor = `${matchingInvoice.title || ''} ${matchingInvoice.type || ''} ${matchingInvoice.documentKind || ''}`.toLowerCase();
+        const isInitialDeposit = matchingInvoice.milestoneKey === 'post-rendering'
+          || invoiceDescriptor.includes('deposit')
+          || invoiceDescriptor.includes('first instalment')
+          || invoiceDescriptor.includes('first installment');
+        if (isInitialDeposit && (invoiceTotal <= 0 || newPaid >= invoiceTotal)) {
+          await updateDoc(doc(db, 'projects', pid), {
+            depositPaid: true,
+            depositPaidAt: serverTimestamp(),
+            initialDepositInvoiceId: matchingInvoice.id,
+            updatedAt: serverTimestamp(),
+          });
+        }
+      }
+
+      // Notify client, admin, and assigned project manager that payment was received
       if (project?.clientId) {
         const msg = `Payment of GH₵ ${Number(amount).toLocaleString()} confirmed for "${project.title || 'your project'}" via ${method}. Thank you!`;
         await createNotification(project.clientId, msg, 'payment', '/portal');
       }
+      const staffRecipients = [...new Set(['admin', managerId, ...(project?.assignedStaff || [])].filter(Boolean))];
+      await Promise.all(staffRecipients.map(recipientId =>
+        createNotification(recipientId, `Offline payment of GH₵${Number(amount).toLocaleString()} recorded for "${project?.title || pid}" via ${method}.`, 'payment_received', '/admin/client-hub')
+          .catch(() => null)
+      ));
 
       logAction(pid, 'Finance', `Offline payment of GH₵${amount} recorded via ${method} (${ref})`);
       notify('success', 'Manual payment recorded — client notified');
@@ -1203,11 +1359,22 @@ export default function App() {
     catch(e) { devErr(e); }
   };
 
-  // sendWhatsAppUpdate — triggers Meta WhatsApp Cloud API via Cloud Function
-  // SMS/Arkesel removed; this is a no-op until Meta WhatsApp credentials are configured.
+  // sendSMSUpdate — sends an SMS to the client when their project advances
   const sendWhatsAppUpdate = async (clientId, projectId, stageName) => {
-    if (import.meta.env.DEV) console.log(`[sendWhatsAppUpdate] Stage: ${stageName}, client: ${clientId}`);
-    // Meta WhatsApp integration handled server-side; no client action needed here.
+    if (user?.role === 'client') return; // clients cannot trigger admin-only SMS
+    try {
+      const client = clients.find(c => c.id === clientId);
+      if (!client?.phone) return;
+      const project = projects.find(p => p.id === projectId);
+      const firstName = (client.name || '').split(' ')[0] || 'there';
+      const projectTitle = project?.title || 'your project';
+      const message = `Hi ${firstName}, your project "${projectTitle}" has moved to the ${stageName} stage. Log in to your portal to see what's next: https://westlinefuture.web.app`;
+      const fn = httpsCallable(functions, 'sendSMS');
+      await fn({ to: client.phone, message });
+      if (import.meta.env.DEV) console.log(`[sendWhatsAppUpdate] SMS sent to ${client.phone}`);
+    } catch (e) {
+      if (import.meta.env.DEV) console.warn('[sendWhatsAppUpdate] SMS failed (non-fatal):', e?.message);
+    }
   };
 
   const syncCMS = async (key, value) => {
@@ -1551,29 +1718,90 @@ export default function App() {
         stageHistory, updatedAt: serverTimestamp(),
       });
       const stage = CLIENT_PROJECT_STAGES.find(s => s.id === newStageId);
-      await addDoc(collection(db, 'projects', projectId, 'messages'), {
-        text: `Stage updated to: ${stage?.name || `Stage ${newStageId}`}. ${stage?.clientMsg || ''}`,
-        senderRole: 'system', senderId: 'system', senderName: 'Westline Future',
-        isInternal: true, createdAt: serverTimestamp(),
-      });
+
+      // ── Auto-generate handover certificate when project reaches Stage 8 ──────
+      if (newStageId === 8) {
+        try {
+          const handoverDate = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+          await addDoc(collection(db, 'projects', projectId, 'documents'), {
+            name: 'Project Handover Certificate',
+            type: 'handover',
+            fileType: 'pdf',
+            stageId: 8,
+            uploadedBy: 'Westline Future',
+            clientId: data.clientId || null,
+            clientName: data.clientName || null,
+            projectTitle: data.title || null,
+            projectType: data.projectType || null,
+            handoverDate,
+            isAutoGenerated: true,
+            createdAt: serverTimestamp(),
+          });
+        } catch (_) {}
+      }
+
+      try {
+        await addDoc(collection(db, 'projects', projectId, 'messages'), {
+          text: `Stage updated to: ${stage?.name || `Stage ${newStageId}`}. ${stage?.clientMsg || ''}`,
+          senderRole: 'system', senderId: 'system', senderName: 'Westline Future',
+          isInternal: true, createdAt: serverTimestamp(),
+        });
+      } catch (_) {}
+      // Also post a client-visible update to their chat thread
+      if (data.clientId) {
+        try {
+          await addDoc(collection(db, 'clients', data.clientId, 'messages'), {
+            text: `🚀 Your project "${data.title}" has moved to: **${stage?.name || `Stage ${newStageId}`}**. ${stage?.clientMsg || ''}`,
+            senderRole: 'system', senderId: 'system', senderName: 'Westline Future',
+            isInternal: false, readByAdmin: true, readByClient: false,
+            createdAt: serverTimestamp(),
+          });
+        } catch (_) {}
+      }
 
       // ── Auto-activate milestone invoice when trigger stage is reached ──────
-      // Stage 3 → post-rendering (60%), Stage 5 → post-production (30%), Stage 7 → post-shipping (10%)
-      const MILESTONE_STAGE_TRIGGERS = { 3: 'post-rendering', 5: 'post-production', 7: 'post-shipping' };
+      // Stage 3 → post-rendering (60%), Stage 5 → post-production (30%), Stage 6 → final balance (before installation)
+      const MILESTONE_STAGE_TRIGGERS = { 3: 'post-rendering', 5: 'post-production', 6: 'completion' };
+      const MILESTONE_LABELS = {
+        'post-rendering':  '60% Rendering Milestone',
+        'post-production': '30% Production Milestone',
+        'completion':      'Final Balance Payment',
+        'post-shipping':   '10% Delivery Milestone',
+      };
       const triggerKey = MILESTONE_STAGE_TRIGGERS[newStageId];
       if (triggerKey) {
         try {
           const today = new Date();
           const due = new Date(today);
-          due.setDate(due.getDate() + 3); // 3-day payment window
+          due.setDate(due.getDate() + 7); // 7-day window for final payment
           const dueStr = due.toISOString().split('T')[0];
+          // Search by milestoneKey first, then fall back to type/title for final invoices
           const invQ = query(
             collection(db, 'invoices'),
             where('parentId', '==', projectId),
             where('milestoneKey', '==', triggerKey)
           );
-          const invSnap = await getDocs(invQ);
-          for (const invDoc of invSnap.docs) {
+          const invQ2 = query(
+            collection(db, 'invoices'),
+            where('projectId', '==', projectId),
+            where('milestoneKey', '==', triggerKey)
+          );
+          const [invSnap, invSnap2] = await Promise.all([getDocs(invQ), getDocs(invQ2)]);
+          // Merge both results, deduplicate by id
+          const allDocs = [...invSnap.docs, ...invSnap2.docs].filter(
+            (d, i, arr) => arr.findIndex(x => x.id === d.id) === i
+          );
+          // For Stage 7 (final payment), also search by type 'final'/'settlement' if no milestoneKey match
+          let finalDocs = allDocs;
+          if (triggerKey === 'completion' && allDocs.length === 0) {
+            const fallbackQ = query(collection(db, 'invoices'), where('parentId', '==', projectId));
+            const fallbackSnap = await getDocs(fallbackQ);
+            finalDocs = fallbackSnap.docs.filter(d => {
+              const t = `${d.data().type || ''} ${d.data().title || ''} ${d.data().milestoneKey || ''}`.toLowerCase();
+              return t.includes('final') || t.includes('settlement') || t.includes('completion') || t.includes('balance');
+            });
+          }
+          for (const invDoc of finalDocs) {
             if (!isPaid(invDoc.data().status)) {
               await updateDoc(invDoc.ref, {
                 due: dueStr,
@@ -1583,13 +1811,28 @@ export default function App() {
               });
             }
           }
-          // Client-visible system message in chat
-          if (data.clientId && !invSnap.empty) {
-            const milestoneLabel = { 'post-rendering': '60% Rendering Milestone', 'post-production': '30% Production Milestone', 'post-shipping': '10% Delivery Milestone' }[triggerKey];
+          // Client-visible system message + push notification
+          if (data.clientId && finalDocs.length > 0) {
+            const milestoneLabel = MILESTONE_LABELS[triggerKey] || 'Payment Milestone';
+            const isFinal = triggerKey === 'completion';
+            const msgText = isFinal
+              ? `🏗️ Your goods are ready for installation! Your final balance payment is now due by ${new Date(dueStr + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'long' })}. Please clear the balance before installation begins — you can pay by bank transfer, mobile money, or cash. Contact us to arrange an offline payment.`
+              : `💳 Payment milestone reached: your *${milestoneLabel}* invoice is now due (${dueStr}). Please open your Payments tab to settle.`;
             await addDoc(collection(db, 'clients', data.clientId, 'messages'), {
-              text: `💳 Payment milestone reached: your *${milestoneLabel}* invoice is now due (${dueStr}). Please open your Payments tab to settle.`,
+              text: msgText,
               senderRole: 'system', senderId: 'system', senderName: 'Westline Future',
-              isInternal: false, createdAt: serverTimestamp(),
+              isInternal: false, readByAdmin: true, readByClient: false, createdAt: serverTimestamp(),
+            });
+            // Strong push notification for final payment
+            await addDoc(collection(db, 'notifications'), {
+              userId: data.clientId,
+              message: isFinal
+                ? `🏗️ Ready for installation — your final balance is due by ${dueStr}. Pay via the Payments tab.`
+                : `💳 ${milestoneLabel} invoice is now due (${dueStr}). Open Payments tab.`,
+              type: 'payment_due',
+              link: '/portal',
+              read: false,
+              createdAt: serverTimestamp(),
             });
           }
         } catch (milestoneErr) {
@@ -1643,16 +1886,43 @@ export default function App() {
   };
 
   const assignWorkerToProject = async (projectId, workerId) => {
+    if (!functions) return;
+    try {
+      const member = (teamMembers || []).find(item =>
+        item.id === workerId || item.uid === workerId || item.email === workerId
+      );
+      if (!member) throw new Error('Team member not found');
+
+      const toggleAssignment = httpsCallable(functions, 'toggleProjectTeamAssignment');
+      const response = await toggleAssignment({
+        projectId,
+        memberId: String(member.uid || member.id),
+      });
+      notify('success', `${response.data?.memberName || member.name || 'Team member'} ${response.data?.assigned ? 'assigned' : 'unassigned'} successfully`);
+    } catch (e) {
+      notify('error', `Failed to update team assignment: ${e.message}`);
+    }
+  };
+
+  const approveSignoff = async (projectId) => {
     if (!db) return;
     try {
-      const snap = await getDoc(doc(db, 'projects', projectId));
-      if (!snap.exists()) return;
-      const current = snap.data().assignedWorkers || [];
-      const updated = current.includes(workerId) ? current.filter(id => id !== workerId) : [...current, workerId];
-      await updateDoc(doc(db, 'projects', projectId), { assignedWorkers: updated, updatedAt: serverTimestamp() });
-      notify('success', current.includes(workerId) ? 'Worker unassigned' : 'Worker assigned to project');
+      const project = clients.find(p => p.id === projectId) || {};
+      // Client-allowed write: flags the sign-off
+      await updateDoc(doc(db, 'projects', projectId), {
+        signOffApproved: true,
+        signOffApprovedAt: serverTimestamp(),
+      });
+      // Admin advances the stage (this succeeds if called by admin, or silently fails for client)
+      try {
+        await updateProjectStage(projectId, 8, 'Client signed off on inspection', { silent: true });
+      } catch (_) {
+        // Fallback: notify admin to complete the handover manually
+        await createNotification('admin', `Client signed off on project "${project.title || projectId}" — please advance to Stage 8 (Handover).`, 'info', `/admin/clients?tab=projects`);
+      }
+      notify('success', 'Sign-off confirmed! Your project is being completed.', 'persistent');
     } catch (e) {
-      notify('error', 'Failed to update worker assignment');
+      notify('error', 'Failed to record sign-off. Please try again.');
     }
   };
 
@@ -1697,7 +1967,21 @@ export default function App() {
         uploadedBy: meta.uploadedBy || 'admin',
         createdAt: serverTimestamp(),
       };
-      await addDoc(collection(db, 'projects', projectId, 'documents'), docData);
+      if (user?.role === 'worker') {
+        const registerDocument = httpsCallable(functions, 'registerWorkerProjectDocument');
+        await registerDocument({
+          projectId,
+          name: docData.name,
+          url: docData.url,
+          fileType: docData.fileType,
+          size: docData.size,
+          stageId: docData.stageId,
+          workerName: user?.name || user?.displayName || 'Field Worker',
+          docType: meta.docType || 'field_document',
+        });
+      } else {
+        await addDoc(collection(db, 'projects', projectId, 'documents'), docData);
+      }
       logAction(projectId, 'Document', `Uploaded: ${file.name}`);
       notify('success', 'Document uploaded');
       const docProject = clients.find(p => p.id === projectId);
@@ -1709,6 +1993,27 @@ export default function App() {
       notify('error', 'Upload failed: ' + e.message);
       return null;
     }
+  };
+
+  const addProjectMessage = async (projectId, text, senderRole = 'worker') => {
+    if (!functions || !projectId || !text?.trim()) return;
+    if (user?.role === 'worker' || senderRole === 'worker') {
+      const submitWorkerNote = httpsCallable(functions, 'submitWorkerProjectNote');
+      await submitWorkerNote({
+        projectId,
+        text: sanitizeText(text),
+        workerName: user?.name || user?.displayName || user?.email || 'Field Worker',
+      });
+      return;
+    }
+    await addDoc(collection(db, 'projects', projectId, 'messages'), {
+      text: sanitizeText(text),
+      senderRole,
+      senderId: user?.uid || user?.id || 'staff',
+      senderName: user?.name || user?.displayName || 'Westline Future Team',
+      isInternal: false,
+      createdAt: serverTimestamp(),
+    });
   };
 
   const addSourcingItem = async (data) => {
@@ -1987,6 +2292,7 @@ export default function App() {
     try {
       if (auth) await signOut(auth);
       // ✓ Firebase Auth clears sessions automatically on signOut
+      localStorage.removeItem('westline_user_cache');
       setUser(null);
       setLoginType('client'); // always reset to client/OTP mode on logout
       navigate('/login');
@@ -2168,8 +2474,8 @@ export default function App() {
     lang, setLang, t, messages, sendMessage, testimonials, submitTestimonial, showVisualizer, setShowVisualizer,
     sendWhatsAppUpdate,
     jobs, createJob, updateJob,
-    createClientProject, updateProjectStage, addClientMessage, assignWorkerToProject, deleteProject,
-    approveQuote, updateShippingDetails, addProjectDocument, createStaffAccount, deleteMember, updateMember,
+    createClientProject, updateProjectStage, addClientMessage, addProjectMessage, assignWorkerToProject, deleteProject,
+    approveQuote, approveSignoff, updateShippingDetails, addProjectDocument, createStaffAccount, deleteMember, updateMember,
     workOrders, containers,
     updateWorkOrder: (id, d) => db && updateDoc(doc(db, 'work_orders', id), { ...d, updatedAt: serverTimestamp() }),
     createWorkOrder,

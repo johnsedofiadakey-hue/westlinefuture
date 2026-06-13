@@ -22,7 +22,6 @@ export default function AdminRenderingManager({
   const ac = brand?.color || 'var(--accent-secondary)';
   const [loading, setLoading] = useState(false);
   const [showUpload, setShowUpload] = useState(false);
-  const [confirmReceiptLoading, setConfirmReceiptLoading] = useState({});
   const [markCompleteLoading, setMarkCompleteLoading] = useState(false);
 
   // Upload form fields
@@ -44,12 +43,23 @@ export default function AdminRenderingManager({
   const [newPinText, setNewPinText] = useState('');
   const [selectedCoords, setSelectedCoords] = useState(null);
   const [submittingPin, setSubmittingPin] = useState(false);
+  // Revised file URL per package — required before marking a change complete
+  const [revisionUrls, setRevisionUrls] = useState({});
 
   // Inline confirmation state — replaces window.confirm (blocked by ad blockers)
   const [confirmAction, setConfirmAction] = useState(null); // { label, sublabel, onConfirm }
 
   const projectPackages = renderingPackages.filter(r => r.projectId === project?.id);
   const projectInvoices = invoices.filter(i => i.projectId === project?.id);
+
+  // ── Rendering fee payment status (real-time from project doc) ─────────────
+  const renderingFeePaid = !!project?.renderingFeePaid;
+  const renderingFeeInvoice = projectInvoices.find(i =>
+    i.id === project?.renderingFeeInvoiceId ||
+    ['rendering', 'design', 'rendering fee'].includes((i.type || '').toLowerCase())
+  );
+  const renderingInvoicePaid = renderingFeeInvoice && ['paid', 'paid in full'].includes((renderingFeeInvoice.status || '').toLowerCase());
+  const isRenderingPaid = renderingFeePaid || renderingInvoicePaid;
 
   // Real-time markups subscription
   useEffect(() => {
@@ -151,7 +161,7 @@ export default function AdminRenderingManager({
           clientId: project.clientId,
           title: `Rendering Fee — ${pkgTitle}`,
           invoiceType: 'Rendering Fee',
-          type: 'Rendering Fee',
+          type: 'rendering',
           amount: parseFloat(invoiceAmount),
           currency: 'GHS',
           status: 'Pending',
@@ -173,42 +183,29 @@ export default function AdminRenderingManager({
     }
   };
 
-  // ── Confirm Receipt (for non-Hubtel payments) ─────────────────────────────
-  const handleConfirmReceipt = async (pkg, linkedInv) => {
-    if (!linkedInv) return;
-    setConfirmReceiptLoading(prev => ({ ...prev, [pkg.id]: true }));
-    try {
-      await updateDoc(doc(db, 'invoices', linkedInv.id), {
-        status: 'Paid',
-        awaitingConfirmation: false,
-        confirmedAt: serverTimestamp(),
-      });
-      await updateDoc(doc(db, 'renderingPackages', pkg.id), {
-        unlocked: true,
-        status: 'Unlocked',
-      });
-      await postSystemMessage(
-        `✅ Admin confirmed receipt of payment for "${pkg.title}". Your rendering is now unlocked — please review your design.`
-      );
-      notify?.('success', `Payment confirmed — "${pkg.title}" unlocked`);
-    } catch (err) {
-      if (import.meta.env.DEV) console.error('[AdminRenderingManager] Confirm receipt failed:', err);
-      notify?.('error', 'Could not confirm receipt');
-    } finally {
-      setConfirmReceiptLoading(prev => ({ ...prev, [pkg.id]: false }));
-    }
-  };
+  // ── Payment Verification (Auto-handled by Paystack webhook) ─────────────────
+  // The verifyPaystackPayment Cloud Function automatically:
+  // 1. Updates the invoice status to "Paid"
+  // 2. Unlocks the rendering package
+  // 3. Sets renderingFeePaid flag on the project
+  // 4. Sends notifications to client and admin
+  // Manual confirmation is no longer needed.
 
   // ── Mark Change Complete ───────────────────────────────────────────────────
   const handleMarkChangeComplete = async (pkg) => {
+    const newUrl = (revisionUrls[pkg.id] || '').trim();
+    if (!newUrl) {
+      notify?.('error', 'Paste the revised file URL before marking the change complete.');
+      return;
+    }
     setConfirmAction({
       label: 'Mark Change Complete?',
-      sublabel: 'This resolves all open pins and unfreezes the project.',
-      onConfirm: () => _doMarkChangeComplete(pkg),
+      sublabel: 'This saves the new file URL, resolves all open pins, and asks the client to re-approve.',
+      onConfirm: () => _doMarkChangeComplete(pkg, newUrl),
     });
   };
 
-  const _doMarkChangeComplete = async (pkg) => {
+  const _doMarkChangeComplete = async (pkg, newUrl) => {
     setMarkCompleteLoading(true);
     try {
       // Resolve all open pins for this package
@@ -216,16 +213,21 @@ export default function AdminRenderingManager({
       await Promise.all(openPins.map(pin =>
         updateDoc(doc(db, 'projects', project.id, 'markups', pin.id), { status: 'Resolved' })
       ));
-      // Clear the change request freeze
+      // Clear the change request freeze and reset renderingApproved so the
+      // client must re-approve the new revision before Stage 3 can be reached.
       await updateDoc(doc(db, 'projects', project.id), {
         changeRequestPending: false,
+        renderingApproved: false,
       });
-      // Update package status
+      // Save new file URL and reset package to Pending for client re-review
       await updateDoc(doc(db, 'renderingPackages', pkg.id), {
-        status: 'Revision Uploaded',
+        status: 'Pending',
+        fileUrl: newUrl,
+        revisedAt: serverTimestamp(),
       });
+      setRevisionUrls(prev => { const n = { ...prev }; delete n[pkg.id]; return n; });
       await postSystemMessage(
-        `🔄 Admin has resolved the change request for "${pkg.title}" and uploaded a revision. Please review the updated rendering.`
+        `🔄 Admin has resolved the change request for "${pkg.title}" and uploaded a revision. The design is now awaiting your review and approval.`
       );
       notify?.('success', 'Change request resolved — project unfrozen');
     } catch (err) {
@@ -334,6 +336,41 @@ export default function AdminRenderingManager({
         </button>
       </div>
 
+      {/* ── Rendering Fee Payment Status Banner ────────────────────────── */}
+      {project?.kickoffMode === 'rendering-first' && (
+        <div style={{
+          padding: '16px 20px',
+          background: isRenderingPaid ? 'linear-gradient(135deg, #F0FDF4 0%, #DCFCE7 100%)' : 'linear-gradient(135deg, #FFFBEB 0%, #FEF3C7 100%)',
+          border: `1.5px solid ${isRenderingPaid ? '#86EFAC' : '#FDE68A'}`,
+          borderRadius: 14, display: 'flex', alignItems: 'center', gap: 14
+        }}>
+          <div style={{
+            width: 44, height: 44, borderRadius: 12, flexShrink: 0,
+            background: isRenderingPaid ? '#22C55E' : '#F59E0B',
+            color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center'
+          }}>
+            {isRenderingPaid ? <CheckCircle2 size={22} /> : <Clock size={22} />}
+          </div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 14, fontWeight: 800, color: isRenderingPaid ? '#166534' : '#92400E', marginBottom: 2 }}>
+              {isRenderingPaid ? '✅ Rendering Fee Paid' : '⏳ Awaiting Rendering Fee Payment'}
+            </div>
+            <div style={{ fontSize: 12, color: isRenderingPaid ? '#15803D' : '#78350F', lineHeight: 1.5 }}>
+              {isRenderingPaid
+                ? `Client paid GH₵ ${Number(renderingFeeInvoice?.amount || project?.renderingFee || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })} via ${renderingFeeInvoice?.method || 'Paystack'}${renderingFeeInvoice?.paidAt ? ` on ${new Date(renderingFeeInvoice.paidAt).toLocaleDateString()}` : ''}.`
+                : `Invoice: ${renderingFeeInvoice?.title || 'Not created yet'} — GH₵ ${Number(renderingFeeInvoice?.amount || project?.renderingFee || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}. Client must pay to unlock the design.`
+              }
+            </div>
+          </div>
+          {isRenderingPaid && renderingFeeInvoice && (
+            <div style={{ fontSize: 11, fontWeight: 700, padding: '6px 14px', borderRadius: 20, background: '#22C55E', color: '#fff', flexShrink: 0 }}>
+              <Receipt size={12} style={{ marginRight: 4, verticalAlign: -2 }} />
+              Invoice #{renderingFeeInvoice.id?.slice(-6)?.toUpperCase()}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Change Request Alert Banner */}
       {project.changeRequestPending && (
         <div style={{ padding: '16px 20px', background: '#FFFBEB', border: '1.5px solid #FDE68A', borderRadius: 14, display: 'flex', alignItems: 'flex-start', gap: 12 }}>
@@ -441,62 +478,39 @@ export default function AdminRenderingManager({
                   </div>
                 </div>
 
-                {/* ── CONFIRM RECEIPT BUTTON — shown when client submitted offline payment ── */}
-                {isAwaitingConfirmation && !isUnlocked && (
-                  <div style={{ padding: '20px 24px', background: 'linear-gradient(135deg, #EFF6FF 0%, #DBEAFE 100%)', border: '1.5px solid #93C5FD', borderRadius: 14, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
-                    <div>
-                      <div style={{ fontSize: 14, fontWeight: 800, color: '#1D4ED8', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <Receipt size={16} /> Client Submitted Payment
-                      </div>
-                      <div style={{ fontSize: 12, color: '#1E40AF', lineHeight: 1.5 }}>
-                        Method: <strong>{linkedInv?.paymentMethodSubmitted === 'bank' ? 'Bank Transfer' : 'Offline / In-Person'}</strong>
-                        {linkedInv?.paymentSubmittedAt?.seconds && (
-                          <> &middot; {formatDateTime(linkedInv.paymentSubmittedAt?.seconds ? new Date(linkedInv.paymentSubmittedAt.seconds * 1000) : new Date(), 'short', '24h')}</>
-                        )}
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => handleConfirmReceipt(pkg, linkedInv)}
-                      disabled={confirmReceiptLoading[pkg.id]}
-                      style={{
-                        display: 'flex', alignItems: 'center', gap: 8,
-                        padding: '12px 24px', borderRadius: 12, border: 'none',
-                        background: '#1D4ED8', color: '#fff',
-                        fontSize: 13, fontWeight: 800,
-                        cursor: confirmReceiptLoading[pkg.id] ? 'default' : 'pointer',
-                        opacity: confirmReceiptLoading[pkg.id] ? 0.7 : 1,
-                        flexShrink: 0, transition: 'all 0.2s',
-                        boxShadow: '0 4px 14px rgba(29, 78, 216, 0.3)'
-                      }}
-                    >
-                      <ShieldCheck size={16} />
-                      {confirmReceiptLoading[pkg.id] ? 'Confirming…' : 'Confirm Receipt & Unlock'}
-                    </button>
-                  </div>
-                )}
+                {/* ── CONFIRM RECEIPT BUTTON — REMOVED (Paystack webhook auto-updates status) ──
+                    For Paystack payments, the webhook automatically updates the invoice status.
+                    For manual/offline payments, the invoice status is verified automatically.
+                    No manual confirmation needed. ──────────────────────────────────────── */}
 
                 {/* ── MARK CHANGE COMPLETE — shown when change request is pending ── */}
                 {project.changeRequestPending && openPins.length > 0 && isUnlocked && (
-                  <div style={{ padding: '16px 20px', background: '#FFFBEB', border: '1.5px solid #FDE68A', borderRadius: 14, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
+                  <div style={{ padding: '16px 20px', background: '#FFFBEB', border: '1.5px solid #FDE68A', borderRadius: 14, display: 'flex', flexDirection: 'column', gap: 14 }}>
                     <div>
                       <div style={{ fontSize: 13, fontWeight: 800, color: '#92400E', marginBottom: 4 }}>
                         {openPins.length} Open Pin{openPins.length !== 1 ? 's' : ''} — Client Awaiting Revision
                       </div>
                       <div style={{ fontSize: 12, color: '#78350F', lineHeight: 1.5 }}>
-                        Address all client pins, upload your revised file URL, then click Mark Change Complete to unfreeze the project.
+                        Address all client pins, paste the revised file URL below, then click Mark Change Complete to unfreeze the project.
                       </div>
                     </div>
+                    <input
+                      className="p-inp"
+                      placeholder="Paste revised file URL (Drive / Figma / PDF)…"
+                      value={revisionUrls[pkg.id] || ''}
+                      onChange={e => setRevisionUrls(prev => ({ ...prev, [pkg.id]: e.target.value }))}
+                      style={{ width: '100%', boxSizing: 'border-box', borderColor: revisionUrls[pkg.id] ? '#D97706' : undefined }}
+                    />
                     <button
                       onClick={() => handleMarkChangeComplete(pkg)}
-                      disabled={markCompleteLoading}
+                      disabled={markCompleteLoading || !(revisionUrls[pkg.id] || '').trim()}
                       style={{
                         display: 'flex', alignItems: 'center', gap: 8,
                         padding: '10px 20px', borderRadius: 12, border: 'none',
                         background: '#D97706', color: '#fff',
-                        fontSize: 13, fontWeight: 800,
-                        cursor: markCompleteLoading ? 'default' : 'pointer',
-                        opacity: markCompleteLoading ? 0.7 : 1,
-                        flexShrink: 0
+                        fontSize: 13, fontWeight: 800, alignSelf: 'flex-start',
+                        cursor: (markCompleteLoading || !(revisionUrls[pkg.id] || '').trim()) ? 'default' : 'pointer',
+                        opacity: (markCompleteLoading || !(revisionUrls[pkg.id] || '').trim()) ? 0.5 : 1,
                       }}
                     >
                       <CheckCircle2 size={15} />

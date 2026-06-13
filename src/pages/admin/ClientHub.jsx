@@ -3,7 +3,7 @@ import {
   ArrowLeft, Plus, MessageSquare, AlertCircle, Briefcase,
   User, DollarSign, Phone, Calendar, Loader2,
   Users, UserCheck, ChevronRight, CheckCircle2, RefreshCw, PenTool,
-  FileText, Upload, ExternalLink, Trash2, ShieldCheck, X
+  FileText, Upload, ExternalLink, Trash2, ShieldCheck, X, Camera
 } from 'lucide-react';
 import { PAv, PSBadge } from '../../components/Shared';
 import { CLIENT_PROJECT_STAGES, PROJECT_TYPES, GLASS_CATALOG_DATA } from '../../data';
@@ -19,12 +19,14 @@ import { calculateTimeline } from '../sharedHelpers';
 
 import { AC, STAGE_ICONS, SCHEDULE_CONFIGS, PREMIUM_CATALOG, BD_ITEMS_CONFIG } from './clienthub/config.jsx';
 import { printInvoiceOrReceipt, printSignedContractDoc } from './clienthub/print';
-import { InvoiceCreatorModal } from './clienthub/InvoiceCreatorModal';
 import { ProjectInvoicesLedger } from './clienthub/ProjectInvoicesLedger';
 import { PaymentScheduleCard } from './clienthub/PaymentScheduleCard';
 import { NewProjectModal } from './clienthub/NewProjectModal';
 import { AdvanceModal } from './clienthub/AdvanceModal';
 import { ShippingDetailsCard, ProjectEconomics, DocumentVault } from './clienthub/ProjectDetailCards';
+import ClientUploadsTab from '../../components/ClientUploadsTab';
+import SecureVault from '../../components/SecureVault';
+import RequestPaymentModal from './clienthub/RequestPaymentModal';
 
 // ─── Stage Scheduler Row ─────────────────────────────────────────────────────
 // Extracted so each row has its own local state for the duration input.
@@ -162,6 +164,7 @@ function SpecBriefManager({ project, updateProject, addProjectDocument, notify, 
   const ac = brand?.color || 'var(--accent-secondary)';
   const [uploading, setUploading] = useState(false);
   const [removing, setRemoving] = useState(false);
+  const [confirmRemove, setConfirmRemove] = useState(false);
   const spec = project?.specDoc;
 
   const handleUpload = async (e) => {
@@ -182,14 +185,32 @@ function SpecBriefManager({ project, updateProject, addProjectDocument, notify, 
           url,
           name: file.name,
           fileType: file.type,
+          version: Number(spec?.version || 0) + 1,
           uploadedAt: new Date().toISOString(),
           uploadedBy: 'admin',
           status: 'pending',
           reviewedAt: null,
           reviewNote: '',
+          signedAt: null,
+          signedBy: '',
+          signedByUid: '',
+          signedByPhone: '',
+          signatureMethod: '',
+          signatureStamp: '',
         }
       });
-      notify?.('success', 'Specification document sent to client for approval');
+      // Notify the client that a spec doc is waiting for their review
+      if (project?.clientId && db) {
+        addDoc(collection(db, 'clients', project.clientId, 'messages'), {
+          text: `📄 Project specification v${Number(spec?.version || 0) + 1}, "${file.name}", has been shared for "${project.title || project.project}". After the initial deposit is verified, please review and sign it to authorise production.`,
+          senderRole: 'system',
+          isInternal: false,
+          readByAdmin: true,
+          readByClient: false,
+          createdAt: serverTimestamp(),
+        }).catch(() => {});
+      }
+      notify?.('success', 'Specification document sent to client for signature');
     } catch (err) {
       console.error(err);
       notify?.('error', 'Upload failed — ' + (err.message || 'Unknown error'));
@@ -199,7 +220,8 @@ function SpecBriefManager({ project, updateProject, addProjectDocument, notify, 
   };
 
   const handleRemove = async () => {
-    if (!window.confirm('Remove the current specification document? The client will no longer see it.')) return;
+    if (!confirmRemove) { setConfirmRemove(true); return; }
+    setConfirmRemove(false);
     setRemoving(true);
     try {
       await updateDoc(doc(db, 'projects', project.id), { specDoc: null });
@@ -211,9 +233,10 @@ function SpecBriefManager({ project, updateProject, addProjectDocument, notify, 
   };
 
   const statusMap = {
-    pending:  { label: 'Awaiting Client Review', color: '#D97706', bg: '#FFF7ED', border: '#FDE68A' },
-    approved: { label: 'Client Approved ✓',       color: '#15803D', bg: '#F0FDF4', border: '#BBF7D0' },
-    rejected: { label: 'Changes Requested',        color: '#DC2626', bg: '#FEF2F2', border: '#FECACA' },
+    pending:  { label: 'Awaiting Client Signature', color: '#D97706', bg: '#FFF7ED', border: '#FDE68A' },
+    approved: { label: 'Approved · Signature Required', color: '#B45309', bg: '#FFFBEB', border: '#FDE68A' },
+    signed:   { label: 'Signed · Production Authorised ✓', color: '#15803D', bg: '#F0FDF4', border: '#BBF7D0' },
+    rejected: { label: 'Changes Requested', color: '#DC2626', bg: '#FEF2F2', border: '#FECACA' },
   };
 
   return (
@@ -222,7 +245,7 @@ function SpecBriefManager({ project, updateProject, addProjectDocument, notify, 
       <div>
         <div style={{ fontSize: 17, fontWeight: 900, color: 'var(--accent-secondary)', marginBottom: 4 }}>Project Specification & Brief</div>
         <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
-          Upload your project specification, design outcomes, or deliverables document (PDF, image, or any file). The client will be prompted to review and approve it before production begins. Their response is logged here in real time.
+          Upload the final project specification, scope, deliverables, and approved design outcome. After the initial deposit is verified, the client must review and sign this document before production can begin.
         </div>
       </div>
 
@@ -237,7 +260,7 @@ function SpecBriefManager({ project, updateProject, addProjectDocument, notify, 
               <div>
                 <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--accent-secondary)' }}>{spec.name || 'Project Specification'}</div>
                 <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 2 }}>
-                  Uploaded {spec.uploadedAt ? new Date(spec.uploadedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}
+                  Version {Number(spec.version || 1)} · Uploaded {spec.uploadedAt ? new Date(spec.uploadedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}
                 </div>
               </div>
             </div>
@@ -246,10 +269,18 @@ function SpecBriefManager({ project, updateProject, addProjectDocument, notify, 
                 style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 10, background: '#EFF6FF', border: '1px solid #BFDBFE', color: '#1D4ED8', fontSize: 12, fontWeight: 700, textDecoration: 'none' }}>
                 <ExternalLink size={12} /> View
               </a>
-              <button onClick={handleRemove} disabled={removing}
-                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 10, background: '#FEF2F2', border: '1px solid #FECACA', color: '#DC2626', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
-                <Trash2 size={12} /> {removing ? 'Removing…' : 'Remove'}
-              </button>
+              {confirmRemove ? (
+                <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                  <span style={{ fontSize: 11, color: '#DC2626', fontWeight: 600 }}>Remove this doc?</span>
+                  <button onClick={handleRemove} style={{ padding: '5px 10px', borderRadius: 8, background: '#DC2626', border: 'none', color: '#fff', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>Yes, remove</button>
+                  <button onClick={() => setConfirmRemove(false)} style={{ padding: '5px 10px', borderRadius: 8, background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>Cancel</button>
+                </div>
+              ) : (
+                <button onClick={handleRemove} disabled={removing}
+                  style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 10, background: '#FEF2F2', border: '1px solid #FECACA', color: '#DC2626', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+                  <Trash2 size={12} /> {removing ? 'Removing…' : 'Remove'}
+                </button>
+              )}
             </div>
           </div>
 
@@ -272,9 +303,10 @@ function SpecBriefManager({ project, updateProject, addProjectDocument, notify, 
             </div>
           )}
 
-          {spec.status === 'approved' && spec.reviewedAt && (
+          {spec.status === 'signed' && spec.signedAt && (
             <div style={{ marginTop: 14, padding: '10px 14px', background: '#F0FDF4', borderRadius: 10, border: '1px solid #BBF7D0', fontSize: 12, color: '#15803D', fontWeight: 600 }}>
-              Approved on {new Date(spec.reviewedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })} by {spec.reviewedBy || 'Client'}
+              Signed on {new Date(spec.signedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })} by {spec.signedBy || spec.reviewedBy || 'Client'}
+              {spec.signatureStamp && <div style={{ fontSize: 10, color: '#4B5563', marginTop: 4, fontFamily: 'monospace' }}>Audit stamp: {spec.signatureStamp}</div>}
             </div>
           )}
 
@@ -284,7 +316,7 @@ function SpecBriefManager({ project, updateProject, addProjectDocument, notify, 
               <Upload size={13} /> {uploading ? 'Uploading…' : 'Replace Document'}
               <input type="file" accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,.ppt,.pptx" style={{ display: 'none' }} onChange={handleUpload} disabled={uploading} />
             </label>
-            <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 8 }}>Uploading a new document will reset the client's approval status to "Pending".</div>
+            <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 8 }}>Uploading a new version invalidates the previous signature and requires the client to sign again.</div>
           </div>
         </div>
       ) : (
@@ -353,6 +385,8 @@ export default function ClientHub({ clientId, dbClients = [], onBack, ...props }
   const [activeTab, setActiveTab] = useState('overview');
   const [settingDate, setSettingDate] = useState(false);
   const [estDate, setEstDate] = useState('');
+  const [showClientPreview, setShowClientPreview] = useState(false);
+  const [showRequestPaymentModal, setShowRequestPaymentModal] = useState(false);
 
   useEffect(() => {
     if (!db || !client) { setLoadingProjects(false); return; }
@@ -423,14 +457,19 @@ export default function ClientHub({ clientId, dbClients = [], onBack, ...props }
 
   const fmt = v => `GH₵ ${Number(v || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
+  // Tab names aligned with client portal for consistency:
+  // Client sees: Progress, Design Vault, Approvals, Photos, Payments, Add-ons, Documents
+  // Admin manages: Overview, Spec, Timeline, Payments, Design Vault, Documents, Team
   const TABS = [
     { id: 'overview',   label: 'Overview',   icon: <Briefcase size={14} /> },
-    { id: 'spec',       label: 'Spec & Brief', icon: <FileText size={14} /> },
+    { id: 'spec',       label: 'Project Brief', icon: <FileText size={14} /> },
     { id: 'timeline',   label: 'Timeline',   icon: <Calendar size={14} /> },
-    { id: 'financials', label: 'Financials', icon: <DollarSign size={14} /> },
-    { id: 'renderings', label: 'Design Vault', icon: <PenTool size={14} /> },
-    { id: 'documents',  label: 'Documents',  icon: <FileText size={14} /> },
-    { id: 'team',       label: 'Team',       icon: <Users size={14} /> }
+    { id: 'financials', label: 'Payments',   icon: <DollarSign size={14} /> },
+    { id: 'renderings', label: 'Designs',    icon: <PenTool size={14} /> },
+    { id: 'vault',      label: 'Vault',      icon: <ShieldCheck size={14} /> },
+    { id: 'uploads',    label: 'Uploads',    icon: <Camera size={14} /> },
+    { id: 'team',       label: 'Team',       icon: <Users size={14} /> },
+    { id: 'messages',   label: 'Messages',   icon: <MessageSquare size={14} /> }
   ];
 
   if (!client) return (
@@ -463,9 +502,16 @@ export default function ClientHub({ clientId, dbClients = [], onBack, ...props }
             </div>
           </div>
         </div>
-        <button onClick={() => setShowNewModal(true)} style={{ height: 40, padding: '0 20px', borderRadius: 12, background: `var(--accent-secondary)`, color: '#fff', border: 'none', fontSize: 13, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}>
-          <Plus size={15} /> New Project
-        </button>
+        <div style={{ display: 'flex', gap: 10 }}>
+          {selected && (
+            <button onClick={() => setShowClientPreview(true)} title="See what this client sees right now" style={{ height: 40, padding: '0 16px', borderRadius: 12, background: '#fff', color: `var(--accent-secondary)`, border: '1.5px solid var(--border-color)', fontSize: 13, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}>
+              👁 Preview as Client
+            </button>
+          )}
+          <button onClick={() => setShowNewModal(true)} style={{ height: 40, padding: '0 20px', borderRadius: 12, background: `var(--accent-secondary)`, color: '#fff', border: 'none', fontSize: 13, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Plus size={15} /> New Project
+          </button>
+        </div>
       </div>
 
       {/* 2-PANEL BODY */}
@@ -473,20 +519,32 @@ export default function ClientHub({ clientId, dbClients = [], onBack, ...props }
 
         {/* LEFT SIDEBAR */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, overflowY: 'auto' }}>
-          <div style={{ padding: '16px 18px', background: `var(--accent-secondary)`, borderRadius: 16, color: '#fff', marginBottom: 4 }}>
-            <div style={{ fontSize: 9, fontWeight: 800, color: ac, textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 10 }}>Client Summary</div>
-            {[
-              { label: 'Total Projects', value: projects.length },
-              { label: 'Active', value: projects.filter(p => p.status !== 'Completed').length },
-              { label: 'Completed', value: projects.filter(p => p.status === 'Completed').length },
-              { label: 'Since', value: client.joined ? new Date(client.joined).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' }) : '—' },
-            ].map(row => (
-              <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 7, fontSize: 11 }}>
-                <span style={{ opacity: 0.55 }}>{row.label}</span>
-                <span style={{ fontWeight: 800 }}>{row.value}</span>
+          {(() => {
+            const activeProjects = projects.filter(p => p.status !== 'Completed').length;
+            const pendingInvoices = (props.invoices || []).filter(i => ['Sent', 'Overdue'].includes(i.status) && i.type !== 'Quotation').length;
+            const unsignedQuotes = (props.approvals || []).filter(a => ['Quotation', 'quotation'].includes(a.type) && a.status === 'Sent').length;
+
+            return (
+              <div style={{ padding: '16px 18px', background: 'linear-gradient(135deg, rgba(255,255,255,0.9), rgba(250,250,249,0.5))', backdropFilter: 'blur(10px)', border: '1px solid rgba(200,169,110,0.3)', borderRadius: 20, color: 'var(--accent-secondary)', marginBottom: 14, boxShadow: '0 8px 32px rgba(0,0,0,0.04)' }}>
+                <div style={{ display: 'flex', gap: 12 }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 10, fontWeight: 800, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 2 }}>Active</div>
+                    <div style={{ fontSize: 18, fontWeight: 900, color: 'var(--accent-secondary)' }}>{activeProjects}</div>
+                  </div>
+                  <div style={{ width: 1, background: 'var(--border-color)' }} />
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 10, fontWeight: 800, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 2 }}>Unpaid</div>
+                    <div style={{ fontSize: 18, fontWeight: 900, color: pendingInvoices > 0 ? '#DC2626' : 'var(--accent-secondary)' }}>{pendingInvoices}</div>
+                  </div>
+                  <div style={{ width: 1, background: 'var(--border-color)' }} />
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 10, fontWeight: 800, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 2 }}>Unsigned</div>
+                    <div style={{ fontSize: 18, fontWeight: 900, color: unsignedQuotes > 0 ? '#D97706' : 'var(--accent-secondary)' }}>{unsignedQuotes}</div>
+                  </div>
+                </div>
               </div>
-            ))}
-          </div>
+            );
+          })()}
           <button
             onClick={() => { setSelectedId('MESSAGES'); setActiveTab('chat'); }}
             style={{ width: '100%', textAlign: 'left', padding: '13px 14px', borderRadius: 13, border: `2px solid ${selectedId === 'MESSAGES' ? ac : 'transparent'}`, background: selectedId === 'MESSAGES' ? `${ac}10` : `var(--bg-secondary)`, cursor: 'pointer', transition: 'all .2s', marginBottom: 20, display: 'flex', alignItems: 'center', gap: 10 }}
@@ -507,23 +565,38 @@ export default function ClientHub({ clientId, dbClients = [], onBack, ...props }
               <div style={{ fontSize: 12, color: `var(--text-secondary)`, fontWeight: 600 }}>No projects yet</div>
               <button onClick={() => setShowNewModal(true)} style={{ marginTop: 8, fontSize: 11, fontWeight: 700, color: ac, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>+ Create first project</button>
             </div>
-          ) : projects.map(p => {
-            const stg = CLIENT_PROJECT_STAGES.find(s => s.id === p.stageId);
-            const isActive = p.id === selectedId;
-            return (
-              <button key={p.id} onClick={() => { setSelectedId(p.id); setActiveTab('overview'); }}
-                style={{ width: '100%', textAlign: 'left', padding: '13px 14px', borderRadius: 13, border: `2px solid ${isActive ? ac : 'transparent'}`, background: isActive ? `${ac}10` : `var(--bg-secondary)`, cursor: 'pointer', transition: 'all .2s' }}>
-                <div style={{ fontSize: 12, fontWeight: 800, color: `var(--accent-secondary)`, marginBottom: 3, lineHeight: 1.3 }}>{p.project || p.title}</div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-                  <span style={{ fontSize: 9, fontWeight: 700, color: stg?.color || `var(--text-secondary)`, background: `${stg?.color || `var(--text-secondary)`}18`, padding: '2px 7px', borderRadius: 20 }}>{stg?.short || 'Stage 1'}</span>
-                  <span style={{ fontSize: 9, color: `var(--text-secondary)` }}>{p.status === 'Completed' ? '✓ Done' : 'Active'}</span>
-                </div>
-                <div style={{ height: 3, background: `var(--border-color)`, borderRadius: 2, overflow: 'hidden' }}>
-                  <div style={{ height: '100%', width: `${stg?.pct || 5}%`, background: stg?.color || ac, borderRadius: 2 }} />
-                </div>
-              </button>
-            );
-          })}
+          ) : (() => {
+            const sortedProjects = [...projects].sort((a, b) => {
+              const aHasUnpaid = (props.invoices || []).some(i => i.projectId === a.id && ['Sent', 'Overdue'].includes(i.status));
+              const bHasUnpaid = (props.invoices || []).some(i => i.projectId === b.id && ['Sent', 'Overdue'].includes(i.status));
+              if (aHasUnpaid && !bHasUnpaid) return -1;
+              if (!aHasUnpaid && bHasUnpaid) return 1;
+              return 0;
+            });
+
+            return sortedProjects.map(p => {
+              const stg = CLIENT_PROJECT_STAGES.find(s => s.id === p.stageId);
+              const isActive = p.id === selectedId;
+              const hasAction = (props.invoices || []).some(i => i.projectId === p.id && ['Sent', 'Overdue'].includes(i.status));
+
+              return (
+                <button key={p.id} onClick={() => { setSelectedId(p.id); setActiveTab('overview'); }}
+                  style={{ width: '100%', textAlign: 'left', padding: '14px 16px', borderRadius: 14, border: `1.5px solid ${isActive ? ac : hasAction ? '#FCA5A5' : 'transparent'}`, background: isActive ? `${ac}10` : hasAction ? '#FEF2F2' : `var(--bg-secondary)`, cursor: 'pointer', transition: 'all .2s', position: 'relative', overflow: 'hidden' }}>
+                  
+                  {hasAction && <div style={{ position: 'absolute', top: 14, right: 14, width: 8, height: 8, borderRadius: '50%', background: '#EF4444', boxShadow: '0 0 8px rgba(239,68,68,0.6)' }} />}
+                  
+                  <div style={{ fontSize: 13, fontWeight: 800, color: hasAction ? '#991B1B' : `var(--accent-secondary)`, marginBottom: 4, paddingRight: 16 }}>{p.project || p.title}</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                    <span style={{ fontSize: 9, fontWeight: 800, color: stg?.color || `var(--text-secondary)`, background: `${stg?.color || `var(--text-secondary)`}18`, padding: '3px 8px', borderRadius: 20 }}>{stg?.short || 'Stage 1'}</span>
+                    <span style={{ fontSize: 9, color: hasAction ? '#B91C1C' : `var(--text-secondary)` }}>{p.status === 'Completed' ? '✓ Done' : hasAction ? 'Action Required' : 'Active'}</span>
+                  </div>
+                  <div style={{ height: 4, background: hasAction ? '#FECACA' : `var(--border-color)`, borderRadius: 2, overflow: 'hidden' }}>
+                    <div style={{ height: '100%', width: `${stg?.pct || 5}%`, background: hasAction ? '#EF4444' : (stg?.color || ac), borderRadius: 2 }} />
+                  </div>
+                </button>
+              );
+            });
+          })()}
         </div>
 
         {/* RIGHT — Tabbed Main */}
@@ -540,6 +613,7 @@ export default function ClientHub({ clientId, dbClients = [], onBack, ...props }
                   isAdmin={true}
                   height="100%"
                   projects={projects.map(p => ({ id: p.id, title: p.title }))}
+                  viewerLanguage={props.lang || 'en'}
                 />
               </div>
             </div>
@@ -608,8 +682,47 @@ export default function ClientHub({ clientId, dbClients = [], onBack, ...props }
                 </div>
               </div>
 
+              {(() => {
+                const projectInvoices = (props.invoices || []).filter(i => i.projectId === selected.id || i.parentId === selected.id);
+                const projectApprovals = (props.approvals || []).filter(a => a.projectId === selected.id);
+                const pendingQuote = projectApprovals.find(a => ['Quotation', 'quotation'].includes(a.type) && a.status === 'Sent');
+                const pendingSpec = selected.specDoc?.url && selected.specDoc?.status !== 'signed';
+                const unpaidInvoice = projectInvoices.find(i => ['Sent', 'Overdue'].includes(i.status) && !['Quotation', 'quotation'].includes(i.type));
+                const verificationPending = projectInvoices.find(i =>
+                  i.awaitingConfirmation === true ||
+                  i.status?.toLowerCase() === 'verification pending'
+                );
+
+                const blocker = pendingQuote ? { msg: 'Client needs to sign Quotation / Contract', type: 'client' }
+                  : pendingSpec ? { msg: 'Client needs to sign Project Specification before Production', type: 'client' }
+                  : verificationPending ? { msg: `Client has notified offline payment for (${verificationPending.title}). Pending your verification.`, type: 'admin' }
+                  : unpaidInvoice ? { msg: `Client has unpaid invoice (${unpaidInvoice.title || 'Invoice'})`, type: 'client' }
+                  : selected.stageId === 1 && !selected.specDoc?.url ? { msg: 'Admin needs to generate Specification / Quote', type: 'admin' }
+                  : null;
+
+                return (
+                  <div style={{ marginBottom: 16 }}>
+                    {blocker && (
+                      <div style={{ padding: '12px 16px', borderRadius: 12, background: blocker.type === 'admin' ? '#FEF2F2' : '#FFFBEB', border: `1.5px solid ${blocker.type === 'admin' ? '#FECACA' : '#FDE68A'}`, display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
+                        <div style={{ fontSize: 16 }}>{blocker.type === 'admin' ? '⚠️' : '⏳'}</div>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: 11, fontWeight: 800, color: blocker.type === 'admin' ? '#991B1B' : '#B45309', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 2 }}>Current Blocker</div>
+                          <div style={{ fontSize: 13, color: blocker.type === 'admin' ? '#7F1D1D' : '#92400E', fontWeight: 600 }}>{blocker.msg}</div>
+                        </div>
+                        {blocker.type === 'client' && (
+                          <button onClick={() => setShowRequestPaymentModal(true)} style={{ flexShrink: 0, padding: '6px 12px', borderRadius: 8, background: '#D97706', color: '#fff', border: 'none', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
+                            Send Reminder
+                          </button>
+                        )}
+                      </div>
+                    )}
+                    
+                  </div>
+                );
+              })()}
+
               {/* Tab Bar */}
-              <div style={{ display: 'flex', gap: 4, marginBottom: 14, flexShrink: 0, background: `var(--bg-secondary)`, padding: 4, borderRadius: 13, border: '1px solid var(--border-color)' }}>
+              <div style={{ position: 'sticky', top: -16, zIndex: 10, display: 'flex', gap: 4, marginBottom: 14, flexShrink: 0, background: 'rgba(250, 250, 249, 0.85)', backdropFilter: 'blur(12px)', padding: 6, borderRadius: 14, border: '1px solid var(--border-color)', margin: '0 -4px 14px -4px' }}>
                 {TABS.map(tab => (
                   <button key={tab.id} onClick={() => setActiveTab(tab.id)}
                     style={{ flex: 1, height: 34, borderRadius: 10, background: activeTab === tab.id ? '#fff' : 'transparent', color: activeTab === tab.id ? `var(--accent-secondary)` : `var(--text-secondary)`, border: activeTab === tab.id ? '1px solid var(--border-color)' : '1px solid transparent', fontSize: 11, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, transition: 'all .18s', boxShadow: activeTab === tab.id ? '0 1px 4px rgba(0,0,0,.07)' : 'none' }}>
@@ -634,6 +747,142 @@ export default function ClientHub({ clientId, dbClients = [], onBack, ...props }
                 {/* OVERVIEW */}
                 {activeTab === 'overview' && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+                    {/* ── CLIENT VIEW MIRROR — what the client sees right now ── */}
+                    {(() => {
+                      const projectInvoices = (props.invoices || []).filter(i => i.projectId === selected.id || i.parentId === selected.id);
+                      const projectPackages = (props.renderingPackages || []).filter(pkg => pkg.projectId === selected.id);
+                      const projectAddOns = (props.addOns || []).filter(a => a.projectId === selected.id);
+                      const isPaid = (s) => ['paid', 'paid in full'].includes(String(s || '').toLowerCase());
+
+                      // Mirror Client Next Action logic exactly
+                      const renderingInv = projectInvoices.find(i =>
+                        i.id === selected.renderingFeeInvoiceId ||
+                        ['rendering', 'design', 'rendering fee'].includes((i.type || '').toLowerCase())
+                      );
+                      const renderingPaid = !!selected.renderingFeePaid || (renderingInv && isPaid(renderingInv.status));
+                      const needsRenderingPayment = selected.kickoffMode === 'rendering-first' && !renderingPaid;
+                      const needsContractSign = !selected.contractAccepted && (selected.kickoffMode === 'rendering-first' ? renderingPaid : true);
+                      const lockedRendering = projectPackages.find(pkg => {
+                        const linkedInv = projectInvoices.find(i => i.id === pkg.linkedInvoiceId);
+                        return linkedInv && !isPaid(linkedInv.status) && !pkg.unlocked;
+                      });
+                      const reviewRendering = projectPackages.find(pkg => {
+                        const linkedInv = projectInvoices.find(i => i.id === pkg.linkedInvoiceId);
+                        return (pkg.unlocked || isPaid(linkedInv?.status)) && pkg.status !== 'Approved';
+                      });
+                      const pendingQuote = projectInvoices.find(i =>
+                        ['Quotation', 'quote', 'quotation'].includes(i.type || i.documentKind) &&
+                        !['approved'].includes(String(i.status || '').toLowerCase()) && !isPaid(i.status)
+                      );
+                      const pendingAddOn = projectAddOns.find(a => ['Pending', 'Pending Approval', 'Priced'].includes(a.status || a.approvalStatus));
+                      const unpaidInvoice = projectInvoices.find(i =>
+                        !isPaid(i.status) && i.type !== 'Quotation' && i.documentKind !== 'quotation' &&
+                        (i.status === 'Overdue' || i.status === 'Sent' || (i.due != null && i.due !== ''))
+                      );
+                      const specPending = selected.specDoc?.url && selected.specDoc?.status !== 'signed';
+
+                      // Determine what client is currently being shown
+                      let clientSeeing, clientAction, clientWaitingOn, urgency;
+                      if (needsRenderingPayment) {
+                        clientSeeing = '🚦 Kickoff Gate — Step 1: Pay Rendering Fee';
+                        clientAction = renderingInv ? `Pay GH₵ ${Number(renderingInv.amount || 0).toLocaleString()} rendering invoice` : 'Waiting for rendering invoice to be created';
+                        clientWaitingOn = renderingInv ? 'Client' : 'Admin (create invoice)';
+                        urgency = renderingInv ? '#D97706' : '#DC2626';
+                      } else if (needsContractSign) {
+                        clientSeeing = '🚦 Kickoff Gate — Step 2: Sign Contract';
+                        clientAction = 'Read & sign project agreement';
+                        clientWaitingOn = 'Client';
+                        urgency = '#D97706';
+                      } else if (specPending) {
+                        clientSeeing = '📄 Project Specification Signature Required';
+                        clientAction = 'Review and sign the final project specification';
+                        clientWaitingOn = 'Client';
+                        urgency = '#1D4ED8';
+                      } else if (lockedRendering) {
+                        clientSeeing = '🔒 Locked Rendering Package';
+                        clientAction = 'Pay invoice to unlock design package';
+                        clientWaitingOn = 'Client';
+                        urgency = '#D97706';
+                      } else if (reviewRendering) {
+                        clientSeeing = '🎨 Review Rendering Package';
+                        clientAction = 'Review, leave pins, approve or request changes';
+                        clientWaitingOn = 'Client';
+                        urgency = AC;
+                      } else if (pendingQuote) {
+                        clientSeeing = '💰 Quote Awaiting Approval';
+                        clientAction = `Review quote: ${pendingQuote.title || pendingQuote.id}`;
+                        clientWaitingOn = 'Client';
+                        urgency = AC;
+                      } else if (pendingAddOn) {
+                        clientSeeing = '🎁 Add-on Decision Needed';
+                        clientAction = `Approve/reject: ${pendingAddOn.title || pendingAddOn.description}`;
+                        clientWaitingOn = 'Client';
+                        urgency = '#B45309';
+                      } else if (unpaidInvoice) {
+                        clientSeeing = '💳 Payment Pending';
+                        clientAction = `Pay invoice: ${unpaidInvoice.title || ''} (GH₵ ${Number(unpaidInvoice.amount || 0).toLocaleString()})`;
+                        clientWaitingOn = 'Client';
+                        urgency = '#16A34A';
+                      } else {
+                        clientSeeing = `✅ Stage ${selected.stageId}: ${currentStageObj?.name || 'In Progress'}`;
+                        clientAction = currentStageObj?.clientMsg || 'Project moving forward — no action required';
+                        clientWaitingOn = currentStageObj?.whoActs === 'client' ? 'Client' : currentStageObj?.whoActs === 'worker' ? 'Field Team' : 'Admin/Production';
+                        urgency = '#16A34A';
+                      }
+
+                      return (
+                        <div style={{
+                          padding: '18px 22px',
+                          background: `linear-gradient(135deg, ${urgency}08 0%, #fff 100%)`,
+                          border: `1.5px solid ${urgency}30`,
+                          borderRadius: 16,
+                          position: 'relative',
+                          overflow: 'hidden',
+                        }}>
+                          <div style={{ position: 'absolute', top: 0, right: 0, padding: '4px 12px', background: urgency, color: '#fff', fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.08em', borderBottomLeftRadius: 10 }}>
+                            Client's View
+                          </div>
+                          <div style={{ fontSize: 10, fontWeight: 800, color: urgency, textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 8, marginTop: 14 }}>
+                            What your client sees right now
+                          </div>
+                          <div style={{ fontSize: 16, fontWeight: 900, color: 'var(--accent-secondary)', marginBottom: 4 }}>
+                            {clientSeeing}
+                          </div>
+                          <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.5, marginBottom: 12 }}>
+                            {clientAction}
+                          </div>
+                          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+                            <div style={{
+                              padding: '5px 12px',
+                              background: clientWaitingOn === 'Client' ? '#FEF3C7' : clientWaitingOn.includes('Admin') ? '#FEE2E2' : '#E0F2FE',
+                              color: clientWaitingOn === 'Client' ? '#92400E' : clientWaitingOn.includes('Admin') ? '#991B1B' : '#075985',
+                              fontSize: 11,
+                              fontWeight: 800,
+                              borderRadius: 20,
+                            }}>
+                              ⏳ Waiting on: {clientWaitingOn}
+                            </div>
+                            {selected.kickoffGateCleared && (
+                              <div style={{ padding: '5px 12px', background: '#F0FDF4', color: '#15803D', fontSize: 11, fontWeight: 800, borderRadius: 20 }}>
+                                ✓ Kickoff Complete
+                              </div>
+                            )}
+                            {selected.contractAccepted && (
+                              <div style={{ padding: '5px 12px', background: '#F0FDF4', color: '#15803D', fontSize: 11, fontWeight: 800, borderRadius: 20 }}>
+                                ✓ Contract Signed
+                              </div>
+                            )}
+                            {renderingPaid && (
+                              <div style={{ padding: '5px 12px', background: '#F0FDF4', color: '#15803D', fontSize: 11, fontWeight: 800, borderRadius: 20 }}>
+                                ✓ Rendering Fee Paid
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })()}
+
                     {currentStageObj && selected.status !== 'Completed' && (
                       <div style={{ padding: '18px 22px', background: '#fff', borderRadius: 16, border: `2px solid ${currentStageObj.color}30` }}>
                         <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>
@@ -660,8 +909,8 @@ export default function ClientHub({ clientId, dbClients = [], onBack, ...props }
                       {[
                         { label: 'Project Type', value: PROJECT_TYPES[selected.projectType]?.label || 'Full Service', icon: '📋' },
                         { label: 'Quote Status', value: selected.quoteApproved ? '✅ Approved' : '⏳ Pending', icon: '💳' },
-                        { label: 'Team', value: `${(selected.assignedWorkers || []).length} assigned`, icon: '👥' },
-                        { label: 'Spec Document', value: !selected.specDoc?.url ? 'Not uploaded' : selected.specDoc.status === 'approved' ? '✅ Approved' : selected.specDoc.status === 'rejected' ? '🔴 Changes Req.' : '⏳ Awaiting Client', icon: '📄' },
+                        { label: 'Team', value: `${new Set([...(selected.assignedWorkers || []), ...(selected.assignedStaff || []), ...(selected.projectManagerId ? [selected.projectManagerId] : [])]).size} assigned`, icon: '👥' },
+                        { label: 'Spec Document', value: !selected.specDoc?.url ? 'Not uploaded' : selected.specDoc.status === 'signed' ? '✅ Signed' : selected.specDoc.status === 'rejected' ? '🔴 Changes Req.' : '⏳ Signature Required', icon: '📄' },
                         { label: 'Contract', value: selected.contractAccepted ? '✅ Signed' : '⏳ Not signed', icon: '📝' },
                         { label: 'Change Req.', value: selected.changeRequestPending ? '⚠️ Pending' : 'None', icon: '🔄' },
                       ].map(item => (
@@ -750,17 +999,47 @@ export default function ClientHub({ clientId, dbClients = [], onBack, ...props }
                           )}
                         </div>
 
-                        {/* Manual override */}
+                        {/* Offline rendering payment recording */}
+                        {selected.kickoffMode === 'rendering-first' && !selected.renderingFeePaid && (() => {
+                          const renderingInv = (props.invoices || []).find(i =>
+                            i.projectId === selected.id &&
+                            (i.id === selected.renderingFeeInvoiceId || ['rendering','design','rendering fee','renderingfee'].includes((i.type || '').toLowerCase()))
+                          );
+                          return (
+                            <button
+                              onClick={async () => {
+                                if (!window.confirm('Confirm that the rendering fee has been received offline (cash / bank transfer)? This will unlock the client\'s design vault.')) return;
+                                if (renderingInv?.id) {
+                                  const { updateDoc, doc: fsDoc } = await import('firebase/firestore');
+                                  const { db: fsDb } = await import('../../lib/firebase');
+                                  await updateDoc(fsDoc(fsDb, 'invoices', renderingInv.id), { status: 'Paid', paidAt: new Date().toISOString(), amountPaid: renderingInv.amount || renderingInv.total });
+                                }
+                                // Also unlock any linked rendering packages
+                                const pkgs = (props.renderingPackages || []).filter(p => p.projectId === selected.id);
+                                for (const pkg of pkgs) {
+                                  const { updateDoc, doc: fsDoc } = await import('firebase/firestore');
+                                  const { db: fsDb } = await import('../../lib/firebase');
+                                  await updateDoc(fsDoc(fsDb, 'renderingPackages', pkg.id), { unlocked: true, status: 'Paid / Unlocked' });
+                                }
+                                await props.updateProject?.(selected.id, { renderingFeePaid: true, renderingFeeUnlockedAt: new Date().toISOString() });
+                                if (selected.stageId < 2) {
+                                  await props.updateProjectStage?.(selected.id, 2, 'Rendering fee paid offline, advancing to Design & Rendering', { silent: true });
+                                }
+                                props.notify?.('success', 'Rendering fee recorded as paid. Client portal unlocked.');
+                              }}
+                              style={{ padding: '10px 16px', borderRadius: 10, border: '1px solid #BBF7D0', background: '#F0FDF4', color: '#15803D', fontSize: 12, fontWeight: 700, cursor: 'pointer', alignSelf: 'flex-start' }}
+                            >
+                              ✅ Mark Rendering Fee Paid (Offline)
+                            </button>
+                          );
+                        })()}
+                        {/* Manual gate override */}
                         {!selected.kickoffGateCleared ? (
                           <button
-                            onClick={() => {
-                              if (window.confirm('Clear the kickoff gate for this client? They will get immediate access to the full portal.')) {
-                                props.updateProject?.(selected.id, { kickoffGateCleared: true });
-                              }
-                            }}
+                            onClick={() => props.updateProject?.(selected.id, { kickoffGateCleared: true })}
                             style={{ padding: '10px 16px', borderRadius: 10, border: '1px solid #BFDBFE', background: '#EFF6FF', color: '#1D4ED8', fontSize: 12, fontWeight: 700, cursor: 'pointer', alignSelf: 'flex-start' }}
                           >
-                            🔓 Manually Clear Gate
+                            🔓 Give full portal access
                           </button>
                         ) : (
                           <button
@@ -813,7 +1092,7 @@ export default function ClientHub({ clientId, dbClients = [], onBack, ...props }
 
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 14, position: 'relative' }}>
                           {/* Horizontal Grid Lines */}
-                          <div style={{ position: 'absolute', left: '160px', right: 0, top: 0, bottom: 0, display: 'flex', justifyContent: 'space-between', pointerEvents: 'none', zIndex: 0 }}>
+                          <div style={{ position: 'absolute', left: '210px', right: 0, top: 0, bottom: 0, display: 'flex', justifyContent: 'space-between', pointerEvents: 'none', zIndex: 0 }}>
                             {[0, 25, 50, 75, 100].map(pct => (
                               <div key={pct} style={{ width: 1, borderLeft: '1px dashed var(--border-color)', height: '100%' }} />
                             ))}
@@ -833,8 +1112,8 @@ export default function ClientHub({ clientId, dbClients = [], onBack, ...props }
                             return (
                               <div key={s.id} style={{ display: 'flex', alignItems: 'center', height: 28, zIndex: 1 }}>
                                 {/* Stage Name Label */}
-                                <div style={{ width: 150, fontSize: 11, fontWeight: 800, color: isCurrent ? `var(--accent-secondary)` : `var(--text-secondary)`, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', paddingRight: 10 }}>
-                                  {s.short}
+                                <div style={{ width: 200, fontSize: 11, fontWeight: 800, color: isCurrent ? `var(--accent-secondary)` : `var(--text-secondary)`, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', paddingRight: 10 }}>
+                                  {s.name}
                                 </div>
                                 {/* Gantt Bar Container */}
                                 <div style={{ flex: 1, height: '100%', position: 'relative', background: '#FAFAF9', borderRadius: 6, overflow: 'hidden', border: '1px solid var(--border-color)' }}>
@@ -902,6 +1181,7 @@ export default function ClientHub({ clientId, dbClients = [], onBack, ...props }
                                   selected={selected}
                                   applicableStages={applicableStages}
                                   updateProject={props.updateProject}
+                                  invoices={props.invoices}
                                 />
                               </React.Fragment>
                             );
@@ -916,36 +1196,79 @@ export default function ClientHub({ clientId, dbClients = [], onBack, ...props }
                 {/* FINANCIALS */}
                 {activeTab === 'financials' && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                    <PaymentScheduleCard project={selected} createInvoice={props.createInvoice} notify={props.notify} brand={brand} />
-                    <ProjectInvoicesLedger project={selected} client={client} invoices={props.invoices} brand={brand} updateInvoice={props.updateInvoice} deleteInvoice={props.deleteInvoice} notify={props.notify} user={props.user} />
+                    <PaymentScheduleCard project={selected} createInvoice={props.createInvoice} notify={props.notify} brand={brand} invoices={props.invoices} />
+                    <ProjectInvoicesLedger project={selected} client={client} invoices={props.invoices} brand={brand} updateInvoice={props.updateInvoice} deleteInvoice={props.deleteInvoice} notify={props.notify} user={props.user} updateProjectStage={props.updateProjectStage} updateProject={props.updateProject} />
                     <ProjectEconomics project={selected} user={props.user} />
                     <div style={{ height: 1, background: 'var(--border-color)', margin: '16px 0' }} />
                     <AdminAddOnManager project={selected} brand={brand} addOns={props.addOns} invoices={props.invoices} createInvoice={props.createInvoice} />
                   </div>
                 )}
 
-                {/* DOCUMENTS */}
-                {activeTab === 'documents' && (
-                  <DocumentVault project={selected} addProjectDocument={props.addProjectDocument} user={props.user} />
+                {/* VAULT */}
+                {activeTab === 'vault' && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+                    <DocumentVault project={selected} addProjectDocument={props.addProjectDocument} user={props.user} />
+                    <SecureVault 
+                      projectId={selected.id} 
+                      user={props.user}
+                      onAdminUploadVault={async (file) => {
+                        const { ref, uploadBytes, getDownloadURL } = await import('firebase/storage');
+                        const { collection, addDoc, serverTimestamp } = await import('firebase/firestore');
+                        try {
+                          const storageRef = ref(storage, `projects/${selected.id}/vault/${Date.now()}_${file.name}`);
+                          await uploadBytes(storageRef, file);
+                          const url = await getDownloadURL(storageRef);
+                          await addDoc(collection(db, 'projects', selected.id, 'vault'), {
+                            name: file.name,
+                            url,
+                            requiresSignature: true,
+                            signatureData: null,
+                            uploadedAt: serverTimestamp(),
+                            uploadedBy: props.user?.name || 'Admin',
+                            projectId: selected.id
+                          });
+                          props.notify?.('Uploaded to Vault', 'success');
+                        } catch (e) {
+                          console.error('Vault upload error:', e);
+                          props.notify?.('Upload failed', 'error');
+                        }
+                      }}
+                    />
+                  </div>
+                )}
+
+                {/* UPLOADS */}
+                {activeTab === 'uploads' && (
+                  <div style={{ background: 'var(--bg-secondary)', borderRadius: 16, padding: 24, border: '1px solid var(--border-color)' }}>
+                    <ClientUploadsTab projectId={selected.id} user={props.user} brand={props.brand} />
+                  </div>
                 )}
 
                 {/* TEAM */}
                 {activeTab === 'team' && (() => {
-                  const assignedIds  = new Set(selected.assignedWorkers || []);
-                  const assignedList = teamMembers.filter(m => assignedIds.has(m.id?.toString()) || assignedIds.has(m.email));
-                  const availList    = teamMembers.filter(m => !assignedIds.has(m.id?.toString()) && !assignedIds.has(m.email));
+                  const assignedIds = new Set([
+                    ...(selected.assignedWorkers || []),
+                    ...(selected.assignedStaff || []),
+                    ...(selected.projectManagerId ? [selected.projectManagerId] : []),
+                  ]);
+                  const assignedList = teamMembers.filter(m => assignedIds.has(m.uid || m.id?.toString()) || assignedIds.has(m.email));
+                  const availList    = teamMembers.filter(m => !assignedIds.has(m.uid || m.id?.toString()) && !assignedIds.has(m.email));
                   const MemberCard = ({ m }) => {
-                    const assigned = assignedIds.has(m.id?.toString()) || assignedIds.has(m.email);
+                    const assigned = assignedIds.has(m.uid || m.id?.toString()) || assignedIds.has(m.email);
+                    const isWorker = m.role === 'worker' || /worker|installer|field|technician|technical team lead/i.test(m.jobRole || '');
+                    const isManager = selected.projectManagerId === (m.uid || m.id);
                     const initials = (m.name || m.email || '?').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
                     return (
-                      <button onClick={() => props.assignWorkerToProject?.(selected.id, m.id?.toString() || m.email)}
+                      <button onClick={() => props.assignWorkerToProject?.(selected.id, m.uid || m.id?.toString() || m.email)}
                         style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 16px', borderRadius: 14, border: `2px solid ${assigned ? ac : `var(--border-color)`}`, background: assigned ? `${ac}14` : `var(--bg-secondary)`, cursor: 'pointer', transition: 'all .18s', minWidth: 200, textAlign: 'left' }}>
                         <div style={{ width: 36, height: 36, borderRadius: '50%', background: assigned ? ac : `var(--border-color)`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 900, color: assigned ? '#fff' : `var(--text-secondary)`, flexShrink: 0 }}>
                           {initials}
                         </div>
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ fontSize: 13, fontWeight: 700, color: `var(--accent-secondary)`, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{m.name || m.email || 'Staff'}</div>
-                          <div style={{ fontSize: 10, color: assigned ? ac : `var(--text-secondary)`, fontWeight: 600, marginTop: 1 }}>{m.jobRole || m.role || 'Team Member'}</div>
+                          <div style={{ fontSize: 10, color: assigned ? ac : `var(--text-secondary)`, fontWeight: 600, marginTop: 1 }}>
+                            {m.jobRole || m.role || 'Team Member'} · {isManager ? 'Project Manager' : isWorker ? 'Field Crew' : 'Project Staff'}
+                          </div>
                         </div>
                         {assigned && <UserCheck size={15} color={ac} style={{ flexShrink: 0 }} />}
                       </button>
@@ -957,7 +1280,7 @@ export default function ClientHub({ clientId, dbClients = [], onBack, ...props }
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <div>
                           <div style={{ fontSize: 14, fontWeight: 900, color: `var(--accent-secondary)` }}>Team Assignment</div>
-                          <div style={{ fontSize: 11, color: `var(--text-secondary)`, marginTop: 2 }}>Click any member to assign or remove them from this project</div>
+                          <div style={{ fontSize: 11, color: `var(--text-secondary)`, marginTop: 2 }}>Assignments are role-aware: staff manage the project, while workers receive it in Field Ops.</div>
                         </div>
                         <div style={{ fontSize: 12, fontWeight: 800, color: ac, background: `${ac}15`, padding: '5px 12px', borderRadius: 8 }}>
                           {assignedList.length} assigned
@@ -993,6 +1316,20 @@ export default function ClientHub({ clientId, dbClients = [], onBack, ...props }
                     </div>
                   );
                 })()}
+
+                {/* MESSAGES */}
+                {activeTab === 'messages' && (
+                  <div style={{ background: '#fff', borderRadius: 16, border: '1px solid var(--border-color)', overflow: 'hidden', height: 600, display: 'flex', flexDirection: 'column' }}>
+                    <WorldClassChat 
+                      clientId={selected.clientId} 
+                      user={props.user} 
+                      isAdmin={true} 
+                      accentColor={brand.color || 'var(--accent-secondary)'} 
+                      projects={projects.filter(w => w.clientId === selected.clientId)} 
+                      viewerLanguage={props.lang || 'en'}
+                    />
+                  </div>
+                )}
               </div>
             </>
           )}
@@ -1005,6 +1342,131 @@ export default function ClientHub({ clientId, dbClients = [], onBack, ...props }
       {showAdvanceModal && selected && nextStage && (
         <AdvanceModal project={selected} stage={currentStageObj} nextStage={nextStage} invoices={props.invoices || []} onClose={() => setShowAdvanceModal(false)} onAdvance={props.updateProjectStage} />
       )}
+      {showRequestPaymentModal && selected && (
+        <RequestPaymentModal
+          client={client}
+          project={selected}
+          invoices={props.invoices || []}
+          onClose={() => setShowRequestPaymentModal(false)}
+          notify={props.notify}
+          ac={props.ac}
+        />
+      )}
+      {showClientPreview && selected && (
+        <ClientPreviewModal
+          project={selected}
+          client={client}
+          invoices={props.invoices || []}
+          renderingPackages={props.renderingPackages || []}
+          addOns={props.addOns || []}
+          brand={brand}
+          onClose={() => setShowClientPreview(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+// ─── Client Preview Modal — shows admin exactly what the client sees ─────────
+function ClientPreviewModal({ project, client, invoices, renderingPackages, addOns, brand, onClose }) {
+  const ac = brand?.color || AC;
+  const projectInvoices = invoices.filter(i => i.projectId === project.id || i.parentId === project.id);
+  const projectPackages = renderingPackages.filter(pkg => pkg.projectId === project.id);
+  const projectAddOns = addOns.filter(a => a.projectId === project.id);
+  const isPaid = (s) => ['paid', 'paid in full'].includes(String(s || '').toLowerCase());
+
+  // Replicate KickoffGate / Next Action logic
+  const renderingInv = projectInvoices.find(i =>
+    i.id === project.renderingFeeInvoiceId ||
+    ['rendering', 'design', 'rendering fee'].includes((i.type || '').toLowerCase())
+  );
+  const renderingPaid = !!project.renderingFeePaid || (renderingInv && isPaid(renderingInv.status));
+  const requiresRendering = project.kickoffMode === 'rendering-first';
+  const contractSigned = !!project.contractAccepted;
+  const kickoffActive = (requiresRendering && !renderingPaid) || !contractSigned;
+
+  const currentStage = CLIENT_PROJECT_STAGES.find(s => s.id === project.stageId);
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)',
+      backdropFilter: 'blur(6px)', zIndex: 9999,
+      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20
+    }} onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} style={{
+        background: '#F8F6F3', borderRadius: 24, maxWidth: 480, width: '100%',
+        maxHeight: '90vh', overflow: 'hidden', display: 'flex', flexDirection: 'column',
+        boxShadow: '0 24px 80px rgba(0,0,0,0.4)'
+      }}>
+        {/* Header */}
+        <div style={{ padding: '20px 24px', background: `var(--accent-secondary)`, color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <div style={{ fontSize: 10, fontWeight: 800, opacity: 0.7, textTransform: 'uppercase', letterSpacing: '.1em', marginBottom: 4 }}>👁 Client View Preview</div>
+            <div style={{ fontSize: 15, fontWeight: 900 }}>{client?.name} · {project.title}</div>
+          </div>
+          <button onClick={onClose} style={{ width: 32, height: 32, borderRadius: 10, background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <X size={16} />
+          </button>
+        </div>
+
+        {/* Phone-frame body */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: 20, background: '#EDEAE6' }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 12, textAlign: 'center' }}>
+            This is what your client sees right now
+          </div>
+
+          {/* Kickoff Gate Preview */}
+          {kickoffActive ? (
+            <div style={{ background: 'linear-gradient(135deg, var(--accent-secondary), #4A3B32)', borderRadius: 18, padding: '22px 20px', color: '#fff', marginBottom: 14 }}>
+              <div style={{ fontSize: 10, fontWeight: 700, opacity: 0.7, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '.1em' }}>
+                🚦 Kickoff Gate
+              </div>
+              <div style={{ fontSize: 20, fontWeight: 900, marginBottom: 6 }}>
+                {requiresRendering && !renderingPaid ? '3D Rendering Fee' : 'Sign Your Contract'}
+              </div>
+              <div style={{ fontSize: 12, opacity: 0.75, lineHeight: 1.5 }}>
+                {requiresRendering && !renderingPaid
+                  ? `Pay GH₵ ${Number(renderingInv?.amount || project.renderingFee || 0).toLocaleString()} rendering fee to unlock the portal`
+                  : 'Read & sign the project agreement to begin'}
+              </div>
+              <div style={{ marginTop: 14, fontSize: 11, fontWeight: 700, padding: '6px 10px', background: 'rgba(255,255,255,0.15)', borderRadius: 8, display: 'inline-block' }}>
+                Step {requiresRendering && !renderingPaid ? 1 : 2} of {requiresRendering ? 2 : 1}
+              </div>
+            </div>
+          ) : (
+            <>
+              {/* Project Overview Card */}
+              <div style={{ background: '#fff', borderRadius: 18, padding: 18, marginBottom: 14, border: '1px solid var(--border-color)' }}>
+                <div style={{ fontSize: 10, fontWeight: 800, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '.1em', marginBottom: 6 }}>Project Overview</div>
+                <div style={{ fontSize: 17, fontWeight: 900, color: 'var(--accent-secondary)', marginBottom: 4 }}>{project.title}</div>
+                <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 12 }}>
+                  Stage {project.stageId} of {CLIENT_PROJECT_STAGES.length} · {currentStage?.short}
+                </div>
+                {currentStage && (
+                  <div style={{ padding: 10, background: `${currentStage.color}10`, borderRadius: 10, fontSize: 12, color: currentStage.color, fontWeight: 700 }}>
+                    {currentStage.emoji} {currentStage.clientMsg}
+                  </div>
+                )}
+              </div>
+
+              {/* Visible tabs */}
+              <div style={{ background: '#fff', borderRadius: 16, padding: 12, fontSize: 11, color: 'var(--text-secondary)' }}>
+                <div style={{ fontWeight: 800, marginBottom: 8 }}>Available Tabs:</div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  {['Progress', project.kickoffMode !== 'direct-kickoff' && 'Designs', 'Approvals', project.stageId >= 6 ? 'Photos' : '🔒Photos', 'Payments', 'Add-ons', 'Documents'].filter(Boolean).map(t => (
+                    <span key={t} style={{ padding: '4px 10px', background: 'var(--bg-secondary)', borderRadius: 12, fontSize: 10, fontWeight: 700 }}>{t}</span>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* Open real portal link */}
+          <div style={{ marginTop: 16, padding: 14, background: '#fff', borderRadius: 14, fontSize: 11, color: 'var(--text-secondary)', textAlign: 'center' }}>
+            Need the real portal? Visit <a href="/portal" target="_blank" rel="noreferrer" style={{ color: ac, fontWeight: 700 }}>/portal</a> while logged in as this client.
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

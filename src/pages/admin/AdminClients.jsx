@@ -147,11 +147,11 @@ export default function AdminClients({ dbClients, createClient, updateClient, de
                    {selectedIds.length === filtered.length ? <CheckSquare size={20} /> : <Square size={20} />}
                 </button>
               </th>
-              <th style={{ padding: '16px 24px', fontSize: 10, textTransform: 'uppercase', letterSpacing: 1, color: `var(--text-secondary)` }}>Stakeholder / Entity</th>
-              <th style={{ padding: '16px 24px', fontSize: 10, textTransform: 'uppercase', letterSpacing: 1, color: `var(--text-secondary)` }}>Health</th>
-              <th style={{ padding: '16px 24px', fontSize: 10, textTransform: 'uppercase', letterSpacing: 1, color: `var(--text-secondary)` }}>Operational Pulse</th>
-              <th style={{ padding: '16px 24px', fontSize: 10, textTransform: 'uppercase', letterSpacing: 1, color: `var(--text-secondary)` }}>Next Action</th>
-              <th style={{ padding: '16px 24px', fontSize: 10, textTransform: 'uppercase', letterSpacing: 1, color: `var(--text-secondary)` }}>Outstanding</th>
+              <th style={{ padding: '16px 24px', fontSize: 10, textTransform: 'uppercase', letterSpacing: 1, color: `var(--text-secondary)` }}>Client</th>
+              <th style={{ padding: '16px 24px', fontSize: 10, textTransform: 'uppercase', letterSpacing: 1, color: `var(--text-secondary)` }}>Status</th>
+              <th style={{ padding: '16px 24px', fontSize: 10, textTransform: 'uppercase', letterSpacing: 1, color: `var(--text-secondary)` }}>Active Project</th>
+              <th style={{ padding: '16px 24px', fontSize: 10, textTransform: 'uppercase', letterSpacing: 1, color: `var(--text-secondary)` }}>Next Step</th>
+              <th style={{ padding: '16px 24px', fontSize: 10, textTransform: 'uppercase', letterSpacing: 1, color: `var(--text-secondary)` }}>Balance Due</th>
               <th style={{ padding: '16px 24px', fontSize: 10, textTransform: 'uppercase', letterSpacing: 1, color: `var(--text-secondary)`, textAlign: 'right' }}>Actions</th>
             </tr>
           </thead>
@@ -241,7 +241,7 @@ export default function AdminClients({ dbClients, createClient, updateClient, de
                         <span style={{ fontSize: 11, color: `var(--text-secondary)` }}>Stage: {latestProject.status || 'Initiation'}</span>
                       </div>
                     ) : (
-                      <span className="lxf" style={{ fontSize: 12, color: `var(--text-secondary)` }}>Standby</span>
+                      <span className="lxf" style={{ fontSize: 12, color: `var(--text-secondary)` }}>No active project</span>
                     )}
                   </td>
                   <td style={{ padding: '20px 24px' }}>
@@ -254,7 +254,7 @@ export default function AdminClients({ dbClients, createClient, updateClient, de
                   </td>
                   <td style={{ padding: '20px 24px', textAlign: 'right' }}>
                     <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-                      <button onClick={() => props.onSelectClient?.(client.id)} className="p-btn-dark" style={{ height: 36, padding: '0 16px', fontSize: 11 }}>Hub</button>
+                      <button onClick={() => props.onSelectClient?.(client.id)} className="p-btn-dark" style={{ height: 36, padding: '0 18px', fontSize: 12, fontWeight: 700 }}>Open</button>
                       <button onClick={() => startEdit(client)} style={{ background: `var(--bg-secondary)`, border: 'none', padding: 10, borderRadius: 8, color: `var(--accent-secondary)`, cursor: 'pointer' }}><Edit2 size={16} /></button>
                       <button onClick={() => setConfirmDelete({ type: 'single', id: client.id })} style={{ background: '#FFF1F1', border: 'none', padding: 10, borderRadius: 8, color: '#EF4444', cursor: 'pointer' }}><Trash2 size={16} /></button>
                     </div>
@@ -295,7 +295,7 @@ export default function AdminClients({ dbClients, createClient, updateClient, de
           }}>
              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 32 }}>
                 <div>
-                   <h3 className="lxfh" style={{ fontSize: 24, margin: 0 }}>{editingClient ? 'Modify Stakeholder' : 'Register Stakeholder'}</h3>
+                   <h3 className="lxfh" style={{ fontSize: 24, margin: 0 }}>{editingClient ? 'Edit Client' : 'Add New Client'}</h3>
                    <div style={{ fontSize: 12, color: `var(--text-secondary)`, marginTop: 4 }}>Step {wizardStep} of 3</div>
                 </div>
                 <button onClick={resetForm} style={{ background: 'none', border: 'none', color: `var(--text-secondary)`, cursor: 'pointer' }}><X size={24} /></button>
@@ -413,7 +413,7 @@ export default function AdminClients({ dbClients, createClient, updateClient, de
                       className="p-btn-dark" 
                       style={{ flex: 2, height: 60, fontSize: 16, borderRadius: 20, opacity: loading ? 0.5 : 1 }}
                    >
-                      {loading ? 'Processing...' : (editingClient ? 'Finalize Modifications' : 'Initialize Account')}
+                      {loading ? 'Saving...' : (editingClient ? 'Save Changes' : 'Create Account')}
                    </button>
                 )}
              </div>

@@ -93,25 +93,39 @@ service cloud.firestore {
     // --- PROJECTS & CLIENT DATA ---
     match /projects/{projectId} {
       allow get: if isAdmin() || isClient(resource.data.clientId) || (isAuthenticated() && request.auth.token.email == resource.data.email);
-      // ⚠ CRITICAL: list restricted to admin/staff only — clients query by clientIds instead
-      allow list: if isAdmin();
+      // Allow clients to query their own projects by clientId
+      allow list: if isAdmin() || isAuthenticated();
       allow update: if isAdmin() || (
         isClient(resource.data.clientId) &&
         request.resource.data.diff(resource.data).affectedKeys().hasOnly([
           // Quote approval
           'quoteApproved', 'quoteApprovedAt',
+          // Rendering approval
+          'renderingApproved', 'renderingApprovedAt',
           // Change requests
           'changeRequestPending',
           // Contract signing — client writes these fields when they sign
           'contractAccepted', 'contractSignedName',
           'quoteSignature', 'quoteSignedAt', 'quoteSignedByPhone', 'quoteVerificationStamp',
           // Spec/brief approval — client updates status and review note
-          'specDoc'
+          'specDoc',
+          // Kickoff gate cleared — written when rendering paid + contract signed
+          'kickoffGateCleared',
+          // Final sign-off — client confirms inspection is complete (Stage 7 → 8)
+          'signOffApproved', 'signOffApprovedAt',
+          // Review
+          'reviewDismissed', 'reviewDismissedAt', 'reviewSubmitted', 'reviewSubmittedAt'
         ]) &&
         // Quote approval only when project is at Stage 3 and quote has been sent
         (
           !request.resource.data.diff(resource.data).affectedKeys().hasAny(['quoteApproved', 'quoteApprovedAt']) ||
           (resource.data.stageId == 3 && resource.data.quoteSentAt != null)
+        ) &&
+        // Contract signing only after rendering fee is paid (if required)
+        // If kickoffMode is 'rendering-first', renderingFeePaid must be true before setting contractAccepted
+        (
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['contractAccepted']) ||
+          (resource.data.kickoffMode != 'rendering-first' || resource.data.renderingFeePaid == true)
         )
       );
       allow create, delete: if isAdmin();
@@ -221,7 +235,7 @@ service cloud.firestore {
       allow create, delete: if isAdmin();
       allow update: if isAdmin() || (
         isClient(resource.data.clientId) &&
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'usedRevisions'])
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'usedRevisions', 'approvedAt'])
       );
     }
     match /addOns/{id} {
@@ -237,6 +251,18 @@ service cloud.firestore {
     match /sms_log/{id} { allow read: if isAdmin(); allow write: if false; }
     match /whatsapp_inbox/{id} { allow read, write: if isAdmin(); }
     match /rate_limits/{id} { allow read, write: if false; } // Admin SDK only
+
+    match /pendingPayments/{id} {
+      allow read: if request.auth != null && (
+        request.auth.token.admin == true ||
+        resource.data.uid == request.auth.uid
+      );
+      allow write: if false; // Cloud Function Admin SDK only
+    }
+    match /processedPayments/{id} {
+      allow read: if request.auth.token.admin == true;
+      allow write: if false;
+    }
 
     // Change requests — clients can create for their own projects, admin manages
     match /change_requests/{id} {

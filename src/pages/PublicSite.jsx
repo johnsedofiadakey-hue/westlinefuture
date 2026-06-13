@@ -44,17 +44,28 @@ export function Hero({ slides, brand, navigate, setPage }) {
     const vid = videoRef.current;
     if (!vid) return;
     vid.playbackRate = 0.5;
-    // Force play — some browsers block autoplay until a user gesture;
-    // calling .play() here handles the resume after that first interaction.
+    // Force play — some browsers block autoplay until a user gesture
     const attempt = () => {
-      vid.play().catch(() => {
-        // Silently ignore — browser will play on next user interaction
-      });
+      if (vid.paused) {
+        vid.play().catch(() => {});
+      }
     };
     attempt();
-    // Also re-attempt if the video was paused (e.g. tab visibility change)
+    // Re-attempt on pause (tab visibility change) and when video data loads
     vid.addEventListener('pause', attempt);
-    return () => vid.removeEventListener('pause', attempt);
+    vid.addEventListener('canplay', attempt);
+    vid.addEventListener('loadeddata', attempt);
+    // Mobile fallback: play on first user touch anywhere on page
+    const touchPlay = () => { attempt(); document.removeEventListener('touchstart', touchPlay); document.removeEventListener('click', touchPlay); };
+    document.addEventListener('touchstart', touchPlay, { once: true, passive: true });
+    document.addEventListener('click', touchPlay, { once: true });
+    return () => {
+      vid.removeEventListener('pause', attempt);
+      vid.removeEventListener('canplay', attempt);
+      vid.removeEventListener('loadeddata', attempt);
+      document.removeEventListener('touchstart', touchPlay);
+      document.removeEventListener('click', touchPlay);
+    };
   }, []);
 
   return (
@@ -69,7 +80,7 @@ export function Hero({ slides, brand, navigate, setPage }) {
         muted
         playsInline
         controls={false}
-        preload="none"
+        preload="auto"
         style={{
           position: 'absolute', inset: 0, width: '100%', height: '100%',
           objectFit: 'cover', zIndex: 0, pointerEvents: 'none'
@@ -82,8 +93,8 @@ export function Hero({ slides, brand, navigate, setPage }) {
           opacity: active === i ? 1 : 0, zIndex: active === i ? 1 : 0
         }}>
           <div style={{
-            position: 'absolute', inset: 0, background: 'linear-gradient(to bottom, rgba(253,252,251,0.05), rgba(253,252,251,0.5))',
-            display: 'flex', alignItems: 'center', padding: '0 5vw', zIndex: 2
+            position: 'absolute', inset: 0, background: mob ? 'linear-gradient(to bottom, rgba(253,252,251,0.3) 0%, rgba(253,252,251,0.75) 50%, rgba(253,252,251,0.9) 100%)' : 'linear-gradient(to bottom, rgba(253,252,251,0.1), rgba(253,252,251,0.6))',
+            display: 'flex', alignItems: mob ? 'flex-end' : 'center', padding: mob ? '0 5vw 15vh' : '0 5vw', zIndex: 2
           }}>
             <div style={{ maxWidth: 1400, margin: '0 auto', width: '100%' }}>
               <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.8 }}>
@@ -107,14 +118,11 @@ export function Hero({ slides, brand, navigate, setPage }) {
                     {s.sub}
                   </p>
                 )}
-                <div style={{ display: 'flex', gap: mob ? 10 : 16, flexWrap: 'nowrap', marginTop: 8 }}>
-                  <button onClick={() => navigate('/?page=contact')} style={{ flex: mob ? 1 : 'initial', padding: mob ? '14px 12px' : '18px 36px', background: DARK_TEXT, color: '#fff', borderRadius: 12, border: 'none', fontWeight: 800, cursor: 'pointer', boxShadow: '0 10px 30px rgba(0,0,0,0.1)', fontSize: mob ? 10 : 14, textTransform: 'uppercase', letterSpacing: '0.1em', transition: 'all 0.3s', whiteSpace: 'nowrap' }} className="hover-lift">Start Project Brief</button>
-                  <button onClick={() => navigate('/workflow')} style={{ flex: mob ? 1 : 'initial', padding: mob ? '14px 12px' : '18px 36px', background: 'rgba(255,255,255,0.95)', color: DARK_TEXT, borderRadius: 12, border: '1px solid rgba(0,0,0,0.1)', backdropFilter: 'blur(10px)', fontWeight: 700, cursor: 'pointer', fontSize: mob ? 10 : 14, textTransform: 'uppercase', letterSpacing: '0.1em', transition: 'all 0.3s', whiteSpace: 'nowrap' }} className="hover-lift">How We Work</button>
-                </div>
-
-
-
               </motion.div>
+              <div style={{ display: 'flex', gap: mob ? 10 : 16, flexWrap: 'nowrap', marginTop: 8, position: 'relative', zIndex: 10 }}>
+                <button onClick={() => navigate('/?page=contact')} style={{ flex: mob ? 1 : 'initial', padding: mob ? '14px 12px' : '18px 36px', background: DARK_TEXT, color: '#fff', borderRadius: 12, border: 'none', fontWeight: 800, cursor: 'pointer', boxShadow: '0 10px 30px rgba(0,0,0,0.1)', fontSize: mob ? 10 : 14, textTransform: 'uppercase', letterSpacing: '0.1em', transition: 'all 0.3s', whiteSpace: 'nowrap' }}>Start Project Brief</button>
+                <button onClick={() => navigate('/workflow')} style={{ flex: mob ? 1 : 'initial', padding: mob ? '14px 12px' : '18px 36px', background: 'rgba(255,255,255,0.95)', color: DARK_TEXT, borderRadius: 12, border: '1px solid rgba(0,0,0,0.1)', fontWeight: 700, cursor: 'pointer', fontSize: mob ? 10 : 14, textTransform: 'uppercase', letterSpacing: '0.1em', transition: 'all 0.3s', whiteSpace: 'nowrap' }}>How We Work</button>
+              </div>
             </div>
           </div>
         </div>
@@ -618,7 +626,7 @@ export default function PublicSite({ brand, setPage, page, onPortal, user, conte
 
     if (p === 'home') return (
       <>
-        <Hero slides={content?.hero?.slides || HERO_SLIDES} brand={brand} navigate={navigate} />
+        <Hero slides={content?.hero?.slides?.length > 0 ? content.hero.slides : HERO_SLIDES} brand={brand} navigate={navigate} />
         {mob
           ? <StatsBarMobile brand={brand} stats={content?.stats} />
           : <StatsBar brand={brand} stats={content?.stats} />}

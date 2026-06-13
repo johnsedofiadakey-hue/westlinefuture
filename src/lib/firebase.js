@@ -23,7 +23,7 @@ export const firebaseConfig = {
   appId: env.VITE_FIREBASE_APP_ID
 };
 
-let app, auth, db, storage, functions, isFirebaseEnabled = false;
+let app, auth, db, storage, functions, messaging, isFirebaseEnabled = false;
 
 try {
   if (hasKeys) {
@@ -37,17 +37,24 @@ try {
     db = getFirestore(app);
     storage = getStorage(app);
     functions = getFunctions(app);
+    import('firebase/messaging').then(({ getMessaging, isSupported }) => {
+      isSupported().then(supported => {
+        if (supported) {
+          messaging = getMessaging(app);
+        }
+      });
+    }).catch(e => console.warn("Firebase messaging not loaded:", e));
     isFirebaseEnabled = true;
   } else {
     // Return null so consumers can guard explicitly
-    app = null; auth = null; db = null; storage = null; functions = null;
+    app = null; auth = null; db = null; storage = null; functions = null; messaging = null;
   }
 } catch (e) {
   console.warn("Firebase initialization failed:", e);
-  app = null; auth = null; db = null; storage = null; functions = null;
+  app = null; auth = null; db = null; storage = null; functions = null; messaging = null;
 }
 
-export { auth, db, storage, functions, isFirebaseEnabled };
+export { auth, db, storage, functions, messaging, isFirebaseEnabled };
 
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 

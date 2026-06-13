@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { LogOut, Package, Truck, Wrench, CheckCircle, ChevronDown, ChevronUp, Camera, MessageSquare, AlertCircle, RefreshCw, CheckSquare, Square, MapPin } from 'lucide-react';
-import { db } from '../lib/firebase';
+import { db, functions } from '../lib/firebase';
 import { updateDoc, doc, serverTimestamp, addDoc, collection } from 'firebase/firestore';
+import { httpsCallable } from 'firebase/functions';
 import { CLIENT_PROJECT_STAGES } from '../data';
 
 // Map to our Phase 1 normalized 7-stage pipeline
@@ -219,13 +220,8 @@ function ProjectCard({ project, updateProjectStage, addProjectMessage, addProjec
 
     setStageLoading(true);
     try {
-      await updateDoc(doc(db, 'projects', project.id), {
-        fieldQAReport: qaReport,
-        updatedAt: serverTimestamp()
-      });
-
-      // Update the stage in Firestore
-      await updateProjectStage(project.id, nextStage, label);
+      const submitFieldReport = httpsCallable(functions, 'submitWorkerFieldReport');
+      await submitFieldReport({ projectId: project.id, qaReport, nextStage, note: label });
       setStageDone(true);
     } catch (e) {
       console.error("[WorkerView Submit Error]:", e);
@@ -264,7 +260,7 @@ function ProjectCard({ project, updateProjectStage, addProjectMessage, addProjec
         name: 'Field QA photo — ' + new Date().toLocaleDateString(),
       });
       setPhotoUploaded(true);
-      setUploadedPhotoUrl(result?.fileUrl || '');
+      setUploadedPhotoUrl(typeof result === 'string' ? result : result?.fileUrl || '');
       setTimeout(() => setPhotoUploaded(false), 3000);
     } catch (e) {
       console.error(e);
@@ -273,19 +269,19 @@ function ProjectCard({ project, updateProjectStage, addProjectMessage, addProjec
   };
 
   return (
-    <div style={{ background: '#fff', borderRadius: 24, padding: 24, boxShadow: '0 4px 20px rgba(92,58,33,0.06)', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: 20 }}>
+    <div style={{ background: '#1F2937', borderRadius: 20, padding: 24, boxShadow: '0 4px 20px rgba(0,0,0,0.5)', border: '1px solid #374151', display: 'flex', flexDirection: 'column', gap: 20 }}>
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 16, fontWeight: 900, color: `var(--accent-secondary)`, marginBottom: 4, lineHeight: 1.3 }}>
+          <div style={{ fontSize: 16, fontWeight: 900, color: '#F9FAFB', marginBottom: 4, lineHeight: 1.3 }}>
             {project.title || project.name || 'Untitled Project'}
           </div>
-          <div style={{ fontSize: 12, color: `var(--text-secondary)`, fontWeight: 500 }}>{project.clientName || 'Client'}</div>
+          <div style={{ fontSize: 12, color: '#9CA3AF', fontWeight: 500 }}>{project.clientName || 'Client'}</div>
         </div>
         <div style={{
           padding: '4px 10px', borderRadius: 100,
-          background: isDelivery ? '#F4EFE6' : isInstall ? '#FFF7ED' : '#F0FDF4',
-          color: isDelivery ? 'var(--accent-primary)' : isInstall ? '#D97706' : '#16A34A',
+          background: isDelivery ? '#FEF3C7' : isInstall ? '#FEF3C7' : '#D1FAE5',
+          color: isDelivery ? '#92400E' : isInstall ? '#B45309' : '#065F46',
           fontSize: 10, fontWeight: 800, marginLeft: 12, whiteSpace: 'nowrap', textTransform: 'uppercase', letterSpacing: '.04em'
         }}>
           {isDelivery ? 'Delivery' : isInstall ? 'Installation' : 'Active'}
@@ -293,26 +289,26 @@ function ProjectCard({ project, updateProjectStage, addProjectMessage, addProjec
       </div>
 
       {/* Stage badge */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: `var(--bg-secondary)`, borderRadius: 12 }}>
-        {isDelivery && <Truck size={14} color="var(--accent-primary)" />}
-        {isInstall && <Wrench size={14} color="#D97706" />}
-        {isComplete && <CheckCircle size={14} color="#16A34A" />}
-        <span style={{ fontSize: 12, fontWeight: 800, color: 'var(--accent-secondary)' }}>{getStageName(project.stageId)}</span>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: '#374151', borderRadius: 8 }}>
+        {isDelivery && <Truck size={14} color="#EAB308" />}
+        {isInstall && <Wrench size={14} color="#EAB308" />}
+        {isComplete && <CheckCircle size={14} color="#10B981" />}
+        <span style={{ fontSize: 12, fontWeight: 800, color: '#F9FAFB' }}>{getStageName(project.stageId)}</span>
       </div>
 
       {/* Project Blueprints & Renderings */}
       {projectRenderings.length > 0 && (
-        <div style={{ padding: '16px', background: '#F8F6F3', borderRadius: 16, border: '1px solid var(--border-color)' }}>
-          <div style={{ fontSize: 11, fontWeight: 800, color: `var(--text-secondary)`, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
-            <FileText size={14} /> Approved Blueprints
+        <div style={{ padding: '16px', background: '#111827', borderRadius: 12, border: '1px solid #374151' }}>
+          <div style={{ fontSize: 11, fontWeight: 800, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <Package size={14} /> Approved Blueprints
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {projectRenderings.map(r => (
-              <a key={r.id} href={r.fileUrl} target="_blank" rel="noreferrer" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px', background: '#fff', borderRadius: 10, textDecoration: 'none', border: '1px solid var(--border-color)' }}>
-                <img src={r.fileUrl} style={{ width: 40, height: 40, borderRadius: 6, objectFit: 'cover', background: 'var(--border-color)' }} onError={(e) => e.target.style.display='none'} />
+              <a key={r.id} href={r.fileUrl} target="_blank" rel="noreferrer" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px', background: '#1F2937', borderRadius: 8, textDecoration: 'none', border: '1px solid #4B5563' }}>
+                <img src={r.fileUrl} style={{ width: 40, height: 40, borderRadius: 6, objectFit: 'cover', background: '#374151' }} onError={(e) => e.target.style.display='none'} />
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--accent-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.title}</div>
-                  <div style={{ fontSize: 10, color: 'var(--text-secondary)' }}>Click to view full size</div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: '#F9FAFB', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.title}</div>
+                  <div style={{ fontSize: 10, color: '#9CA3AF' }}>Click to view full size</div>
                 </div>
               </a>
             ))}
@@ -324,55 +320,55 @@ function ProjectCard({ project, updateProjectStage, addProjectMessage, addProjec
       {!isComplete && (
         <div style={{ 
           padding: 16, 
-          borderRadius: 16, 
-          background: checkInLocked ? '#FFFBEB' : '#F0FDF4',
-          border: `1.5px solid ${checkInLocked ? '#F59E0B30' : '#10B98130'}`,
+          borderRadius: 12, 
+          background: checkInLocked ? '#451A03' : '#064E3B',
+          border: `1px solid ${checkInLocked ? '#B45309' : '#059669'}`,
           display: 'flex',
           flexDirection: 'column',
           gap: 10
         }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <MapPin size={16} color={checkInLocked ? '#D97706' : '#16A34A'} />
-              <span style={{ fontSize: 12, fontWeight: 900, color: checkInLocked ? '#92400E' : '#065F46' }}>
+              <MapPin size={16} color={checkInLocked ? '#FBBF24' : '#34D399'} />
+              <span style={{ fontSize: 12, fontWeight: 900, color: checkInLocked ? '#FDE68A' : '#A7F3D0' }}>
                 {checkInLocked ? "Site Check-in Locked" : "Site Check-in Active ✓"}
               </span>
             </div>
             <button 
               onClick={getWorkerLocation}
               disabled={locating}
-              style={{ background: 'none', border: 'none', color: 'var(--accent-secondary)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, fontWeight: 700 }}
+              style={{ background: 'none', border: 'none', color: '#F9FAFB', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, fontWeight: 700 }}
             >
               <RefreshCw size={11} className={locating ? "spin" : ""} style={{ animation: locating ? 'spin 1s linear infinite' : 'none' }} /> Refresh
             </button>
           </div>
 
-          <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.4 }}>
+          <div style={{ fontSize: 12, color: '#D1D5DB', lineHeight: 1.4 }}>
             {locating ? (
               "Verifying coordinates via carrier satellites..."
             ) : locationError ? (
-              <span style={{ color: '#DC2626', fontWeight: 700 }}>{locationError}</span>
+              <span style={{ color: '#F87171', fontWeight: 700 }}>{locationError}</span>
             ) : (
               `You are currently ${distance ? (distance > 1000 ? `${(distance/1000).toFixed(2)} km` : `${Math.round(distance)} meters`) : '—'} away from site coordinates.`
             )}
           </div>
 
           {checkInLocked && !locating && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#D97706', fontWeight: 700 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#FBBF24', fontWeight: 700 }}>
               <AlertCircle size={12} /> Must be within 100 meters to log stage completions.
             </div>
           )}
 
           {/* Dev Bypass Switch */}
           {import.meta.env.DEV && (
-            <div style={{ borderTop: '1px dashed var(--border-color)', paddingTop: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: 10, fontWeight: 800, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>🔧 Dev Geofence Bypass</span>
+            <div style={{ borderTop: '1px dashed #374151', paddingTop: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: 10, fontWeight: 800, color: '#9CA3AF', textTransform: 'uppercase' }}>🔧 Dev Geofence Bypass</span>
               <button 
                 onClick={() => setDevBypass(p => !p)}
                 style={{
                   padding: '4px 10px', borderRadius: 20, border: 'none',
-                  background: devBypass ? 'var(--accent-secondary)' : 'var(--border-color)',
-                  color: '#fff', fontSize: 10, fontWeight: 800, cursor: 'pointer'
+                  background: devBypass ? '#EAB308' : '#374151',
+                  color: devBypass ? '#111827' : '#9CA3AF', fontSize: 10, fontWeight: 800, cursor: 'pointer'
                 }}
               >
                 {devBypass ? "BYPASSED" : "OFF"}
@@ -385,7 +381,7 @@ function ProjectCard({ project, updateProjectStage, addProjectMessage, addProjec
       {/* QA Inspection Checklist Form */}
       {!isComplete && !stageDone && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <label style={{ fontSize: 11, fontWeight: 800, color: `var(--text-secondary)`, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+          <label style={{ fontSize: 11, fontWeight: 800, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
             Site QA Checklist Form
           </label>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -398,13 +394,13 @@ function ProjectCard({ project, updateProjectStage, addProjectMessage, addProjec
                   style={{ 
                     display: 'flex', alignItems: 'center', gap: 10, 
                     padding: '12px 14px', borderRadius: 12, 
-                    background: checked ? '#FDFBF7' : 'var(--bg-secondary)',
-                    border: `1.5px solid ${checked ? 'var(--accent-secondary)30' : 'var(--border-color)'}`,
+                    background: checked ? '#422006' : '#111827',
+                    border: `1.5px solid ${checked ? '#EAB308' : '#374151'}`,
                     cursor: 'pointer', transition: 'all 0.15s'
                   }}
                 >
-                  {checked ? <CheckSquare size={16} color="var(--accent-secondary)" /> : <Square size={16} color="var(--text-secondary)" />}
-                  <span style={{ fontSize: 12, fontWeight: 600, color: checked ? 'var(--accent-secondary)' : 'var(--text-secondary)', lineHeight: 1.4 }}>
+                  {checked ? <CheckSquare size={16} color="#EAB308" /> : <Square size={16} color="#9CA3AF" />}
+                  <span style={{ fontSize: 12, fontWeight: 600, color: checked ? '#FDE68A' : '#9CA3AF', lineHeight: 1.4 }}>
                     {item.label}
                   </span>
                 </div>
@@ -417,15 +413,15 @@ function ProjectCard({ project, updateProjectStage, addProjectMessage, addProjec
       {/* Photo upload camera */}
       {!isComplete && !stageDone && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <label style={{ fontSize: 11, fontWeight: 800, color: `var(--text-secondary)`, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+          <label style={{ fontSize: 11, fontWeight: 800, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
             Field photo QA proof
           </label>
           <label style={{
             display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-            padding: '14px', borderRadius: 14,
-            background: photoUploaded ? '#F0FDF4' : `var(--bg-secondary)`,
-            color: photoUploaded ? '#16A34A' : `var(--accent-secondary)`,
-            border: `1px dashed ${photoUploaded ? '#10B981' : 'var(--border-color)'}`,
+            padding: '14px', borderRadius: 12,
+            background: photoUploaded ? '#064E3B' : '#111827',
+            color: photoUploaded ? '#34D399' : '#EAB308',
+            border: `1px dashed ${photoUploaded ? '#059669' : '#4B5563'}`,
             fontSize: 13, fontWeight: 800, cursor: photoLoading ? 'default' : 'pointer'
           }}>
             <Camera size={16} />
@@ -448,10 +444,10 @@ function ProjectCard({ project, updateProjectStage, addProjectMessage, addProjec
           onClick={handleStageUpdate}
           disabled={stageLoading || checkInLocked || !allChecked}
           style={{
-            width: '100%', padding: '14px', borderRadius: 14,
-            background: (checkInLocked || !allChecked) ? 'var(--border)' : `var(--accent-secondary)`,
-            color: '#fff', border: 'none',
-            fontSize: 14, fontWeight: 800, cursor: (stageLoading || checkInLocked || !allChecked) ? 'default' : 'pointer',
+            width: '100%', padding: '14px', borderRadius: 12,
+            background: (checkInLocked || !allChecked) ? '#374151' : '#EAB308',
+            color: (checkInLocked || !allChecked) ? '#9CA3AF' : '#111827', border: 'none',
+            fontSize: 14, fontWeight: 900, cursor: (stageLoading || checkInLocked || !allChecked) ? 'default' : 'pointer',
             opacity: stageLoading ? 0.7 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
             transition: 'all 0.2s', marginTop: 10
           }}
@@ -465,8 +461,9 @@ function ProjectCard({ project, updateProjectStage, addProjectMessage, addProjec
       {stageDone && (
         <div style={{
           padding: '12px 16px', borderRadius: 12,
-          background: isOfflineCached ? '#FFFBEB' : '#F0FDF4',
-          color: isOfflineCached ? '#D97706' : '#16A34A',
+          background: isOfflineCached ? '#451A03' : '#064E3B',
+          color: isOfflineCached ? '#FBBF24' : '#34D399',
+          border: `1px solid ${isOfflineCached ? '#B45309' : '#059669'}`,
           fontSize: 13, fontWeight: 700, display: 'flex',
           alignItems: 'center', gap: 8
         }}>
@@ -478,8 +475,8 @@ function ProjectCard({ project, updateProjectStage, addProjectMessage, addProjec
       )}
 
       {/* Notes */}
-      <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: 16 }}>
-        <label style={{ fontSize: 11, fontWeight: 800, color: `var(--text-secondary)`, textTransform: 'uppercase', letterSpacing: '0.08em', display: 'block', marginBottom: 8 }}>
+      <div style={{ borderTop: '1px solid #374151', paddingTop: 16 }}>
+        <label style={{ fontSize: 11, fontWeight: 800, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '0.08em', display: 'block', marginBottom: 8 }}>
           Add a note
         </label>
         <textarea
@@ -488,9 +485,9 @@ function ProjectCard({ project, updateProjectStage, addProjectMessage, addProjec
           placeholder="Describe what you observed, issues encountered, etc."
           rows={3}
           style={{
-            width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #E5E0D8',
-            fontSize: 13, fontFamily: 'inherit', resize: 'vertical', color: `var(--accent-secondary)`,
-            background: `var(--bg-secondary)`, boxSizing: 'border-box', outline: 'none'
+            width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #4B5563',
+            fontSize: 13, fontFamily: 'inherit', resize: 'vertical', color: '#F9FAFB',
+            background: '#111827', boxSizing: 'border-box', outline: 'none'
           }}
         />
         <button
@@ -498,9 +495,9 @@ function ProjectCard({ project, updateProjectStage, addProjectMessage, addProjec
           disabled={noteLoading || !note.trim()}
           style={{
             marginTop: 8, padding: '10px 16px', borderRadius: 10,
-            background: note.trim() ? `var(--accent-secondary)` : '#E5E0D8',
-            color: note.trim() ? '#fff' : '#9A948E',
-            border: 'none', fontSize: 12, fontWeight: 700,
+            background: note.trim() ? '#EAB308' : '#374151',
+            color: note.trim() ? '#111827' : '#9CA3AF',
+            border: 'none', fontSize: 12, fontWeight: 800,
             cursor: note.trim() && !noteLoading ? 'pointer' : 'default',
             display: 'flex', alignItems: 'center', gap: 6
           }}
@@ -518,23 +515,23 @@ function AllProjectsAccordion({ projects, user, renderingPackages, updateProject
   if (!projects || projects.length === 0) return null;
 
   return (
-    <div style={{ background: '#fff', borderRadius: 20, overflow: 'hidden', boxShadow: '0 2px 12px rgba(0,0,0,0.05)', border: '1px solid var(--border-color)' }}>
+    <div style={{ background: '#1F2937', borderRadius: 20, overflow: 'hidden', boxShadow: '0 4px 20px rgba(0,0,0,0.5)', border: '1px solid #374151' }}>
       <button
         onClick={() => setOpen(o => !o)}
         style={{
           width: '100%', padding: '18px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-          background: 'transparent', border: 'none', cursor: 'pointer', borderBottom: open ? '1px solid var(--border-color)' : 'none'
+          background: 'transparent', border: 'none', cursor: 'pointer', borderBottom: open ? '1px solid #374151' : 'none'
         }}
       >
-        <span style={{ fontSize: 15, fontWeight: 700, color: `var(--accent-secondary)` }}>All Assigned Projects ({projects.length})</span>
-        {open ? <ChevronUp size={18} color="var(--text-secondary)" /> : <ChevronDown size={18} color="var(--text-secondary)" />}
+        <span style={{ fontSize: 15, fontWeight: 700, color: '#F9FAFB' }}>All Assigned Projects ({projects.length})</span>
+        {open ? <ChevronUp size={18} color="#9CA3AF" /> : <ChevronDown size={18} color="#9CA3AF" />}
       </button>
       {open && (
         <div style={{ padding: '16px 24px', display: 'flex', flexDirection: 'column', gap: 12 }}>
           {projects.map(p => (
-            <div key={p.id} style={{ padding: '12px 16px', background: `var(--bg-secondary)`, borderRadius: 12, border: '1px solid var(--border-color)' }}>
-              <div style={{ fontSize: 14, fontWeight: 700, color: `var(--accent-secondary)` }}>{p.title || p.name || 'Untitled'}</div>
-              <div style={{ fontSize: 11, color: `var(--text-secondary)`, marginTop: 4 }}>
+            <div key={p.id} style={{ padding: '12px 16px', background: '#111827', borderRadius: 12, border: '1px solid #4B5563' }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: '#F9FAFB' }}>{p.title || p.name || 'Untitled'}</div>
+              <div style={{ fontSize: 11, color: '#9CA3AF', marginTop: 4 }}>
                 {p.clientName || ''} · {getStageName(p.stageId)}
               </div>
             </div>
@@ -576,12 +573,8 @@ export default function WorkerView({ user, onLogout, clients, updateStage, logs,
         const payload = JSON.parse(cachedStr);
         const { projectId, qaReport, nextStage, label } = payload;
         
-        // Sync to Firestore
-        await updateDoc(doc(db, 'projects', projectId), {
-          fieldQAReport: qaReport,
-          updatedAt: serverTimestamp()
-        });
-        await updateProjectStage(projectId, nextStage, label);
+        const submitFieldReport = httpsCallable(functions, 'submitWorkerFieldReport');
+        await submitFieldReport({ projectId, qaReport, nextStage, note: label });
         
         // Remove from cache
         localStorage.removeItem(key);
@@ -598,7 +591,7 @@ export default function WorkerView({ user, onLogout, clients, updateStage, logs,
     } finally {
       setSyncingOffline(false);
     }
-  }, [updateProjectStage, updateCachedCount]);
+  }, [updateCachedCount]);
 
   useEffect(() => {
     updateCachedCount();
@@ -647,31 +640,32 @@ export default function WorkerView({ user, onLogout, clients, updateStage, logs,
   const workerName = user?.name || user?.displayName || user?.email || 'Worker';
 
   return (
-    <div style={{ minHeight: '100vh', background: '#F8F6F3', fontFamily: "'Inter', 'Satoshi', sans-serif" }}>
+    <div style={{ minHeight: '100vh', background: '#111827', color: '#F9FAFB', fontFamily: "'Inter', 'Satoshi', sans-serif" }}>
       {/* Top bar */}
       <div style={{
-        background: `var(--accent-secondary)`, color: '#fff',
+        background: '#0F172A', color: '#fff',
         padding: '0 20px',
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         position: 'sticky', top: 0, zIndex: 100,
-        height: 60, boxShadow: '0 2px 20px rgba(0,0,0,0.1)'
+        height: 60, boxShadow: '0 4px 20px rgba(0,0,0,0.4)',
+        borderBottom: '2px solid #EAB308'
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div style={{ width: 32, height: 32, borderRadius: 10, background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <Wrench size={16} color="var(--accent-secondary)" />
+          <div style={{ width: 32, height: 32, borderRadius: 8, background: '#EAB308', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Wrench size={16} color="#000" />
           </div>
           <div>
-            <div style={{ fontSize: 14, fontWeight: 700, lineHeight: 1 }}>Field View</div>
-            <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.6)', marginTop: 2 }}>{workerName}</div>
+            <div style={{ fontSize: 14, fontWeight: 800, lineHeight: 1, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#F9FAFB' }}>Field Ops</div>
+            <div style={{ fontSize: 10, color: '#9CA3AF', marginTop: 2 }}>{workerName}</div>
           </div>
         </div>
         <button
           onClick={onLogout}
           style={{
             display: 'flex', alignItems: 'center', gap: 6,
-            padding: '8px 14px', borderRadius: 10,
-            background: 'rgba(255,255,255,0.1)', color: '#fff', border: 'none',
-            fontSize: 12, fontWeight: 600, cursor: 'pointer'
+            padding: '8px 14px', borderRadius: 8,
+            background: 'rgba(255,255,255,0.1)', color: '#F9FAFB', border: '1px solid rgba(255,255,255,0.2)',
+            fontSize: 12, fontWeight: 700, cursor: 'pointer', transition: 'all 0.2s'
           }}
         >
           <LogOut size={14} /> Sign out
@@ -723,11 +717,11 @@ export default function WorkerView({ user, onLogout, clients, updateStage, logs,
         {/* Today's jobs */}
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
-            <div style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.12em', color: `var(--text-secondary)` }}>
+            <div style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.12em', color: '#9CA3AF' }}>
               Today's Jobs
             </div>
             {todayProjects.length > 0 && (
-              <div style={{ background: `var(--accent-secondary)`, color: '#fff', padding: '2px 8px', borderRadius: 100, fontSize: 10, fontWeight: 800 }}>
+              <div style={{ background: '#EAB308', color: '#111827', padding: '2px 8px', borderRadius: 100, fontSize: 10, fontWeight: 800 }}>
                 {todayProjects.length}
               </div>
             )}
@@ -735,14 +729,14 @@ export default function WorkerView({ user, onLogout, clients, updateStage, logs,
 
           {todayProjects.length === 0 ? (
             <div style={{
-              background: '#fff', borderRadius: 20, padding: '40px 24px', textAlign: 'center',
-              boxShadow: '0 2px 12px rgba(0,0,0,0.05)', border: '1px solid var(--border-color)'
+              background: '#1F2937', borderRadius: 20, padding: '40px 24px', textAlign: 'center',
+              boxShadow: '0 4px 20px rgba(0,0,0,0.5)', border: '1px solid #374151'
             }}>
-              <AlertCircle size={36} color="#D97706" style={{ marginBottom: 12 }} />
-              <div style={{ fontSize: 15, fontWeight: 700, color: `var(--accent-secondary)`, marginBottom: 8 }}>
+              <AlertCircle size={36} color="#EAB308" style={{ marginBottom: 12 }} />
+              <div style={{ fontSize: 15, fontWeight: 700, color: '#F9FAFB', marginBottom: 8 }}>
                 No jobs assigned for today.
               </div>
-              <div style={{ fontSize: 13, color: `var(--text-secondary)` }}>Contact your supervisor for your assignment.</div>
+              <div style={{ fontSize: 13, color: '#9CA3AF' }}>Contact your supervisor for your assignment.</div>
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -764,7 +758,7 @@ export default function WorkerView({ user, onLogout, clients, updateStage, logs,
         {/* All assigned projects accordion */}
         {allAssigned.length > 0 && (
           <div>
-            <div style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.12em', color: `var(--text-secondary)`, marginBottom: 16 }}>
+            <div style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.12em', color: '#9CA3AF', marginBottom: 16 }}>
               All Assignments
             </div>
             <AllProjectsAccordion projects={allAssigned} user={user} renderingPackages={renderingPackages} updateProjectStage={updateProjectStage} addProjectMessage={props.addProjectMessage} addProjectDocument={props.addProjectDocument} />
@@ -772,7 +766,7 @@ export default function WorkerView({ user, onLogout, clients, updateStage, logs,
         )}
 
         {/* Footer */}
-        <div style={{ textAlign: 'center', padding: '16px 0', fontSize: 11, color: `var(--text-secondary)` }}>
+        <div style={{ textAlign: 'center', padding: '16px 0', fontSize: 11, color: '#9CA3AF' }}>
           {brand?.name || 'Westline Future'} Field App
         </div>
       </div>

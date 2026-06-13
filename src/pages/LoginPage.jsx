@@ -156,7 +156,7 @@ export default function LoginPage({ onLogin, onBack, brand, type = 'client', ...
     } catch (e) {
       setClientErr(e?.userMessage || mapFirebaseError(e));
       if (e?.code === 'auth/too-many-requests') {
-        setResendTimer(300);
+        setResendTimer(30); // Reduced from 300 to allow faster retries
       }
     }
     setOtpLoading(false);

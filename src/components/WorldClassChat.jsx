@@ -45,7 +45,7 @@ export const translateText = async (text, targetLang) => {
   const cacheKey = `${text}:${targetLang}`;
   if (translationCache.has(cacheKey)) return translationCache.get(cacheKey);
   try {
-    const fn = httpsCallable(functions, 'translateText');
+    const fn = httpsCallable(functions, 'translateChatMessage');
     const result = await fn({ text, targetLang, sourceLang: srcLang });
     const translated = result.data?.translated;
     if (translated && translated !== text) {
@@ -54,8 +54,8 @@ export const translateText = async (text, targetLang) => {
     }
     return null;
   } catch (err) {
-    if (import.meta.env.DEV) console.error('[translateText] failed:', err.message);
-    return null;
+    console.error('[translateText] failed:', err);
+    throw err;
   }
 };
 
@@ -135,20 +135,31 @@ function ProjectBadge({ title, accentColor }) {
 function Bubble({ msg, isMine, isSystem, accentColor, onReact, viewerLang = 'en' }) {
   const [translation, setTranslation] = useState(null);
   const [translating, setTranslating] = useState(false);
+  const [translationError, setTranslationError] = useState('');
   const [showReactions, setShowReactions] = useState(false);
   const reactionRef = useRef(null);
   const ac = accentColor || 'var(--accent-secondary)';
 
   const msgLang = detectLang(msg.text || '');
   const showTranslateBtn = !isSystem && msg.text?.length > 2;
-  const targetLang = msgLang === 'zh-CN' ? 'en' : 'zh-CN';
+  const normalizedViewerLang = viewerLang === 'zh' ? 'zh-CN' : viewerLang;
+  const targetLang = normalizedViewerLang === msgLang
+    ? (msgLang === 'zh-CN' ? 'en' : 'zh-CN')
+    : normalizedViewerLang;
+  const storedTranslation = msg.translations?.[targetLang] || msg.translatedText || null;
 
   const handleTranslate = async () => {
     if (translation) { setTranslation(null); return; }
     setTranslating(true);
-    const result = await translateText(msg.text, targetLang);
-    setTranslation(result);
-    setTranslating(false);
+    setTranslationError('');
+    try {
+      const result = storedTranslation || await translateText(msg.text, targetLang);
+      setTranslation(result);
+    } catch {
+      setTranslationError('Translation unavailable. Try again.');
+    } finally {
+      setTranslating(false);
+    }
   };
 
   const reactions = msg.reactions || {};
@@ -252,7 +263,7 @@ function Bubble({ msg, isMine, isSystem, accentColor, onReact, viewerLang = 'en'
       )}
 
       {/* Auto-translation (pre-computed on send) */}
-      {msg.translatedText && !translation && (
+      {storedTranslation && !translation && (
         <div style={{
           maxWidth: '78%', fontSize: 12, color: 'var(--dim)', fontStyle: 'italic',
           background: 'rgba(var(--ac-rgb),0.04)', padding: '6px 12px',
@@ -260,7 +271,7 @@ function Bubble({ msg, isMine, isSystem, accentColor, onReact, viewerLang = 'en'
           lineHeight: 1.5, display: 'flex', alignItems: 'flex-start', gap: 6,
         }}>
           <Globe size={12} style={{ flexShrink: 0, marginTop: 2, opacity: 0.7 }} />
-          <span>{msg.translatedText}</span>
+          <span>{storedTranslation}</span>
         </div>
       )}
 
@@ -274,6 +285,11 @@ function Bubble({ msg, isMine, isSystem, accentColor, onReact, viewerLang = 'en'
         }}>
           <Globe size={12} style={{ flexShrink: 0, marginTop: 2, opacity: 0.7 }} />
           <span>{translation}</span>
+        </div>
+      )}
+      {translationError && (
+        <div style={{ maxWidth: '78%', fontSize: 11, color: '#B91C1C', padding: '4px 8px' }}>
+          {translationError}
         </div>
       )}
 
@@ -322,6 +338,7 @@ export default function WorldClassChat({
   addClientMessage,
   isAdmin = false,
   height = 480,
+  viewerLanguage = 'en',
   // Project context tagging
   projects = [],           // array of { id, title } — client's active projects
 }) {
@@ -342,8 +359,7 @@ export default function WorldClassChat({
   const [activeProjectTag, setActiveProjectTag] = useState(null); // { id, title } | null
   const [projectFilter, setProjectFilter] = useState(null);       // project id | null = all
 
-  // viewer language defaults to browser or brand lang
-  const viewerLang = detectLang('');
+  const viewerLang = viewerLanguage === 'zh' ? 'zh-CN' : viewerLanguage;
 
   // Typing indicator
   const userId = user?.uid || user?.id || 'anon';
@@ -444,13 +460,18 @@ export default function WorldClassChat({
 
     // Auto-translate Chinese → English (and vice-versa)
     let translatedText = null;
+    let translationTarget = null;
     const lang = detectLang(rawText);
     if (lang === 'zh-CN') {
-      translatedText = await translateText(rawText, 'en');
+      translationTarget = 'en';
     } else if (lang === 'en' && rawText.length > 0) {
-      // Translate English → Chinese for admin messages going to Chinese-speaking clients
-      if (isAdmin && !isInternal) {
-        translatedText = await translateText(rawText, 'zh-CN');
+      translationTarget = 'zh-CN';
+    }
+    if (!isInternal && translationTarget) {
+      try {
+        translatedText = await translateText(rawText, translationTarget);
+      } catch {
+        translatedText = null;
       }
     }
 
@@ -464,12 +485,42 @@ export default function WorldClassChat({
         isInternal,
         createdAt: serverTimestamp(),
       };
-      if (translatedText) msgData.translatedText = translatedText;
+      msgData.sourceLanguage = lang;
+      if (translatedText) {
+        msgData.translatedText = translatedText;
+        msgData.translations = { [translationTarget]: translatedText };
+      }
       if (activeProjectTag && !isInternal) {
         msgData.projectId = activeProjectTag.id;
         msgData.projectTitle = activeProjectTag.title;
       }
       await addDoc(collection(db, 'clients', clientId, 'messages'), msgData);
+
+      // Create notification for the other party
+      if (!isInternal) {
+        if (role === 'client') {
+          await addDoc(collection(db, 'notifications'), {
+            userId: 'admin',
+            title: `New Message from ${userName}`,
+            message: `"${rawText.substring(0, 40)}${rawText.length > 40 ? '...' : ''}"`,
+            type: 'new_message',
+            link: `/admin/clients?id=${clientId}`, // Opens client profile in admin
+            read: false,
+            createdAt: serverTimestamp(),
+            clientId: clientId
+          });
+        } else if (role === 'admin') {
+          await addDoc(collection(db, 'notifications'), {
+            userId: clientId,
+            title: `New Message from Westline Future`,
+            message: `"${rawText.substring(0, 40)}${rawText.length > 40 ? '...' : ''}"`,
+            type: 'new_message',
+            link: `/portal`, // or appropriate client link
+            read: false,
+            createdAt: serverTimestamp()
+          });
+        }
+      }
     } catch (err) {
       // Fallback to prop function if direct write fails
       if (import.meta.env.DEV) console.error('[WorldClassChat] Direct write failed, falling back:', err);
@@ -506,6 +557,32 @@ export default function WorldClassChat({
         msgData.projectTitle = activeProjectTag.title;
       }
       await addDoc(collection(db, 'clients', clientId, 'messages'), msgData);
+
+      // Create notification for the other party
+      if (!msgData.isInternal) {
+        if (role === 'client') {
+          await addDoc(collection(db, 'notifications'), {
+            userId: 'admin',
+            title: `New Image from ${userName}`,
+            message: `Sent an attachment`,
+            type: 'new_message',
+            link: `/admin/clients?id=${clientId}`, // Opens client profile in admin
+            read: false,
+            createdAt: serverTimestamp(),
+            clientId: clientId
+          });
+        } else if (role === 'admin') {
+          await addDoc(collection(db, 'notifications'), {
+            userId: clientId,
+            title: `New Image from Westline Future`,
+            message: `Sent an attachment`,
+            type: 'new_message',
+            link: `/portal`, // or appropriate client link
+            read: false,
+            createdAt: serverTimestamp()
+          });
+        }
+      }
       setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 150);
     } catch (err) {
       if (import.meta.env.DEV) console.error('[Chat] Image upload failed:', err.message);

@@ -5515,7 +5515,9 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
             <div style={{ fontSize: 40, marginBottom: 16 }}>⚠️</div>
             <div style={{ fontSize: 17, fontWeight: 800, color: `var(--accent-secondary)`, marginBottom: 8 }}>Couldn't load your projects</div>
             <div style={{ fontSize: 13, color: `var(--text-secondary)`, marginBottom: 24, lineHeight: 1.6 }}>
-              There was a connection issue. Please refresh the page or contact our team.
+              {projectsError === 'permission-denied'
+                ? 'Your account is signed in, but project access could not be verified. Please retry, then contact our team if this continues.'
+                : 'There was a connection issue. Please refresh the page or contact our team.'}
             </div>
             <button onClick={() => window.location.reload()} style={{ padding: '12px 24px', background: `var(--accent-secondary)`, color: '#fff', border: 'none', borderRadius: 14, fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
               Retry

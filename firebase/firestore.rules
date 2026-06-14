@@ -17,25 +17,28 @@ service cloud.firestore {
         request.auth.token.email.matches(".*@westlinefuture.com") ||
         request.auth.token.email == "admin@westlinefuture.com"
       );
-      let isRoleAdmin = isAuthenticated() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && (
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'staff'
-      );
+      let isRoleAdmin = userHasRole("admin") || userHasRole("staff");
       return isEmailAdmin || isRoleAdmin;
     }
 
+    function tokenHasRole(role) {
+      return isAuthenticated()
+        && "role" in request.auth.token
+        && request.auth.token.role == role;
+    }
+
+    function userHasRole(role) {
+      return isAuthenticated()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == role;
+    }
+
     function isStaff() {
-      return isAuthenticated() && (
-        request.auth.token.role == "staff" ||
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "staff"
-      );
+      return tokenHasRole("staff") || userHasRole("staff");
     }
 
     function isWorker() {
-      return isAuthenticated() && (
-        request.auth.token.role == "worker" ||
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "worker"
-      );
+      return tokenHasRole("worker") || userHasRole("worker");
     }
 
     function isAdminOrStaff() {
@@ -46,10 +49,6 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.token.phone_number != null
         ? request.auth.token.phone_number.replace("+", "")
         : "";
-    }
-
-    function authEmail() {
-      return isAuthenticated() && request.auth.token.email != null ? request.auth.token.email : "";
     }
 
     function isClient(clientId) {
@@ -75,6 +74,7 @@ service cloud.firestore {
         && (
           isClient(d.clientId) ||
           (d.clientIds is list && request.auth.uid in d.clientIds) ||
+          (d.clientIds is list && authPhoneId() in d.clientIds) ||
           (d.clientIds is list && request.auth.token.phone_number != null
             && request.auth.token.phone_number in d.clientIds)
         );
@@ -95,6 +95,7 @@ service cloud.firestore {
     function isAssignedClient(project) {
       return isClient(project.clientId)
         || (project.clientIds is list && request.auth.uid in project.clientIds)
+        || (project.clientIds is list && authPhoneId() in project.clientIds)
         || (project.clientIds is list
           && request.auth.token.phone_number != null
           && request.auth.token.phone_number in project.clientIds);

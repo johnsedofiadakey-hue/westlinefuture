@@ -71,6 +71,21 @@ test('client portal subscribes only to explicitly indexed project documents', ()
   );
 });
 
+test('Lucide icons do not shadow native collection constructors', () => {
+  assert.doesNotMatch(
+    clientPortal,
+    /\bAward,\s*Map,\s*HelpCircle/,
+  );
+  assert.match(
+    clientPortal,
+    /Map as MapIcon/,
+  );
+  assert.match(
+    clientPortal,
+    /const projectMap = new Map\(\)/,
+  );
+});
+
 test('sanitized public gateway settings remain readable by client portals', () => {
   assert.match(
     rules,

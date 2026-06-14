@@ -9,7 +9,7 @@ import {
   Truck, Wrench, ShoppingCart, ArrowRight, Lock,
   Download, File, Image, Archive, Package, Camera,
   X, Copy, Check, RefreshCw, Gift, Edit3, ChevronDown,
-  ZoomIn, ScanSearch, PenTool, Printer, FileCheck, PenLine, ShieldCheck, Award, Map, HelpCircle, Calendar
+  ZoomIn, ScanSearch, PenTool, Printer, FileCheck, PenLine, ShieldCheck, Award, Map as MapIcon, HelpCircle, Calendar
 } from 'lucide-react';
 import { CLIENT_PROJECT_STAGES, PROJECT_TYPES } from '../data';
 import { calculateTimeline } from './sharedHelpers';
@@ -3963,7 +3963,7 @@ function ProjectRoadmap({ project, invoices = [], renderingPackages = [], setAct
       {/* Header */}
       <div style={{ padding: isMobile ? '16px 20px 14px' : '18px 26px 14px', borderBottom: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', gap: 10 }}>
         <div style={{ width: 32, height: 32, borderRadius: 10, background: 'var(--bg-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <Map size={16} color="var(--accent-primary)" />
+          <MapIcon size={16} color="var(--accent-primary)" />
         </div>
         <div>
           <div style={{ fontSize: 14, fontWeight: 900, color: 'var(--accent-secondary)' }}>Your Project Journey</div>

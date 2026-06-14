@@ -1,12 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, FileText, Loader2, CheckCircle2, DollarSign, Zap, Edit2 } from 'lucide-react';
+import { Plus, Loader2, CheckCircle2, DollarSign, Zap, Edit2 } from 'lucide-react';
 import { db } from '../../../lib/firebase';
 import { collection, onSnapshot, query, orderBy, addDoc, serverTimestamp, doc, updateDoc, getDocs, where } from 'firebase/firestore';
 import { SCHEDULE_CONFIGS } from './config.jsx';
-import { InvoiceCreatorModal } from './InvoiceCreatorModal';
 
 // ─── Payment Schedule Card (admin) ───────────────────────────────────────────
-export function PaymentScheduleCard({ project, createInvoice, notify, brand, invoices }) {
+export function PaymentScheduleCard({ project, notify, brand, invoices }) {
   const budget = Number(project.budget) || 0;
   const scheduleType = project.paymentSchedule || 'standard';
   const config = SCHEDULE_CONFIGS[scheduleType] || SCHEDULE_CONFIGS.standard;
@@ -15,7 +14,6 @@ export function PaymentScheduleCard({ project, createInvoice, notify, brand, inv
   const [logging, setLogging] = useState(false);
   const [logForm, setLogForm] = useState({ amount: '', description: '', date: new Date().toISOString().slice(0, 10) });
   const [saving, setSaving] = useState(false);
-  const [showInvoiceModal, setShowInvoiceModal] = useState(false);
 
   // ── Set Project Value ──────────────────────────────────────────────────────
   const [editingBudget, setEditingBudget] = useState(false);
@@ -238,17 +236,6 @@ export function PaymentScheduleCard({ project, createInvoice, notify, brand, inv
                 <Plus size={13} /> Log Payment
               </button>
             )}
-            {createInvoice && (
-              <button
-                onClick={() => {
-                  if (!project?.clientId) { notify?.('error', 'Project must have a client set'); return; }
-                  setShowInvoiceModal(true);
-                }}
-                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 10, background: '#16A34A', color: '#fff', border: 'none', fontSize: 12, fontWeight: 800, cursor: 'pointer' }}
-              >
-                <FileText size={13} /> Create Invoice
-              </button>
-            )}
             <button
               onClick={() => setChanging(p => !p)}
               style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '7px 14px', borderRadius: 10, background: changing ? 'var(--accent-secondary)' : 'var(--bg-secondary)', color: changing ? '#fff' : 'var(--text-secondary)', border: '1px solid var(--border-color)', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}
@@ -401,16 +388,6 @@ export function PaymentScheduleCard({ project, createInvoice, notify, brand, inv
               );
             })}
           </div>
-        )}
-
-        {showInvoiceModal && (
-          <InvoiceCreatorModal
-            project={project}
-            brand={brand}
-            createInvoice={createInvoice}
-            onClose={() => setShowInvoiceModal(false)}
-            notify={notify}
-          />
         )}
       </div>
     </div>

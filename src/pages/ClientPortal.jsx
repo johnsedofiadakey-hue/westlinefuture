@@ -2637,9 +2637,8 @@ function PhotoFeed({ projectId }) {
 // ─── Cost Breakdown Card (client-visible) ────────────────────────────────────
 function CostBreakdownCard({ project, fmt, card, pad, isMobile }) {
   const breakdown = project.breakdown || {};
-  const surcharges = project.surcharges || [];
   const hasBd = breakdown.product?.enabled || breakdown.shipping?.enabled || breakdown.installation?.enabled || (breakdown.extras?.length > 0);
-  if (!hasBd && surcharges.length === 0) return null;
+  if (!hasBd) return null;
 
   const BD_ROWS = [
     { key: 'product',      label: 'Product / Materials',  color: `var(--accent-secondary)` },
@@ -2650,8 +2649,6 @@ function CostBreakdownCard({ project, fmt, card, pad, isMobile }) {
   const extraRows = (breakdown.extras || []).filter(e => e.amount > 0);
   const bdSubtotal = BD_ROWS.reduce((s, r) => s + (breakdown[r.key]?.amount || 0), 0)
     + extraRows.reduce((s, e) => s + (Number(e.amount) || 0), 0);
-  const scTotal = surcharges.reduce((s, sc) => s + (Number(sc.amount) || 0), 0);
-  const grandTotal = bdSubtotal + scTotal;
 
   return (
     <div style={{ ...card, padding: pad }}>
@@ -2679,28 +2676,10 @@ function CostBreakdownCard({ project, fmt, card, pad, isMobile }) {
           </div>
         ))}
 
-        {/* Surcharges */}
-        {surcharges.map(sc => (
-          <div key={sc.id} style={{ padding: '12px 0', borderBottom: '1px solid var(--border-color)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#DC2626', flexShrink: 0, marginTop: 2 }} />
-                <span style={{ fontSize: 13, color: '#3D3530', fontWeight: 700 }}>{sc.label}</span>
-              </div>
-              <span style={{ fontSize: 13, fontWeight: 800, color: '#DC2626', whiteSpace: 'nowrap', marginLeft: 12 }}>+{fmt(sc.amount)}</span>
-            </div>
-            <div style={{ marginLeft: 18, padding: '10px 14px', background: '#FEF2F2', borderRadius: 10, border: '1px solid #FECACA30' }}>
-              <div style={{ fontSize: 11, fontWeight: 800, color: '#DC2626', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 4 }}>Reason for adjustment</div>
-              <div style={{ fontSize: 12, color: `var(--text-secondary)`, lineHeight: 1.6 }}>{sc.reason}</div>
-              <div style={{ fontSize: 10, color: `var(--text-secondary)`, marginTop: 6, fontWeight: 600 }}>Effective {sc.date}</div>
-            </div>
-          </div>
-        ))}
-
         {/* Total */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 14, marginTop: 4 }}>
           <span style={{ fontSize: 14, fontWeight: 900, color: `var(--accent-secondary)` }}>Total Project Value</span>
-          <span style={{ fontSize: 16, fontWeight: 900, color: `var(--accent-secondary)` }}>{fmt(grandTotal)}</span>
+          <span style={{ fontSize: 16, fontWeight: 900, color: `var(--accent-secondary)` }}>{fmt(bdSubtotal)}</span>
         </div>
       </div>
     </div>

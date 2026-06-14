@@ -60,7 +60,6 @@ export async function printInvoiceOrReceipt(inv, brand) {
   const lbl         = isRcpt ? 'RECEIPT' : isQuo ? 'QUOTATION' : 'INVOICE';
   const sublbl      = isDesign    ? 'Design & Rendering Fee'
                     : isMilestone ? 'Milestone Payment'
-                    : inv.type === 'Surcharge' ? 'Surcharge'
                     : inv.type === 'Add-On'    ? 'Project Add-On'
                     : null;
 

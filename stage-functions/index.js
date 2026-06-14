@@ -348,12 +348,13 @@ exports.scheduleProjectSiteVisit = onCall(async request => {
   ].filter(Boolean))];
   recipients.forEach(userId => {
     const notificationRef = db.collection('notifications').doc();
+    const appointmentMessage = `The technical site visit for "${project.title || 'project'}" is scheduled for ${startAt.toLocaleString('en-GB', { timeZone: siteVisit.timezone })}.`;
     batch.set(notificationRef, {
       userId,
       clientId: userId === project.clientId ? project.clientId : null,
       title: 'Site visit scheduled',
-      message: `The technical site visit for "${project.title || 'project'}" is scheduled for ${startAt.toLocaleString('en-GB', { timeZone: siteVisit.timezone })}.`,
-      msg: 'Site visit appointment confirmed.',
+      message: notes ? `${appointmentMessage} Access note: ${notes}` : appointmentMessage,
+      msg: notes ? `Site visit confirmed. Note: ${notes}` : 'Site visit appointment confirmed.',
       type: 'site_visit_scheduled',
       link: userId === project.clientId
         ? `/portal?projectId=${encodeURIComponent(projectId)}&tab=overview`

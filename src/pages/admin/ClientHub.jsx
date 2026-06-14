@@ -109,12 +109,16 @@ function getProjectWorkflowGuidance(project, invoices = [], approvals = [], rend
   }
 
   if (renderingFirst && project.siteVisit?.status === 'scheduled') {
+    const appointment = project.siteVisit.startAt
+      ? new Date(project.siteVisit.startAt).toLocaleString('en-GB', { dateStyle: 'full', timeStyle: 'short' })
+      : 'the confirmed appointment time';
+    const visitNote = project.siteVisit.notes ? ` Client note: ${project.siteVisit.notes}` : '';
     return result(
       'technical team',
       'Complete the scheduled site survey',
-      'The appointment is confirmed. Assigned workers must capture measurements, notes, and site evidence.',
-      { title: 'Site visit confirmed', body: 'The client can see the confirmed appointment and should prepare site access.', action: 'Appointment confirmed' },
-      { title: 'Coordinate the technical team', body: 'Confirm worker assignment. After the visit, mark it complete and record measurements, notes, and evidence.', tab: 'team', action: 'Review Team' }
+      `The visit is confirmed for ${appointment}.${visitNote}`,
+      { title: 'Site visit confirmed', body: `The appointment is set for ${appointment}.`, action: 'Appointment confirmed' },
+      { title: 'Coordinate the technical team', body: `Confirm worker assignment and site access.${visitNote} After the visit, mark it complete and record measurements and evidence.`, tab: 'overview', action: 'View Appointment' }
     );
   }
 
@@ -381,6 +385,18 @@ function AdminSiteVisitCard({ project, notify }) {
                 ? `${new Date(project.siteVisit.startAt).toLocaleString('en-GB', { dateStyle: 'full', timeStyle: 'short' })} · Source: ${project.siteVisit.source || 'portal'}`
                 : 'Use this when the client calls or WhatsApps instead of scheduling from the portal.'}
           </div>
+          {scheduled && (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 8, marginTop: 10 }}>
+              <div style={{ padding: '9px 11px', borderRadius: 10, background: '#EFF6FF', border: '1px solid #DBEAFE' }}>
+                <div style={{ fontSize: 9, fontWeight: 900, color: '#1D4ED8', textTransform: 'uppercase', marginBottom: 3 }}>Scheduled by</div>
+                <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--accent-secondary)' }}>{project.siteVisit.scheduledByName || (project.siteVisit.source === 'client_portal' ? 'Client' : 'Project Manager')}</div>
+              </div>
+              <div style={{ padding: '9px 11px', borderRadius: 10, background: '#F8FAFC', border: '1px solid #E2E8F0' }}>
+                <div style={{ fontSize: 9, fontWeight: 900, color: '#475569', textTransform: 'uppercase', marginBottom: 3 }}>Client note</div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--accent-secondary)', whiteSpace: 'pre-wrap' }}>{project.siteVisit.notes || 'No access instructions were provided.'}</div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
       {!scheduled && !completed && (
@@ -490,7 +506,7 @@ function DetailedWorkflowProgress({ project, invoices, renderingPackages }) {
 // Extracted so each row has its own local state for the duration input.
 // Saves to Firestore only on blur — prevents keystroke race conditions that
 // caused the Gantt to show stale intermediate values.
-function StageSchedulerRow({ s, idx, stageInfo, selected, applicableStages, updateProject }) {
+function StageSchedulerRow({ s, idx, stageInfo, earliestStartDate, selected, applicableStages, updateProject }) {
   const [localDays, setLocalDays] = useState(stageInfo.durationDays || 5);
 
   // Sync from Firestore when the parent data changes (e.g. another stage was edited)
@@ -545,6 +561,7 @@ function StageSchedulerRow({ s, idx, stageInfo, selected, applicableStages, upda
             <input
               type="date"
               value={stageInfo.startDate || ''}
+              min={earliestStartDate || undefined}
               onChange={async (e) => {
                 await saveTimeline({ startDate: e.target.value, manualOverride: true });
               }}
@@ -1572,6 +1589,11 @@ export default function ClientHub({ clientId, dbClients = [], onBack, ...props }
                             const isCurrent = s.id === selected.stageId;
                             const isPast = (selected.stageId || 1) > s.id;
                             const stageInfo = computedTimeline[s.id] || {};
+                            const previousStage = applicableStages[idx - 1];
+                            const previousEnd = previousStage ? computedTimeline[previousStage.id]?.endDate : null;
+                            const earliestStartDate = previousEnd
+                              ? new Date(new Date(`${previousEnd}T00:00:00`).getTime() + 86400000).toISOString().slice(0, 10)
+                              : null;
 
                             return (
                               <React.Fragment key={s.id}>
@@ -1579,6 +1601,7 @@ export default function ClientHub({ clientId, dbClients = [], onBack, ...props }
                                   s={s}
                                   idx={idx}
                                   stageInfo={stageInfo}
+                                  earliestStartDate={earliestStartDate}
                                   selected={selected}
                                   applicableStages={applicableStages}
                                   updateProject={props.updateProject}
@@ -1597,9 +1620,9 @@ export default function ClientHub({ clientId, dbClients = [], onBack, ...props }
                 {/* FINANCIALS */}
                 {activeTab === 'financials' && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                    <PaymentScheduleCard project={selected} createInvoice={props.createInvoice} notify={props.notify} brand={brand} invoices={props.invoices} />
+                    <PaymentScheduleCard project={selected} notify={props.notify} brand={brand} invoices={props.invoices} />
                     <ProjectInvoicesLedger project={selected} client={client} invoices={props.invoices} brand={brand} updateInvoice={props.updateInvoice} deleteInvoice={props.deleteInvoice} notify={props.notify} user={props.user} updateProjectStage={props.updateProjectStage} updateProject={props.updateProject} />
-                    <ProjectEconomics project={selected} user={props.user} />
+                    <ProjectEconomics project={selected} />
                     <div style={{ height: 1, background: 'var(--border-color)', margin: '16px 0' }} />
                     <AdminAddOnManager project={selected} brand={brand} addOns={props.addOns} invoices={props.invoices} createInvoice={props.createInvoice} />
                   </div>

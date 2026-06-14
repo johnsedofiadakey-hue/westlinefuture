@@ -66,3 +66,10 @@ test('client project query uses one rules-compatible canonical identity', () => 
     /projectsError && projects\.length === 0/,
   );
 });
+
+test('sanitized public gateway settings remain readable by client portals', () => {
+  assert.match(
+    rules,
+    /match \/cms_content\/\{docId\} \{[\s\S]*allow read: if true;/,
+  );
+});

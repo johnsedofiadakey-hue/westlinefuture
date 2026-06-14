@@ -235,7 +235,9 @@ service cloud.firestore {
       allow write: if isAdmin() || isClient(resource.data.clientId);
     }
     match /cms_content/{docId} {
-      allow read: if docId != 'gatewaySettings' || isAdmin();
+      // Gateway settings contain public provider identifiers and feature flags
+      // only. Secret credentials live exclusively in Secret Manager.
+      allow read: if true;
       allow write: if isAdmin();
     }
     match /settings/{docId} { allow read: if true; allow write: if isAdmin(); }

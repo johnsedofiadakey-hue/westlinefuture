@@ -19,13 +19,13 @@ import {
   collection, onSnapshot, query, where, orderBy, limit, addDoc, serverTimestamp,
   updateDoc, doc
 } from 'firebase/firestore';
-import { usePaystackPayment } from 'react-paystack';
 import ClientRenderingVault from '../components/ClientRenderingVault';
 import UnifiedPaymentGateway from '../components/UnifiedPaymentGateway';
 import WorldClassChat from '../components/WorldClassChat';
 import InvoiceDocument from '../components/InvoiceDocument';
 import ClientUploadsTab from '../components/ClientUploadsTab';
 import SecureVault from '../components/SecureVault';
+import { deriveWorkflowStep, WORKFLOW_STEP } from '../lib/projectWorkflow';
 
 const AC = `var(--accent-secondary)`;
 
@@ -313,11 +313,10 @@ const STAGE_ICONS = {
 // ─── Payment Schedule Configs ─────────────────────────────────────────────────
 const SCHEDULE_CONFIGS = {
   standard: {
-    label: 'Standard (60/30/10)',
+    label: 'Standard (60/40)',
     milestones: [
-      { key: 'post-rendering',  label: '60% After Rendering Approval',  pct: 0.60, cumPct: 0.60 },
-      { key: 'post-production', label: '30% After Production Complete', pct: 0.30, cumPct: 0.90 },
-      { key: 'post-shipping',   label: '10% After Delivery',            pct: 0.10, cumPct: 1.00 },
+      { key: 'initial-deposit',          label: '60% Initial Project Deposit',             pct: 0.60, cumPct: 0.60 },
+      { key: 'pre-installation-balance', label: '40% When Goods Arrive in Ghana',          pct: 0.40, cumPct: 1.00 },
     ],
   },
   '50-50': {
@@ -345,7 +344,7 @@ const MILESTONES = SCHEDULE_CONFIGS.standard.milestones;
 const isPaidStatus = (status) => ['paid', 'paid in full'].includes(String(status || '').toLowerCase().trim());
 const isInitialProjectDepositInvoice = (invoice) => {
   const descriptor = `${invoice?.title || ''} ${invoice?.type || ''} ${invoice?.documentKind || ''}`.toLowerCase();
-  return invoice?.milestoneKey === 'post-rendering'
+  return ['initial-deposit', 'post-rendering'].includes(invoice?.milestoneKey)
     || descriptor.includes('deposit')
     || descriptor.includes('first instalment')
     || descriptor.includes('first installment');
@@ -662,13 +661,11 @@ function SpecApprovalCard({ project, user, brand, isMobile, invoices = [] }) {
 
   if (!spec?.url) return null;
 
-  const projectInvoices = invoices.filter(invoice =>
-    invoice.projectId === project.id || invoice.parentId === project.id
-  );
-  const paidInitialDeposit = projectInvoices.find(invoice =>
-    isInitialProjectDepositInvoice(invoice) && isPaidStatus(invoice.status)
-  );
-  const depositVerified = !!project.depositPaid || !!paidInitialDeposit;
+  const specificationStageOpen = Number(project.stageId || 1) >= 2;
+
+  if (!specificationStageOpen && !['signed', 'rejected'].includes(spec.status)) {
+    return null;
+  }
 
   const handleReject = async () => {
     if (busy) return;
@@ -698,7 +695,7 @@ function SpecApprovalCard({ project, user, brand, isMobile, invoices = [] }) {
   };
 
   const handleSign = async () => {
-    if (busy || !depositVerified || !documentAccepted || !legalConsent || typedName.trim().length < 3) return;
+    if (busy || !documentAccepted || !legalConsent || typedName.trim().length < 3) return;
     setBusy(true);
     setError('');
     try {
@@ -723,7 +720,7 @@ function SpecApprovalCard({ project, user, brand, isMobile, invoices = [] }) {
       <div style={{ padding: '20px 24px', borderRadius: 20, background: '#F0FDF4', border: '1.5px solid #BBF7D0', display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
         <CheckCircle2 size={24} color="#16A34A" style={{ flexShrink: 0 }} />
         <div style={{ flex: 1, minWidth: 220 }}>
-          <div style={{ fontSize: 14, fontWeight: 800, color: '#15803D' }}>Project Specification Signed</div>
+          <div style={{ fontSize: 14, fontWeight: 800, color: '#15803D' }}>Project Brief Signed</div>
           <div style={{ fontSize: 12, color: '#166534', marginTop: 2 }}>
             Signed by {spec.signedBy || typedName || 'Client'} · Version {Number(spec.version || 1)}. This approval cannot be revoked from the portal and remains available for comparison with the completed work.
           </div>
@@ -761,7 +758,7 @@ function SpecApprovalCard({ project, user, brand, isMobile, invoices = [] }) {
         </span>
       </div>
       <div style={{ fontSize: 18, fontWeight: 900, color: 'var(--accent-secondary)', marginBottom: 6 }}>
-        Review & Sign Project Specification
+        Review & Sign Project Brief
       </div>
       <div style={{ fontSize: 13, color: '#374151', lineHeight: 1.6, marginBottom: 20 }}>
         This legally binding pre-production agreement includes the final drawings, bill of materials, quantities, specifications, scope, exclusions, deliverables, and production requirements. Review every section before signing.
@@ -772,7 +769,7 @@ function SpecApprovalCard({ project, user, brand, isMobile, invoices = [] }) {
           <AlertCircle size={17} /> Legally binding approval
         </div>
         <div style={{ fontSize: 12, lineHeight: 1.6 }}>
-          Signing document version {Number(spec.version || 1)} authorises Westline Future to procure materials and begin production. Do not sign until the drawings, materials, quantities, specifications, deliverables, and exclusions are correct.
+          Signing document version {Number(spec.version || 1)} confirms the final project scope used to prepare your quotation. Do not sign until the drawings, materials, quantities, specifications, deliverables, outcomes, and exclusions are correct.
         </div>
       </div>
 
@@ -791,17 +788,15 @@ function SpecApprovalCard({ project, user, brand, isMobile, invoices = [] }) {
         <FileText size={15} /> Review Full Document · Version {Number(spec.version || 1)}
       </a>
 
-      {!depositVerified && (
-        <div style={{ padding: '12px 14px', borderRadius: 12, background: '#FFF7ED', border: '1px solid #FED7AA', color: '#9A3412', fontSize: 12, lineHeight: 1.55, marginBottom: 16 }}>
-          <strong>Initial deposit required.</strong> The specification can be reviewed now, but signing unlocks only after the initial project instalment is verified.
-        </div>
-      )}
+      <div style={{ padding: '12px 14px', borderRadius: 12, background: '#F0FDF4', border: '1px solid #BBF7D0', color: '#166534', fontSize: 12, lineHeight: 1.55, marginBottom: 16 }}>
+        <strong>What happens next:</strong> Signing confirms the final scope and unlocks quotation preparation. Procurement and production begin only after you approve the quotation and the initial deposit is verified.
+      </div>
 
       {!showRejectBox ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           {spec.status === 'approved' && (
             <div style={{ padding: '10px 12px', borderRadius: 10, background: '#FFFBEB', border: '1px solid #FDE68A', color: '#92400E', fontSize: 12 }}>
-              Your previous approval is recorded. A formal signature is still required before Production.
+              Your previous approval is recorded. A formal signature is still required before quotation preparation.
             </div>
           )}
           <div>
@@ -812,32 +807,32 @@ function SpecApprovalCard({ project, user, brand, isMobile, invoices = [] }) {
               value={typedName}
               onChange={e => setTypedName(e.target.value)}
               placeholder="Enter your full legal name"
-              disabled={!depositVerified || busy}
-              style={{ width: '100%', height: 44, borderRadius: 11, border: '1.5px solid #BFDBFE', padding: '0 13px', fontSize: 14, boxSizing: 'border-box', background: depositVerified ? '#fff' : '#F3F4F6' }}
+              disabled={busy}
+              style={{ width: '100%', height: 44, borderRadius: 11, border: '1.5px solid #BFDBFE', padding: '0 13px', fontSize: 14, boxSizing: 'border-box', background: '#fff' }}
             />
           </div>
-          <label style={{ display: 'flex', alignItems: 'flex-start', gap: 9, cursor: depositVerified ? 'pointer' : 'default' }}>
+          <label style={{ display: 'flex', alignItems: 'flex-start', gap: 9, cursor: 'pointer' }}>
             <input
               type="checkbox"
               checked={documentAccepted}
               onChange={e => setDocumentAccepted(e.target.checked)}
-              disabled={!depositVerified || busy}
+              disabled={busy}
               style={{ marginTop: 3 }}
             />
             <span style={{ fontSize: 12, color: '#374151', lineHeight: 1.55 }}>
               I have opened and reviewed the complete document, including its final drawings, bill of materials, quantities, specifications, scope, exclusions, and deliverables.
             </span>
           </label>
-          <label style={{ display: 'flex', alignItems: 'flex-start', gap: 9, cursor: depositVerified ? 'pointer' : 'default' }}>
+          <label style={{ display: 'flex', alignItems: 'flex-start', gap: 9, cursor: 'pointer' }}>
             <input
               type="checkbox"
               checked={legalConsent}
               onChange={e => setLegalConsent(e.target.checked)}
-              disabled={!depositVerified || busy}
+              disabled={busy}
               style={{ marginTop: 3 }}
             />
             <span style={{ fontSize: 12, color: '#374151', lineHeight: 1.55 }}>
-              I understand that entering my legal name creates my electronic signature, is intended to be legally binding, and authorises procurement and production under version {Number(spec.version || 1)}.
+              I understand that entering my legal name creates my electronic signature, is intended to be legally binding, and authorises Westline Future to prepare the final quotation from this approved project brief.
             </span>
           </label>
           {error && (
@@ -848,10 +843,10 @@ function SpecApprovalCard({ project, user, brand, isMobile, invoices = [] }) {
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
           <button
               onClick={handleSign}
-              disabled={busy || !depositVerified || !documentAccepted || !legalConsent || typedName.trim().length < 3}
-              style={{ flex: 2, minWidth: 220, padding: '13px 20px', borderRadius: 12, border: 'none', background: '#16A34A', color: '#fff', fontSize: 14, fontWeight: 800, cursor: busy ? 'default' : 'pointer', opacity: busy || !depositVerified || !documentAccepted || !legalConsent || typedName.trim().length < 3 ? 0.55 : 1 }}
+              disabled={busy || !documentAccepted || !legalConsent || typedName.trim().length < 3}
+              style={{ flex: 2, minWidth: 220, padding: '13px 20px', borderRadius: 12, border: 'none', background: '#16A34A', color: '#fff', fontSize: 14, fontWeight: 800, cursor: busy ? 'default' : 'pointer', opacity: busy || !documentAccepted || !legalConsent || typedName.trim().length < 3 ? 0.55 : 1 }}
           >
-              {busy ? 'Signing…' : 'Sign & Authorise Production'}
+              {busy ? 'Signing…' : 'Sign Project Brief'}
           </button>
           <button
             onClick={() => setShowRejectBox(true)}
@@ -910,12 +905,12 @@ function ContractAgreementModal({ project, user, brand, onClose, onSigned, isMob
 
   const defaultClauses = [
     {
-      title: 'Scope of Work',
-      text: `Westline Future Ltd. ("Contractor") agrees to supply, source, and install premium interior decoration products and finishes for the project <strong>${project?.title || '[Project Name]'}</strong>, in accordance with the approved 3D interior design and specifications confirmed at the time of quotation. This includes all agreed items covering kitchen, bathroom, flooring, wardrobes, doors, ceilings, and any other elements detailed in the accepted quote.`,
+      title: 'Engagement',
+      text: `Westline Future Ltd. ("Contractor") and the Client agree to continue development of <strong>${project?.title || '[Project Name]'}</strong> from the approved 3D rendering into a detailed project brief, bill of materials, final deliverables, quotation, procurement, shipping, and installation workflow. The detailed scope is not final until the separate project brief is reviewed and signed.`,
     },
     {
       title: 'Payment Terms',
-      text: `The total agreed contract value is <strong>${budget ? `GH₵ ${budget.toLocaleString(undefined, { minimumFractionDigits: 2 })}` : 'as per the accepted quotation'}</strong>. Works shall commence upon execution of this contract and clearance of the mobilisation deposit as stated in the payment plan. All milestone payments are due as per the agreed schedule. No installation works shall commence if any preceding milestone payment remains outstanding.`,
+      text: 'The project price and payment values will be stated in the final quotation issued after the detailed project brief is signed. Production begins only after quotation approval and verification of the initial project deposit. The final goods balance is due after the goods arrive in Ghana and before release to site. Installation is billed separately as an approved add-on.',
     },
     {
       title: '3D Design Approval',
@@ -965,48 +960,22 @@ function ContractAgreementModal({ project, user, brand, onClose, onSigned, isMob
     setBusy(true);
     setError(null);
     try {
-      const ip = await fetch('https://api.ipify.org?format=json')
-        .then(r => r.json()).then(d => d.ip).catch(() => 'unavailable');
-      const now = new Date().toISOString();
       const sigDataUrl = drawnSig || nameToSignatureDataUrl(name, ac);
-
-      // Only write fields allowed by Firestore client rules.
-      // stageId/timeline must NOT be included here — server rejects them and reverts
-      // the whole write, causing the gate to loop. Stage advance is handled by admin/CF.
-      await updateDoc(doc(db, 'projects', project.id), {
-        contractAccepted:       true,
-        contractSignedName:     name || 'Drawn Signature',
-        quoteSignature:         sigDataUrl,
-        quoteSignedAt:          serverTimestamp(),
-        quoteSignedByPhone:     user?.phone || '',
-        quoteVerificationStamp: { ipAddress: ip, userAgent: navigator.userAgent, timestamp: now },
-        kickoffGateCleared:     true,
+      const signAgreement = httpsCallable(functions, 'signProjectAgreement');
+      const result = await signAgreement({
+        projectId: project.id,
+        typedName: name || user?.name || 'Client Signature',
+        signatureData: sigDataUrl,
+        legalConsent: true,
+        userAgent: navigator.userAgent,
       });
 
-      // Notify admin that contract has been signed
-      try {
-        await addDoc(collection(db, 'notifications'), {
-          userId: 'admin',
-          message: `✍️ ${name || user?.name || 'Client'} has signed the contract for "${project.title || 'a project'}". The portal is now fully unlocked.`,
-          type: 'contract_signed',
-          link: '/admin',
-          read: false,
-          createdAt: serverTimestamp(),
-        });
-        // Also post to client chat thread so there's an audit trail
-        await addDoc(collection(db, 'clients', project.clientId, 'messages'), {
-          text: `✍️ Contract signed by ${name || 'Client'} — portal access granted. The project is now active.`,
-          senderRole: 'system',
-          isInternal: false,
-          readByAdmin: false,
-          readByClient: true,
-          createdAt: serverTimestamp(),
-        });
-      } catch (_) { /* non-fatal — signing itself succeeded */ }
-
-      onSigned?.();
+      onSigned?.(result.data);
     } catch (e) {
-      setError('Failed to save signature. Please try again.');
+      const message = e?.message
+        ?.replace(/^Firebase:\s*/i, '')
+        ?.replace(/\s*\(functions\/[^)]+\)\.?$/i, '');
+      setError(message || 'Failed to save signature. Please try again.');
       if (import.meta.env.DEV) console.error('[ContractSign]', e);
     }
     setBusy(false);
@@ -1249,83 +1218,6 @@ function isImageType(fileType) {
   return ft.includes('image') || ft.includes('jpg') || ft.includes('jpeg') || ft.includes('png') || ft.includes('webp');
 }
 
-// ─── PaymentButton ────────────────────────────────────────────────────────────
-function PaymentButton({ label, amountGHS, email, projectId, invoiceId, paymentType, onSuccess, onClose, disabled }) {
-  const [processing, setProcessing] = useState(false);
-  const [verifyError, setVerifyError] = useState(null);
-
-  const config = {
-    reference: 'GT-' + Date.now(),
-    email: email || 'client@clients.westlinefuture.com',
-    amount: Math.round((amountGHS || 0) * 100),
-    publicKey: import.meta.env.VITE_PAYSTACK_PUBLIC_KEY || '',
-    currency: 'GHS',
-  };
-
-  const initializePayment = createPaystackPayment(config);
-
-  const handlePay = () => {
-    if (disabled || processing) return;
-    setVerifyError(null);
-    setProcessing(true);
-    initializePayment({
-      onSuccess: async (ref) => {
-        const reference = ref?.reference || ref?.trxref || String(ref);
-        // Server-side verification — never trust the client alone
-        if (functions && projectId) {
-          try {
-            const verify = httpsCallable(functions, 'verifyPaystackPayment');
-            await verify({ reference, projectId, invoiceId, expectedAmountGHS: amountGHS, type: paymentType || 'payment' });
-          } catch (err) {
-            if (import.meta.env.DEV) console.error('[Paystack] Verify failed:', err.message);
-            setVerifyError('Payment received but server verification failed. Contact support with ref: ' + reference);
-            setProcessing(false);
-            return;
-          }
-        }
-        setProcessing(false);
-        if (onSuccess) onSuccess(ref);
-      },
-      onClose: () => {
-        setProcessing(false);
-        if (onClose) onClose();
-      },
-    }).catch((err) => {
-      setProcessing(false);
-      setVerifyError(err.message || 'Unable to open Paystack checkout.');
-    });
-  };
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      <button
-        onClick={handlePay}
-        disabled={disabled || processing}
-        style={{
-          display: 'inline-flex', alignItems: 'center', gap: 10,
-          padding: '14px 28px', borderRadius: 14, border: 'none',
-          background: disabled ? `var(--border-color)` : 'linear-gradient(135deg, #16A34A, #15803D)',
-          color: disabled ? `var(--text-secondary)` : '#fff',
-          fontSize: 15, fontWeight: 800, cursor: disabled ? 'default' : 'pointer',
-          boxShadow: disabled ? 'none' : '0 4px 16px rgba(22,163,74,.35)',
-          transition: 'all .2s',
-          letterSpacing: '.01em',
-        }}
-      >
-        {processing
-          ? <><Loader2 size={18} style={{ animation: 'spin 1s linear infinite' }} /> Verifying payment...</>
-          : <><CreditCard size={18} /> {label}</>
-        }
-      </button>
-      {verifyError && (
-        <div style={{ fontSize: 12, color: '#DC2626', padding: '8px 12px', background: '#FEF2F2', borderRadius: 8, border: '1px solid #FECACA' }}>
-          {verifyError}
-        </div>
-      )}
-    </div>
-  );
-}
-
 // ─── Stage Action Card ────────────────────────────────────────────────────────
 function StageActionCard({ project, user, approveQuote, approveSignoff, payInvoice, updateProjectStage }) {
   const applicableStages = CLIENT_PROJECT_STAGES.filter(s => {
@@ -1337,6 +1229,8 @@ function StageActionCard({ project, user, approveQuote, approveSignoff, payInvoi
 
   // Live invoice query so we show real amounts, not hardcoded 50%
   const [dueInvoice, setDueInvoice] = useState(null);
+  const [issuedQuote, setIssuedQuote] = useState(null);
+  const [justPaid, setJustPaid] = useState(false);
   useEffect(() => {
     if (!db || !project?.id || !currentStage?.requiresPayment) return;
     const q = query(
@@ -1349,8 +1243,22 @@ function StageActionCard({ project, user, approveQuote, approveSignoff, payInvoi
     );
     let fromProject = [], fromParent = [];
     const merge = () => {
-      const all = [...fromProject, ...fromParent];
-      const unpaid = all.filter(i => !['paid', 'paid in full'].includes(String(i.status || '').toLowerCase().trim()));
+      const merged = new Map();
+      [...fromProject, ...fromParent].forEach(invoice => merged.set(invoice.id, invoice));
+      const all = [...merged.values()];
+      const quotes = all
+        .filter(invoice => {
+          const descriptor = `${invoice.type || ''} ${invoice.documentKind || ''}`.toLowerCase();
+          return descriptor.includes('quotation') || descriptor === 'quote';
+        })
+        .filter(invoice => !['cancelled', 'superseded', 'rejected'].includes(String(invoice.status || '').toLowerCase()))
+        .sort((a, b) => Number(b.version || 0) - Number(a.version || 0));
+      setIssuedQuote(quotes[0] || null);
+      const unpaid = all.filter(i => {
+        const descriptor = `${i.type || ''} ${i.documentKind || ''}`.toLowerCase();
+        const isQuote = descriptor.includes('quotation') || descriptor === 'quote';
+        return !isQuote && !['paid', 'paid in full'].includes(String(i.status || '').toLowerCase().trim());
+      });
       setDueInvoice(unpaid[0] || null);
     };
     const u1 = onSnapshot(q, s => { fromProject = s.docs.map(d => ({ id: d.id, ...d.data() })); merge(); }, () => merge());
@@ -1370,7 +1278,12 @@ function StageActionCard({ project, user, approveQuote, approveSignoff, payInvoi
   if (currentStage.needsClientApproval) {
     if (currentStage.id === 3 && project.quoteApproved) return null;
     if (currentStage.id === 7 && project.signOffApproved) return null;
-    const contractRequired = currentStage.id === 3 && !project.contractAccepted;
+    const renderingApprovalRequired = currentStage.id === 3 &&
+      project.kickoffMode !== 'direct-kickoff' &&
+      project.renderingApproved !== true &&
+      project.designApproved !== true &&
+      String(project.renderingStatus || '').toLowerCase() !== 'approved';
+    const quoteMissing = currentStage.id === 3 && !issuedQuote;
 
     return (
       <div style={{
@@ -1382,21 +1295,31 @@ function StageActionCard({ project, user, approveQuote, approveSignoff, payInvoi
           <AlertCircle size={18} color="var(--accent-primary)" />
           <span style={{ fontSize: 12, fontWeight: 800, color: `var(--accent-primary)`, textTransform: 'uppercase', letterSpacing: '.06em' }}>Action Required</span>
         </div>
-        <div style={{ fontSize: 20, fontWeight: 900, color: `var(--accent-secondary)`, marginBottom: 6 }}>Approval Required</div>
-        <div style={{ fontSize: 14, color: `var(--text-secondary)`, lineHeight: 1.6, marginBottom: contractRequired ? 16 : 20 }}>
-          {currentStage.id === 3 ? "We've prepared your final quotation. Please review the document, then approve it below." : "Please review the work and confirm your approval."}
+        <div style={{ fontSize: 20, fontWeight: 900, color: `var(--accent-secondary)`, marginBottom: 6 }}>
+          {quoteMissing ? 'Final Quote Not Issued Yet' : 'Approval Required'}
         </div>
-        {contractRequired && (
+        <div style={{ fontSize: 14, color: `var(--text-secondary)`, lineHeight: 1.6, marginBottom: renderingApprovalRequired ? 16 : 20 }}>
+          {currentStage.id === 3
+            ? quoteMissing
+              ? 'Your rendering is approved. Your account manager must now prepare and issue the quotation before you can review the project cost.'
+              : `Review "${issuedQuote.title || 'the quotation'}". Approve it if the cost is agreed, or request a revised version from your project manager.`
+            : 'Please review the work and confirm your approval.'}
+        </div>
+        {renderingApprovalRequired && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', borderRadius: 12, background: '#FEF3C7', border: '1px solid #FDE68A', marginBottom: 20 }}>
             <AlertCircle size={15} color="#D97706" style={{ flexShrink: 0 }} />
             <span style={{ fontSize: 13, fontWeight: 700, color: '#92400E' }}>
-              You must sign the project contract before approving the quote. Please complete that step first.
+              You must approve the final rendering before approving the quotation.
             </span>
           </div>
         )}
-        <button
+        {quoteMissing ? (
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '11px 16px', borderRadius: 12, background: '#F3F4F6', color: '#6B7280', fontSize: 13, fontWeight: 700 }}>
+            <Clock size={15} /> Waiting for account manager
+          </div>
+        ) : <button
           onClick={async () => {
-            if (acting || contractRequired) return;
+            if (acting || renderingApprovalRequired) return;
             setActing(true);
             try {
               if (currentStage.id === 3) {
@@ -1409,14 +1332,14 @@ function StageActionCard({ project, user, approveQuote, approveSignoff, payInvoi
               setActing(false);
             }
           }}
-          disabled={acting || contractRequired}
+          disabled={acting || renderingApprovalRequired}
           style={{
             display: 'inline-flex', alignItems: 'center', gap: 10,
             padding: '14px 32px', borderRadius: 14, border: 'none',
-            background: (acting || contractRequired) ? `var(--border-color)` : `var(--accent-secondary)`,
-            color: (acting || contractRequired) ? `var(--text-secondary)` : '#fff',
-            fontSize: 15, fontWeight: 800, cursor: (acting || contractRequired) ? 'default' : 'pointer',
-            boxShadow: (acting || contractRequired) ? 'none' : '0 4px 16px rgba(26,20,16,.25)',
+            background: (acting || renderingApprovalRequired) ? `var(--border-color)` : `var(--accent-secondary)`,
+            color: (acting || renderingApprovalRequired) ? `var(--text-secondary)` : '#fff',
+            fontSize: 15, fontWeight: 800, cursor: (acting || renderingApprovalRequired) ? 'default' : 'pointer',
+            boxShadow: (acting || renderingApprovalRequired) ? 'none' : '0 4px 16px rgba(26,20,16,.25)',
             transition: 'all .2s',
           }}
         >
@@ -1424,7 +1347,26 @@ function StageActionCard({ project, user, approveQuote, approveSignoff, payInvoi
             ? <><Loader2 size={18} style={{ animation: 'spin 1s linear infinite' }} /> Approving...</>
             : <>Confirm Approval <ArrowRight size={18} /></>
           }
-        </button>
+        </button>}
+        {!quoteMissing && currentStage.id === 3 && !project.quoteApproved && (
+          <button
+            onClick={async () => {
+              const note = window.prompt('What should be changed in this quotation?');
+              if (!note?.trim()) return;
+              setActing(true);
+              try {
+                const requestChanges = httpsCallable(functions, 'requestProjectQuoteChanges');
+                await requestChanges({ projectId: project.id, quoteId: issuedQuote.id, note: note.trim() });
+              } finally {
+                setActing(false);
+              }
+            }}
+            disabled={acting}
+            style={{ marginLeft: 10, padding: '14px 22px', borderRadius: 14, border: '1.5px solid #DC2626', background: '#fff', color: '#DC2626', fontSize: 14, fontWeight: 800, cursor: acting ? 'default' : 'pointer' }}
+          >
+            Request Changes
+          </button>
+        )}
       </div>
     );
   }
@@ -1433,10 +1375,6 @@ function StageActionCard({ project, user, approveQuote, approveSignoff, payInvoi
     const isDeposit = currentStage.id === 3;
     const invoiceTitle = dueInvoice?.title || (isDeposit ? 'Project Deposit' : 'Balance Payment');
     const fmt = n => `GH₵ ${Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
-
-    // justPaid: local flag set immediately on onSuccess so the pay button never re-flashes
-    // while Firestore propagates the invoice status update (can take 1-3s)
-    const [justPaid, setJustPaid] = useState(false);
 
     if (justPaid || (dueInvoice && ['paid', 'paid in full'].includes(String(dueInvoice.status || '').toLowerCase().trim()))) {
       return (
@@ -1544,18 +1482,45 @@ function ClientNextActionCard({ project, invoices = [], renderingPackages = [], 
   const pendingQuote = projectInvoices.find(i => ['Quotation', 'quote', 'quotation'].includes(i.type || i.documentKind) && !['approved'].includes(String(i.status || '').toLowerCase()) && !isPaidStatus(i.status));
 
   const noRendering = project.kickoffMode === 'direct-kickoff';
+  const renderingPaid = project.renderingFeePaid === true || projectPackages.some(pkg => {
+    const linkedInv = projectInvoices.find(i => i.id === pkg.linkedInvoiceId || i.renderingPackageId === pkg.id);
+    return pkg.unlocked || pkg.status === 'Paid / Unlocked' || isPaidStatus(linkedInv?.status);
+  });
+  const renderingApproved = project.renderingApproved === true ||
+    project.designApproved === true ||
+    projectPackages.some(pkg => String(pkg.status || '').toLowerCase() === 'approved');
+  const productionAuthorized = project.productionAuthorized === true || project.specDoc?.status === 'signed';
+  const workflowStep = deriveWorkflowStep(project, { invoices: projectInvoices, renderingPackages: projectPackages });
 
-  const specPending = project.specDoc?.url && project.specDoc?.status !== 'signed' && project.specDoc?.status !== 'rejected';
+  const specPending = Number(project.stageId || 1) >= 2 &&
+    project.specDoc?.url &&
+    project.specDoc?.status !== 'signed' &&
+    project.specDoc?.status !== 'rejected';
 
   let action;
-  if (specPending) {
-    action = { tone: '#1D4ED8', bg: '#EFF6FF', icon: <FileCheck size={18} />, title: 'Project brief needs your review', body: 'Your account manager has uploaded the project specification and deliverables. Please review and approve before production begins.', button: 'Review Spec', tab: 'overview' };
-  } else if (!noRendering && lockedRendering) {
+  if (!noRendering && !renderingPaid) {
     action = { tone: '#D97706', bg: '#FFF7ED', icon: <Lock size={18} />, title: 'Design fee payment needed', body: 'Pay the design fee to unlock your 3D renders.', button: 'View Designs', tab: 'designs' };
+  } else if (workflowStep === WORKFLOW_STEP.SITE_VISIT_SCHEDULING) {
+    action = { tone: '#2563EB', bg: '#EFF6FF', icon: <Calendar size={18} />, title: 'Choose your site visit date', body: 'Your rendering fee is confirmed. Select when our technical team can visit for measurements and photos.', button: 'Schedule Below', tab: 'overview' };
+  } else if (workflowStep === WORKFLOW_STEP.SITE_SURVEY) {
+    const visitDate = project.siteVisit?.startAt ? new Date(project.siteVisit.startAt).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' }) : '';
+    action = { tone: '#2563EB', bg: '#EFF6FF', icon: <Calendar size={18} />, title: 'Site visit confirmed', body: visitDate ? `Our technical team is scheduled for ${visitDate}.` : 'Your technical site visit is scheduled.', button: 'View Timeline', tab: 'overview' };
+  } else if (!noRendering && project.siteVisit?.status === 'completed' && projectPackages.length === 0) {
+    action = { tone: '#2563EB', bg: '#EFF6FF', icon: <Clock size={18} />, title: 'Your 3D rendering is being prepared', body: 'The site survey is complete. Westline Future has been prompted to prepare and upload your rendering package.', button: 'View Timeline', tab: 'overview' };
+  } else if (!noRendering && lockedRendering) {
+    action = { tone: '#D97706', bg: '#FFF7ED', icon: <Lock size={18} />, title: 'Design package is being verified', body: 'Your payment or rendering access is still being verified.', button: 'View Designs', tab: 'designs' };
   } else if (!noRendering && reviewRendering) {
     action = { tone: 'var(--accent-primary)', bg: '#F4EFE6', icon: <PenTool size={18} />, title: 'Review your rendering', body: 'Your design package is unlocked. Review it, leave pins, request changes, or approve the final version.', button: 'Review Design', tab: 'designs' };
-  } else if (pendingQuote) {
-    action = { tone: 'var(--accent-primary)', bg: '#FDFAF6', icon: <FileText size={18} />, title: 'Quote ready for review', body: 'Check the quote and let us know if you are happy with it.', button: 'View Quotes', tab: 'documents' };
+  } else if (pendingQuote && renderingApproved && !project.quoteApproved) {
+    action = { tone: 'var(--accent-primary)', bg: '#FDFAF6', icon: <FileText size={18} />, title: 'Quotation ready for negotiation', body: 'Review the project cost. Approve it or request changes before the contract is issued.', button: 'View Quote', tab: 'documents' };
+  } else if (project.quoteApproved && !project.contractAccepted) {
+    action = { tone: '#7C3AED', bg: '#F5F3FF', icon: <PenLine size={18} />, title: 'Sign the project contract', body: 'Your negotiated quotation is approved. Review and sign the contract and terms to unlock the initial payment.', button: 'Review Contract', tab: 'documents' };
+  } else if (project.contractAccepted && !project.depositPaid && !project.initialDepositPaid) {
+    action = { tone: '#16A34A', bg: '#F0FDF4', icon: <CreditCard size={18} />, title: 'Initial project payment required', body: 'Your contract is signed. Pay online or submit an offline payment for verification.', button: 'Open Payments', tab: 'financials' };
+  } else if ((project.depositPaid || project.initialDepositPaid) && !project.specDoc?.url) {
+    action = { tone: '#2563EB', bg: '#EFF6FF', icon: <Clock size={18} />, title: 'Final deliverables document is being prepared', body: 'Your initial payment is confirmed. Westline Future is preparing the final drawings, bill of materials, scope, exclusions, and deliverables.', button: 'View Documents', tab: 'documents' };
+  } else if (specPending && (project.depositPaid || project.initialDepositPaid)) {
+    action = { tone: '#1D4ED8', bg: '#EFF6FF', icon: <FileCheck size={18} />, title: 'Sign the final deliverables document', body: 'Review the final drawings, bill of materials, scope, deliverables, exclusions, and outcomes. Signing authorises production.', button: 'Review Deliverables', tab: 'documents' };
   } else if (pendingAddOn) {
     action = { tone: '#B45309', bg: '#FFFBEB', icon: <Gift size={18} />, title: 'Add-on needs decision', body: `${pendingAddOn.title || pendingAddOn.description || 'A project variation'} is waiting for your approval.`, button: 'Review Add-ons', tab: 'financials' };
   } else if (unpaidAddOn) {
@@ -1598,6 +1563,61 @@ function ClientNextActionCard({ project, invoices = [], renderingPackages = [], 
   );
 }
 
+function ClientSiteVisitScheduler({ project, isMobile }) {
+  const [startAt, setStartAt] = useState('');
+  const [notes, setNotes] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const workflowStep = deriveWorkflowStep(project);
+  if (![WORKFLOW_STEP.SITE_VISIT_SCHEDULING, WORKFLOW_STEP.SITE_SURVEY].includes(workflowStep)) return null;
+
+  const scheduled = project.siteVisit?.status === 'scheduled';
+  const submit = async () => {
+    if (!startAt || busy) return;
+    setBusy(true);
+    setError('');
+    try {
+      const scheduleSiteVisit = httpsCallable(functions, 'scheduleProjectSiteVisit');
+      await scheduleSiteVisit({
+        projectId: project.id,
+        startAt: new Date(startAt).toISOString(),
+        durationMinutes: 120,
+        timezone: 'Africa/Accra',
+        source: 'client_portal',
+        notes,
+      });
+    } catch (e) {
+      setError(e?.message || 'Could not schedule the site visit.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div style={{ padding: isMobile ? 20 : 24, borderRadius: 20, background: '#fff', border: '1px solid var(--border-color)', boxShadow: '0 4px 18px rgba(0,0,0,.04)' }}>
+      <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', marginBottom: scheduled ? 0 : 18 }}>
+        <div style={{ width: 42, height: 42, borderRadius: 12, background: '#EFF6FF', color: '#2563EB', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Calendar size={19} /></div>
+        <div>
+          <div style={{ fontSize: 16, fontWeight: 900, color: 'var(--accent-secondary)' }}>{scheduled ? 'Technical site visit confirmed' : 'Schedule your technical site visit'}</div>
+          <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.5, marginTop: 3 }}>
+            {scheduled
+              ? new Date(project.siteVisit.startAt).toLocaleString('en-GB', { dateStyle: 'full', timeStyle: 'short' })
+              : 'Choose a date and time when our team can take measurements and site photos.'}
+          </div>
+        </div>
+      </div>
+      {!scheduled && (
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'minmax(220px, .8fr) 1.2fr auto', gap: 10 }}>
+          <input type="datetime-local" value={startAt} min={new Date(Date.now() + 3600000).toISOString().slice(0, 16)} onChange={e => setStartAt(e.target.value)} style={{ padding: '12px 14px', borderRadius: 12, border: '1.5px solid var(--border-color)', fontFamily: 'inherit' }} />
+          <input value={notes} onChange={e => setNotes(e.target.value)} placeholder="Access instructions or preferred contact" style={{ padding: '12px 14px', borderRadius: 12, border: '1.5px solid var(--border-color)', fontFamily: 'inherit' }} />
+          <button onClick={submit} disabled={!startAt || busy} style={{ padding: '12px 18px', borderRadius: 12, border: 'none', background: startAt ? 'var(--accent-secondary)' : 'var(--border-color)', color: '#fff', fontWeight: 800, cursor: startAt ? 'pointer' : 'default' }}>{busy ? 'Scheduling...' : 'Confirm Visit'}</button>
+        </div>
+      )}
+      {error && <div style={{ color: '#DC2626', fontSize: 12, marginTop: 10 }}>{error}</div>}
+    </div>
+  );
+}
+
 function ClientApprovalsTab({ project, invoices = [], approvals = [], approveQuote, approveSignoff, brand, user, isMobile, setActiveTab, updateProjectStage, updateApproval }) {
   const [signOffBusy, setSignOffBusy] = useState(false);
   const [signOffDone, setSignOffDone] = useState(false);
@@ -1610,6 +1630,7 @@ function ClientApprovalsTab({ project, invoices = [], approvals = [], approveQuo
   const [reconsiderBusy, setReconsiderBusy] = useState(false);
 
   const quoteDocs = invoices.filter(i => (i.projectId === project.id || i.parentId === project.id) && ['Quotation', 'quote', 'quotation'].includes(i.type || i.documentKind));
+  const productionAuthorized = project.productionAuthorized === true || project.specDoc?.status === 'signed';
   const pendingApprovals = (approvals || []).filter(a => a.projectId === project.id && a.status === 'pending');
   const pastApprovals = (approvals || []).filter(a => a.projectId === project.id && a.status !== 'pending');
 
@@ -1758,48 +1779,40 @@ function ClientApprovalsTab({ project, invoices = [], approvals = [], approveQuo
         </div>
       )}
 
-      {/* ── SECTION 2: Contract & Quotation Approval ─────────────────────── */}
-      {/* Collapse this section once both contract signed and quote approved */}
-      {(project.contractAccepted || contractJustSigned) && (quoteDocs.length === 0 || quoteDocs.every(q => ['approved', 'Approved'].includes(String(q.status || '').toLowerCase()))) ? (
+      {/* ── SECTION 2: Quotation negotiation ─────────────────────────────── */}
+      {productionAuthorized && project.quoteApproved ? (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', borderRadius: 12, background: '#F0FDF4', border: '1px solid #BBF7D0', margin: '0 0 8px 0' }}>
           <CheckCircle2 size={14} color="#16A34A" />
-          <span style={{ fontSize: 13, fontWeight: 700, color: '#15803D' }}>Contract signed &amp; quote approved</span>
+          <span style={{ fontSize: 13, fontWeight: 700, color: '#15803D' }}>Quotation, contract, payment, and deliverables approved</span>
         </div>
       ) : (
       <div style={{ ...sectionStyle, borderBottom: project.stageId === 7 ? '1px solid var(--border-color)' : 'none' }}>
-        <div style={sectionTitleStyle}>② Contract &amp; Quotation Approval</div>
+        <div style={sectionTitleStyle}>② Quotation &amp; Cost Negotiation</div>
 
-        {/* Contract signing gate */}
-        {(project.contractAccepted || contractJustSigned) ? (
+        {/* Production-authorisation gate */}
+        {productionAuthorized ? (
           <div style={{ padding: '12px 16px', borderRadius: 14, background: '#F0FDF4', border: '1px solid #BBF7D0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, marginBottom: 12 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <FileCheck size={15} color="#16A34A" />
               <div>
-                <div style={{ fontSize: 12, fontWeight: 800, color: '#15803D' }}>Contract Signed</div>
+                <div style={{ fontSize: 12, fontWeight: 800, color: '#15803D' }}>Production Authorised</div>
                 <div style={{ fontSize: 11, color: '#16A34A' }}>
-                  {project.contractSignedName || user?.name || 'You'} ·{' '}
-                  {project.quoteSignedAt?.seconds ? new Date(project.quoteSignedAt.seconds * 1000).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Just now'}
+                  Project specification signed by {project.specDoc?.signedBy || user?.name || 'client'}
                 </div>
               </div>
             </div>
-            <button
-              onClick={() => printSignedContractDoc(project, user, brand)}
-              style={{ padding: '8px 14px', borderRadius: 10, border: '1px solid #BBF7D0', background: '#fff', color: '#15803D', fontSize: 11, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
-            >
-              <Printer size={12} /> Download Signed Contract
-            </button>
           </div>
         ) : (
           <div style={{ padding: 16, borderRadius: 16, background: 'linear-gradient(135deg, #FFF7ED, #FFFBF5)', border: '1.5px solid #F59E0B40', marginBottom: 12 }}>
-            <div style={{ fontSize: 13, fontWeight: 900, color: '#92400E', marginBottom: 4 }}>Sign the Project Contract</div>
+            <div style={{ fontSize: 13, fontWeight: 900, color: '#92400E', marginBottom: 4 }}>Final Deliverables Follow Payment</div>
             <div style={{ fontSize: 12, color: '#78350F', lineHeight: 1.6, marginBottom: 12 }}>
-              Before approving your quote, please read and sign the project contract. This is a legally binding agreement for the work to be carried out.
+              First approve the quotation, sign the contract, and complete the initial payment. Westline Future will then issue the final deliverables document for production authorisation.
             </div>
             <button
-              onClick={() => setShowContract(true)}
+              onClick={() => setActiveTab?.('documents')}
               style={{ padding: '10px 18px', borderRadius: 12, border: 'none', background: `var(--accent-secondary)`, color: '#fff', fontSize: 12, fontWeight: 900, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 7 }}
             >
-              <FileCheck size={14} /> Review & Sign Contract →
+              <FileCheck size={14} /> View Documents →
             </button>
           </div>
         )}
@@ -1817,11 +1830,8 @@ function ClientApprovalsTab({ project, invoices = [], approvals = [], approveQuo
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
               <button onClick={() => downloadInvoicePDF(inv, project, user, brand)} style={{ padding: '9px 13px', borderRadius: 10, border: '1px solid var(--border-color)', background: '#fff', fontSize: 11, fontWeight: 800, cursor: 'pointer' }}>Download</button>
-              {approveQuote && !project.quoteApproved && (project.contractAccepted || contractJustSigned) && (
+              {approveQuote && !project.quoteApproved && (
                 <button onClick={() => approveQuote(project.id)} style={{ padding: '9px 13px', borderRadius: 10, border: 'none', background: `var(--accent-primary)`, color: '#fff', fontSize: 11, fontWeight: 900, cursor: 'pointer' }}>Approve Quote</button>
-              )}
-              {approveQuote && !project.quoteApproved && !(project.contractAccepted || contractJustSigned) && (
-                <button disabled style={{ padding: '9px 13px', borderRadius: 10, border: '1px solid var(--border-color)', background: 'var(--bg-secondary)', color: 'var(--text-secondary)', fontSize: 11, fontWeight: 800, cursor: 'not-allowed' }} title="Sign contract first">Sign contract first</button>
               )}
             </div>
           </div>
@@ -1923,6 +1933,7 @@ function ClientAddOnsTab({ project, addOns: propAddOns = [], invoices: propInvoi
   // Own live queries — bypasses the clientId/UID mismatch in AppContext for phone-auth users
   const [liveAddOns, setLiveAddOns] = useState(null);
   const [liveInvoices, setLiveInvoices] = useState(null);
+  const [respondingTo, setRespondingTo] = useState(null);
 
   useEffect(() => {
     if (!db || !project?.id) return;
@@ -1941,6 +1952,22 @@ function ClientAddOnsTab({ project, addOns: propAddOns = [], invoices: propInvoi
   const email = user?.proxyEmail || (user?.phone ? user.phone + '@clients.westlinefuture.com' : 'client@clients.westlinefuture.com');
   const parseAmount = value => parseFloat(String(value || '0').replace(/[^0-9.]/g, '')) || 0;
   const cardStyle = { padding: isMobile ? '20px 18px' : '24px 28px', background: '#fff', borderRadius: isMobile ? 24 : 20, border: isMobile ? 'none' : '1px solid var(--border-color)', boxShadow: isMobile ? '0 2px 16px rgba(0,0,0,.08)' : '0 4px 20px rgba(0,0,0,.05)' };
+  const respondToAddOn = async (addOnId, decision) => {
+    const note = decision === 'reject'
+      ? window.prompt('Describe the change you need before approving this add-on:')?.trim()
+      : '';
+    if (decision === 'reject' && !note) return;
+    setRespondingTo(addOnId);
+    try {
+      const respond = httpsCallable(functions, 'respondToProjectAddOn');
+      await respond({ addOnId, decision, note });
+    } catch (error) {
+      console.error('[ClientAddOnsTab] Failed to respond to add-on:', error);
+      alert(error?.message || 'The add-on response could not be recorded.');
+    } finally {
+      setRespondingTo(null);
+    }
+  };
 
   if (liveAddOns === null) {
     return <div style={{ ...cardStyle, padding: '32px', textAlign: 'center', color: 'var(--text-secondary)', fontSize: 13 }}>Loading add-ons…</div>;
@@ -1963,6 +1990,7 @@ function ClientAddOnsTab({ project, addOns: propAddOns = [], invoices: propInvoi
         );
         const amount = parseAmount(addOn.price || addOn.amount || linkedInv?.amount || linkedInv?.total);
         const isPaid = isPaidStatus(linkedInv?.status);
+        const awaitingApproval = String(addOn.status || '').toLowerCase() === 'pending approval';
         const unpaid = linkedInv && !isPaid;
         const statusLabel = isPaid ? 'Paid' : addOn.status || 'Pending Payment';
         const statusColor = isPaid ? '#16A34A' : '#D97706';
@@ -1983,6 +2011,26 @@ function ClientAddOnsTab({ project, addOns: propAddOns = [], invoices: propInvoi
                 {amount ? `GH₵ ${amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}` : 'Pricing pending'}
                 {isPaid && <span style={{ fontSize: 11, fontWeight: 700, marginLeft: 6 }}>✓ Settled</span>}
               </div>
+              {awaitingApproval && (
+                <div style={{ display: 'flex', gap: 8, width: isMobile ? '100%' : 'auto' }}>
+                  <button
+                    type="button"
+                    disabled={respondingTo === addOn.id}
+                    onClick={() => respondToAddOn(addOn.id, 'reject')}
+                    style={{ flex: 1, minHeight: 42, padding: '0 14px', borderRadius: 10, border: '1px solid #DC2626', background: '#fff', color: '#B91C1C', fontWeight: 800, cursor: 'pointer' }}
+                  >
+                    Request changes
+                  </button>
+                  <button
+                    type="button"
+                    disabled={respondingTo === addOn.id}
+                    onClick={() => respondToAddOn(addOn.id, 'approve')}
+                    style={{ flex: 1, minHeight: 42, padding: '0 18px', borderRadius: 10, border: 'none', background: '#166534', color: '#fff', fontWeight: 800, cursor: 'pointer' }}
+                  >
+                    {respondingTo === addOn.id ? 'Saving...' : 'Approve add-on'}
+                  </button>
+                </div>
+              )}
               {unpaid && amount > 0 && (
                 <div style={{ width: isMobile ? '100%' : 260, maxWidth: '100%' }}>
                   <UnifiedPaymentGateway
@@ -1997,7 +2045,7 @@ function ClientAddOnsTab({ project, addOns: propAddOns = [], invoices: propInvoi
                   />
                 </div>
               )}
-              {!linkedInv && amount === 0 && (
+              {!linkedInv && !awaitingApproval && amount === 0 && (
                 <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Invoice being prepared by your account manager.</div>
               )}
             </div>
@@ -2108,42 +2156,6 @@ function InstallationStatusCard({ project }) {
 function ShippingTrackerCard({ project, invoices = [] }) {
   const sd = project.shippingDetails;
   if ((project.stageId || 0) < 5) return null;
-
-  // ── Payment gate: post-production (30%) milestone must be paid to see shipping details ──
-  const postProdInv = invoices.find(i =>
-    (i.projectId === project.id || i.parentId === project.id) &&
-    (i.milestoneKey === 'post-production' || (i.title || i.name || '').toLowerCase().includes('production'))
-  );
-  const postProdPaid = postProdInv
-    ? ['paid', 'paid in full', 'partially paid'].includes((postProdInv.status || '').toLowerCase())
-    : false;
-
-  // If invoice exists but unpaid, block access and prompt payment
-  if (postProdInv && !postProdPaid) {
-    return (
-      <div style={{
-        padding: '24px 20px', borderRadius: 20,
-        background: 'linear-gradient(135deg, #1C1917, #292524)',
-        color: '#fff', marginBottom: 4,
-        boxShadow: '0 8px 32px rgba(0,0,0,.3)',
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
-          <span style={{ fontSize: 24 }}>🔒</span>
-          <div>
-            <div style={{ fontSize: 11, fontWeight: 800, color: 'rgba(255,255,255,.5)', textTransform: 'uppercase', letterSpacing: '.08em' }}>Shipping Details Locked</div>
-            <div style={{ fontSize: 17, fontWeight: 900, color: '#fff' }}>Payment Required</div>
-          </div>
-        </div>
-        <div style={{ fontSize: 13, color: 'rgba(255,255,255,.65)', lineHeight: 1.6, marginBottom: 16 }}>
-          Your goods are in production and will be ready for dispatch soon. To unlock live shipping details — vessel name, BL number, container, and ETA — please clear your <strong style={{ color: '#FCD34D' }}>30% Production Milestone</strong> payment.
-        </div>
-        <div style={{ padding: '12px 16px', background: 'rgba(255,255,255,.06)', borderRadius: 12, fontSize: 13, color: 'rgba(255,255,255,.5)' }}>
-          Invoice: <strong style={{ color: '#fff' }}>{postProdInv.invoiceNo || postProdInv.title || 'Production Milestone'}</strong> · GH₵ {Number(postProdInv.amount || postProdInv.total || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })} due
-        </div>
-        <div style={{ marginTop: 12, fontSize: 11, color: 'rgba(255,255,255,.35)' }}>Open the <strong style={{ color: 'rgba(255,255,255,.55)' }}>Payments</strong> tab to settle this invoice.</div>
-      </div>
-    );
-  }
 
   if (!sd?.vesselName) return null;
 
@@ -2733,8 +2745,14 @@ function PaymentsTab({ project, user, transactions: propTxns, invoices: propInvs
   const uid = user?.id || user?.uid || user?.phone;
   const allPayments = livePayments
     ?? (propTxns || []).filter(t => t.projectId === project.id);
-  const allInvoices = liveInvoices
+  const rawInvoices = liveInvoices
     ?? (propInvs || []).filter(i => i.projectId === project.id || i.parentId === project.id);
+  const productionAuthorized = project.productionAuthorized === true || project.specDoc?.status === 'signed';
+  const allInvoices = rawInvoices.filter(invoice => {
+    if (productionAuthorized) return true;
+    const descriptor = `${invoice.title || ''} ${invoice.type || ''} ${invoice.documentKind || ''}`.toLowerCase();
+    return descriptor.includes('rendering') || descriptor.includes('design fee');
+  });
 
   const parseAmount = value => parseFloat(String(value || '0').replace(/[^0-9.]/g, '')) || 0;
   const totalPaid = allPayments.reduce((s, t) => s + parseAmount(t.amount), 0);
@@ -2762,6 +2780,8 @@ function PaymentsTab({ project, user, transactions: propTxns, invoices: propInvs
 
   // Which project stage triggers each standard milestone key
   const MILESTONE_TRIGGERS = {
+    'initial-deposit':          { stage: 3, label: 'After quote approval',      stageLabel: 'Stage 3 — Quote & Deposit' },
+    'pre-installation-balance': { stage: 5, label: 'After arrival in Ghana',    stageLabel: 'Stage 5 — Shipping' },
     'post-rendering':  { stage: 3, label: 'After rendering approval',  stageLabel: 'Stage 3 — Quote' },
     'post-production': { stage: 5, label: 'After production complete', stageLabel: 'Stage 5 — Delivery' },
     'post-shipping':   { stage: 7, label: 'After delivery',            stageLabel: 'Stage 7 — Inspection' },
@@ -3021,22 +3041,14 @@ function PaymentsTab({ project, user, transactions: propTxns, invoices: propInvs
                             if (!currentDueMilestoneInv?.id || offlineSubmitting) return;
                             setOfflineSubmitting(true);
                             try {
-                              await updateDoc(doc(db, 'invoices', currentDueMilestoneInv.id), {
-                                awaitingConfirmation: true,
-                                paymentMethodSubmitted: offlineMethod,
-                                paymentSubmittedAt: serverTimestamp(),
+                              const submitOfflinePayment = httpsCallable(functions, 'submitOfflinePayment');
+                              await submitOfflinePayment({
+                                projectId: project.id,
+                                invoiceId: currentDueMilestoneInv.id,
+                                amount: parseAmount(currentDueMilestoneInv.amount || currentDueMilestoneInv.total),
+                                method: offlineMethod === 'bank' ? 'bank' : 'cash',
+                                reference: '',
                               });
-                              const paymentMessage = `${user?.name || project.clientName || 'Client'} submitted an offline payment for ${currentDueMilestoneInv.currency || 'GHS'} ${parseAmount(currentDueMilestoneInv.amount || currentDueMilestoneInv.total).toLocaleString()}. Please confirm receipt.`;
-                              const recipients = [...new Set(['admin', project.projectManagerId, ...(project.assignedStaff || [])].filter(Boolean))];
-                              await Promise.all(recipients.map(userId => addDoc(collection(db, 'notifications'), {
-                                userId,
-                                message: paymentMessage,
-                                msg: paymentMessage,
-                                type: 'payment_submitted',
-                                link: '/admin/client-hub',
-                                read: false,
-                                createdAt: serverTimestamp(),
-                              }).catch(() => null)));
                               setOfflineSubmitted(true);
                             } catch (e) { console.error(e); } finally { setOfflineSubmitting(false); }
                           }}
@@ -3199,7 +3211,7 @@ function PaymentsTab({ project, user, transactions: propTxns, invoices: propInvs
                   onClick={() => {
                     const el = document.getElementById('client-invoice-doc');
                     if (!el) return;
-                    const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${viewInvoice.title || 'Invoice'}</title><style>@page{size:A4;margin:0}body{margin:0;background:#fff;font-family:sans-serif}#client-invoice-doc{width:210mm;min-height:297mm;margin:0 auto}@media print{button{display:none!important}}</style></head><body><div id="client-invoice-doc">${el.innerHTML}</div><script>window.onload=()=>{setTimeout(()=>{window.print();},500);};<\/script></body></html>`;
+                    const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${viewInvoice.title || 'Invoice'}</title><style>@page{size:A4;margin:0}body{margin:0;background:#fff;font-family:sans-serif}#client-invoice-doc{width:210mm;min-height:297mm;margin:0 auto}@media print{button{display:none!important}}</style></head><body><div id="client-invoice-doc">${el.innerHTML}</div><script>window.onload=()=>{setTimeout(()=>{window.print();},500);};</script></body></html>`;
                     const win = window.open('', '_blank');
                     if (!win) return;
                     win.document.open();
@@ -3875,39 +3887,68 @@ function ProjectRoadmap({ project, invoices = [], renderingPackages = [], setAct
     ['Quotation','quote','quotation'].includes(i.type || i.documentKind) &&
     !['approved'].includes(String(i.status || '').toLowerCase())
   );
-  const contractSigned = !!project.contractAccepted || !!project.quoteApproved;
+  const contractSigned = !!project.contractAccepted;
+  const briefSigned = project.productionAuthorized === true || project.specDoc?.status === 'signed';
   const renderingPkg = (renderingPackages || []).find(p => p.projectId === project.id);
   const renderingUnlocked = renderingPkg?.unlocked || renderingPkg?.status === 'Paid / Unlocked' || !!project.renderingFeePaid;
   const renderingApproved = !!project.renderingApproved;
 
   // Per-stage client guidance
+  const siteVisitScheduled = project.siteVisit?.status === 'scheduled';
+  const siteVisitCompleted = project.siteVisit?.status === 'completed' || project.siteSurveyCompleted === true;
   const stageGuidance = {
-    1: { who: 'westline', msg: 'Our team is visiting your site to take precise measurements. No action needed from you right now.' },
-    2: { who: renderingUnlocked ? (renderingApproved ? 'done' : 'client') : 'client',
-         msg: renderingUnlocked
-           ? (renderingApproved ? 'You have approved the design. Moving to the next step.' : 'Your 3D renders are ready! Please review the design and let us know if you want any changes before we proceed.')
-           : 'Your design package is being prepared. Once ready, you will need to pay the design fee to unlock and review your 3D renders.',
+    1: { who: !project.renderingFeePaid ? 'client' : !siteVisitScheduled && !siteVisitCompleted ? 'client' : siteVisitCompleted ? 'done' : 'westline',
+         msg: !project.renderingFeePaid
+           ? 'Pay the rendering fee to begin the measured design journey.'
+           : !siteVisitScheduled && !siteVisitCompleted
+             ? 'Choose a date and time for our technical team to visit your site.'
+             : !siteVisitCompleted
+               ? 'Your technical site visit is scheduled. Please ensure the team can access the project area.'
+               : 'The technical survey and measurements are complete.' },
+    2: { who: renderingApproved ? 'done' : 'client',
+         msg: !renderingUnlocked
+           ? 'The design team is preparing your rendering from the completed site measurements.'
+           : !renderingApproved
+             ? 'Review the rendering, request revisions if needed, or approve the final version.'
+             : 'Your final rendering is approved and the quotation can now be negotiated.',
          action: renderingUnlocked && !renderingApproved ? { label: 'Review Design →', tab: 'designs' } : null,
     },
-    3: { who: contractSigned ? 'done' : 'client',
-         msg: contractSigned
-           ? 'Quote approved and contract signed. Your project is now confirmed.'
+    3: { who: briefSigned ? 'done' : 'client',
+         msg: briefSigned
+           ? 'The quotation, contract, initial payment, and final deliverables are approved. Production is authorised.'
+           : !project.quoteApproved && hasUnpaidQuote
+             ? 'Review the quotation. Approve the agreed cost or request a revised version.'
+             : project.quoteApproved && !contractSigned
+               ? 'The quotation is approved. Review and sign the project contract and terms.'
+               : contractSigned && !project.depositPaid && !project.initialDepositPaid
+                 ? 'Your contract is signed. Complete the initial project payment.'
+                 : (project.depositPaid || project.initialDepositPaid) && !project.specDoc?.url
+                   ? 'Westline Future is preparing your final drawings, bill of materials, scope, and deliverables.'
+                   : project.specDoc?.url && !briefSigned
+                     ? 'Review and sign the final deliverables document to authorise production.'
            : hasUnpaidQuote
-             ? 'Your final quotation is ready. Please review it, approve it, and sign the contract to confirm your project.'
-             : 'We are preparing your final quotation. You will receive a notification as soon as it is ready for review.',
-         action: !contractSigned && hasUnpaidQuote ? { label: 'Review Quote & Sign →', tab: 'documents' } : null,
+             ? 'Your quotation is ready for review.'
+             : 'We are preparing your quotation for cost negotiation.',
+         action: hasUnpaidQuote ? { label: 'Review Quote →', tab: 'documents' } : null,
     },
     4: { who: 'westline', msg: 'We are procuring your materials and fabricating your custom furniture and fixtures at our production facility.' },
-    5: { who: 'westline', msg: 'Your order is packed and in transit. We will notify you with tracking updates as it ships to your location.' },
-    6: { who: 'westline', msg: 'Our installation crew is on-site setting up and finishing all your components. You can reach us if you have any questions.' },
+    5: { who: project.goodsArrivedInGhana && !project.goodsBalancePaid ? 'client' : 'westline',
+         msg: !project.goodsArrivedInGhana
+           ? 'Your goods are in transit to Ghana. Shipping details and ETA remain available during the journey.'
+           : !project.goodsBalancePaid
+             ? 'Your goods have arrived in Ghana. Pay the final goods balance before delivery to site.'
+             : !project.installationFeePaid && project.projectType !== 'buy-only'
+               ? 'The goods balance is cleared. Approve and pay the separate installation-service invoice.'
+               : 'All pre-installation payments are complete. Westline Future is scheduling the field crew.',
+         action: project.goodsArrivedInGhana && (!project.goodsBalancePaid || !project.installationFeePaid) ? { label: 'Open Payments →', tab: 'financials' } : null,
+    },
+    6: { who: 'westline', msg: 'The final goods balance and separate installation service are paid. Our crew is on-site completing installation.' },
     7: { who: 'client', msg: 'Installation is complete! Please inspect the finished work carefully. If you are happy, please sign off so we can close the project.',
          action: { label: 'Inspect & Sign Off →', tab: 'documents' },
     },
-    8: { who: hasUnpaidInvoice ? 'client' : 'done',
-         msg: hasUnpaidInvoice
-           ? 'Almost there! Please clear the final balance to complete your project and receive your handover documents.'
-           : 'Your project is complete and all balances are settled. Congratulations! 🎉',
-         action: hasUnpaidInvoice ? { label: 'Make Final Payment →', tab: 'financials' } : null,
+    8: { who: 'done',
+         msg: 'Your project is complete. Handover documents and warranty information remain available in your portal.',
+         action: null,
     },
   };
 
@@ -4650,6 +4691,9 @@ function KickoffGate({ project, user, brand, isMobile, invoices = [], hasUnlocke
 
   const requiresRendering = project.kickoffMode === 'rendering-first';
   const contractSigned = !!project.contractAccepted || contractJustSigned;
+  const renderingApproved = project.renderingApproved === true ||
+    project.designApproved === true ||
+    String(project.renderingStatus || '').toLowerCase() === 'approved';
 
   // Check rendering paid: either the flag is set, the linked invoice is "Paid", OR Paystack just confirmed it locally
   const renderingInvoiceObj = invoices.find(inv =>
@@ -4699,10 +4743,11 @@ function KickoffGate({ project, user, brand, isMobile, invoices = [], hasUnlocke
   const renderingPaid = !!project.renderingFeePaid || paidLocally || (renderingInvoiceObj && renderingInvoiceObj.status === 'Paid') || hasUnlockedDesign;
 
   const needsRenderingPayment = requiresRendering && !renderingPaid;
-  const needsContract = !contractSigned;
+  const needsContract = project.quoteApproved === true && !contractSigned;
   const renderingInvoice = renderingInvoiceObj;
 
-  // Step 1 = rendering fee (rendering-first only), Step 2 = contract signing
+  // Rendering review happens between these gates. Contract signing is exposed
+  // only after the final rendering is approved.
   const step = needsRenderingPayment ? 1 : needsContract ? 2 : null;
 
   // Notify parent when gate clears — must be in an effect, not the render body,
@@ -4714,9 +4759,9 @@ function KickoffGate({ project, user, brand, isMobile, invoices = [], hasUnlocke
 
   if (step === null) return null;
 
-  const stepLabel = step === 1 ? 'Step 1 of 2 — 3D Rendering Fee' : 'Step 2 of 2 — Project Agreement';
-  const totalSteps = requiresRendering ? 2 : 1;
-  const currentStep = requiresRendering ? step : (step === 2 ? 1 : null);
+  const stepLabel = step === 1 ? 'Rendering fee payment' : 'Contract signature after quote approval';
+  const totalSteps = 1;
+  const currentStep = 1;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -4730,14 +4775,12 @@ function KickoffGate({ project, user, brand, isMobile, invoices = [], hasUnlocke
           {project.title}
         </div>
         <div style={{ fontSize: isMobile ? 22 : 26, fontWeight: 900, marginBottom: 6 }}>
-          {step === 1 ? '3D Rendering Fee' : 'Sign Project Agreement'}
+          {step === 1 ? '3D Rendering Fee' : 'Sign Approved Project Contract'}
         </div>
         <div style={{ fontSize: 13, opacity: .75, lineHeight: 1.5 }}>
           {step === 1
-            ? 'Pay the rendering fee to receive your photorealistic 3D design previews. Your portal unlocks after signing the contract in the next step.'
-            : requiresRendering
-              ? 'Your 3D rendering fee is confirmed. Now read and sign the project agreement to officially begin — your full portal unlocks immediately after.'
-              : 'Please read and sign the project agreement to unlock your portal and begin the project journey.'}
+            ? 'Pay the rendering fee, then schedule the technical site visit. Your rendering will be produced from the verified measurements.'
+            : 'Your negotiated quotation is approved. Read and sign the project contract to activate the initial project payment.'}
         </div>
         {/* Step progress dots */}
         {totalSteps > 1 && (
@@ -4965,7 +5008,7 @@ function ContractGate({ project, user, brand, isMobile }) {
           Sign Your Contract
         </div>
         <div style={{ fontSize: 13, opacity: .75, lineHeight: 1.5 }}>
-          Your initial deposit has been received! Please read and sign the project agreement to officially begin production.
+          Your negotiated quotation is approved. Please read and sign the project contract and terms to activate the initial project payment.
         </div>
       </div>
 
@@ -4989,7 +5032,7 @@ function ContractGate({ project, user, brand, isMobile }) {
         </div>
 
         <div style={{ background: 'var(--bg-secondary)', borderRadius: 14, padding: '16px 20px', marginBottom: 20, fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
-          By signing this agreement you confirm the scope of work, payment schedule, and terms as discussed with your account manager. This is a binding contract.
+          By signing this agreement you accept the legal and commercial terms for continuing from the approved rendering into the detailed project brief and quotation process. The final scope and price are approved separately.
         </div>
 
         <button
@@ -5168,6 +5211,13 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
 
     const clientAccessId = user.id || user.uid;
     if (!clientAccessId) { setLoadingProjects(false); return; }
+    const phoneDigits = String(user.phone || user.phoneNumber || '').replace(/\D/g, '');
+    const candidates = [...new Set([
+      clientAccessId,
+      user.uid,
+      phoneDigits,
+      phoneDigits ? `+${phoneDigits}` : '',
+    ].filter(Boolean))].slice(0, 10);
 
     const q = query(
       collection(db, 'projects'),
@@ -5538,8 +5588,9 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
                   const hasUnlockedDesignLocal = (props.renderingPackages || []).some(pkg => pkg.projectId === selected.id && (pkg.unlocked || pkg.status === 'Paid / Unlocked'));
                   const renderingPaid = renderingPaidByFlag || renderingPaidByInvoice || hasUnlockedDesignLocal;
                   const contractSigned = !!selected.contractAccepted || isCleared;
-                  // Gate is active until BOTH rendering fee (if required) AND contract are done
-                  const gateActive = !isCleared && (!contractSigned || (requiresRendering && !renderingPaid));
+                  // Rendering payment is the initial gate. Contract signing becomes
+                  // a later gate only after the negotiated quotation is approved.
+                  const gateActive = !isCleared && ((requiresRendering && !renderingPaid) || (selected.quoteApproved === true && !contractSigned));
                   if (!gateActive) return null;
                   return (
                     <KickoffGate
@@ -5552,9 +5603,6 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
                       updateProjectStage={props.updateProjectStage}
                       onGateCleared={() => setGateCleared(prev => ({ ...prev, [selected.id]: true }))}
                       onPaymentSuccess={() => {
-                        if (selected.stageId < 3) {
-                          props.updateProjectStage?.(selected.id, 3, 'Rendering fee paid, advancing to quote', { silent: true });
-                        }
                         // Force refresh of project data after payment
                         // The onSnapshot listener should pick up renderingFeePaid, but as a safety net
                         // we force a manual read after a short delay and update state directly.
@@ -5627,9 +5675,10 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
                 {activeTab === 'overview' && (() => {
                   const pendingInvoices = (props.invoices || []).filter(i => i.projectId === selected?.id && ['Sent', 'Partially Paid'].includes(i.status) && i.type !== 'Quotation');
                   const unsignedQuote = (props.approvals || []).find(a => a.projectId === selected?.id && ['Quotation', 'quotation'].includes(a.type) && a.status === 'Sent');
-                  const specNeedsReview = selected?.specDoc?.url && selected?.specDoc?.status === 'sent';
-                  const actionReq = unsignedQuote ? { title: 'Contract Signature Required', desc: 'Your project quotation and contract are ready for your secure electronic signature.', tab: 'documents', btn: 'Sign Contract', icon: <PenTool size={18} color="#DC2626" /> }
-                    : specNeedsReview ? { title: 'Project Specification Review', desc: 'Your detailed project specification is ready. Please review and approve it so production can begin.', tab: 'documents', btn: 'Review Spec', icon: <FileCheck size={18} color="#D97706" /> }
+                  const productionAuthorized = selected?.productionAuthorized === true || selected?.specDoc?.status === 'signed';
+                  const specNeedsReview = selected?.specDoc?.url && !['signed', 'rejected'].includes(selected?.specDoc?.status);
+                  const actionReq = specNeedsReview ? { title: 'Project Brief Signature Required', desc: 'Review and sign the final project brief to unlock quotation preparation.', tab: 'documents', btn: 'Review & Sign', icon: <FileCheck size={18} color="#D97706" /> }
+                    : unsignedQuote && productionAuthorized ? { title: 'Final Quote Ready', desc: 'Production is authorised. Review and approve your final quote to continue.', tab: 'vault', btn: 'Review Quote', icon: <PenTool size={18} color="#DC2626" /> }
                     : pendingInvoices.length > 0 ? { title: 'Pending Invoice', desc: `You have ${pendingInvoices.length} unpaid invoice(s) on your account.`, tab: 'financials', btn: 'View Invoices', icon: <CreditCard size={18} color="#D97706" /> }
                     : null;
 
@@ -5667,7 +5716,10 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
                         const contSigned = !!selected.contractAccepted || !!selected.kickoffGateCleared;
                         const specUploaded = !!selected.specDoc?.url;
                         const specApproved = ['signed', 'approved'].includes(selected.specDoc?.status);
-                        const depositInv = (props.invoices || []).find(i => (i.projectId === selected.id || i.parentId === selected.id) && (i.type || '').toLowerCase().includes('deposit'));
+                        const depositInv = (props.invoices || []).find(i =>
+                          (i.projectId === selected.id || i.parentId === selected.id) &&
+                          isInitialProjectDepositInvoice(i)
+                        );
                         const depositPaid = !!selected.depositPaid || (depositInv && isPaidStatus(depositInv.status));
                         const allDone = contSigned && (!requiresRend || rendPaid) && (!specUploaded || specApproved) && depositPaid;
                         const welcomeKey = `portal_welcomed_${user?.id}_${selected?.id}`;
@@ -5678,8 +5730,8 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
                           ...(requiresRend ? [{ label: '3D rendering fee paid', done: rendPaid, action: null }] : []),
                           { label: 'Project agreement signed', done: contSigned, action: null },
                           { label: 'Project brief & spec uploaded by team', done: specUploaded, action: null, waiting: !specUploaded },
-                          { label: 'Review & approve project specification', done: specApproved, action: specUploaded && !specApproved ? () => setActiveTab('documents') : null, actionLabel: 'Review Now →', waiting: !specUploaded },
-                          { label: 'Initial deposit paid — production begins', done: depositPaid, action: !depositPaid ? () => setActiveTab('financials') : null, actionLabel: 'Pay Deposit →' },
+                          { label: 'Sign project brief & unlock quotation', done: specApproved, action: specUploaded && !specApproved ? () => setActiveTab('documents') : null, actionLabel: 'Review & Sign →', waiting: !specUploaded },
+                          { label: 'Approve quote & complete required payment', done: !!selected.quoteApproved && depositPaid, action: specApproved && (!selected.quoteApproved || !depositPaid) ? () => setActiveTab(selected.quoteApproved ? 'financials' : 'vault') : null, actionLabel: selected.quoteApproved ? 'Pay Now →' : 'Review Quote →', waiting: !specApproved },
                         ];
                         const nextStep = steps.find(s => !s.done && !s.waiting);
                         const setupPct = Math.round((steps.filter(s => s.done).length / steps.length) * 100);
@@ -5731,17 +5783,19 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
                       })()}
 
                       {/* ── Spec Doc Review Banner — shown when admin uploads spec but client hasn't approved ── */}
-                      {selected?.specDoc?.url && !['signed', 'approved'].includes(selected.specDoc?.status) && (
+                      {Number(selected?.stageId || 1) >= 2 &&
+                        selected?.specDoc?.url &&
+                        !['signed', 'approved'].includes(selected.specDoc?.status) && (
                         <div style={{ padding: '16px 20px', borderRadius: 16, background: '#FFFBEB', border: '1.5px solid #FDE68A', display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
                           <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
                             <span style={{ fontSize: 20, marginTop: 2 }}>📋</span>
                             <div>
-                              <div style={{ fontSize: 14, fontWeight: 900, color: '#92400E', marginBottom: 3 }}>Your Project Brief Is Ready to Review</div>
-                              <div style={{ fontSize: 12, color: '#B45309', lineHeight: 1.5 }}>Your team has uploaded your project specification, scope, and brief. Please review and approve it so production can begin. Go to the <strong>Documents</strong> tab to view it.</div>
+                              <div style={{ fontSize: 14, fontWeight: 900, color: '#92400E', marginBottom: 3 }}>Authorise Procurement &amp; Production</div>
+                              <div style={{ fontSize: 12, color: '#B45309', lineHeight: 1.5 }}>Your initial payment is confirmed. Review and sign the final deliverables document before production begins.</div>
                             </div>
                           </div>
                           <button onClick={() => setActiveTab('documents')} style={{ padding: '10px 20px', borderRadius: 10, background: '#D97706', color: '#fff', fontSize: 13, fontWeight: 800, border: 'none', cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                            Review Brief →
+                            Review & Authorise →
                           </button>
                         </div>
                       )}
@@ -5754,6 +5808,7 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
                       setActiveTab={setActiveTab}
                       isMobile={isMobile}
                     />
+                    <ClientSiteVisitScheduler project={selected} isMobile={isMobile} />
 
                     <ProjectRoadmap
                       project={selected}
@@ -5764,16 +5819,13 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
                       onStageGuide={setActiveStageGuide}
                     />
                     {(() => {
-                      const initialDepositInvoice = gateInvoices.find(inv => {
-                        const t = (inv.type || '').toLowerCase();
-                        const title = (inv.title || '').toLowerCase();
-                        return t.includes('deposit') || title.includes('deposit');
-                      });
-                      const depositPaid = initialDepositInvoice && initialDepositInvoice.status === 'Paid';
                       // Include gateCleared so the overview doesn't re-show ContractGate while
                       // waiting for the Firestore snapshot to propagate after signing.
                       const contractSigned = !!selected.contractAccepted || !!selected.kickoffGateCleared || !!gateCleared[selected.id];
-                      const showContractGate = !contractSigned && selected.renderingFeePaid;
+                      const renderingApproved = selected.renderingApproved === true ||
+                        selected.designApproved === true ||
+                        String(selected.renderingStatus || '').toLowerCase() === 'approved';
+                      const showContractGate = !contractSigned && selected.quoteApproved === true;
 
                       if (showContractGate) {
                         return (

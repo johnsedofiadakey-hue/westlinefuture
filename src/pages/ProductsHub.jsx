@@ -381,7 +381,7 @@ function BuyNowModal({ product, user, brand, onClose }) {
   const email   = user?.proxyEmail || (user?.phone ? `${user.phone}@clients.westlinefuture.com` : 'order@westlinefuture.com');
   const { brand: ctxBrand } = useContext(AppContext);
   const gw = ctxBrand?.gatewaySettings || {};
-  const paystackKey = gw.paystackPublicKey || '';
+  const paystackKey = gw.paystackPublicKey || import.meta.env.VITE_PAYSTACK_PUBLIC_KEY || '';
   const paystackActive = !!(gw.enablePaystack !== false && paystackKey);
   const hubtelActive = !!(gw.enableHubtel && gw.hubtelClientId && gw.hubtelClientSecret && gw.hubtelMerchantId);
   const paymentAvailable = paystackActive || hubtelActive;

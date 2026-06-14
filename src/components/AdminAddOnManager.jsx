@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { Plus, CheckCircle2, FileText, AlertCircle, Trash2 } from 'lucide-react';
 import { db } from '../lib/firebase';
-import { collection, addDoc, updateDoc, doc, serverTimestamp, deleteDoc } from 'firebase/firestore';
+import { collection, addDoc, doc, serverTimestamp, deleteDoc } from 'firebase/firestore';
 
-export default function AdminAddOnManager({ project, brand, addOns = [], invoices = [], createInvoice }) {
+export default function AdminAddOnManager({ project, brand, addOns = [], invoices = [] }) {
   const ac = brand?.color || 'var(--accent-secondary)';
   const [loading, setLoading] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
@@ -12,6 +12,7 @@ export default function AdminAddOnManager({ project, brand, addOns = [], invoice
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [amount, setAmount] = useState('');
+  const [category, setCategory] = useState('general');
 
   const projectAddOns = addOns.filter(a => a.projectId === project?.id);
 
@@ -19,58 +20,38 @@ export default function AdminAddOnManager({ project, brand, addOns = [], invoice
     if (!title || !amount) return;
     setLoading(true);
     try {
-      // 1. Create the Invoice for the Add-on
-      const invoicePayload = {
-        title: `Add-On: ${title}`,
-        clientId: project.clientId,
-        client: project.clientName || 'Client',
-        projectId: project.id,
-        parentId: project.id,
-        amount: parseFloat(amount),
-        total: parseFloat(amount),
-        status: 'Sent',
-        type: 'Add-On Invoice',
-        documentKind: 'invoice',
-        paymentPurpose: 'add_on',
-        currency: 'GHS',
-        items: [{ desc: title, qty: 1, rate: parseFloat(amount), total: parseFloat(amount) }],
-        date: new Date().toISOString().slice(0, 10),
-      };
-      const invId = await createInvoice(invoicePayload);
-
-      // 2. Add to addOns collection
       const addOnRef = await addDoc(collection(db, 'addOns'), {
         projectId: project.id,
         clientId: project.clientId,
         title,
         description,
         amount: parseFloat(amount),
-        linkedInvoiceId: invId,
-        status: 'Pending Payment',
+        category,
+        isInstallationInvoice: category === 'installation',
+        status: 'Pending Approval',
         createdAt: serverTimestamp()
       });
 
-      const clientLink = `/portal?projectId=${encodeURIComponent(project.id)}&tab=financials&invoiceId=${encodeURIComponent(invId)}`;
-      const notificationMessage = `A new add-on invoice for "${title}" is ready. Amount due: GH₵ ${parseFloat(amount).toLocaleString()}. Open Financials to review the invoice and pay securely.`;
+      const clientLink = `/portal?projectId=${encodeURIComponent(project.id)}&tab=financials&addOnId=${encodeURIComponent(addOnRef.id)}`;
+      const notificationMessage = `A proposed add-on, "${title}", requires your approval. Review the scope and price of GH₵ ${parseFloat(amount).toLocaleString()}. An invoice is created only after approval.`;
 
       if (project.clientId) {
         await Promise.all([
           addDoc(collection(db, 'notifications'), {
             userId: project.clientId,
             clientId: project.clientId,
-            title: 'New add-on invoice ready',
+            title: 'Add-on approval required',
             message: notificationMessage,
             msg: notificationMessage,
-            type: 'add_on_invoice',
+            type: 'add_on_approval',
             link: clientLink,
             projectId: project.id,
-            invoiceId: invId,
             addOnId: addOnRef.id,
             read: false,
             createdAt: serverTimestamp(),
           }),
           addDoc(collection(db, 'clients', project.clientId, 'messages'), {
-            text: `🧾 **New add-on invoice ready**\n${title} — **GH₵ ${parseFloat(amount).toLocaleString()}**\nOpen Financials in your portal to review the invoice and pay securely.`,
+            text: `**Add-on approval required**\n${title} — **GH₵ ${parseFloat(amount).toLocaleString()}**\nReview the proposed scope in Financials. An invoice is issued only after you approve it.`,
             senderRole: 'system',
             senderId: 'system',
             senderName: 'Westline Future Billing',
@@ -78,7 +59,6 @@ export default function AdminAddOnManager({ project, brand, addOns = [], invoice
             readByAdmin: true,
             readByClient: false,
             projectId: project.id,
-            invoiceId: invId,
             addOnId: addOnRef.id,
             link: clientLink,
             createdAt: serverTimestamp(),
@@ -90,6 +70,7 @@ export default function AdminAddOnManager({ project, brand, addOns = [], invoice
       setTitle('');
       setDescription('');
       setAmount('');
+      setCategory('general');
     } catch (e) {
       console.error(e);
     } finally {
@@ -128,6 +109,18 @@ export default function AdminAddOnManager({ project, brand, addOns = [], invoice
               <input className="p-inp" placeholder="e.g. Extra Glass Panel" value={title} onChange={e => setTitle(e.target.value)} />
             </div>
             <div className="p-field">
+              <label style={{ fontSize: 10, fontWeight: 800, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Add-On Type</label>
+              <select className="p-inp" value={category} onChange={e => setCategory(e.target.value)}>
+                <option value="general">General Scope Add-On</option>
+                <option value="installation">Installation Service</option>
+              </select>
+              {category === 'installation' && (
+                <div style={{ marginTop: 7, fontSize: 11, lineHeight: 1.5, color: '#92400E' }}>
+                  This creates the separate installation-service invoice. It must be approved and paid before installation can begin.
+                </div>
+              )}
+            </div>
+            <div className="p-field">
               <label style={{ fontSize: 10, fontWeight: 800, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Amount (GHS)</label>
               <input type="number" className="p-inp" placeholder="e.g. 1500" value={amount} onChange={e => setAmount(e.target.value)} />
             </div>
@@ -137,7 +130,7 @@ export default function AdminAddOnManager({ project, brand, addOns = [], invoice
             </div>
           </div>
           <button onClick={handleCreateAddOn} disabled={loading || !title || !amount} style={{ marginTop: 20, background: '#111', color: '#fff', border: 'none', padding: '12px 24px', borderRadius: 12, fontWeight: 700, cursor: 'pointer', opacity: (loading || !title || !amount) ? 0.5 : 1 }}>
-            {loading ? 'Processing...' : 'Create Invoice & Add-On'}
+            {loading ? 'Sending...' : 'Send Add-On for Approval'}
           </button>
         </div>
       )}
@@ -152,7 +145,8 @@ export default function AdminAddOnManager({ project, brand, addOns = [], invoice
           {projectAddOns.map(addon => {
             const linkedInv = invoices.find(i => i.id === addon.linkedInvoiceId);
             const isPaid = linkedInv && ['paid', 'paid in full'].includes(String(linkedInv.status || '').toLowerCase().trim());
-            const statusColor = isPaid ? '#10B981' : '#F59E0B';
+            const awaitingApproval = String(addon.status || '').toLowerCase() === 'pending approval';
+            const statusColor = isPaid ? '#10B981' : awaitingApproval ? '#2563EB' : '#F59E0B';
 
             return (
               <div key={addon.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px', background: '#fff', border: '1px solid var(--border-color)', borderRadius: 14 }}>
@@ -163,13 +157,14 @@ export default function AdminAddOnManager({ project, brand, addOns = [], invoice
                   <div>
                     <div className="lxfh" style={{ fontSize: 15, fontWeight: 700 }}>{addon.title}</div>
                     <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 4 }}>
-                      Amount: GHS {addon.amount?.toLocaleString()} &middot; Invoice: {linkedInv?.invoiceNo || 'INV'} ({linkedInv?.status})
+                      {addon.isInstallationInvoice || addon.category === 'installation' ? 'Installation service · ' : ''}
+                      Amount: GHS {addon.amount?.toLocaleString()} &middot; {linkedInv ? `Invoice: ${linkedInv.invoiceNo || 'INV'} (${linkedInv.status})` : 'Invoice created after client approval'}
                     </div>
                   </div>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                   <div style={{ fontSize: 11, fontWeight: 800, padding: '4px 12px', borderRadius: 20, background: `${statusColor}15`, color: statusColor, textTransform: 'uppercase' }}>
-                    {isPaid ? 'Paid & Approved' : 'Awaiting Payment'}
+                    {isPaid ? 'Paid & Approved' : awaitingApproval ? 'Awaiting Approval' : addon.status || 'Awaiting Payment'}
                   </div>
                   <button onClick={() => handleDelete(addon.id)} style={{ background: 'transparent', border: 'none', color: '#EF4444', cursor: 'pointer', padding: 8 }}>
                     <Trash2 size={16} />

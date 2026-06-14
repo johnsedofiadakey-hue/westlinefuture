@@ -21,9 +21,47 @@ const META_WA_PHONE_ID   = { value: () => process.env.META_WA_PHONE_ID };
 // App secret — used to verify inbound webhook signatures from Meta
 const META_APP_SECRET    = { value: () => process.env.META_APP_SECRET || '' };
 const WA_VERIFY_TOKEN    = { value: () => process.env.WA_VERIFY_TOKEN };
-const PAYSTACK_SECRET_KEY = { value: () => process.env.PAYSTACK_SECRET_KEY };
+const PAYSTACK_SECRET_KEY = defineSecret('PAYSTACK_SECRET_KEY');
+const OPENAI_API_KEY = defineSecret('OPENAI_API_KEY');
+const HUBTEL_PAYMENT_CLIENT_ID = defineSecret('HUBTEL_PAYMENT_CLIENT_ID');
+const HUBTEL_PAYMENT_CLIENT_SECRET = defineSecret('HUBTEL_PAYMENT_CLIENT_SECRET');
+const HUBTEL_PAYMENT_MERCHANT_ID = defineSecret('HUBTEL_PAYMENT_MERCHANT_ID');
 
 const HUBTEL_SMS_SENDER = 'WestlineFut'; // max 11 chars
+const normalizePhoneDigits = value => String(value || '').replace(/\D/g, '');
+
+async function assertAdminOrStaff(auth) {
+  if (!auth?.uid) throw new HttpsError('unauthenticated', 'Authentication required.');
+  const userSnap = await getFirestore().collection('users').doc(auth.uid).get();
+  const role = String(userSnap.data()?.role || auth.token?.role || '').toLowerCase();
+  if (!['admin', 'staff', 'project manager', 'project_manager', 'finance manager', 'operations manager'].includes(role)) {
+    throw new HttpsError('permission-denied', 'Admin or staff access is required.');
+  }
+  return role;
+}
+
+async function assertProjectAccess(auth, projectId) {
+  if (!auth?.uid) throw new HttpsError('unauthenticated', 'Authentication required.');
+  const db = getFirestore();
+  const projectSnap = await db.collection('projects').doc(projectId).get();
+  if (!projectSnap.exists) throw new HttpsError('not-found', 'Project not found.');
+  const project = projectSnap.data();
+  const userSnap = await db.collection('users').doc(auth.uid).get();
+  const role = String(userSnap.data()?.role || auth.token?.role || '').toLowerCase();
+  if (['admin', 'staff', 'project manager', 'project_manager', 'finance manager', 'operations manager'].includes(role)) {
+    return project;
+  }
+  const authPhone = normalizePhoneDigits(auth.token?.phone_number);
+  const clientIds = [project.clientId, ...(Array.isArray(project.clientIds) ? project.clientIds : [])].map(normalizePhoneDigits);
+  if (
+    auth.uid === project.clientId ||
+    clientIds.includes(normalizePhoneDigits(auth.uid)) ||
+    (authPhone && clientIds.includes(authPhone))
+  ) {
+    return project;
+  }
+  throw new HttpsError('permission-denied', 'This project is not assigned to your account.');
+}
 
 /**
  * Load Hubtel SMS credentials — env first, then Firestore fallback (same doc as payment).
@@ -89,17 +127,18 @@ async function sendHubtelSMS(to, body) {
  * Body: { reference, projectId, invoiceId?, type? }
  */
 exports.verifyPaystackPayment = onCall(
-  { cors: true },
+  { cors: true, secrets: [PAYSTACK_SECRET_KEY] },
   async (request) => {
     if (!request.auth) throw new Error("Authentication required");
 
     const uid = request.auth.uid;
-    const { reference, projectId, invoiceId, expectedAmountGHS, type = "payment" } = request.data || {};
+    const { reference, projectId, expectedAmountGHS, type = "payment" } = request.data || {};
+    let { invoiceId } = request.data || {};
 
     if (!reference) throw new Error("reference is required");
     if (!projectId) throw new Error("projectId is required");
 
-    const VALID_TYPES = ["payment", "deposit", "final", "rendering", "renderingFee", "design", "addon", "invoice", "milestone", "receipt"];
+    const VALID_TYPES = ["payment", "deposit", "final", "rendering", "renderingFee", "design", "addon", "installation", "goods_balance", "invoice", "milestone", "receipt"];
     if (!VALID_TYPES.includes(type)) {
       logger.warn(`verifyPaystackPayment: unknown payment type "${type}" for project ${projectId} — treating as "payment"`);
     }
@@ -140,21 +179,10 @@ exports.verifyPaystackPayment = onCall(
     // Rate limit: max 10 verify calls per UID per hour
     await enforceRateLimit(`verifyPayment:${uid}`, 10, 3600);
 
-    // ⚠ CRITICAL: Load Paystack secret from Cloud Function secrets (most secure), fall back to Firestore only if env not set
-    // Cloud Function secrets (PAYSTACK_SECRET_KEY) are encrypted and not readable by admins or clients.
-    // Only fall back to Firestore for flexibility, but prefer the env var which is not logged or exposed.
-    let paystackSecret = PAYSTACK_SECRET_KEY.value();
+    const paystackSecret = PAYSTACK_SECRET_KEY.value();
     if (!paystackSecret) {
-      // Fallback: load from Firestore if not in Cloud Function secrets
-      const db2 = getFirestore();
-      const gwSnap = await db2.collection("cms_content").doc("gatewaySettings").get().catch(() => null);
-      paystackSecret = gwSnap?.data()?.content?.paystackSecretKey || '';
-      if (!paystackSecret) {
-        throw new Error("Paystack secret key not configured. Set PAYSTACK_SECRET_KEY in Cloud Function secrets or save it in AdminFinancials → Gateway Settings.");
-      }
-      logger.warn("verifyPaystackPayment: using Paystack secret from Firestore (should use Cloud Function secret for security)");
+      throw new Error("Paystack secret key is not configured in Cloud Function secrets.");
     }
-    if (!paystackSecret) throw new Error("Paystack secret key is not configured.");
 
     // Verify with Paystack — throws on network failure or non-2xx
     let tx;
@@ -246,9 +274,8 @@ exports.verifyPaystackPayment = onCall(
           type: 'renderingFee',
           title: '3D Design & Rendering Fee',
           amount: amountGHS,
-          amountPaid: amountGHS,
-          status: 'Paid',
-          paidAt: new Date().toISOString(),
+          amountPaid: 0,
+          status: 'Sent',
           createdAt: new Date().toISOString(),
           method: 'Paystack',
           lastUpdatedBy: 'system'
@@ -259,50 +286,75 @@ exports.verifyPaystackPayment = onCall(
       }
     }
 
-    // Write to both the project ledger and the manager-visible global ledger.
-    const paymentProjectSnap = await db.collection("projects").doc(projectId).get();
-    const paymentProject = paymentProjectSnap.exists ? paymentProjectSnap.data() : {};
-    const managerId = paymentProject.projectManagerId || paymentProject.assignedStaff?.[0] || null;
-    const transactionRecord = {
-      id: txId,
-      projectId,
-      parentId: projectId,
-      clientId: paymentProject.clientId || '',
-      projectManagerId: managerId,
-      invoiceId: invoiceId || reference,
-      reference,
-      amount: amountGHS,
-      currency: tx.currency,
-      method: "Paystack",
-      channel: tx.channel,
-      gateway_response: tx.gateway_response,
-      date: String(tx.paid_at || new Date().toISOString()).slice(0, 10),
-      paidAt: tx.paid_at,
-      type,
-      status: "verified",
-      verifiedAt: FieldValue.serverTimestamp(),
-      verifiedBy: uid,
-    };
-    const paymentBatch = db.batch();
-    paymentBatch.set(
-      db.collection("projects").doc(projectId).collection("transactions").doc(txId),
-      transactionRecord,
-      { merge: true }
-    );
-    paymentBatch.set(db.collection("transactions").doc(txId), transactionRecord, { merge: true });
-    paymentBatch.set(
-      db.collection("projects").doc(projectId),
-      { paidAmount: FieldValue.increment(amountGHS), updatedAt: FieldValue.serverTimestamp() },
-      { merge: true }
-    );
-    await paymentBatch.commit();
+    // Reconcile the invoice, both ledgers, the project total, and the payment
+    // guard in one transaction. A verified payment is never partially recorded.
+    let paymentProject = {};
+    let managerId = null;
+    let reconciledInvoice = null;
+    await db.runTransaction(async transaction => {
+      const projectRef = db.collection('projects').doc(projectId);
+      const invoiceRef = invoiceId ? db.collection('invoices').doc(invoiceId) : null;
+      const processedRef = db.collection('processedPayments').doc(reference);
+      const reads = [transaction.get(projectRef), transaction.get(processedRef)];
+      if (invoiceRef) reads.push(transaction.get(invoiceRef));
+      const [projectSnap, processedSnap, invoiceSnap] = await Promise.all(reads);
+      if (processedSnap.exists) {
+        throw new Error('This Paystack reference has already been reconciled.');
+      }
+      if (!projectSnap.exists) throw new Error('Project not found during payment reconciliation.');
+      paymentProject = projectSnap.data();
+      managerId = paymentProject.projectManagerId || paymentProject.assignedStaff?.[0] || null;
 
-    // ── Write a Firestore-level pending guard immediately after Paystack confirms ─
-    // This prevents double payment even across devices/sessions — if the invoice
-    // update below fails, we can still detect this reference was used.
-    if (invoiceId) {
-      try {
-        await db.collection('pendingPayments').doc(invoiceId).set({
+      let invoiceUpdate = null;
+      if (invoiceRef) {
+        if (!invoiceSnap.exists) throw new Error('Invoice not found during payment reconciliation.');
+        const invData = invoiceSnap.data();
+        const invoiceTotal = Number(invData.amount || invData.total || 0);
+        const currentPaid = Number(invData.amountPaid || invData.paidAmount || 0);
+        const newAmountPaid = currentPaid + amountGHS;
+
+        logger.info(`verifyPaystackPayment: invoice ${invoiceId} payment processing`, {
+          invoiceTotal,
+          currentPaid,
+          amountPaid: amountGHS,
+          newAmountPaid,
+          hasAmount: !!invData.amount,
+          hasTotal: !!invData.total,
+          currentStatus: invData.status,
+        });
+
+        let newStatus = invData.status || "Pending";
+        if (invoiceTotal > 0) {
+          const tolerance = invoiceTotal * 0.02;
+          if (newAmountPaid >= invoiceTotal - tolerance) {
+            newStatus = "Paid";
+          } else if (newAmountPaid > 0) {
+            newStatus = "Partially Paid";
+          }
+        } else {
+          newStatus = "Paid";
+          logger.warn(`verifyPaystackPayment: invoice ${invoiceId} has no total amount, marking as Paid anyway`);
+        }
+
+        logger.info(`verifyPaystackPayment: invoice ${invoiceId} status: ${invData.status} → ${newStatus}`);
+
+        invoiceUpdate = {
+          status: newStatus,
+          amountPaid: newAmountPaid,
+          paidAmount: newAmountPaid,
+          paidAt: new Date().toISOString(),
+          method: "Paystack",
+          lastUpdatedBy: uid,
+          lastUpdatedAt: FieldValue.serverTimestamp(),
+        };
+        reconciledInvoice = { ...invData, ...invoiceUpdate };
+        transaction.set(invoiceRef, invoiceUpdate, { merge: true });
+        transaction.set(
+          projectRef.collection('payments').doc(invoiceId),
+          invoiceUpdate,
+          { merge: true }
+        );
+        transaction.set(db.collection('pendingPayments').doc(invoiceId), {
           reference,
           invoiceId,
           projectId,
@@ -310,92 +362,128 @@ exports.verifyPaystackPayment = onCall(
           amountGHS,
           uid,
           receivedAt: FieldValue.serverTimestamp(),
-          verified: false, // will be updated to true below
+          verified: true,
+          verifiedAt: FieldValue.serverTimestamp(),
         }, { merge: true });
-      } catch (_) { /* non-fatal */ }
-    }
-
-    // Update the invoice and project payment statuses server-side
-    if (invoiceId) {
-      try {
-        const invRef = db.collection("invoices").doc(invoiceId);
-        const invSnap = await invRef.get();
-        if (invSnap.exists) {
-          const invData = invSnap.data();
-          const invoiceTotal = Number(invData.amount || invData.total || 0);
-          const currentPaid = Number(invData.amountPaid || invData.paidAmount || 0);
-          const newAmountPaid = currentPaid + amountGHS;
-
-          logger.info(`verifyPaystackPayment: invoice ${invoiceId} payment processing`, {
-            invoiceTotal,
-            currentPaid,
-            amountPaid: amountGHS,
-            newAmountPaid,
-            hasAmount: !!invData.amount,
-            hasTotal: !!invData.total,
-            currentStatus: invData.status,
-          });
-
-          let newStatus = invData.status || "Pending";
-          if (invoiceTotal > 0) {
-            const tolerance = invoiceTotal * 0.02;
-            if (newAmountPaid >= invoiceTotal - tolerance) {
-              newStatus = "Paid";
-            } else if (newAmountPaid > 0) {
-              newStatus = "Partially Paid";
-            }
-          } else {
-            // No amount specified — mark as paid anyway since payment was received
-            newStatus = "Paid";
-            logger.warn(`verifyPaystackPayment: invoice ${invoiceId} has no total amount, marking as Paid anyway`);
-          }
-
-          logger.info(`verifyPaystackPayment: invoice ${invoiceId} status: ${invData.status} → ${newStatus}`);
-
-          const updatePayload = {
-            status: newStatus,
-            amountPaid: newAmountPaid,
-            paidAmount: newAmountPaid,
-            paidAt: new Date().toISOString(),
-            method: "Paystack",
-            lastUpdatedBy: uid,
-            lastUpdatedAt: FieldValue.serverTimestamp(),
-          };
-
-          await invRef.update(updatePayload);
-          logger.info(`verifyPaystackPayment: invoice ${invoiceId} updated successfully to status: ${newStatus}`);
-
-          // Mark the Firestore pending guard as verified — cross-device double-pay protection
-          try { await db.collection('pendingPayments').doc(invoiceId).set({ verified: true, verifiedAt: FieldValue.serverTimestamp() }, { merge: true }); } catch (_) {}
-
-          // Also update project payments collection for tracking
-          await db.collection("projects").doc(projectId).collection("payments").doc(invoiceId).set(updatePayload, { merge: true });
-        } else {
-          logger.warn(`verifyPaystackPayment: invoice ${invoiceId} not found in Firestore`);
-        }
-      } catch (err) {
-        logger.error(`verifyPaystackPayment: invoice ${invoiceId} update failed`, {
-          error: err.message,
-          code: err.code,
-          stack: err.stack,
-        });
       }
-    }
+
+      const transactionRecord = {
+        id: txId,
+        projectId,
+        parentId: projectId,
+        clientId: paymentProject.clientId || '',
+        projectManagerId: managerId,
+        invoiceId: invoiceId || reference,
+        reference,
+        amount: amountGHS,
+        currency: tx.currency,
+        method: 'Paystack',
+        channel: tx.channel,
+        gateway_response: tx.gateway_response,
+        date: String(tx.paid_at || new Date().toISOString()).slice(0, 10),
+        paidAt: tx.paid_at,
+        type,
+        status: 'verified',
+        verifiedAt: FieldValue.serverTimestamp(),
+        verifiedBy: uid,
+      };
+      transaction.set(projectRef.collection('transactions').doc(txId), transactionRecord, { merge: true });
+      transaction.set(db.collection('transactions').doc(txId), transactionRecord, { merge: true });
+      transaction.set(projectRef, {
+        paidAmount: FieldValue.increment(amountGHS),
+        paymentSummary: {
+          lastPaymentAt: FieldValue.serverTimestamp(),
+          lastPaymentReference: reference,
+          lastPaymentAmount: amountGHS,
+          lastPaymentMethod: 'Paystack',
+        },
+        updatedAt: FieldValue.serverTimestamp(),
+      }, { merge: true });
+      transaction.set(db.collection('activity_logs').doc(), {
+        action: 'payment_verified',
+        projectId,
+        invoiceId: invoiceId || null,
+        reference,
+        amountGHS,
+        channel: tx.channel,
+        type,
+        verifiedAt: FieldValue.serverTimestamp(),
+        verifiedBy: uid,
+      });
+      transaction.set(processedRef, {
+        reference,
+        transactionId: txId,
+        invoiceId: invoiceId || null,
+        projectId,
+        uid,
+        amountGHS,
+        processedAt: FieldValue.serverTimestamp(),
+      });
+    });
 
     // ── Write project-level payment flags based on payment type ──────────────
     // These are the canonical boolean fields that AdvanceModal gate checks read.
     // The rendering fee case is handled in detail below; deposit and final are set here.
-    if (invoiceId && (typeLower === 'deposit')) {
+    const paymentDescription = `${reconciledInvoice?.milestoneKey || ''} ${reconciledInvoice?.title || ''} ${reconciledInvoice?.type || ''} ${typeLower}`.toLowerCase();
+    const invoicePaidInFull = reconciledInvoice && String(reconciledInvoice.status || '').toLowerCase() === 'paid';
+    if (invoiceId && invoicePaidInFull && (
+      paymentDescription.includes('initial-deposit') ||
+      paymentDescription.includes('post-rendering') ||
+      paymentDescription.includes('deposit') ||
+      paymentDescription.includes('first instal')
+    )) {
       try {
         await db.collection('projects').doc(projectId).update({
           depositPaid: true,
+          initialDepositPaid: true,
           depositPaidAt: FieldValue.serverTimestamp(),
+          workflowStep: 'deliverables-approval',
+          nextAction: 'Upload the final project deliverables document for client review and signature',
         });
         logger.info(`verifyPaystackPayment: project ${projectId} depositPaid = true`);
       } catch (e) {
         logger.warn('verifyPaystackPayment: could not set depositPaid', e.message);
       }
-    } else if (invoiceId && (typeLower === 'final' || typeLower === 'finalpayment' || typeLower === 'settlement')) {
+    } else if (invoiceId && invoicePaidInFull && (
+      paymentDescription.includes('pre-installation-balance') ||
+      paymentDescription.includes('goods balance') ||
+      paymentDescription.includes('ghana arrival') ||
+      paymentDescription.includes('final goods') ||
+      paymentDescription.includes('post-production') ||
+      paymentDescription.includes('production milestone') ||
+      paymentDescription.includes('second instal')
+    )) {
+      try {
+        await db.collection('projects').doc(projectId).update({
+          postProductionPaid: true,
+          goodsBalancePaid: true,
+          postProductionPaidAt: FieldValue.serverTimestamp(),
+        });
+        logger.info(`verifyPaystackPayment: project ${projectId} postProductionPaid = true`);
+      } catch (e) {
+        logger.warn('verifyPaystackPayment: could not set postProductionPaid', e.message);
+      }
+    } else if (invoiceId && invoicePaidInFull && (
+      reconciledInvoice?.isInstallationInvoice === true ||
+      reconciledInvoice?.paymentPurpose === 'installation' ||
+      paymentDescription.includes('installation service') ||
+      paymentDescription.includes('installation add-on')
+    )) {
+      try {
+        await db.collection('projects').doc(projectId).update({
+          installationFeePaid: true,
+          installationFeePaidAt: FieldValue.serverTimestamp(),
+        });
+        logger.info(`verifyPaystackPayment: project ${projectId} installationFeePaid = true`);
+      } catch (e) {
+        logger.warn('verifyPaystackPayment: could not set installationFeePaid', e.message);
+      }
+    } else if (invoiceId && invoicePaidInFull && (
+      paymentDescription.includes('post-shipping') ||
+      paymentDescription.includes('completion') ||
+      paymentDescription.includes('final') ||
+      paymentDescription.includes('settlement')
+    )) {
       try {
         await db.collection('projects').doc(projectId).update({
           finalSettlementPaid: true,
@@ -484,33 +572,19 @@ exports.verifyPaystackPayment = onCall(
           }
         }
 
-        // ── Mark rendering fee as paid on the project ──────────────────────────
-        // This unlocks the client portal's full access and removes the payment gate.
-        // Also auto-advance from Stage 1 (Survey) to Stage 2 (Design & Rendering)
-        // so the project immediately moves into the design phase.
-        const projectSnap0 = await db.collection('projects').doc(projectId).get();
-        const currentStageId = projectSnap0.exists ? (projectSnap0.data()?.stageId || 1) : 1;
-        const stageUpdate = currentStageId === 1 ? {
-          stageId: 2,
-          stageHistory: FieldValue.arrayUnion({
-            stageId: 2,
-            timestamp: new Date().toISOString(),
-            note: 'Auto-advanced to Design & Rendering after rendering fee payment.',
-            autoAdvanced: true,
-          }),
-        } : {};
-        
+        const paidProjectSnap = await db.collection('projects').doc(projectId).get();
+        const paidProject = paidProjectSnap.exists ? paidProjectSnap.data() : {};
+        // Rendering payment unlocks appointment scheduling. Design work begins
+        // only after the technical site survey is completed.
         const updatePayload = {
           renderingFeePaid: true,
           renderingFeePaidAt: FieldValue.serverTimestamp(),
-          ...stageUpdate,
+          workflowStep: 'site-visit-scheduling',
+          nextAction: 'Client or project manager schedules the technical site visit',
         };
         if (invoiceId) updatePayload.renderingFeeInvoiceId = invoiceId;
 
         await db.collection('projects').doc(projectId).update(updatePayload);
-        if (currentStageId === 1) {
-          logger.info(`verifyPaystackPayment: project ${projectId} auto-advanced to Stage 2 (Design & Rendering)`);
-        }
         logger.info(`verifyPaystackPayment: project ${projectId} marked rendering fee as paid`);
       } catch (e) {
         logger.warn('verifyPaystackPayment: could not unlock rendering package or update project', e.message);
@@ -534,7 +608,7 @@ exports.verifyPaystackPayment = onCall(
           }
         }
         const notifMsg = typeLower === 'rendering' || typeLower === 'renderingfee' || typeLower === 'design'
-          ? `Payment confirmed! Your 3D design package for "${projectTitle}" is now unlocked. Open the Design Vault to view your renders.`
+          ? `Payment confirmed for "${projectTitle}". Choose a date for the technical site visit so our team can take measurements and prepare your 3D rendering.`
           : `Payment of GHS ${amountGHS.toFixed(2)} confirmed for "${projectTitle}". Thank you!`;
         await db.collection('notifications').add({
           userId: clientId,
@@ -546,14 +620,17 @@ exports.verifyPaystackPayment = onCall(
           createdAt: FieldValue.serverTimestamp(),
         });
         // Also notify admin and the assigned project manager.
-        const adminMsg = `Payment of GHS ${amountGHS.toFixed(2)} received for "${projectTitle}" (${type}) via Paystack. Ref: ${reference}`;
+        const isRenderingPayment = typeLower === 'rendering' || typeLower === 'renderingfee' || typeLower === 'design';
+        const adminMsg = isRenderingPayment
+          ? `Rendering fee of GHS ${amountGHS.toFixed(2)} received for "${projectTitle}". Help the client schedule the technical site visit. Ref: ${reference}`
+          : `Payment of GHS ${amountGHS.toFixed(2)} received for "${projectTitle}" (${type}) via Paystack. Ref: ${reference}`;
         const recipients = [...new Set(['admin', managerId, ...(paymentProject.assignedStaff || [])].filter(Boolean))];
         await Promise.all(recipients.map(recipientId =>
           db.collection('notifications').add({
             userId: recipientId,
             message: adminMsg,
             msg: adminMsg,
-            type: 'payment',
+            type: isRenderingPayment ? 'rendering_upload_required' : 'payment',
             link: '/admin/client-hub',
             read: false,
             createdAt: FieldValue.serverTimestamp(),
@@ -562,53 +639,6 @@ exports.verifyPaystackPayment = onCall(
       }
     } catch (e) {
       logger.warn('verifyPaystackPayment: could not create payment notifications', e.message);
-    }
-
-      batch.set(projectRef.collection("payments").doc(invoiceId), {
-        status: "Paid",
-        paidAt: FieldValue.serverTimestamp(),
-        reference,
-        method: "Paystack",
-        updatedAt: FieldValue.serverTimestamp(),
-      }, { merge: true });
-    }
-
-    batch.set(projectRef, {
-      paymentSummary: {
-        lastPaymentAt: FieldValue.serverTimestamp(),
-        lastPaymentReference: reference,
-        lastPaymentAmount: amountGHS,
-        lastPaymentMethod: "Paystack",
-      },
-      updatedAt: FieldValue.serverTimestamp(),
-    }, { merge: true });
-
-    batch.set(db.collection("activity_logs").doc(), {
-      action: "payment_verified",
-      projectId,
-      invoiceId: invoiceId || null,
-      reference,
-      amountGHS,
-      channel: tx.channel,
-      type,
-      verifiedAt: FieldValue.serverTimestamp(),
-      verifiedBy: uid,
-    });
-
-    // ── RECORD PROCESSED PAYMENT (Idempotency) ──────────────────────────────────
-    // Store this reference so we can detect and reject duplicate processing attempts
-    try {
-      await db.collection('processedPayments').doc(reference).set({
-        invoiceId: invoiceId || reference,
-        projectId,
-        amountGHS,
-        reference,
-        processedAt: FieldValue.serverTimestamp(),
-        processedBy: uid,
-      }, { merge: true });
-    } catch (err) {
-      logger.warn('verifyPaystackPayment: could not record processed payment', err.message);
-      // Continue anyway; the payment is already processed, this is just tracking
     }
 
     // Stage auto-advance is handled client-side via updateProjectStage() which runs full gate checks.
@@ -732,42 +762,50 @@ exports.translateProjectMessage = onCall(
 // ---------------------------------------------------------------------------
 // ── Helper: load gateway settings from the correct Firestore path ─────────────
 // AdminFinancials saves via syncCMS('gatewaySettings', ...) → cms_content/gatewaySettings → content
-async function loadGatewaySettings(db) {
+async function loadGatewaySettings(db, includeSecrets = true) {
+  let stored = {};
   try {
     const snap = await db.collection("cms_content").doc("gatewaySettings").get();
-    if (snap.exists) return snap.data()?.content || {};
+    if (snap.exists) stored = snap.data()?.content || {};
   } catch (err) {
-    logger.warn("loadGatewaySettings: cms_content path failed, trying legacy path", err.message);
+    logger.warn("loadGatewaySettings: cms_content path failed", err.message);
   }
-  // Legacy fallback path
-  try {
-    const snap = await db.collection("system_settings").doc("payment_gateways").get();
-    if (snap.exists) return snap.data() || {};
-  } catch (_) {}
-  return {};
+  return {
+    ...stored,
+    hubtelClientId: includeSecrets ? (HUBTEL_PAYMENT_CLIENT_ID.value() || stored.hubtelClientId || '') : (stored.hubtelClientId || ''),
+    hubtelClientSecret: includeSecrets ? (HUBTEL_PAYMENT_CLIENT_SECRET.value() || '') : '',
+    hubtelMerchantId: includeSecrets ? (HUBTEL_PAYMENT_MERCHANT_ID.value() || stored.hubtelMerchantId || '') : (stored.hubtelMerchantId || ''),
+  };
 }
+
+exports.getPublicPaymentSettings = onCall(
+  { cors: true },
+  async () => {
+    const settings = await loadGatewaySettings(getFirestore(), false);
+    return {
+      enablePaystack: settings.enablePaystack !== false,
+      enableHubtel: settings.enableHubtel === true,
+      paystackPublicKey: settings.paystackPublicKey || process.env.PAYSTACK_PUBLIC_KEY || '',
+      hubtelMerchantId: settings.hubtelMerchantId || '',
+      vapidKey: settings.vapidKey || '',
+    };
+  }
+);
 
 // ── Hubtel Connection Test (admin only) ─────────────────────────────────────
 exports.testHubtelConnection = onCall(
-  { cors: true },
+  { cors: true, secrets: [HUBTEL_PAYMENT_CLIENT_ID, HUBTEL_PAYMENT_CLIENT_SECRET, HUBTEL_PAYMENT_MERCHANT_ID] },
   async (request) => {
     if (!request.auth) throw new HttpsError("unauthenticated", "Authentication required");
 
     const db = getFirestore();
     let clientId, clientSecret, merchantId, enabled;
 
-    if (request.data?.hubtelClientId && request.data?.hubtelClientSecret) {
-      clientId     = String(request.data.hubtelClientId).trim();
-      clientSecret = String(request.data.hubtelClientSecret).trim();
-      merchantId   = String(request.data.hubtelMerchantId || '').trim();
-      enabled      = true;
-    } else {
-      const gs = await loadGatewaySettings(db).catch(() => ({}));
-      clientId     = String(gs.hubtelClientId || '').trim();
-      clientSecret = String(gs.hubtelClientSecret || '').trim();
-      merchantId   = String(gs.hubtelMerchantId || '').trim();
-      enabled      = gs.enableHubtel;
-    }
+    const gs = await loadGatewaySettings(db).catch(() => ({}));
+    clientId     = String(gs.hubtelClientId || '').trim();
+    clientSecret = String(gs.hubtelClientSecret || '').trim();
+    merchantId   = String(gs.hubtelMerchantId || '').trim();
+    enabled      = gs.enableHubtel;
 
     if (!enabled) throw new HttpsError("failed-precondition", "Hubtel is not enabled. Toggle it on and Save first.");
     if (!clientId || !clientSecret) throw new HttpsError("failed-precondition", "Client ID or Client Secret is missing.");
@@ -844,7 +882,7 @@ exports.testHubtelConnection = onCall(
 );
 
 exports.initializeHubtelPayment = onCall(
-  { cors: true },
+  { cors: true, secrets: [HUBTEL_PAYMENT_CLIENT_ID, HUBTEL_PAYMENT_CLIENT_SECRET, HUBTEL_PAYMENT_MERCHANT_ID] },
   async (request) => {
     if (!request.auth) throw new HttpsError("unauthenticated", "Authentication required");
 
@@ -902,7 +940,7 @@ exports.initializeHubtelPayment = onCall(
       const rawBody = err.response?.data;
       const hubMsg  = rawBody?.message || rawBody?.Message || rawBody?.ResponseMessage || '';
       const hubBody = JSON.stringify(rawBody || {}).slice(0, 500);
-      logger.error("initializeHubtelPayment failed:", { status, hubMsg, hubBody, clientRef: clientReference, merchantNorm });
+      logger.error("initializeHubtelPayment failed:", { status, hubMsg, hubBody, clientRef: clientReference, merchantId: hubtelMerchantId });
 
       if (status === 401) {
         throw new HttpsError("unauthenticated",
@@ -925,11 +963,12 @@ exports.initializeHubtelPayment = onCall(
 );
 
 exports.verifyHubtelPayment = onCall(
-  { cors: true },
+  { cors: true, secrets: [HUBTEL_PAYMENT_CLIENT_ID, HUBTEL_PAYMENT_CLIENT_SECRET, HUBTEL_PAYMENT_MERCHANT_ID] },
   async (request) => {
     if (!request.auth) throw new HttpsError("unauthenticated", "Authentication required");
 
-    const { clientReference, projectId, invoiceId, expectedAmountGHS, type = "payment" } = request.data || {};
+    const { clientReference, projectId, expectedAmountGHS, type = "payment" } = request.data || {};
+    let { invoiceId } = request.data || {};
     if (!clientReference || !projectId) {
       throw new HttpsError("invalid-argument", "clientReference and projectId are required");
     }
@@ -1003,9 +1042,8 @@ exports.verifyHubtelPayment = onCall(
           type: 'renderingFee',
           title: '3D Design & Rendering Fee',
           amount: amountGHS,
-          amountPaid: amountGHS,
-          status: 'Paid',
-          paidAt: new Date().toISOString(),
+          amountPaid: 0,
+          status: 'Pending',
           createdAt: new Date().toISOString(),
           method: 'Hubtel',
           lastUpdatedBy: 'system'
@@ -1091,6 +1129,51 @@ exports.verifyHubtelPayment = onCall(
       }
     }
 
+    const verifiedInvoiceSnap = invoiceId ? await db.collection('invoices').doc(invoiceId).get() : null;
+    const verifiedInvoice = verifiedInvoiceSnap?.exists ? verifiedInvoiceSnap.data() : null;
+    const verifiedDescription = `${verifiedInvoice?.milestoneKey || ''} ${verifiedInvoice?.title || ''} ${verifiedInvoice?.type || ''}`.toLowerCase();
+    const verifiedInFull = !verifiedInvoice || String(verifiedInvoice.status || '').toLowerCase() === 'paid';
+    const projectFlagUpdate = {};
+
+    if (verifiedInFull && ['rendering', 'renderingfee', 'design', 'rendering fee'].includes(typeLower)) {
+      projectFlagUpdate.renderingFeePaid = true;
+      projectFlagUpdate.renderingFeePaidAt = FieldValue.serverTimestamp();
+      projectFlagUpdate.renderingFeeInvoiceId = invoiceId || null;
+      projectFlagUpdate.workflowStep = 'site-visit-scheduling';
+      projectFlagUpdate.nextAction = 'Client or project manager schedules the technical site visit';
+      const packageSnap = await db.collection('renderingPackages')
+        .where('projectId', '==', projectId)
+        .limit(10)
+        .get();
+      await Promise.all(packageSnap.docs.map(packageDoc =>
+        packageDoc.ref.set({
+          unlocked: true,
+          accessStatus: 'unlocked',
+          unlockedAt: FieldValue.serverTimestamp(),
+        }, { merge: true })
+      ));
+    } else if (verifiedInFull && verifiedInvoice) {
+      if (verifiedDescription.includes('initial-deposit') || verifiedDescription.includes('deposit') || verifiedDescription.includes('first instal')) {
+        projectFlagUpdate.depositPaid = true;
+        projectFlagUpdate.initialDepositPaid = true;
+        projectFlagUpdate.depositPaidAt = FieldValue.serverTimestamp();
+        projectFlagUpdate.workflowStep = 'deliverables-approval';
+        projectFlagUpdate.nextAction = 'Upload the final project deliverables document for client review and signature';
+      }
+      if (verifiedDescription.includes('pre-installation-balance') || verifiedDescription.includes('goods balance') || verifiedDescription.includes('ghana arrival') || verifiedDescription.includes('final goods')) {
+        projectFlagUpdate.goodsBalancePaid = true;
+        projectFlagUpdate.postProductionPaid = true;
+        projectFlagUpdate.goodsBalancePaidAt = FieldValue.serverTimestamp();
+      }
+      if (verifiedInvoice.isInstallationInvoice === true || verifiedInvoice.paymentPurpose === 'installation' || verifiedDescription.includes('installation service')) {
+        projectFlagUpdate.installationFeePaid = true;
+        projectFlagUpdate.installationFeePaidAt = FieldValue.serverTimestamp();
+      }
+    }
+    if (Object.keys(projectFlagUpdate).length > 0) {
+      await db.collection('projects').doc(projectId).set(projectFlagUpdate, { merge: true });
+    }
+
     // Audit log
     await db.collection("activity_logs").add({
       action: "payment_verified",
@@ -1103,14 +1186,17 @@ exports.verifyHubtelPayment = onCall(
       verifiedBy: uid,
     });
 
-    const paymentMessage = `Payment of GHS ${amountGHS.toFixed(2)} received for "${paymentProject.title || 'project'}" (${type}) via Hubtel. Ref: ${clientReference}`;
+    const renderingPayment = ['rendering', 'renderingfee', 'design', 'rendering fee'].includes(typeLower);
+    const paymentMessage = renderingPayment
+      ? `Rendering fee of GHS ${amountGHS.toFixed(2)} received for "${paymentProject.title || 'project'}" via Hubtel. Upload the rendering package now. Ref: ${clientReference}`
+      : `Payment of GHS ${amountGHS.toFixed(2)} received for "${paymentProject.title || 'project'}" (${type}) via Hubtel. Ref: ${clientReference}`;
     const recipients = [...new Set(['admin', managerId, ...(paymentProject.assignedStaff || [])].filter(Boolean))];
     await Promise.all(recipients.map(recipientId =>
       db.collection('notifications').add({
         userId: recipientId,
         message: paymentMessage,
         msg: paymentMessage,
-        type: 'payment',
+        type: renderingPayment ? 'rendering_upload_required' : 'payment',
         link: '/admin/client-hub',
         read: false,
         createdAt: FieldValue.serverTimestamp(),
@@ -1637,7 +1723,7 @@ function validatePasswordStrength(password) {
   if (!/\d/.test(password)) {
     return { valid: false, reason: "Password must include a number" };
   }
-  if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password)) {
+  if (!/[^A-Za-z0-9]/.test(password)) {
     return { valid: false, reason: "Password must include a special character (!@#$%^&*, etc.)" };
   }
   return { valid: true, reason: null };
@@ -1892,7 +1978,7 @@ const STAGE_NAMES = {
   5: "Shipping & Logistics",
   6: "Installation",
   7: "Inspection & Sign-off",
-  8: "Handover & Final Settlement",
+  8: "Handover & Closeout",
 };
 
 exports.sendOverdueReminders = onSchedule(
@@ -2163,45 +2249,6 @@ exports.debugInvoice = onRequest(
 );
 
 /**
- * DEBUG ENDPOINT: Check recent payment verifications
- * Call with: curl "https://us-central1-westlinefuture.cloudfunctions.net/debugPayments?projectId=XXXXX"
- */
-exports.debugPayments = onRequest(
-  { cors: true },
-  async (request, response) => {
-    const projectId = request.query.projectId;
-    if (!projectId) {
-      return response.status(400).json({ error: 'projectId parameter required' });
-    }
-
-    logger.info('debugPayments called', { projectId });
-
-    try {
-      const db = getFirestore();
-      const paymentsSnap = await db
-        .collection('projects')
-        .doc(projectId)
-        .collection('payments')
-        .orderBy('paidAt', 'desc')
-        .limit(10)
-        .get();
-
-      return response.json({
-        projectId,
-        paymentCount: paymentsSnap.docs.length,
-        payments: paymentsSnap.docs.map(doc => ({
-          invoiceId: doc.id,
-          ...doc.data(),
-        })),
-      });
-    } catch (err) {
-      logger.error('debugPayments failed', err.message);
-      return response.status(500).json({ error: err.message, projectId });
-    }
-  }
-);
-
-/**
  * PAYSTACK WEBHOOK — Safety net for payment verification.
  * If the client-side verifyPaystackPayment call fails (network issue, app closed, etc.),
  * this webhook ensures the invoice still gets updated.
@@ -2210,7 +2257,7 @@ exports.debugPayments = onRequest(
  * https://us-central1-westlinefuture.cloudfunctions.net/paystackWebhook
  */
 exports.paystackWebhook = onRequest(
-  { cors: false },
+  { cors: false, secrets: [PAYSTACK_SECRET_KEY] },
   async (request, response) => {
     if (request.method !== 'POST') {
       return response.status(405).json({ error: 'Method not allowed' });
@@ -2218,22 +2265,18 @@ exports.paystackWebhook = onRequest(
 
     try {
       // Verify webhook signature
-      let paystackSecret = PAYSTACK_SECRET_KEY.value();
+      const paystackSecret = PAYSTACK_SECRET_KEY.value();
       if (!paystackSecret) {
-        const db2 = getFirestore();
-        const gwSnap = await db2.collection('cms_content').doc('gatewaySettings').get().catch(() => null);
-        paystackSecret = gwSnap?.data()?.content?.paystackSecretKey || '';
+        logger.error('paystackWebhook: PAYSTACK_SECRET_KEY is not configured');
+        return response.status(503).json({ error: 'Payment verification is not configured' });
       }
-
-      if (paystackSecret) {
-        const hash = crypto
-          .createHmac('sha512', paystackSecret)
-          .update(JSON.stringify(request.body))
-          .digest('hex');
-        if (hash !== request.headers['x-paystack-signature']) {
-          logger.warn('paystackWebhook: invalid signature');
-          return response.status(401).json({ error: 'Invalid signature' });
-        }
+      const hash = crypto
+        .createHmac('sha512', paystackSecret)
+        .update(JSON.stringify(request.body))
+        .digest('hex');
+      if (hash !== request.headers['x-paystack-signature']) {
+        logger.warn('paystackWebhook: invalid signature');
+        return response.status(401).json({ error: 'Invalid signature' });
       }
 
       const event = request.body;
@@ -2287,6 +2330,7 @@ exports.paystackWebhook = onRequest(
       }
 
       // Update invoice status
+      let reconciledInvoice = null;
       if (finalInvoiceId) {
         const invRef = db.collection('invoices').doc(finalInvoiceId);
         const invSnap = await invRef.get();
@@ -2310,7 +2354,10 @@ exports.paystackWebhook = onRequest(
               lastUpdatedBy: 'webhook',
               lastUpdatedAt: FieldValue.serverTimestamp(),
             });
+            reconciledInvoice = { ...invData, status: newStatus, amountPaid: newAmountPaid };
             logger.info(`paystackWebhook: invoice ${invoiceId} updated to ${newStatus}`);
+          } else {
+            reconciledInvoice = invData;
           }
         }
       }
@@ -2318,18 +2365,8 @@ exports.paystackWebhook = onRequest(
       // Update project payment flags based on payment type
       if (payTypeLower === 'rendering' || payTypeLower === 'renderingfee' || payTypeLower === 'design') {
         const projectRef = db.collection('projects').doc(projectId);
-        const projectSnap = await projectRef.get().catch(() => null);
-        const currentStageId = projectSnap?.exists ? (projectSnap.data()?.stageId || 1) : 1;
-        const stageUpdate = currentStageId === 1 ? {
-          stageId: 2,
-          stageHistory: FieldValue.arrayUnion({
-            stageId: 2,
-            timestamp: new Date().toISOString(),
-            note: 'Auto-advanced to Design & Rendering after rendering fee payment (webhook fallback).',
-            autoAdvanced: true,
-            source: 'webhook',
-          }),
-        } : {};
+        const renderingProjectSnap = await projectRef.get();
+        const renderingProject = renderingProjectSnap.exists ? renderingProjectSnap.data() : {};
         // Unlock the rendering package linked to this invoice
         await db.collection('renderingPackages')
           .where('projectId', '==', projectId)
@@ -2347,21 +2384,36 @@ exports.paystackWebhook = onRequest(
           renderingFeePaid: true,
           renderingFeePaidAt: FieldValue.serverTimestamp(),
           renderingFeeInvoiceId: finalInvoiceId,
-          ...stageUpdate,
+          workflowStep: 'site-visit-scheduling',
+          nextAction: 'Client or project manager schedules the technical site visit',
         }).catch(e => logger.warn('paystackWebhook: project update failed', e.message));
-        if (currentStageId === 1) {
-          logger.info(`paystackWebhook: project ${projectId} auto-advanced to Stage 2`);
+      } else if (reconciledInvoice && String(reconciledInvoice.status || '').toLowerCase() === 'paid') {
+        const description = `${reconciledInvoice.milestoneKey || ''} ${reconciledInvoice.title || ''} ${reconciledInvoice.type || ''} ${payTypeLower}`.toLowerCase();
+        const flagUpdate = {};
+        if (description.includes('initial-deposit') || description.includes('post-rendering') || description.includes('deposit') || description.includes('first instal')) {
+          flagUpdate.depositPaid = true;
+          flagUpdate.initialDepositPaid = true;
+          flagUpdate.depositPaidAt = FieldValue.serverTimestamp();
+          flagUpdate.workflowStep = 'deliverables-approval';
+          flagUpdate.nextAction = 'Upload the final project deliverables document for client review and signature';
         }
-      } else if (payTypeLower === 'deposit') {
-        await db.collection('projects').doc(projectId).update({
-          depositPaid: true,
-          depositPaidAt: FieldValue.serverTimestamp(),
-        }).catch(e => logger.warn('paystackWebhook: depositPaid update failed', e.message));
-      } else if (payTypeLower === 'final' || payTypeLower === 'finalpayment' || payTypeLower === 'settlement') {
-        await db.collection('projects').doc(projectId).update({
-          finalSettlementPaid: true,
-          finalSettlementPaidAt: FieldValue.serverTimestamp(),
-        }).catch(e => logger.warn('paystackWebhook: finalSettlementPaid update failed', e.message));
+        if (description.includes('pre-installation-balance') || description.includes('goods balance') || description.includes('ghana arrival') || description.includes('final goods') || description.includes('post-production') || description.includes('production milestone') || description.includes('second instal')) {
+          flagUpdate.postProductionPaid = true;
+          flagUpdate.goodsBalancePaid = true;
+          flagUpdate.postProductionPaidAt = FieldValue.serverTimestamp();
+        }
+        if (description.includes('post-shipping') || description.includes('completion') || description.includes('final') || description.includes('settlement')) {
+          flagUpdate.finalSettlementPaid = true;
+          flagUpdate.finalSettlementPaidAt = FieldValue.serverTimestamp();
+        }
+        if (reconciledInvoice.isInstallationInvoice === true || reconciledInvoice.paymentPurpose === 'installation' || description.includes('installation service') || description.includes('installation add-on')) {
+          flagUpdate.installationFeePaid = true;
+          flagUpdate.installationFeePaidAt = FieldValue.serverTimestamp();
+        }
+        if (Object.keys(flagUpdate).length > 0) {
+          await db.collection('projects').doc(projectId).update(flagUpdate)
+            .catch(e => logger.warn('paystackWebhook: project payment flag update failed', e.message));
+        }
       }
 
       // Write the same normalized transaction to both ledgers and reconcile the project total.

@@ -293,11 +293,6 @@ export const AppProvider = ({ children }) => {
       }, (err) => devWarn("Activity logs listener failed:", err));
     }
 
-    // ✅ CRITICAL FIX #2: Reduce approvals limit from 200 → 50 with pagination
-    const unsubApprovals = onSnapshot(user.role === 'admin' ? query(collection(db, 'approvals'), limit(50)) : query(collection(db, 'approvals'), where('clientId', '==', user.id), limit(50)), (snap) => {
-      setApprovals(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    }, (err) => devWarn("Approval Sync Error:", err));
-
     const unsubApprovals = listenMerged('approvals', setApprovals, 'Approval');
     const unsubCR = listenMerged('change_requests', setChangeRequests, 'CR');
     const unsubProc = listenMerged('procurements', setProcurements, 'Procurement');

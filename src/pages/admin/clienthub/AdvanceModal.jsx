@@ -3,6 +3,7 @@ import { AppContext } from '../../../context/AppContext';
 import { createPortal } from 'react-dom';
 import { X, CheckCircle2, AlertCircle, ChevronDown, Loader2 } from 'lucide-react';
 import { STAGE_ICONS } from './config.jsx';
+import { checkStageGates } from '../../../lib/projectGates';
 
 // ─── Stage Advance Modal ──────────────────────────────────────────────────────
 export function AdvanceModal({ project, stage, nextStage, invoices = [], onClose, onAdvance }) {
@@ -18,82 +19,7 @@ export function AdvanceModal({ project, stage, nextStage, invoices = [], onClose
   const [showAdvanced, setShowAdvanced] = useState(false);
 
   const needsApproval = nextStage?.needsClientApproval || nextStage?.whoActs === 'client' || stage?.needsClientApproval;
-  const projectInvoices = (invoices || []).filter(inv => inv.parentId === project.id || inv.projectId === project.id);
-  const invIsPaid = (status) => ['paid', 'paid in full'].includes(String(status || '').toLowerCase().trim());
-  const hasPaidInvoice = (label) => projectInvoices.some(inv => {
-    const title = `${inv.title || ''} ${inv.type || ''} ${inv.invoiceType || ''}`.toLowerCase();
-    return title.includes(label) && invIsPaid(inv.status);
-  });
-
-  const gateChecks = [
-    {
-      id: 'rendering-fee',
-      label: 'Rendering fee paid',
-      applies: nextStage.id >= 2 && project.kickoffMode !== 'direct-kickoff',
-      ok: !!project.renderingFeePaid,
-    },
-    {
-      id: 'rendering-approved',
-      label: 'Rendering/design approved',
-      applies: nextStage.id >= 3 && project.kickoffMode !== 'direct-kickoff',
-      ok: !!(project.renderingApproved || project.designApproved || project.renderingStatus === 'Approved'),
-    },
-    {
-      id: 'quote-approved',
-      label: 'Final quote approved',
-      applies: nextStage.id >= 4,
-      ok: !!(project.quoteApproved || project.quoteStatus === 'approved' || project.approvedQuoteId || project.depositPaid),
-    },
-    {
-      id: 'contract-signed',
-      label: 'Project agreement or specification signed by client',
-      applies: nextStage.id >= 4,
-      ok: !!(project.contractAccepted || project.quoteSignature || project.specDoc?.status === 'signed'),
-    },
-    {
-      id: 'deposit-paid',
-      label: 'Deposit paid',
-      applies: nextStage.id >= 4,
-      ok: !!(project.depositPaid || project.depositStatus === 'Paid' || hasPaidInvoice('deposit')),
-    },
-    {
-      id: 'post-production-paid',
-      label: 'Production milestone payment (30%) cleared by client',
-      applies: nextStage.id >= 6,
-      ok: !!(
-        project.postProductionPaid ||
-        projectInvoices.some(inv => {
-          const key = (inv.milestoneKey || '').toLowerCase();
-          const title = `${inv.title || ''} ${inv.type || ''}`.toLowerCase();
-          return (key === 'post-production' || title.includes('production')) && invIsPaid(inv.status);
-        })
-      ),
-    },
-    {
-      id: 'field-crew',
-      label: 'Field crew assigned',
-      applies: nextStage.id >= 6 && project.projectType !== 'buy-only',
-      ok: (project.assignedWorkers || []).length > 0,
-    },
-    {
-      id: 'final-settlement',
-      label: 'Final payment cleared',
-      applies: nextStage.id >= 8,
-      ok: !!(project.finalPaymentPaid || project.finalSettlementPaid || hasPaidInvoice('final')),
-    },
-    {
-      id: 'spec-doc-signed',
-      label: 'Project specification must be client-approved before production',
-      applies: nextStage.id >= 4 && !!project.specDoc?.url,
-      ok: ['signed', 'approved'].includes(project.specDoc?.status),
-    },
-    {
-      id: 'change-request-pending',
-      label: 'Open change request — resolve before advancing',
-      applies: !!project.changeRequestPending,
-      ok: false,
-    },
-  ].filter(c => c.applies);
+  const gateChecks = checkStageGates(project, nextStage.id, { invoices }).gates;
 
   const blockingChecks = gateChecks.filter(c => !c.ok);
   const allClear = blockingChecks.length === 0;

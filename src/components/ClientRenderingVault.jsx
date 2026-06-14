@@ -3,7 +3,8 @@ import {
   Lock, FileText, Download, CheckCircle2, AlertCircle, Send, X,
   PlusCircle, Trash2, Check, Banknote, Building2, Smartphone, Clock, Info
 } from 'lucide-react';
-import { db } from '../lib/firebase';
+import { db, functions } from '../lib/firebase';
+import { httpsCallable } from 'firebase/functions';
 import {
   updateDoc, doc, collection, addDoc, onSnapshot, query, orderBy,
   serverTimestamp, deleteDoc, writeBatch
@@ -87,6 +88,8 @@ export default function ClientRenderingVault({
         renderingApproved: true,
         renderingApprovedAt: serverTimestamp(),
         changeRequestPending: false,
+        workflowStep: 'quote-negotiation',
+        nextAction: 'Project manager prepares the quotation for cost negotiation',
       });
       await postSystemMessage(
         `✅ ${project.clientName || 'Client'} approved the design rendering "${pkg.title}". The project is cleared to proceed to quotation.`
@@ -111,6 +114,8 @@ export default function ClientRenderingVault({
       batch.update(doc(db, 'projects', project.id), {
         changeRequestPending: true,
         renderingApproved: false,
+        workflowStep: 'rendering-review',
+        nextAction: 'Design team uploads the requested rendering revision',
       });
       await batch.commit();
       await postSystemMessage(
@@ -122,6 +127,7 @@ export default function ClientRenderingVault({
         message: `${project.clientName || 'Client'} requested changes on "${pkg.title}" in "${project.title}": ${changeRequestNote.trim()}`,
         type: 'change_request',
         link: '/admin',
+        projectId: project.id,
         read: false,
         createdAt: new Date(),
       }).catch(() => {});
@@ -139,36 +145,19 @@ export default function ClientRenderingVault({
     if (!linkedInv) return;
     setPaySubmitting(prev => ({ ...prev, [pkg.id]: true }));
     try {
-      await updateDoc(doc(db, 'invoices', linkedInv.id), {
-        awaitingConfirmation: true,
-        paymentMethodSubmitted: method,
-        paymentSubmittedAt: serverTimestamp(),
+      const submitOfflinePayment = httpsCallable(functions, 'submitOfflinePayment');
+      await submitOfflinePayment({
+        projectId: project.id,
+        invoiceId: linkedInv.id,
+        amount: parseAmount(linkedInv.amount || linkedInv.total),
+        method: method === 'bank' ? 'bank' : 'cash',
+        reference: '',
       });
       const methodLabel = method === 'bank' ? 'bank transfer' : 'offline/in-person payment';
       await postSystemMessage(
         `💳 ${project.clientName || 'Client'} submitted a ${methodLabel} for the rendering fee invoice "${linkedInv.invoiceNumber || 'INV'}" — ${linkedInv.currency || 'GHS'} ${parseAmount(linkedInv.amount || linkedInv.total).toLocaleString()}. Awaiting admin confirmation.`
       );
 
-      // Notify admin
-      await addDoc(collection(db, 'notifications'), {
-        userId: 'admin',
-        message: `${project.clientName || 'Client'} submitted an offline payment (${methodLabel}) for ${linkedInv.currency || 'GHS'} ${parseAmount(linkedInv.amount || linkedInv.total).toLocaleString()}. Please confirm receipt.`,
-        type: 'payment_submitted',
-        link: '/admin',
-        read: false,
-        createdAt: serverTimestamp(),
-      }).catch(() => {});
-      const managerId = project.projectManagerId || project.assignedStaff?.[0];
-      if (managerId) {
-        await addDoc(collection(db, 'notifications'), {
-          userId: managerId,
-          message: `${project.clientName || 'Client'} submitted an offline payment (${methodLabel}) for ${linkedInv.currency || 'GHS'} ${parseAmount(linkedInv.amount || linkedInv.total).toLocaleString()}. Please confirm receipt.`,
-          type: 'payment_submitted',
-          link: '/admin/client-hub',
-          read: false,
-          createdAt: serverTimestamp(),
-        }).catch(() => {});
-      }
     } catch (err) {
       console.error('[ClientRenderingVault] Offline payment submit failed:', err);
     } finally {
@@ -232,6 +221,7 @@ export default function ClientRenderingVault({
         message: `${project.clientName || 'Client'} placed a feedback pin on "${pkg?.title || 'design'}" in "${project.title}" — project is now on hold.`,
         type: 'change_request',
         link: '/admin',
+        projectId: project.id,
         read: false,
         createdAt: serverTimestamp(),
       }).catch(() => {});

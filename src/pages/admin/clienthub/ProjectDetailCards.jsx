@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Anchor, Loader2, TrendingUp, Plus, X, AlertCircle, FileText, Download, Upload, Camera } from 'lucide-react';
-import { db } from '../../../lib/firebase';
+import { db, functions } from '../../../lib/firebase';
 import { collection, onSnapshot, query, orderBy, doc, updateDoc, addDoc, serverTimestamp } from 'firebase/firestore';
+import { httpsCallable } from 'firebase/functions';
 import { AC, BD_ITEMS_CONFIG } from './config.jsx';
 
 // ─── Shipping Details Form ────────────────────────────────────────────────────
-export function ShippingDetailsCard({ project, updateShippingDetails }) {
+export function ShippingDetailsCard({ project, invoices = [], updateShippingDetails, notify }) {
   const init = {
     vesselName: project.shippingDetails?.vesselName || '',
     blNumber: project.shippingDetails?.blNumber || '',
@@ -16,6 +17,18 @@ export function ShippingDetailsCard({ project, updateShippingDetails }) {
   const [form, setForm] = useState(init);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [confirmingArrival, setConfirmingArrival] = useState(false);
+  const projectInvoices = invoices.filter(inv => inv.projectId === project.id || inv.parentId === project.id);
+  const goodsBalanceInvoice = projectInvoices.find(inv => {
+    const key = String(inv.milestoneKey || '').toLowerCase();
+    const descriptor = `${inv.title || ''} ${inv.type || ''}`.toLowerCase();
+    return key === 'pre-installation-balance' || descriptor.includes('goods balance') || descriptor.includes('ghana arrival');
+  });
+  const goodsBalancePaid = project.goodsBalancePaid === true || project.postProductionPaid === true ||
+    ['paid', 'paid in full'].includes(String(goodsBalanceInvoice?.status || '').toLowerCase());
+  const paymentAwaitingVerification = goodsBalanceInvoice?.awaitingConfirmation === true ||
+    String(goodsBalanceInvoice?.status || '').toLowerCase() === 'verification pending';
+  const shippingStageReached = Number(project.stageId || 1) >= 5;
 
   // Re-sync if project changes
   useEffect(() => {
@@ -37,6 +50,20 @@ export function ShippingDetailsCard({ project, updateShippingDetails }) {
     await updateShippingDetails(project.id, form);
     setSaving(false);
     setSaved(true);
+  };
+
+  const handleConfirmArrival = async () => {
+    if (!functions || confirmingArrival) return;
+    setConfirmingArrival(true);
+    try {
+      const confirmArrival = httpsCallable(functions, 'markGoodsArrivedInGhana');
+      const response = await confirmArrival({ projectId: project.id, arrivalNote: form.notes });
+      notify?.('success', `Goods arrival confirmed. Final goods balance invoice ${response.data?.invoiceId || ''} is now due.`);
+    } catch (error) {
+      notify?.('error', error?.message || 'Could not confirm goods arrival.');
+    } finally {
+      setConfirmingArrival(false);
+    }
   };
 
   const inputStyle = {
@@ -61,7 +88,62 @@ export function ShippingDetailsCard({ project, updateShippingDetails }) {
   };
 
   return (
-    <div style={{ padding: '20px 24px', background: '#fff', borderRadius: 20, border: '1px solid var(--border-color)' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <div style={{
+        padding: '16px 18px',
+        borderRadius: 16,
+        background: project.goodsArrivedInGhana ? (goodsBalancePaid ? '#F0FDF4' : paymentAwaitingVerification ? '#EFF6FF' : '#FFFBEB') : '#F8FAFC',
+        border: `1.5px solid ${project.goodsArrivedInGhana ? (goodsBalancePaid ? '#86EFAC' : paymentAwaitingVerification ? '#93C5FD' : '#FDE68A') : '#CBD5E1'}`,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+          <div style={{ fontSize: 20 }}>{project.goodsArrivedInGhana ? (goodsBalancePaid ? '✅' : paymentAwaitingVerification ? '🔎' : '💳') : '🚢'}</div>
+          <div style={{ flex: 1 }}>
+            <div style={{
+              fontSize: 10,
+              fontWeight: 900,
+              color: goodsBalancePaid ? '#15803D' : paymentAwaitingVerification ? '#1D4ED8' : '#B45309',
+              textTransform: 'uppercase',
+              letterSpacing: '.08em',
+              marginBottom: 4,
+            }}>
+              Shipping and Ghana arrival
+            </div>
+            <div style={{ fontSize: 15, fontWeight: 900, color: 'var(--accent-secondary)', marginBottom: 4 }}>
+              {goodsBalancePaid
+                ? 'Final goods balance verified — installation payment is next'
+                : paymentAwaitingVerification
+                  ? 'Client payment submitted — admin verification required'
+                  : project.goodsArrivedInGhana
+                    ? 'Goods are in Ghana — final goods balance is due'
+                    : shippingStageReached
+                      ? 'Publish tracking details, then confirm arrival in Ghana'
+                      : 'Prepare shipping details before dispatch'}
+            </div>
+            <div style={{ fontSize: 12, lineHeight: 1.55, color: 'var(--text-secondary)' }}>
+              {goodsBalancePaid
+                ? 'The core project balance is cleared. Create and collect the separate installation-service add-on before moving goods to site.'
+                : paymentAwaitingVerification
+                  ? 'Open Payments, match the transfer or receipt against company records, and confirm it.'
+                  : project.goodsArrivedInGhana
+                    ? `The ${goodsBalanceInvoice?.title || 'final goods balance'} invoice is outstanding. Installation remains blocked until it is paid.`
+                    : 'Shipping details are client-visible during the shipping stage. Confirm Ghana arrival only after the goods physically arrive; that action issues the final goods balance automatically.'}
+            </div>
+          </div>
+          <div style={{
+            padding: '5px 10px',
+            borderRadius: 20,
+            background: '#fff',
+            fontSize: 10,
+            fontWeight: 900,
+            color: goodsBalancePaid ? '#15803D' : '#B45309',
+            whiteSpace: 'nowrap',
+          }}>
+            {project.goodsArrivedInGhana ? (goodsBalancePaid ? 'BALANCE PAID' : 'PAYMENT DUE') : 'TRACKING VISIBLE'}
+          </div>
+        </div>
+      </div>
+
+      <div style={{ padding: '20px 24px', background: '#fff', borderRadius: 20, border: '1px solid var(--border-color)' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <div style={{ width: 34, height: 34, borderRadius: 10, background: '#F0F9FF', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -83,6 +165,22 @@ export function ShippingDetailsCard({ project, updateShippingDetails }) {
         >
           {saving ? <><Loader2 size={13} className="spin" /> Saving...</> : saved ? '✓ Saved' : 'Save'}
         </button>
+        {shippingStageReached && (
+          <button
+            onClick={handleConfirmArrival}
+            disabled={confirmingArrival || project.goodsArrivedInGhana}
+            style={{
+              height: 34, padding: '0 14px', borderRadius: 10,
+              background: project.goodsArrivedInGhana ? '#F0FDF4' : '#B45309',
+              color: project.goodsArrivedInGhana ? '#15803D' : '#fff',
+              border: project.goodsArrivedInGhana ? '1px solid #86EFAC' : 'none',
+              fontSize: 11, fontWeight: 800, cursor: project.goodsArrivedInGhana ? 'default' : 'pointer',
+              marginLeft: 8,
+            }}
+          >
+            {confirmingArrival ? 'Confirming...' : project.goodsArrivedInGhana ? 'Goods Arrival Confirmed' : 'Mark Arrived in Ghana'}
+          </button>
+        )}
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
@@ -133,6 +231,7 @@ export function ShippingDetailsCard({ project, updateShippingDetails }) {
           rows={3}
           style={{ ...inputStyle, resize: 'vertical', lineHeight: 1.6 }}
         />
+      </div>
       </div>
     </div>
   );

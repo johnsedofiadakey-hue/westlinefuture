@@ -64,7 +64,7 @@ import { onAuthStateChanged, signInWithEmailAndPassword, signOut, createUserWith
 import { httpsCallable } from 'firebase/functions';
 import { 
   collection, query, onSnapshot, getDocs, getDoc, doc, 
-  updateDoc, addDoc, setDoc, deleteDoc, orderBy, collectionGroup, limit, where, serverTimestamp, increment, or
+  updateDoc, addDoc, setDoc, deleteDoc, writeBatch, orderBy, collectionGroup, limit, where, serverTimestamp, increment, or
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { uploadFile } from './lib/firebase';
@@ -245,6 +245,7 @@ export default function App() {
     if (clean.length >= 10) return clean;
     return clean;
   };
+  const normalizeClientId = (value) => normalizePhone(String(value || '')) || String(value || '').trim();
 
   /**
    * Build a de-duped array of every possible client ID format for a given
@@ -842,83 +843,9 @@ export default function App() {
   // Canonical invoice-paid check — normalises "Paid", "paid", "Paid in Full"
   const isPaid = (status) => ['paid', 'paid in full'].includes(String(status || '').toLowerCase().trim());
 
-  const updateStage = async (projectId, stageId) => {
-    try {
-      // Unified 8-stage pipeline — always use CLIENT_PROJECT_STAGES
-      const stageObj = CLIENT_PROJECT_STAGES.find(s => s.id === stageId);
-      const clientStageName = stageObj?.name || `Stage ${stageId}`;
-      const project = clients.find(p => p.id === projectId);
-
-      // ✅ PHASE 3 FIX #13: Use centralized stage gate validation (was scattered in 2 places)
-      const gates = checkStageGates(project, stageId, { invoices, changeRequests: [] });
-      if (!gates.canAdvance) {
-        gates.blockers.forEach(b => notify('error', `Stage locked: ${b.message}`));
-        return;
-      }
-
-      if (stageObj) {
-         if (stageObj.requiresPayment) {
-            const projectInvoices = invoices.filter(i => i.parentId === projectId);
-            const unpaid = projectInvoices.filter(i => !isPaid(i.status));
-            if (unpaid.length > 0) {
-               notify('error', 'Stage locked: Outstanding payments required.');
-               return;
-            }
-         }
-         
-         // AUTOMATED MILESTONE INVOICING (8-stage pipeline)
-         const invoiceTriggers = {
-           1: { title: 'Initial Consultation & Design Deposit', percent: 10 },
-           2: { title: 'Fabrication Commencement Payment', percent: 40 },
-           4: { title: 'Pre-Installation Logistics Settlement', percent: 40 },
-           8: { title: 'Final Handover & Quality Settlement', percent: 10 }
-         };
-
-         if (invoiceTriggers[stageId] && project) {
-            const { title, percent, type } = invoiceTriggers[stageId];
-            const baseBudget = parseMoney(project.projectTotal || project.budget);
-            const amount = percent > 0 ? (baseBudget * percent) / 100 : parseMoney(project.renderingFee);
-            
-            if (amount > 0) {
-              const existing = invoices.find(i => i.parentId === projectId && i.title === title);
-              if (!existing) {
-                if (import.meta.env.DEV) devLog(`[AUTO-INVOICE] Generating ${title} for Project ${projectId}`);
-                await createInvoice({
-                  parentId: projectId,
-                  clientId: project.clientId,
-                  clientEmail: project.email,
-                  title: title,
-                  amount: amount,
-                  date: new Date().toISOString().split('T')[0],
-                  due: new Date(Date.now() + 7*24*60*60*1000).toISOString().split('T')[0],
-                  status: 'Pending',
-                  type: type || 'Milestone',
-                  invoiceType: type || 'milestone',
-                  stageGate: stageId
-                });
-                createNotification(project.clientId, `New Invoice Generated: ${title}`, 'info', '/portal');
-              }
-            }
-         }
-
-         // FEEDBACK LOOP: If stage is 8 (Handover), request feedback
-         if (stageId === 8 && project) {
-           createNotification(project.clientId, "Project Complete! We'd love to hear your feedback on your Westline Future experience.", "success", "/portal?action=feedback");
-         }
-      }
-      
-      const stageObjForPct = CLIENT_PROJECT_STAGES.find(s => s.id === stageId);
-      await updateDoc(doc(db, 'projects', projectId), { stageId, progress: stageObjForPct?.pct ?? Math.round((stageId / 8) * 100) });
-
-      // Notify client of stage change (only when admin moves project forward)
-      if (project?.clientId) {
-        const clientMsg = stageObj?.clientMsg || `Your project has progressed to ${clientStageName}.`;
-        createNotification(project.clientId, `📍 Project Update: "${project.title || 'Your project'}" has moved to ${clientStageName}. ${clientMsg}`, 'info', `/portal?projectId=${projectId}`);
-      }
-
-      logAction(projectId, 'Stage', `Moved to Stage ${stageId} — ${clientStageName}`);
-    } catch (e) { devErr(e); }
-  };
+  // Legacy admin screens still call updateStage. Route every transition through
+  // the same canonical advancement implementation and gate model.
+  const updateStage = (...args) => updateProjectStage(...args);
 
   const createProposal = async (data) => {
     if (!db) return;
@@ -1058,13 +985,24 @@ export default function App() {
 
   const computeNextProjectAction = (project, targetStageId = project?.stageId || 1) => {
     if (!project) return 'Review project setup';
-    if (targetStageId <= 1) return 'Prepare final quote and deposit invoice';
-    if (targetStageId === 2) return project.depositPaid ? 'Release procurement and production' : 'Awaiting quote approval and project deposit';
-    if (targetStageId === 3) return 'Track procurement and production status';
-    if (targetStageId === 4) return 'Track shipping, clearance, and site delivery';
-    if (targetStageId === 5) return 'Field team installation updates required';
-    if (targetStageId === 6) return 'Awaiting inspection sign-off';
-    if (targetStageId === 7) return project.finalPaymentPaid ? 'Issue handover documents' : 'Awaiting final settlement';
+    if (targetStageId <= 1) return 'Issue and verify rendering fee';
+    if (targetStageId === 2) {
+      if (!project.renderingApproved) return 'Upload or complete rendering review';
+      if (!project.contractAccepted) return 'Awaiting contract signature';
+      if (project.specDoc?.status !== 'signed') return 'Prepare or sign project brief';
+      return 'Prepare final quotation';
+    }
+    if (targetStageId === 3) return project.depositPaid ? 'Advance to production' : 'Awaiting quote approval and initial deposit';
+    if (targetStageId === 4) return 'Track procurement and production';
+    if (targetStageId === 5) {
+      if (!project.shippingDetails?.vesselName) return 'Publish shipping details and ETA';
+      if (!project.goodsArrivedInGhana) return 'Track shipment and confirm Ghana arrival';
+      if (!project.goodsBalancePaid) return 'Verify final goods balance';
+      if (!project.installationFeePaid) return 'Prepare or collect installation add-on';
+      return 'Assign crew and begin installation';
+    }
+    if (targetStageId === 6) return 'Field team installation updates required';
+    if (targetStageId === 7) return 'Awaiting inspection sign-off';
     return CLIENT_PROJECT_STAGES.find(s => s.id === targetStageId)?.adminPrompt || 'Monitor project progress';
   };
 
@@ -1175,6 +1113,7 @@ export default function App() {
         renderingApproved: true,
         renderingApprovedAt: serverTimestamp(),
         renderingStatus: 'approved',
+        workflowStep: 'quote-negotiation',
         nextAction: 'Prepare final project quote',
         updatedAt: serverTimestamp(),
       });
@@ -1218,6 +1157,7 @@ export default function App() {
         activeQuoteId: quoteRef.id,
         activeQuoteVersion: version,
         quoteStatus: 'sent',
+        workflowStep: 'quote-negotiation',
         projectTotal: total,
         budget: total ? String(total) : project.budget || '',
         nextAction: 'Awaiting final quote approval',
@@ -1395,8 +1335,6 @@ export default function App() {
       const txId = `TX-${Date.now()}`;
       const newTx = {
         id: txId,
-        projectId,
-        clientId: inv?.clientId || getProjectClientId(projectId),
         invoiceId: id,
         projectId,
         parentId: projectId,
@@ -1663,7 +1601,7 @@ export default function App() {
     try {
       const client = clients.find(c => c.id === clientId);
       if (!client?.phone) return;
-      const project = projects.find(p => p.id === projectId);
+      const project = clients.find(p => p.id === projectId);
       const firstName = (client.name || '').split(' ')[0] || 'there';
       const projectTitle = project?.title || 'your project';
       const message = `Hi ${firstName}, your project "${projectTitle}" has moved to the ${stageName} stage. Log in to your portal to see what's next: https://westlinefuture.web.app`;
@@ -1813,7 +1751,7 @@ export default function App() {
         clientIds: buildClientIds(id, data.phone || data.clientPhone),
         status: 'Initialized',
         stageId: 1,
-        stageModel: 'westline-7-stage-v1',
+        stageModel: 'westline-8-stage-v2',
         renderingStatus: 'not_started',
         quoteStatus: 'not_started',
         depositStatus: 'not_started',
@@ -1838,10 +1776,8 @@ export default function App() {
     const ts = Date.now();
     const SCHEDULES = {
       standard: [
-        { name: '10% Deposit',        pct: 0.10, stageId: 1 },
-        { name: '40% Pre-production', pct: 0.40, stageId: 3 },
-        { name: '40% Pre-delivery',   pct: 0.40, stageId: 6 },
-        { name: '10% Completion',     pct: 0.10, stageId: 8 },
+        { name: '60% Initial Project Deposit',             pct: 0.60, stageId: 3, milestoneKey: 'initial-deposit' },
+        { name: '40% Final Goods Balance on Ghana Arrival', pct: 0.40, stageId: 5, milestoneKey: 'pre-installation-balance' },
       ],
       '70-30': [
         { name: '70% Before Delivery', pct: 0.70, stageId: 3 },
@@ -1855,6 +1791,7 @@ export default function App() {
       pct: m.pct,
       amount: fmt(num * m.pct),
       stageId: m.stageId,
+      milestoneKey: m.milestoneKey,
       invoiceType: m.invoiceType,
       status: 'Pending',
     }));
@@ -1896,7 +1833,9 @@ export default function App() {
         clientIds: buildClientIds(clientId, data.phone || data.clientPhone),
         projectType: data.projectType || 'full-service',
         stageId: 1,
-        stageModel: 'westline-7-stage-v1',
+        stageModel: 'westline-8-stage-v2',
+        workflowModel: 'westline-client-journey-v3',
+        workflowStep: data.kickoffMode === 'direct-kickoff' ? 'quote-negotiation' : 'rendering-payment',
         status: 'Active',
         projectLifecycleStatus: 'Active',
         budget: data.budget || '',
@@ -1906,10 +1845,21 @@ export default function App() {
         renderingFeePaid: false,
         renderingUnlocked: false,
         renderingApproved: false,
+        siteVisit: {
+          status: 'not_scheduled',
+          source: null,
+          startAt: null,
+          endAt: null,
+          timezone: 'Africa/Accra',
+          scheduledBy: null,
+          scheduledAt: null,
+          completedAt: null,
+        },
+        siteSurveyCompleted: false,
         quoteStatus: 'not_started',
         quoteApproved: false,
         depositPaid: false,
-        nextAction: data.renderingFee ? 'Create and send rendering fee invoice' : 'Confirm rendering fee and upload design package',
+        nextAction: data.renderingFee ? 'Client pays rendering fee, then schedules the technical site visit' : 'Confirm the project launch requirements',
         breakdown: data.breakdown || null,
         paymentSchedule: data.paymentSchedule || 'standard',
         kickoffMode: data.kickoffMode || 'rendering-first',
@@ -2008,9 +1958,14 @@ export default function App() {
       const snap = await getDoc(doc(db, 'projects', projectId));
       if (!snap.exists()) throw new Error('Project not found');
       const data = snap.data();
-      if (newStageId >= 3 && !data.depositPaid && !options.adminOverride) {
-        notify('error', 'Stage locked: project deposit must be paid before procurement.');
-        return;
+      const gateResult = checkStageGates(
+        { id: projectId, ...data },
+        newStageId,
+        { invoices, changeRequests }
+      );
+      if (!gateResult.canAdvance && !options.gateOverride) {
+        const message = gateResult.blockers.map(blocker => blocker.message).join(' ');
+        throw new Error(message || 'Required project gates have not been completed.');
       }
       const effectiveTimestamp = options.overrideDate
         ? new Date(options.overrideDate).toISOString()
@@ -2023,7 +1978,6 @@ export default function App() {
         clientVisibleNote: sanitizeText(options.clientVisibleNote || ''),
         ...(options.overrideDate ? { backdated: true } : {}),
       }];
-      const stage = CLIENT_PROJECT_STAGES.find(s => s.id === newStageId);
       await updateDoc(doc(db, 'projects', projectId), {
         stageId: newStageId,
         status: newStageId === 8 ? 'Completed' : 'Active',
@@ -2077,15 +2031,11 @@ export default function App() {
         } catch (_) {}
       }
 
-      // ── Auto-activate milestone invoice when trigger stage is reached ──────
-      // Stage 3 → post-rendering (60%), Stage 5 → post-production (30%), Stage 6 → final balance (before installation)
-      const MILESTONE_STAGE_TRIGGERS = { 3: 'post-rendering', 5: 'post-production', 6: 'completion' };
-      const MILESTONE_LABELS = {
-        'post-rendering':  '60% Rendering Milestone',
-        'post-production': '30% Production Milestone',
-        'completion':      'Final Balance Payment',
-        'post-shipping':   '10% Delivery Milestone',
-      };
+      // Payment invoices are activated by the event that makes them due:
+      // quote approval activates the initial deposit; confirmed Ghana arrival
+      // activates the final goods balance. A stage number alone is insufficient.
+      const MILESTONE_STAGE_TRIGGERS = {};
+      const MILESTONE_LABELS = {};
       const triggerKey = MILESTONE_STAGE_TRIGGERS[newStageId];
       if (triggerKey) {
         try {
@@ -2109,17 +2059,7 @@ export default function App() {
           const allDocs = [...invSnap.docs, ...invSnap2.docs].filter(
             (d, i, arr) => arr.findIndex(x => x.id === d.id) === i
           );
-          // For Stage 7 (final payment), also search by type 'final'/'settlement' if no milestoneKey match
-          let finalDocs = allDocs;
-          if (triggerKey === 'completion' && allDocs.length === 0) {
-            const fallbackQ = query(collection(db, 'invoices'), where('parentId', '==', projectId));
-            const fallbackSnap = await getDocs(fallbackQ);
-            finalDocs = fallbackSnap.docs.filter(d => {
-              const t = `${d.data().type || ''} ${d.data().title || ''} ${d.data().milestoneKey || ''}`.toLowerCase();
-              return t.includes('final') || t.includes('settlement') || t.includes('completion') || t.includes('balance');
-            });
-          }
-          for (const invDoc of finalDocs) {
+          for (const invDoc of allDocs) {
             if (!isPaid(invDoc.data().status)) {
               await updateDoc(invDoc.ref, {
                 due: dueStr,
@@ -2130,23 +2070,17 @@ export default function App() {
             }
           }
           // Client-visible system message + push notification
-          if (data.clientId && finalDocs.length > 0) {
+          if (data.clientId && allDocs.length > 0) {
             const milestoneLabel = MILESTONE_LABELS[triggerKey] || 'Payment Milestone';
-            const isFinal = triggerKey === 'completion';
-            const msgText = isFinal
-              ? `🏗️ Your goods are ready for installation! Your final balance payment is now due by ${new Date(dueStr + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'long' })}. Please clear the balance before installation begins — you can pay by bank transfer, mobile money, or cash. Contact us to arrange an offline payment.`
-              : `💳 Payment milestone reached: your *${milestoneLabel}* invoice is now due (${dueStr}). Please open your Payments tab to settle.`;
+            const msgText = `💳 Payment milestone reached: your *${milestoneLabel}* invoice is now due (${dueStr}). Please open your Payments tab to settle.`;
             await addDoc(collection(db, 'clients', data.clientId, 'messages'), {
               text: msgText,
               senderRole: 'system', senderId: 'system', senderName: 'Westline Future',
               isInternal: false, readByAdmin: true, readByClient: false, createdAt: serverTimestamp(),
             });
-            // Strong push notification for final payment
             await addDoc(collection(db, 'notifications'), {
               userId: data.clientId,
-              message: isFinal
-                ? `🏗️ Ready for installation — your final balance is due by ${dueStr}. Pay via the Payments tab.`
-                : `💳 ${milestoneLabel} invoice is now due (${dueStr}). Open Payments tab.`,
+              message: `💳 ${milestoneLabel} invoice is now due (${dueStr}). Open Payments tab.`,
               type: 'payment_due',
               link: '/portal',
               read: false,
@@ -2168,13 +2102,15 @@ export default function App() {
       }
       notify('success', `Project advanced to ${stage?.name}`, 'persistent');
       logAction(data.clientId, 'Projects', `Stage ${newStageId} — ${projectId}`);
+      return true;
     } catch (e) {
-      notify('error', 'Failed to update stage');
+      notify('error', e?.message || 'Failed to update stage');
       devErr(e);
+      throw e;
     }
   };
 
-  const addClientMessage = async (clientId, text, senderRole = 'admin', isInternal = false) => {
+  const addClientMessage = async (clientId, text, senderRole = 'admin', isInternal = false, meta = {}) => {
     if (!db || !text?.trim()) return;
     const senderName = user?.name || user?.displayName || 'Westline Future Team';
     try {
@@ -2232,21 +2168,20 @@ export default function App() {
     if (!db) return;
     try {
       const project = clients.find(p => p.id === projectId) || {};
-      // Client-allowed write: flags the sign-off
-      await updateDoc(doc(db, 'projects', projectId), {
-        signOffApproved: true,
-        signOffApprovedAt: serverTimestamp(),
+      const submitProjectSignoff = httpsCallable(functions, 'submitProjectSignoff');
+      const response = await submitProjectSignoff({
+        projectId,
+        approverName: user?.name || project.clientName || 'Client',
+        legalConsent: true,
       });
-      // Admin advances the stage (this succeeds if called by admin, or silently fails for client)
-      try {
-        await updateProjectStage(projectId, 8, 'Client signed off on inspection', { silent: true });
-      } catch (_) {
-        // Fallback: notify admin to complete the handover manually
-        await createNotification('admin', `Client signed off on project "${project.title || projectId}" — please advance to Stage 8 (Handover).`, 'info', `/admin/clients?tab=projects`);
-      }
-      notify('success', 'Sign-off confirmed! Your project is being completed.', 'persistent');
+      notify('success', 'Inspection approved. The project has moved to handover and closeout.', 'persistent');
+      return response.data;
     } catch (e) {
-      notify('error', 'Failed to record sign-off. Please try again.');
+      const message = e?.message
+        ?.replace(/^Firebase:\s*/i, '')
+        ?.replace(/\s*\(functions\/[^)]+\)\.?$/i, '');
+      notify('error', message || 'Failed to record sign-off. Please try again.');
+      throw e;
     }
   };
 
@@ -2254,21 +2189,26 @@ export default function App() {
     if (!db) return;
     try {
       const project = clients.find(p => p.id === projectId);
-      await updateDoc(doc(db, 'projects', projectId), {
-        quoteApproved: true,
-        quoteApprovedAt: serverTimestamp(),
-        quoteStatus: 'approved',
-        approvedQuoteId: project?.activeQuoteId || null,
-        approvedQuoteVersion: project?.activeQuoteVersion || null,
-        nextAction: 'Create project deposit invoice',
-        updatedAt: serverTimestamp(),
-      });
-      if (project?.stageId === 2) {
-        await updateProjectStage(projectId, 3, 'Quotation approved by client', { silent: true });
+      const renderingApproved = project?.kickoffMode === 'direct-kickoff' ||
+        project?.renderingApproved === true ||
+        project?.designApproved === true ||
+        String(project?.renderingStatus || '').toLowerCase() === 'approved';
+      if (!renderingApproved) {
+        notify('error', 'The final rendering must be approved before the quotation can be approved.');
+        return;
       }
-      createNotification('admin', `Client approved quote for ${project?.name || 'Project'}`, 'quote_approved', `/admin/clients?tab=projects`);
-      notify('success', 'Quote approved — advancing to deposit stage', 'persistent');
-    } catch (e) { notify('error', 'Failed to approve quote'); }
+      const approveProjectQuote = httpsCallable(functions, 'approveProjectQuote');
+      await approveProjectQuote({
+        projectId,
+        approverName: user?.name || project?.clientName || 'Client',
+      });
+      notify('success', 'Final quote approved. The project contract is now ready for signature.', 'persistent');
+    } catch (e) {
+      const message = e?.message
+        ?.replace(/^Firebase:\s*/i, '')
+        ?.replace(/\s*\(functions\/[^)]+\)\.?$/i, '');
+      notify('error', message || 'Failed to approve quote');
+    }
   };
 
   const updateShippingDetails = async (projectId, details) => {

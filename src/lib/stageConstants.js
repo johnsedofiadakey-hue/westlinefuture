@@ -10,15 +10,22 @@
 
 // Stage IDs (1–8)
 export const STAGE = {
-  INQUIRY_INTAKE: 1,
-  QUOTATION: 2,
-  DEPOSIT_PAID: 3,
+  SURVEY: 1,
+  DESIGN_RENDERING: 2,
+  QUOTE_DEPOSIT: 3,
   PRODUCTION: 4,
-  PRE_DELIVERY: 5,
+  SHIPPING: 5,
   INSTALLATION: 6,
   INSPECTION: 7,
-  COMPLETION: 8,
+  HANDOVER: 8,
 };
+
+// Compatibility aliases for older imports. New code should use the canonical names above.
+STAGE.INQUIRY_INTAKE = STAGE.SURVEY;
+STAGE.QUOTATION = STAGE.DESIGN_RENDERING;
+STAGE.DEPOSIT_PAID = STAGE.QUOTE_DEPOSIT;
+STAGE.PRE_DELIVERY = STAGE.SHIPPING;
+STAGE.COMPLETION = STAGE.HANDOVER;
 
 // Aliases for backward compatibility
 export const STAGES = STAGE;
@@ -28,14 +35,14 @@ export const STAGES = STAGE;
  * Used for UI labels, colors, and business logic checks
  */
 export const STAGE_METADATA = {
-  [STAGE.INQUIRY_INTAKE]: { name: 'Inquiry & Intake', color: '#3B82F6' },
-  [STAGE.QUOTATION]: { name: 'Quotation', color: '#8B5CF6' },
-  [STAGE.DEPOSIT_PAID]: { name: 'Quote Approved', color: '#EC4899' },
-  [STAGE.PRODUCTION]: { name: 'Production', color: '#F59E0B' },
-  [STAGE.PRE_DELIVERY]: { name: 'Pre-Delivery', color: '#10B981' },
-  [STAGE.INSTALLATION]: { name: 'Installation', color: '#14B8A6' },
-  [STAGE.INSPECTION]: { name: 'Inspection', color: '#06B6D4' },
-  [STAGE.COMPLETION]: { name: 'Completion', color: '#6366F1' },
+  [STAGE.SURVEY]: { name: 'Onboarding, Payment & Site Survey', color: '#78716C' },
+  [STAGE.DESIGN_RENDERING]: { name: '3D Rendering Review', color: '#9333EA' },
+  [STAGE.QUOTE_DEPOSIT]: { name: 'Commercial Approval & Production Authority', color: '#B7791F' },
+  [STAGE.PRODUCTION]: { name: 'Procurement & Production', color: '#3E2414' },
+  [STAGE.SHIPPING]: { name: 'Shipping & Delivery', color: '#A69282' },
+  [STAGE.INSTALLATION]: { name: 'Installation', color: '#3E2414' },
+  [STAGE.INSPECTION]: { name: 'Inspection & Sign-off', color: '#B7791F' },
+  [STAGE.HANDOVER]: { name: 'Handover & Closeout', color: '#180E06' },
 };
 
 /**
@@ -46,5 +53,5 @@ export const isStageBefore = (currentStage, threshold) => currentStage < thresho
 
 // Common queries
 export const isProductionOrAfter = (stage) => isStageAtOrAfter(stage, STAGE.PRODUCTION);
-export const isDeliveryOrAfter = (stage) => isStageAtOrAfter(stage, STAGE.INSTALLATION);
-export const isComplete = (stage) => stage === STAGE.COMPLETION;
+export const isDeliveryOrAfter = (stage) => isStageAtOrAfter(stage, STAGE.SHIPPING);
+export const isComplete = (stage) => stage === STAGE.HANDOVER;

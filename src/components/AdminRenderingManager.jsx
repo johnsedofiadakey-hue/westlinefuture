@@ -96,6 +96,14 @@ export default function AdminRenderingManager({
   // ── Attempt to upload — check if invoice is linked ────────────────────────
   const handleUploadAttempt = () => {
     if (!pkgTitle || !pkgUrl) return;
+    if (
+      project?.kickoffMode !== 'direct-kickoff' &&
+      project?.siteVisit?.status !== 'completed' &&
+      project?.siteSurveyCompleted !== true
+    ) {
+      notify?.('error', 'Complete the technical site visit and measurements before publishing the 3D rendering.');
+      return;
+    }
     if (!linkedInvoiceId) {
       // Auto-link to the existing rendering fee invoice if one was created at project setup
       const existingRenderingInvId = project?.renderingFeeInvoiceId;
@@ -125,12 +133,12 @@ export default function AdminRenderingManager({
         linkedInvoiceId: invId,
         includedRevisions: parseInt(includedRevisions, 10) || 2,
         usedRevisions: 0,
-        unlocked: !invId,
-        status: invId ? 'Locked' : 'Unlocked',
+        unlocked: isRenderingPaid || !invId,
+        status: isRenderingPaid || !invId ? 'Paid / Unlocked' : 'Locked',
         createdAt: serverTimestamp()
       });
       await postSystemMessage(
-        `🎨 Admin uploaded a new design rendering package: "${pkgTitle}". ${invId ? 'A rendering fee invoice has been issued — please pay to unlock it.' : 'It is now available for review.'}`
+        `🎨 A new 3D rendering package is ready: "${pkgTitle}". ${invId ? 'Your verified rendering payment unlocks access for review.' : 'It is now available for review.'}`
       );
       setShowUpload(false);
       setPkgTitle('');
@@ -303,25 +311,6 @@ export default function AdminRenderingManager({
     return cleanUrl.endsWith('.png') || cleanUrl.endsWith('.jpg') || cleanUrl.endsWith('.jpeg') || cleanUrl.endsWith('.webp') || cleanUrl.endsWith('.gif');
   };
 
-  const handleManualUnlock = async (pkgId, forceUnlock) => {
-    setConfirmAction({
-      label: forceUnlock ? 'Manually Unlock Package?' : 'Re-lock Package?',
-      sublabel: forceUnlock
-        ? 'Client will see the rendering without paying the invoice.'
-        : 'Client will be asked to pay before viewing.',
-      onConfirm: async () => {
-        try {
-          await updateDoc(doc(db, 'renderingPackages', pkgId), {
-            unlocked: forceUnlock,
-            status: forceUnlock ? 'Unlocked' : 'Locked'
-          });
-        } catch (err) {
-          if (import.meta.env.DEV) console.error('[AdminRenderingManager] Failed to toggle unlock:', err);
-        }
-      },
-    });
-  };
-
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
 
@@ -460,21 +449,8 @@ export default function AdminRenderingManager({
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                     <div style={{ fontSize: 11, fontWeight: 800, padding: '4px 12px', borderRadius: 20, background: `${statusColor}15`, color: statusColor, textTransform: 'uppercase' }}>
-                      {isUnlocked ? (pkg.unlocked ? 'Manually Unlocked' : pkg.status) : isAwaitingConfirmation ? 'Awaiting Confirmation' : 'Locked'}
+                      {isUnlocked ? pkg.status : isAwaitingConfirmation ? 'Awaiting Confirmation' : 'Locked'}
                     </div>
-                    {/* Force Unlock Toggle */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }} title="Force-unlock grants file access regardless of invoice status. The invoice remains unpaid until you confirm receipt separately.">
-                      <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)' }}>Force Unlock</span>
-                      <div
-                        onClick={() => handleManualUnlock(pkg.id, !pkg.unlocked)}
-                        style={{ width: 36, height: 20, borderRadius: 10, background: pkg.unlocked ? '#10B981' : 'var(--border-color)', position: 'relative', cursor: 'pointer', transition: 'background 0.2s' }}
-                      >
-                        <div style={{ width: 16, height: 16, borderRadius: '50%', background: '#fff', position: 'absolute', top: 2, left: pkg.unlocked ? 18 : 2, transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,.15)' }} />
-                      </div>
-                    </div>
-                    {pkg.unlocked && (
-                      <span style={{ fontSize: 10, color: '#D97706', fontWeight: 700 }} title="Invoice payment status is independent of this toggle. Confirm receipt via the button below to mark the invoice paid.">⚠ Invoice status unchanged</span>
-                    )}
                   </div>
                 </div>
 

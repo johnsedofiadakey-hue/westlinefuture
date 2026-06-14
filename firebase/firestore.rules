@@ -80,6 +80,33 @@ service cloud.firestore {
         );
     }
 
+    function isAssignedWorker(project) {
+      return isWorker()
+        && project.assignedWorkers is list
+        && request.auth.uid in project.assignedWorkers;
+    }
+
+    function isAssignedStaff(project) {
+      return isAuthenticated()
+        && project.assignedStaff is list
+        && request.auth.uid in project.assignedStaff;
+    }
+
+    function isAssignedClient(project) {
+      return isClient(project.clientId)
+        || (project.clientIds is list && request.auth.uid in project.clientIds)
+        || (project.clientIds is list
+          && request.auth.token.phone_number != null
+          && request.auth.token.phone_number in project.clientIds);
+    }
+
+    function canReadProject(project) {
+      return isAdminOrStaff()
+        || isAssignedClient(project)
+        || isAssignedWorker(project)
+        || isAssignedStaff(project);
+    }
+
     // --- USER PROFILES ---
     match /users/{userId} {
       allow get: if isAdmin() || isClient(userId);
@@ -104,7 +131,7 @@ service cloud.firestore {
     }
 
     match /team/{memberId} {
-      allow read: if isAuthenticated();
+      allow read: if isAdminOrStaff() || (isAuthenticated() && request.auth.uid == memberId);
       allow write: if isAdmin();
     }
 
@@ -120,55 +147,51 @@ service cloud.firestore {
 
     // --- PROJECTS & CLIENT DATA ---
     match /projects/{projectId} {
-      allow get: if isAdmin() || isClient(resource.data.clientId) || (isAuthenticated() && request.auth.token.email == resource.data.email);
-      // Allow clients to query their own projects by clientId
-      allow list: if isAdmin() || isAuthenticated();
+      allow get, list: if canReadProject(resource.data);
       allow update: if isAdmin() || (
-        isClient(resource.data.clientId) &&
+        isAssignedClient(resource.data) &&
         request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-          // Quote approval
-          'quoteApproved', 'quoteApprovedAt',
           // Rendering approval
           'renderingApproved', 'renderingApprovedAt',
           // Change requests
           'changeRequestPending',
-          // Contract signing — client writes these fields when they sign
-          'contractAccepted', 'contractSignedName',
-          'quoteSignature', 'quoteSignedAt', 'quoteSignedByPhone', 'quoteVerificationStamp',
-          // Spec/brief approval — client updates status and review note
-          'specDoc',
-          // Kickoff gate cleared — written when rendering paid + contract signed
-          'kickoffGateCleared',
-          // Final sign-off — client confirms inspection is complete (Stage 7 → 8)
-          'signOffApproved', 'signOffApprovedAt',
           // Review
           'reviewDismissed', 'reviewDismissedAt', 'reviewSubmitted', 'reviewSubmittedAt'
-        ]) &&
-        // Quote approval only when project is at Stage 3 and quote has been sent
-        (
-          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['quoteApproved', 'quoteApprovedAt']) ||
-          (resource.data.stageId == 3 && resource.data.quoteSentAt != null)
-        ) &&
-        // Contract signing only after rendering fee is paid (if required)
-        // If kickoffMode is 'rendering-first', renderingFeePaid must be true before setting contractAccepted
-        (
-          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['contractAccepted']) ||
-          (resource.data.kickoffMode != 'rendering-first' || resource.data.renderingFeePaid == true)
-        )
+        ])
       );
       allow create, delete: if isAdmin();
 
       match /messages/{msgId} {
-        allow get, list: if isAdmin() || isClient(get(/databases/$(database)/documents/projects/$(projectId)).data.clientId);
-        allow create: if isAdmin() || isClient(get(/databases/$(database)/documents/projects/$(projectId)).data.clientId);
-        allow update: if isAdmin() || isClient(get(/databases/$(database)/documents/projects/$(projectId)).data.clientId);
+        allow get, list: if canReadProject(get(/databases/$(database)/documents/projects/$(projectId)).data);
+        allow create: if isAdminOrStaff()
+          || isAssignedClient(get(/databases/$(database)/documents/projects/$(projectId)).data)
+          || isAssignedWorker(get(/databases/$(database)/documents/projects/$(projectId)).data);
+        allow update: if isAdminOrStaff()
+          || (
+            isAssignedClient(get(/databases/$(database)/documents/projects/$(projectId)).data)
+            && resource.data.senderId == request.auth.uid
+          );
         allow delete: if isAdmin();
       }
       // Typing presence — any authenticated participant can write their own doc
       match /typing/{typingUserId} {
-        allow read: if isAdmin() || isClient(get(/databases/$(database)/documents/projects/$(projectId)).data.clientId);
+        allow read: if canReadProject(get(/databases/$(database)/documents/projects/$(projectId)).data);
         allow write: if (isAuthenticated() && request.auth.uid == typingUserId) || isAdmin();
         allow delete: if isAuthenticated();
+      }
+      match /documents/{docId} {
+        allow get, list: if canReadProject(get(/databases/$(database)/documents/projects/$(projectId)).data)
+          && (isAdminOrStaff() || resource.data.clientVisible == true || isAssignedWorker(get(/databases/$(database)/documents/projects/$(projectId)).data));
+        allow create: if isAdminOrStaff()
+          || (
+            isAssignedWorker(get(/databases/$(database)/documents/projects/$(projectId)).data)
+            && request.resource.data.uploadedByUid == request.auth.uid
+          )
+          || (
+            isAssignedClient(get(/databases/$(database)/documents/projects/$(projectId)).data)
+            && request.resource.data.uploadedByUid == request.auth.uid
+          );
+        allow update, delete: if isAdminOrStaff();
       }
       match /{subcollection}/{docId} {
         allow get, list: if subcollection != "documents" && canReadProject(get(/databases/$(database)/documents/projects/$(projectId)).data);
@@ -196,7 +219,10 @@ service cloud.firestore {
       allow read: if isAdmin() || isClient(resource.data.clientId);
       allow write: if isAdmin() || isClient(resource.data.clientId);
     }
-    match /cms_content/{docId} { allow read: if true; allow write: if isAdmin(); }
+    match /cms_content/{docId} {
+      allow read: if docId != 'gatewaySettings' || isAdmin();
+      allow write: if isAdmin();
+    }
     match /settings/{docId} { allow read: if true; allow write: if isAdmin(); }
     match /system_settings/{docId} { allow read, write: if isAdmin(); }
     match /product_sync_sources/{sourceId} { allow read, write: if isAdmin(); }
@@ -206,7 +232,22 @@ service cloud.firestore {
 
     match /notifications/{notifId} {
       allow read: if isAdmin() || (isAuthenticated() && (request.auth.uid == resource.data.userId || isClient(resource.data.userId)));
-      allow create: if isAuthenticated();
+      allow create: if isAdminOrStaff() || (
+        isAuthenticated()
+        && request.resource.data.userId == 'admin'
+        && (
+          (
+            request.resource.data.projectId is string
+            && isClientOfProject(request.resource.data.projectId)
+            && request.resource.data.type in ['change_request']
+          )
+          || (
+            request.resource.data.clientId is string
+            && isClient(request.resource.data.clientId)
+            && request.resource.data.type == 'new_message'
+          )
+        )
+      );
       allow update, delete: if isAdmin() || (isAuthenticated() && (request.auth.uid == resource.data.userId || isClient(resource.data.userId)));
     }
 

@@ -725,7 +725,6 @@ export default function ProjectKanban({ clients = [], brand, updateProjectStage,
   const [dragOverCol, setDragOverCol] = useState(null);
   const [openProject, setOpenProject] = useState(null);
   const [showArchived, setShowArchived] = useState(false);
-  const [viewMode, setViewMode] = useState('board');
   const [healthFilter, setHealthFilter] = useState('all');
   const [sortBy, setSortBy] = useState('risk');
   const [compact, setCompact] = useState(false);

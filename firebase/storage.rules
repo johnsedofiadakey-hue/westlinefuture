@@ -12,7 +12,7 @@ service firebase.storage {
 
     function isAdmin() {
       return isAuthenticated() && (
-        request.auth.token.email.matches(".*@westlinefuture\\.com") ||
+        (request.auth.token.email != null && request.auth.token.email.matches(".*@westlinefuture\\.com")) ||
         request.auth.token.email == "admin@westlinefuture.com"
       );
     }
@@ -29,6 +29,35 @@ service firebase.storage {
       return isAdmin() || isStaff();
     }
 
+    function projectData(projectId) {
+      return firestore.get(/databases/(default)/documents/projects/$(projectId)).data;
+    }
+
+    function isProjectClient(projectId) {
+      let project = projectData(projectId);
+      return isAuthenticated() && (
+        request.auth.uid == project.clientId ||
+        (project.clientIds is list && request.auth.uid in project.clientIds) ||
+        (project.clientIds is list
+          && request.auth.token.phone_number != null
+          && request.auth.token.phone_number in project.clientIds)
+      );
+    }
+
+    function isAssignedWorker(projectId) {
+      let project = projectData(projectId);
+      return isWorker()
+        && project.assignedWorkers is list
+        && request.auth.uid in project.assignedWorkers;
+    }
+
+    function isAssignedStaff(projectId) {
+      let project = projectData(projectId);
+      return isStaff()
+        && project.assignedStaff is list
+        && request.auth.uid in project.assignedStaff;
+    }
+
     function isSafeUpload() {
       return request.resource.size < 20 * 1024 * 1024 &&
         request.resource.contentType.matches("image/.*|application/pdf|text/plain|application/vnd.openxmlformats-officedocument.*");
@@ -36,14 +65,19 @@ service firebase.storage {
 
     // User profile files
     match /users/{userId}/{allPaths=**} {
-      allow read: if isAuthenticated();
-      allow write: if isAuthenticated() && request.auth.uid == userId;
+      allow read: if isAdminOrStaff() || (isAuthenticated() && request.auth.uid == userId);
+      allow write: if isAdminOrStaff() || (isAuthenticated() && request.auth.uid == userId);
     }
 
-    // Project media and documents — any authenticated user can upload (admin, staff, workers)
+    match /clients/{clientId}/chat/{allPaths=**} {
+      allow read: if isAdminOrStaff() || (isAuthenticated() && request.auth.uid == clientId);
+      allow write: if (isAdminOrStaff() || (isAuthenticated() && request.auth.uid == clientId)) && isSafeUpload();
+    }
+
+    // Project media and documents are limited to project participants.
     match /projects/{projectId}/{allPaths=**} {
-      allow read: if isAuthenticated();
-      allow write: if (isAdminOrStaff() || isWorker()) && isSafeUpload();
+      allow read: if isAdminOrStaff() || isProjectClient(projectId) || isAssignedWorker(projectId) || isAssignedStaff(projectId);
+      allow write: if (isAdminOrStaff() || isAssignedWorker(projectId) || isProjectClient(projectId)) && isSafeUpload();
     }
 
     // Branding assets — admin only
@@ -52,10 +86,10 @@ service firebase.storage {
       allow write: if isAdmin();
     }
 
-    // Field uploads — any authenticated user can upload (workers)
-    match /field/{allPaths=**} {
+    // Field uploads are namespaced by project and limited to assigned workers.
+    match /field/{projectId}/{allPaths=**} {
       allow read: if isAdminOrStaff();
-      allow write: if isAuthenticated() && isSafeUpload();
+      allow write: if isAssignedWorker(projectId) && isSafeUpload();
     }
 
     // CMS / showcase media

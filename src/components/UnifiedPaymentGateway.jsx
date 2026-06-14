@@ -15,12 +15,12 @@
  *   contactPhone {string}  — shown in error state
  *   onSuccess    {fn}      — called with invoiceId after verified payment
  */
-import React, { useState, useContext } from 'react';
-import { usePaystackPayment } from 'react-paystack';
+import React, { useState, useContext, useEffect } from 'react';
 import { ArrowRight, Loader2, CheckCircle2, AlertCircle, PhoneCall, ShieldCheck, CreditCard, Smartphone, Building2, Banknote, X } from 'lucide-react';
 import { functions } from '../lib/firebase';
 import { httpsCallable } from 'firebase/functions';
 import { AppContext } from '../context/AppContext';
+import { createPaystackPayment } from '../lib/paystack';
 
 // ── Paystack button (inner component so hook is always called) ─────────────
 function PaystackOption({ amountGHS, email, invoiceId, projectId, paymentType, description, publicKey, onSuccess, onError }) {
@@ -40,7 +40,7 @@ function PaystackOption({ amountGHS, email, invoiceId, projectId, paymentType, d
     metadata:  { invoiceId, projectId, paymentType, description },
   };
 
-  const initializePayment = usePaystackPayment(config);
+  const initializePayment = createPaystackPayment(config);
 
   const handleSuccess = async (res) => {
     const ref = res?.reference || res?.trxref || String(res);
@@ -214,12 +214,21 @@ export default function UnifiedPaymentGateway({
   const [offlineReference, setOfflineReference] = useState('');
   const [offlineBusy, setOfflineBusy] = useState(false);
   const [offlineSubmitted, setOfflineSubmitted] = useState(false);
+  const [publicGatewaySettings, setPublicGatewaySettings] = useState(null);
   const fullAmount = parseFloat(amountGHS || 0);
 
-  const gw             = brand?.gatewaySettings || {};
+  useEffect(() => {
+    if (!functions) return;
+    const loadSettings = httpsCallable(functions, 'getPublicPaymentSettings');
+    loadSettings()
+      .then(response => setPublicGatewaySettings(response.data || {}))
+      .catch(() => setPublicGatewaySettings({}));
+  }, []);
+
+  const gw             = { ...(publicGatewaySettings || {}), ...(brand?.gatewaySettings || {}) };
   const paystackKey    = gw.paystackPublicKey || import.meta.env.VITE_PAYSTACK_PUBLIC_KEY || '';
   const paystackActive = !!(gw.enablePaystack !== false && paystackKey);
-  const hubtelActive   = !!(gw.enableHubtel && gw.hubtelClientId && gw.hubtelClientSecret && gw.hubtelMerchantId);
+  const hubtelActive   = gw.enableHubtel === true;
   const neitherActive  = !paystackActive && !hubtelActive;
 
   // The actual amount that will be charged — partial if set, otherwise full

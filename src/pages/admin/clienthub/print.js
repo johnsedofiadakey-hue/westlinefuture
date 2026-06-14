@@ -7,6 +7,14 @@
 // These describe what stage of the contract the payment covers.
 // They are intentionally generic and do not reference internal workflow keys.
 const MILESTONE_COPY = {
+  'initial-deposit': {
+    title: 'Initial Project Deposit',
+    body:  'This payment is the initial deposit under the approved quotation. It authorises procurement, manufacturing, and production of the goods and components described in the signed project brief.',
+  },
+  'pre-installation-balance': {
+    title: 'Final Goods Balance',
+    body:  'This payment is due after the goods arrive in Ghana and before they are released for delivery to the client site. Installation services are billed separately through an approved add-on invoice.',
+  },
   'post-rendering': {
     title: 'First Contract Instalment',
     body:  'This payment constitutes the primary instalment under the contract for the above-referenced project. It covers the commencement of all agreed professional services including initial survey, design development, procurement of specified materials, and preparation works required to advance the project to the manufacturing stage.',

@@ -135,8 +135,8 @@ export function NewProjectModal({ client, teamMembers = [], onClose, onCreate })
             <label style={lS}>Launch Mode</label>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
               {[
-                { id: 'rendering-first', title: 'With Rendering', desc: 'Client pays a separate design/CAD fee, reviews the 3D rendering, then approves the quote.' },
-                { id: 'direct-kickoff', title: 'No Rendering', desc: 'Client doesn\'t need a rendering. Skip straight to quotation — no design fee, no Design Vault.' },
+                { id: 'rendering-first', title: 'Standard Client Journey', desc: 'Rendering fee, scheduled site visit, measurements, 3D review, quotation negotiation, contract, payment, and deliverables approval.' },
+                { id: 'direct-kickoff', title: 'No Rendering', desc: 'For simple supply-only work. Skip rendering and site-survey gates, then begin at quotation negotiation.' },
               ].map(mode => (
                 <button key={mode.id} type="button" onClick={() => set('kickoffMode', mode.id)} style={{ padding: 14, borderRadius: 14, border: `2px solid ${form.kickoffMode === mode.id ? AC : `var(--border-color)`}`, background: form.kickoffMode === mode.id ? 'var(--bg-secondary)' : '#fff', textAlign: 'left', cursor: 'pointer' }}>
                   <div style={{ fontSize: 13, fontWeight: 900, color: form.kickoffMode === mode.id ? AC : `var(--accent-secondary)`, marginBottom: 4 }}>{mode.title}</div>

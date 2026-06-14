@@ -71,6 +71,7 @@ function ProjectCard({ project, updateProjectStage, addProjectMessage, addProjec
 
   const isDelivery = project.stageId === DELIVERY_STAGE;
   const isInstall = project.stageId === INSTALLATION_STAGE;
+  const isSiteSurvey = project.siteVisit?.status === 'scheduled' && project.siteSurveyCompleted !== true;
   const isComplete = project.stageId >= INSPECTION_SIGN_OFF;
 
   const projectRenderings = renderingPackages.filter(r => r.projectId === project.id && (r.status === 'Approved' || r.status === 'Unlocked'));
@@ -136,7 +137,13 @@ function ProjectCard({ project, updateProjectStage, addProjectMessage, addProjec
     );
   }
 
-  const activeChecklist = isDelivery ? deliveryChecklist : isInstall ? installChecklist : [];
+  const surveyChecklist = [
+    { key: 'measurements', label: 'All required room and opening measurements captured' },
+    { key: 'site_photos', label: 'Clear site photos and access conditions recorded' },
+    { key: 'services', label: 'Electrical, plumbing, structure, and obstruction notes recorded' },
+    { key: 'client_confirmation', label: 'Visit findings reviewed with the client or site representative' },
+  ];
+  const activeChecklist = isSiteSurvey ? surveyChecklist : isDelivery ? deliveryChecklist : isInstall ? installChecklist : [];
 
   // Default target coordinate fallbacks ( Accra Westline Office ) if not set
   const targetLat = Number(project.latitude) || 5.6037;
@@ -183,7 +190,25 @@ function ProjectCard({ project, updateProjectStage, addProjectMessage, addProjec
   const checkInLocked = !devBypass && (distance === null || distance > 100);
 
   const handleStageUpdate = async () => {
-    if (!updateProjectStage || checkInLocked || !allChecked) return;
+    if ((!updateProjectStage && !isSiteSurvey) || checkInLocked || !allChecked) return;
+
+    if (isSiteSurvey) {
+      setStageLoading(true);
+      try {
+        const completeSiteVisit = httpsCallable(functions, 'completeProjectSiteVisit');
+        await completeSiteVisit({
+          projectId: project.id,
+          notes: note.trim() || 'Technical site survey completed by assigned field worker.',
+          evidenceUrls: uploadedPhotoUrl ? [uploadedPhotoUrl] : [],
+        });
+        setStageDone(true);
+      } catch (e) {
+        console.error('[WorkerView Site Survey Error]:', e);
+      } finally {
+        setStageLoading(false);
+      }
+      return;
+    }
     
     const nextStage = isDelivery ? StageSixFallback() : INSPECTION_SIGN_OFF;
     const label = isDelivery 
@@ -280,16 +305,17 @@ function ProjectCard({ project, updateProjectStage, addProjectMessage, addProjec
         </div>
         <div style={{
           padding: '4px 10px', borderRadius: 100,
-          background: isDelivery ? '#FEF3C7' : isInstall ? '#FEF3C7' : '#D1FAE5',
-          color: isDelivery ? '#92400E' : isInstall ? '#B45309' : '#065F46',
+          background: isSiteSurvey ? '#DBEAFE' : isDelivery ? '#FEF3C7' : isInstall ? '#FEF3C7' : '#D1FAE5',
+          color: isSiteSurvey ? '#1D4ED8' : isDelivery ? '#92400E' : isInstall ? '#B45309' : '#065F46',
           fontSize: 10, fontWeight: 800, marginLeft: 12, whiteSpace: 'nowrap', textTransform: 'uppercase', letterSpacing: '.04em'
         }}>
-          {isDelivery ? 'Delivery' : isInstall ? 'Installation' : 'Active'}
+          {isSiteSurvey ? 'Site Survey' : isDelivery ? 'Delivery' : isInstall ? 'Installation' : 'Active'}
         </div>
       </div>
 
       {/* Stage badge */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: '#374151', borderRadius: 8 }}>
+        {isSiteSurvey && <MapPin size={14} color="#60A5FA" />}
         {isDelivery && <Truck size={14} color="#EAB308" />}
         {isInstall && <Wrench size={14} color="#EAB308" />}
         {isComplete && <CheckCircle size={14} color="#10B981" />}
@@ -439,7 +465,7 @@ function ProjectCard({ project, updateProjectStage, addProjectMessage, addProjec
       )}
 
       {/* Stage action submit */}
-      {(isDelivery || isInstall) && !stageDone && (
+      {(isSiteSurvey || isDelivery || isInstall) && !stageDone && (
         <button
           onClick={handleStageUpdate}
           disabled={stageLoading || checkInLocked || !allChecked}
@@ -452,9 +478,10 @@ function ProjectCard({ project, updateProjectStage, addProjectMessage, addProjec
             transition: 'all 0.2s', marginTop: 10
           }}
         >
+          {isSiteSurvey && <MapPin size={16} />}
           {isDelivery && <Truck size={16} />}
           {isInstall && <Wrench size={16} />}
-          {stageLoading ? 'Updating...' : isDelivery ? 'Mark as Delivered (QA Approved)' : 'Mark as Installed (QA Approved)'}
+          {stageLoading ? 'Updating...' : isSiteSurvey ? 'Complete Site Survey' : isDelivery ? 'Mark as Delivered (QA Approved)' : 'Mark as Installed (QA Approved)'}
         </button>
       )}
       
@@ -634,7 +661,7 @@ export default function WorkerView({ user, onLogout, clients, updateStage, logs,
   const allAssigned = (clients || []).filter(isAssigned);
 
   const todayProjects = allAssigned.filter(
-    p => p.stageId === DELIVERY_STAGE || p.stageId === INSTALLATION_STAGE
+    p => p.siteVisit?.status === 'scheduled' || p.stageId === DELIVERY_STAGE || p.stageId === INSTALLATION_STAGE
   );
 
   const workerName = user?.name || user?.displayName || user?.email || 'Worker';

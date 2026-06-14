@@ -5508,7 +5508,7 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
               <div key={i} style={{ height: i === 1 ? 140 : 80, borderRadius: isMobile ? 24 : 20, background: '#fff', animation: 'pulse 1.5s infinite', animationDelay: `${i * 0.15}s`, boxShadow: isMobile ? '0 2px 12px rgba(0,0,0,.06)' : 'none' }} />
             ))}
           </div>
-        ) : projectsError ? (
+        ) : projectsError && projects.length === 0 ? (
           <div style={{ padding: isMobile ? '48px 24px' : '80px 40px', textAlign: 'center', background: '#fff', borderRadius: 24, boxShadow: isMobile ? '0 2px 16px rgba(0,0,0,.08)' : 'none', marginTop: isMobile ? 8 : 0 }}>
             <div style={{ fontSize: 40, marginBottom: 16 }}>⚠️</div>
             <div style={{ fontSize: 17, fontWeight: 800, color: `var(--accent-secondary)`, marginBottom: 8 }}>Couldn't load your projects</div>

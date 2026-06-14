@@ -14,3 +14,11 @@ test('production builds retain the Westline Firebase fallback configuration', as
     'Firebase availability must be based on the resolved config, not environment variables alone'
   );
 });
+
+test('Firestore uses a transport compatible with restrictive client networks', async () => {
+  const source = await readFile(new URL('../src/lib/firebase.js', import.meta.url), 'utf8');
+
+  assert.match(source, /initializeFirestore\(app,\s*\{/);
+  assert.match(source, /experimentalForceLongPolling:\s*true/);
+  assert.doesNotMatch(source, /db\s*=\s*getFirestore\(app\)/);
+});

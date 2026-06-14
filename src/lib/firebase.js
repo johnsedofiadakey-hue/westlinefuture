@@ -1,6 +1,6 @@
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
+import { initializeFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 import { getFunctions } from "firebase/functions";
 
@@ -43,7 +43,13 @@ try {
       auth.settings.appVerificationDisabledForTesting = true;
       console.warn("Firebase Phone Auth test mode is enabled. Use only Firebase console test phone numbers locally.");
     }
-    db = getFirestore(app);
+    // Some mobile networks, proxies, privacy extensions, and antivirus tools
+    // break Firestore's default streaming WebChannel transport with HTTP 400
+    // responses. Long polling keeps realtime listeners reliable in those
+    // environments instead of showing cached data and then dropping it.
+    db = initializeFirestore(app, {
+      experimentalForceLongPolling: true,
+    });
     storage = getStorage(app);
     functions = getFunctions(app);
     import('firebase/messaging').then(({ getMessaging, isSupported }) => {

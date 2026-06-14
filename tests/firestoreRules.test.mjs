@@ -34,6 +34,24 @@ test('project access accepts normalized Firebase phone claims', () => {
   assert.equal(normalizedPhoneMemberships.length, 2);
 });
 
+test('client matching never reads optional auth claims without a presence guard', () => {
+  assert.match(
+    rules,
+    /function authEmail\(\)[\s\S]*"email" in request\.auth\.token/,
+  );
+  assert.match(
+    rules,
+    /function authPhoneNumber\(\)[\s\S]*"phone_number" in request\.auth\.token/,
+  );
+
+  const isClientBody = rules.match(
+    /function isClient\(clientId\) \{([\s\S]*?)\n    \}/,
+  )?.[1] || '';
+
+  assert.doesNotMatch(isClientBody, /request\.auth\.token\.email/);
+  assert.doesNotMatch(isClientBody, /request\.auth\.token\.phone_number/);
+});
+
 test('client project query uses one rules-compatible canonical identity', () => {
   assert.match(
     clientPortal,
@@ -42,5 +60,9 @@ test('client project query uses one rules-compatible canonical identity', () => 
   assert.doesNotMatch(
     clientPortal,
     /where\('clientIds', 'array-contains-any'/,
+  );
+  assert.match(
+    clientPortal,
+    /projectsError && projects\.length === 0/,
   );
 });

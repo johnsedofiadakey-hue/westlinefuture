@@ -46,19 +46,36 @@ service cloud.firestore {
     }
 
     function authPhoneId() {
-      return isAuthenticated() && request.auth.token.phone_number != null
+      return isAuthenticated()
+        && "phone_number" in request.auth.token
+        && request.auth.token.phone_number != null
         ? request.auth.token.phone_number.replace("+", "")
+        : "";
+    }
+
+    function authPhoneNumber() {
+      return isAuthenticated()
+        && "phone_number" in request.auth.token
+        && request.auth.token.phone_number != null
+        ? request.auth.token.phone_number
+        : "";
+    }
+
+    function authEmail() {
+      return isAuthenticated()
+        && "email" in request.auth.token
+        && request.auth.token.email != null
+        ? request.auth.token.email
         : "";
     }
 
     function isClient(clientId) {
       return isAuthenticated() && (
         request.auth.uid == clientId ||
-        (request.auth.token.email != null && request.auth.token.email.replace("@clients.westlinefuture.com", "") == clientId) ||
-        (request.auth.token.phone_number != null && (
-          request.auth.token.phone_number == clientId ||
-          request.auth.token.phone_number == ("+" + clientId)
-        ))
+        authEmail().replace("@clients.westlinefuture.com", "") == clientId ||
+        authPhoneNumber() == clientId ||
+        authPhoneNumber() == ("+" + clientId) ||
+        authPhoneId() == clientId
       );
     }
 
@@ -75,8 +92,7 @@ service cloud.firestore {
           isClient(d.clientId) ||
           (d.clientIds is list && request.auth.uid in d.clientIds) ||
           (d.clientIds is list && authPhoneId() in d.clientIds) ||
-          (d.clientIds is list && request.auth.token.phone_number != null
-            && request.auth.token.phone_number in d.clientIds)
+          (d.clientIds is list && authPhoneNumber() in d.clientIds)
         );
     }
 
@@ -96,9 +112,7 @@ service cloud.firestore {
       return isClient(project.clientId)
         || (project.clientIds is list && request.auth.uid in project.clientIds)
         || (project.clientIds is list && authPhoneId() in project.clientIds)
-        || (project.clientIds is list
-          && request.auth.token.phone_number != null
-          && request.auth.token.phone_number in project.clientIds);
+        || (project.clientIds is list && authPhoneNumber() in project.clientIds);
     }
 
     function canReadProject(project) {

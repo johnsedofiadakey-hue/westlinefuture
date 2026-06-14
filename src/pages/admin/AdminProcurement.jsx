@@ -4,7 +4,7 @@ import { PROCUREMENT_STAGES } from '../../data';
 import { Camera, Package, Truck, CheckCircle, Factory, Warehouse } from 'lucide-react';
 
 export default function AdminProcurement({ projectId, procurements = [], createProcurement, updateProcurement, deleteProcurement, brand, notify }) {
-  const ac = brand.color || '#0F766E';
+  const ac = brand.color || `var(--accent-secondary)`;
   const myProcs = (procurements || []).filter(p => p.parentId === projectId);
   
   const [showAdd, setShowAdd] = useState(false);
@@ -42,12 +42,12 @@ export default function AdminProcurement({ projectId, procurements = [], createP
        </div>
        
        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 20 }}>
-          <div style={{ background: '#F9FAFB', borderRadius: 8, padding: 12 }}>
-             <div className="lxf" style={{ fontSize: 11, color: '#6B7280', textTransform: 'uppercase' }}>Total Estimated</div>
+          <div style={{ background: `var(--bg-secondary)`, borderRadius: 8, padding: 12 }}>
+             <div className="lxf" style={{ fontSize: 11, color: `var(--text-secondary)`, textTransform: 'uppercase' }}>Total Estimated</div>
              <div className="lxf" style={{ fontSize: 18, fontWeight: 700 }}>${totalEst.toLocaleString()}</div>
           </div>
-          <div style={{ background: '#F9FAFB', borderRadius: 8, padding: 12 }}>
-             <div className="lxf" style={{ fontSize: 11, color: '#6B7280', textTransform: 'uppercase' }}>Actual Spent</div>
+          <div style={{ background: `var(--bg-secondary)`, borderRadius: 8, padding: 12 }}>
+             <div className="lxf" style={{ fontSize: 11, color: `var(--text-secondary)`, textTransform: 'uppercase' }}>Actual Spent</div>
              <div className="lxf" style={{ fontSize: 18, fontWeight: 700, color: totalAct > totalEst ? '#ff4444' : '#16A34A' }}>${totalAct.toLocaleString()}</div>
           </div>
        </div>
@@ -74,7 +74,7 @@ export default function AdminProcurement({ projectId, procurements = [], createP
            </div>
 
            {na.status === 'production' && (
-             <div className="fade-in" style={{ padding: 12, background: '#111827', color: '#fff', borderRadius: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+             <div className="fade-in" style={{ padding: 12, background: `var(--accent-secondary)`, color: '#fff', borderRadius: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div style={{ fontSize: 12 }}><Factory size={14} style={{ marginRight: 8 }} /> In Production</div>
                 <div style={{ display: 'flex', gap: 8 }}>
                    <input className="p-inp" placeholder="Factory Photo URL" value={na.factoryPhoto} onChange={e => setNa({...na, factoryPhoto: e.target.value})} style={{ background: 'rgba(255,255,255,.1)', color: '#fff', fontSize: 11, border: 'none' }} />
@@ -83,7 +83,7 @@ export default function AdminProcurement({ projectId, procurements = [], createP
              </div>
            )}
 
-           <div style={{ padding: '12px', background: '#F9FAFB', borderRadius: 12, display: 'flex', flexDirection: 'column', gap: 12 }}>
+           <div style={{ padding: '12px', background: `var(--bg-secondary)`, borderRadius: 12, display: 'flex', flexDirection: 'column', gap: 12 }}>
                <label className="lxf" style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
                   <input type="checkbox" checked={na.isShipment} onChange={e => setNa({...na, isShipment: e.target.checked})} />
                   Track as Shipment (Logistics Gateway)
@@ -106,12 +106,12 @@ export default function AdminProcurement({ projectId, procurements = [], createP
             return (
               <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 12, border: '1px solid rgba(0,0,0,.05)', borderRadius: 8 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                   <div style={{ width: 32, height: 32, borderRadius: 8, background: '#F9FAFB', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16 }}>
+                   <div style={{ width: 32, height: 32, borderRadius: 8, background: `var(--bg-secondary)`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16 }}>
                       {stage.icon}
                    </div>
                    <div>
                      <div className="lxf" style={{ fontSize: 13, fontWeight: 600 }}>{p.itemName}</div>
-                     <div className="lxf" style={{ fontSize: 11, color: '#6B7280' }}>{p.source} · <span style={{ color: stage.color, fontWeight: 700 }}>{stage.name}</span></div>
+                     <div className="lxf" style={{ fontSize: 11, color: `var(--text-secondary)` }}>{p.source} · <span style={{ color: stage.color, fontWeight: 700 }}>{stage.name}</span></div>
                    </div>
                 </div>
                 <div style={{ textAlign: 'right' }}>
@@ -121,7 +121,7 @@ export default function AdminProcurement({ projectId, procurements = [], createP
               </div>
             );
          })}
-         {myProcs.length === 0 && <div className="lxf" style={{ fontSize: 12, color: '#6B7280', fontStyle: 'italic' }}>No procurement items tracked yet.</div>}
+         {myProcs.length === 0 && <div className="lxf" style={{ fontSize: 12, color: `var(--text-secondary)`, fontStyle: 'italic' }}>No procurement items tracked yet.</div>}
        </div>
     </div>
   );

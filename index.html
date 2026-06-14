@@ -2,25 +2,52 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/png" href="/logo.png" />
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="manifest" href="/manifest.json" />
-    <meta name="theme-color" content="#0F766E" />
+    <meta name="theme-color" content="#131643" />
+
+    <!-- Preconnect: critical third-party origins -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="preconnect" href="https://firebasestorage.googleapis.com" crossorigin />
+    <link rel="preconnect" href="https://identitytoolkit.googleapis.com" crossorigin />
+    <link rel="dns-prefetch" href="https://yun.kujiale.com" />
+    <link rel="preconnect" href="https://yun.kujiale.com" crossorigin />
+
+    <!-- Fonts: non-blocking load via media trick -->
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" media="print" onload="this.media='all'" />
+    <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" /></noscript>
 
     <!-- SEO Meta Tags -->
     <title>Westline Future | Global Trading Co, Ltd</title>
-    <meta name="description" content="Westline Future — Global Trading Co, Ltd. Premium structural glass, aluminum works, and interior finishing solutions. Precision sourcing and delivery for ambitious architectural projects worldwide." />
-    <meta name="keywords" content="global trading, structural glass, aluminum works, interior finishing, glass installation, shower cubicles, glass balustrades, office partitions, kitchen design, China sourcing, furniture procurement" />
+    <meta name="description" content="Westline Future — Global Trading Co, Ltd. Premium interior solutions: structural glass, aluminium works, kitchen & bathroom installations, wardrobes, flooring and more. Design, source, install." />
+    <meta name="keywords" content="westline future, global trading, interior finishing, structural glass, aluminium works, kitchen installation, bathroom renovation, wardrobes, flooring, Ghana interiors, China sourcing, furniture procurement" />
     <meta name="author" content="Westline Future" />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://westlinedecor.com" />
 
-    <!-- Social Meta Tags -->
+    <!-- Open Graph (Facebook, WhatsApp, LinkedIn previews) -->
+    <meta property="og:site_name" content="Westline Future" />
     <meta property="og:title" content="Westline Future | Global Trading Co, Ltd" />
-    <meta property="og:description" content="Premium structural glass and interior finishing solutions. Precision global sourcing and local delivery." />
+    <meta property="og:description" content="Premium interior solutions — structural glass, aluminium works, kitchen & bathroom installations. Design, source, install. Serving clients globally." />
     <meta property="og:type" content="website" />
-    <meta property="og:url" content="https://westlinefuture.com" />
-    <meta property="og:image" content="/hero_seo.png" />
+    <meta property="og:url" content="https://westlinedecor.com" />
+    <meta property="og:image" content="https://westlinefuture.web.app/og-image.jpg" />
+    <meta property="og:image:type" content="image/jpeg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Westline Future — Global Trading Co, Ltd" />
+    <meta property="og:locale" content="en_GB" />
+
+    <!-- Twitter / X Card -->
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:image" content="/hero_seo.png" />
+    <meta name="twitter:site" content="@westlinefuture" />
+    <meta name="twitter:title" content="Westline Future | Global Trading Co, Ltd" />
+    <meta name="twitter:description" content="Premium interior solutions — structural glass, aluminium works, kitchen & bathroom installations. Design, source, install." />
+    <meta name="twitter:image" content="https://westlinefuture.web.app/og-image.jpg" />
+    <meta name="twitter:image:alt" content="Westline Future — Global Trading Co, Ltd" />
 
     <!-- Structured Data (JSON-LD) -->
     <script type="application/ld+json">
@@ -28,36 +55,38 @@
       "@context": "https://schema.org",
       "@type": "LocalBusiness",
       "name": "Westline Future",
-      "description": "Global Trading Co, Ltd — Premium structural glass, interior finishing, and precision global sourcing.",
-      "url": "https://westlinefuture.com",
-      "telephone": "",
+      "alternateName": "Global Trading Co, Ltd",
+      "description": "Premium interior solutions — structural glass, aluminium works, kitchen and bathroom installations, wardrobes, flooring and global sourcing.",
+      "url": "https://westlinedecor.com",
+      "logo": "https://westlinedecor.com/logo.png",
+      "image": "https://westlinefuture.web.app/og-image.jpg",
       "email": "admin@westlinefuture.com",
-      "address": {
-        "@type": "PostalAddress",
-        "addressLocality": "",
-        "addressRegion": "",
-        "addressCountry": ""
-      },
+      "sameAs": [
+        "https://westlinefuture.web.app"
+      ],
       "knowsAbout": [
         "Structural Glass Installation",
-        "Aluminum Glazing",
+        "Aluminium Windows & Glazing",
         "Shower Cubicles",
         "Glass Balustrades",
         "Office Glass Partitions",
-        "Frameless Glass Doors",
+        "Kitchen Renovation",
+        "Bathroom Installation",
+        "Wardrobes & Storage",
+        "Tiles & Flooring",
         "China Furniture Sourcing",
-        "Modern Kitchen Design",
         "Interior Finishing"
       ],
       "hasOfferCatalog": {
         "@type": "OfferCatalog",
-        "name": "Construction & Interior Services",
+        "name": "Interior & Construction Services",
         "itemListElement": [
-          { "@type": "Offer", "itemOffered": { "@type": "Service", "name": "Glass Installation & Balustrades" }},
-          { "@type": "Offer", "itemOffered": { "@type": "Service", "name": "Shower Cubicles & Enclosures" }},
-          { "@type": "Offer", "itemOffered": { "@type": "Service", "name": "Office Glass Partitions" }},
-          { "@type": "Offer", "itemOffered": { "@type": "Service", "name": "China Furniture Sourcing & Logistics" }},
-          { "@type": "Offer", "itemOffered": { "@type": "Service", "name": "Interior Deco & Finishing" }}
+          { "@type": "Offer", "itemOffered": { "@type": "Service", "name": "Glass & Aluminium Works" }},
+          { "@type": "Offer", "itemOffered": { "@type": "Service", "name": "Kitchen Installation" }},
+          { "@type": "Offer", "itemOffered": { "@type": "Service", "name": "Bathroom Installation" }},
+          { "@type": "Offer", "itemOffered": { "@type": "Service", "name": "Wardrobes & Storage Solutions" }},
+          { "@type": "Offer", "itemOffered": { "@type": "Service", "name": "Tiles & Flooring" }},
+          { "@type": "Offer", "itemOffered": { "@type": "Service", "name": "Global Sourcing & Logistics" }}
         ]
       }
     }
@@ -66,5 +95,6 @@
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
+
   </body>
 </html>

@@ -27,7 +27,7 @@
 }
 
 .btn-dark {
-  background: #111827;
+  background: var(--accent-secondary);
   color: #fff;
 }
 

@@ -1,1472 +1,370 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
-  ArrowLeft, Plus, Send, CheckCircle2, Circle, ChevronRight,
-  User, Briefcase, DollarSign, Phone, Calendar, X, Loader2,
-  Lock, MessageSquare, AlertCircle, Star, Truck, ShoppingCart,
-  Factory, Package, Wrench, Search, CreditCard,
-  Users, UserCheck, MoreVertical, Clock,
-  Globe, Upload, FileText, Download, ScanSearch, StickyNote, Anchor,
-  TrendingUp, Camera, Languages, Mic, Square, Pencil, Save
+  ArrowLeft, Plus, MessageSquare, AlertCircle, Briefcase,
+  User, DollarSign, Phone, Calendar, Loader2,
+  Users, UserCheck, ChevronRight, CheckCircle2, RefreshCw, PenTool,
+  FileText, Upload, ExternalLink, Trash2, ShieldCheck, X, Camera
 } from 'lucide-react';
 import { PAv, PSBadge } from '../../components/Shared';
-import { CLIENT_PROJECT_STAGES, PROJECT_TYPES } from '../../data';
-import { db, functions, uploadFile } from '../../lib/firebase';
-import { httpsCallable } from 'firebase/functions';
+import { CLIENT_PROJECT_STAGES, PROJECT_TYPES, GLASS_CATALOG_DATA } from '../../data';
+import { db, storage } from '../../lib/firebase';
 import {
   collection, onSnapshot, query, orderBy, addDoc, serverTimestamp, doc, updateDoc, arrayUnion
 } from 'firebase/firestore';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import AdminRenderingManager from '../../components/AdminRenderingManager';
+import AdminAddOnManager from '../../components/AdminAddOnManager';
+import WorldClassChat from '../../components/WorldClassChat';
+import { calculateTimeline } from '../sharedHelpers';
 
-const AC = '#0F766E';
+import { AC, STAGE_ICONS, SCHEDULE_CONFIGS, PREMIUM_CATALOG, BD_ITEMS_CONFIG } from './clienthub/config.jsx';
+import { printInvoiceOrReceipt, printSignedContractDoc } from './clienthub/print';
+import { ProjectInvoicesLedger } from './clienthub/ProjectInvoicesLedger';
+import { PaymentScheduleCard } from './clienthub/PaymentScheduleCard';
+import { NewProjectModal } from './clienthub/NewProjectModal';
+import { AdvanceModal } from './clienthub/AdvanceModal';
+import { ShippingDetailsCard, ProjectEconomics, DocumentVault } from './clienthub/ProjectDetailCards';
+import ClientUploadsTab from '../../components/ClientUploadsTab';
+import SecureVault from '../../components/SecureVault';
+import RequestPaymentModal from './clienthub/RequestPaymentModal';
 
-// ─── Stage Icon Map ───────────────────────────────────────────────────────────
-const STAGE_ICONS = {
-  1: <Search size={15} />,
-  2: <Lock size={15} />,
-  3: <ScanSearch size={15} />,
-  4: <FileText size={15} />,
-  5: <CreditCard size={15} />,
-  6: <Factory size={15} />,
-  7: <Truck size={15} />,
-  8: <Wrench size={15} />,
-  9: <ScanSearch size={15} />,
-  10: <Star size={15} />,
-};
+// ─── Stage Scheduler Row ─────────────────────────────────────────────────────
+// Extracted so each row has its own local state for the duration input.
+// Saves to Firestore only on blur — prevents keystroke race conditions that
+// caused the Gantt to show stale intermediate values.
+function StageSchedulerRow({ s, idx, stageInfo, selected, applicableStages, updateProject }) {
+  const [localDays, setLocalDays] = useState(stageInfo.durationDays || 5);
 
-// ─── Payment Schedule Configs ─────────────────────────────────────────────────
-const SCHEDULE_CONFIGS = {
-  standard: {
-    label: 'Standard',
-    sub: '50% deposit → 50% final',
-    milestones: [
-      { key: 'deposit', label: '50% Project Deposit', pct: 0.50, cumPct: 0.50, stageId: 2 },
-      { key: 'final', label: '50% Final Settlement', pct: 0.50, cumPct: 1.00, stageId: 7 },
-    ],
-  },
-  '70-30': {
-    label: '70/30',
-    sub: '70% before delivery · 30% after',
-    milestones: [
-      { key: 'pre-delivery', label: '70% Before Delivery', pct: 0.70, cumPct: 0.70 },
-      { key: 'completion',   label: '30% After Delivery',  pct: 0.30, cumPct: 1.00 },
-    ],
-  },
-  custom: {
-    label: 'Custom',
-    sub: 'Flexible batch payments',
-    milestones: [],
-  },
-};
-
-// ─── Payment Schedule Card (admin) ───────────────────────────────────────────
-function PaymentScheduleCard({ project, createInvoice, notify }) {
-  const budget = Number(String(project.projectTotal || project.budget || 0).replace(/[^0-9.]/g, '')) || 0;
-  const scheduleType = project.paymentSchedule || 'standard';
-  const config = SCHEDULE_CONFIGS[scheduleType] || SCHEDULE_CONFIGS.standard;
-  const [changing, setChanging] = useState(false);
-  const [logging, setLogging] = useState(false);
-  const [logForm, setLogForm] = useState({ amount: '', description: '', date: new Date().toISOString().slice(0, 10) });
-  const [saving, setSaving] = useState(false);
-
-  const [payments, setPayments] = useState([]);
+  // Sync from Firestore when the parent data changes (e.g. another stage was edited)
   useEffect(() => {
-    if (!db || !project?.id) return;
-    const q = query(collection(db, 'projects', project.id, 'transactions'), orderBy('date', 'desc'));
-    return onSnapshot(q, snap => setPayments(snap.docs.map(d => ({ id: d.id, ...d.data() }))), () => setPayments([]));
-  }, [project?.id]);
+    setLocalDays(stageInfo.durationDays || 5);
+  }, [stageInfo.durationDays]);
 
-  const totalPaid = payments.reduce((s, t) => s + (Number(t.amount) || 0), 0);
-  const paidPct = budget > 0 ? Math.min(100, (totalPaid / budget) * 100) : 0;
-  const remaining = Math.max(0, budget - totalPaid);
+  const isCurrent = s.id === selected.stageId;
+  const isPast = (selected.stageId || 1) > s.id;
+  const stageHistEntry = (selected.stageHistory || []).find(h => h.stageId === s.id);
 
-  const fmt = v => `GHS ${Number(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-
-  const getMilestoneStatus = (m) => {
-    if (budget <= 0) return 'upcoming';
-    if (totalPaid >= budget * m.cumPct) return 'paid';
-    if (totalPaid >= budget * (m.cumPct - m.pct)) return 'due';
-    return 'upcoming';
-  };
-
-  const changeSchedule = async (type) => {
-    if (!db || !project?.id) return;
-    await updateDoc(doc(db, 'projects', project.id), { paymentSchedule: type });
-    setChanging(false);
-  };
-
-  const logPayment = async () => {
-    if (!logForm.amount || Number(logForm.amount) <= 0 || saving) return;
-    setSaving(true);
-    try {
-      const amount = Number(logForm.amount);
-      await addDoc(collection(db, 'projects', project.id, 'transactions'), {
-        amount,
-        description: logForm.description.trim() || 'Payment received',
-        date: logForm.date,
-        projectId: project.id,
-        type: 'payment',
-        createdAt: serverTimestamp(),
-      });
-      await updateDoc(doc(db, 'projects', project.id), { paidAmount: totalPaid + amount });
-      setLogForm({ amount: '', description: '', date: new Date().toISOString().slice(0, 10) });
-      setLogging(false);
-    } catch (e) {
-      if (import.meta.env.DEV) console.error('[logPayment]', e);
-    }
-    setSaving(false);
+  const saveTimeline = async (overrides = {}) => {
+    const updatedStageTimeline = {
+      ...(selected.timeline || {}),
+      [s.id]: { ...(selected.timeline?.[s.id] || {}), ...overrides },
+    };
+    const newTimeline = calculateTimeline(selected.createdAt || selected.projectDate, updatedStageTimeline, applicableStages);
+    const lastStage = applicableStages[applicableStages.length - 1];
+    const estComp = newTimeline[lastStage.id]?.endDate || '';
+    await updateProject(selected.id, { timeline: newTimeline, estimatedCompletion: estComp });
   };
 
   return (
-    <div style={{ padding: '20px 24px', background: '#fff', borderRadius: 18, border: '1px solid #E5E7EB' }}>
-      {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
-        <div>
-          <div style={{ fontSize: 13, fontWeight: 800, color: '#111827', marginBottom: 2 }}>Payment Schedule</div>
-          <div style={{ fontSize: 11, color: '#6B7280', fontWeight: 600 }}>{config.label} · {config.sub}</div>
-        </div>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          {scheduleType === 'custom' && (
-            <button
-              onClick={() => setLogging(p => !p)}
-              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 10, background: '#111827', color: '#fff', border: 'none', fontSize: 12, fontWeight: 800, cursor: 'pointer' }}
-            >
-              <Plus size={13} /> Log Payment
-            </button>
-          )}
-          {createInvoice && (
-            <button
-              onClick={async () => {
-                if (!project?.clientId || !project?.budget) { notify?.('error', 'Project must have a client and budget set'); return; }
-                const amount = Number(String(project.budget).replace(/[^0-9.]/g, '')) || 0;
-                await createInvoice({
-                  projectId: project.id, clientId: project.clientId,
-                  clientName: project.name || project.title,
-                  clientEmail: project.email || '', clientPhone: project.phone || '',
-                  title: `Invoice — ${project.title || project.name}`,
-                  currency: 'GHS',
-                  date: new Date().toISOString().split('T')[0],
-                  due: new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0],
-                  items: [{ id: Date.now(), desc: project.title || 'Glass Fabrication Services', qty: 1, rate: amount, unit: 'job' }],
-                  amount: `GHS ${amount.toLocaleString()}`, total: amount,
-                  status: 'Pending', type: 'Invoice', parentId: project.id,
-                });
-                notify?.('success', 'Invoice generated for client');
-              }}
-              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 10, background: '#16A34A', color: '#fff', border: 'none', fontSize: 12, fontWeight: 800, cursor: 'pointer' }}
-            >
-              <FileText size={13} /> Generate Invoice
-            </button>
-          )}
-          <button
-            onClick={() => setChanging(p => !p)}
-            style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '7px 14px', borderRadius: 10, background: changing ? '#111827' : '#F9FAFB', color: changing ? '#fff' : '#4B5563', border: '1px solid #E5E7EB', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}
-          >
-            {changing ? 'Done' : 'Change'}
-          </button>
-        </div>
+    <div style={{ position: 'relative', display: 'flex', gap: 16, marginBottom: idx < applicableStages.length - 1 ? 24 : 0, zIndex: 1 }}>
+      <div style={{ position: 'absolute', left: -44, top: 0, width: 34, height: 34, borderRadius: '50%', background: isPast ? s.color : isCurrent ? '#fff' : `var(--bg-secondary)`, border: isPast ? `2px solid ${s.color}` : isCurrent ? `2.5px solid ${s.color}` : '2px solid var(--border-color)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2, boxShadow: isCurrent ? `0 0 0 4px ${s.color}20` : 'none', color: isPast ? '#fff' : s.color, transition: 'all .3s' }}>
+        {isPast ? <CheckCircle2 size={14} /> : STAGE_ICONS[s.id]}
       </div>
 
-      {/* Schedule picker */}
-      {changing && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 16, padding: '14px', background: '#F9FAFB', borderRadius: 14 }}>
-          {Object.entries(SCHEDULE_CONFIGS).map(([key, cfg]) => (
-            <button
-              key={key}
-              onClick={() => changeSchedule(key)}
-              style={{
-                padding: '12px 10px', borderRadius: 12, border: `2px solid ${scheduleType === key ? '#111827' : '#E5E7EB'}`,
-                background: scheduleType === key ? '#111827' : '#fff', cursor: 'pointer', textAlign: 'left', transition: 'all .15s',
-              }}
-            >
-              <div style={{ fontSize: 12, fontWeight: 800, color: scheduleType === key ? '#fff' : '#111827', marginBottom: 3 }}>{cfg.label}</div>
-              <div style={{ fontSize: 10, color: scheduleType === key ? 'rgba(255,255,255,.6)' : '#6B7280', lineHeight: 1.4 }}>{cfg.sub}</div>
-            </button>
-          ))}
-        </div>
-      )}
+      <div style={{ flex: 1, padding: '16px 20px', borderRadius: 16, background: isCurrent ? `${s.color}04` : isPast ? `var(--bg-secondary)` : '#fff', border: isCurrent ? `1.5px solid ${s.color}40` : '1px solid var(--border-color)', boxShadow: '0 2px 10px rgba(0,0,0,0.01)' }}>
 
-      {/* Log Payment form */}
-      {logging && (
-        <div style={{ marginBottom: 16, padding: '16px', background: '#F9FAFB', borderRadius: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <div style={{ fontSize: 12, fontWeight: 800, color: '#111827' }}>Record a Payment</div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-            <div>
-              <label style={{ fontSize: 10, fontWeight: 700, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '.06em', display: 'block', marginBottom: 4 }}>Amount (GHS) *</label>
+        {/* Row Header */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', marginBottom: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 14, fontWeight: 900, color: `var(--accent-secondary)` }}>{s.name}</span>
+            {isCurrent && <span style={{ fontSize: 9, fontWeight: 800, color: s.color, background: `${s.color}15`, padding: '2px 8px', borderRadius: 20, textTransform: 'uppercase' }}>Active</span>}
+            {isPast && <span style={{ fontSize: 9, fontWeight: 700, color: '#16A34A', background: '#F0FDF4', padding: '2px 8px', borderRadius: 20 }}>Done</span>}
+          </div>
+          {stageHistEntry?.timestamp && (
+            <span style={{ fontSize: 11, color: `var(--text-secondary)`, fontWeight: 600 }}>
+              {(() => { const d = stageHistEntry.timestamp?.toDate ? stageHistEntry.timestamp.toDate() : new Date(stageHistEntry.timestamp); return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }); })()}
+              {isCurrent && (() => { const d = stageHistEntry.timestamp?.toDate ? stageHistEntry.timestamp.toDate() : new Date(stageHistEntry.timestamp); const days = Math.max(0, Math.floor((Date.now() - d.getTime()) / 86400000)); return <span style={{ fontWeight: 700, color: s.color, marginLeft: 6 }}>({days}d active)</span>; })()}
+            </span>
+          )}
+        </div>
+
+        {/* Scheduler Inputs */}
+        <div style={{ display: 'flex', gap: 16, alignItems: 'center', background: '#fff', padding: 12, borderRadius: 12, border: '1px solid var(--border-color)', flexWrap: 'wrap' }}>
+
+          {/* Start Date */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <span style={{ fontSize: 9, fontWeight: 800, color: `var(--text-secondary)`, textTransform: 'uppercase', letterSpacing: '.04em' }}>Start Date</span>
+            <input
+              type="date"
+              value={stageInfo.startDate || ''}
+              onChange={async (e) => {
+                await saveTimeline({ startDate: e.target.value, manualOverride: true });
+              }}
+              style={{ border: '1px solid var(--border-color)', borderRadius: 8, padding: '6px 10px', fontSize: 12, fontFamily: 'inherit', color: `var(--accent-secondary)`, fontWeight: 700 }}
+            />
+          </div>
+
+          {/* Duration Days — local state, saves on blur */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <span style={{ fontSize: 9, fontWeight: 800, color: `var(--text-secondary)`, textTransform: 'uppercase', letterSpacing: '.04em' }}>Duration</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <input
                 type="number"
-                value={logForm.amount}
-                onChange={e => setLogForm(p => ({ ...p, amount: e.target.value }))}
-                placeholder="e.g. 15000"
-                style={{ width: '100%', padding: '9px 12px', borderRadius: 10, border: '1.5px solid #E5E7EB', fontSize: 13, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' }}
+                min="1"
+                value={localDays}
+                onChange={e => setLocalDays(parseInt(e.target.value, 10) || 1)}
+                onBlur={async () => {
+                  if (localDays !== stageInfo.durationDays) {
+                    await saveTimeline({ durationDays: localDays });
+                  }
+                }}
+                style={{ width: 60, border: '1px solid var(--border-color)', borderRadius: 8, padding: '6px 10px', fontSize: 12, fontFamily: 'inherit', color: `var(--accent-secondary)`, fontWeight: 700, textAlign: 'center' }}
               />
-            </div>
-            <div>
-              <label style={{ fontSize: 10, fontWeight: 700, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '.06em', display: 'block', marginBottom: 4 }}>Date</label>
-              <input
-                type="date"
-                value={logForm.date}
-                onChange={e => setLogForm(p => ({ ...p, date: e.target.value }))}
-                style={{ width: '100%', padding: '9px 12px', borderRadius: 10, border: '1.5px solid #E5E7EB', fontSize: 13, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' }}
-              />
+              <span style={{ fontSize: 11, color: `var(--text-secondary)`, fontWeight: 600 }}>days</span>
             </div>
           </div>
-          <div>
-            <label style={{ fontSize: 10, fontWeight: 700, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '.06em', display: 'block', marginBottom: 4 }}>Note</label>
-            <input
-              value={logForm.description}
-              onChange={e => setLogForm(p => ({ ...p, description: e.target.value }))}
-              placeholder="e.g. Second batch payment — wire transfer"
-              style={{ width: '100%', padding: '9px 12px', borderRadius: 10, border: '1.5px solid #E5E7EB', fontSize: 13, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' }}
-            />
-          </div>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button
-              onClick={logPayment}
-              disabled={saving || !logForm.amount}
-              style={{ flex: 1, padding: '10px', borderRadius: 10, background: '#111827', color: '#fff', border: 'none', fontSize: 13, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, opacity: !logForm.amount ? 0.5 : 1 }}
-            >
-              {saving ? <><Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> Saving...</> : 'Record Payment'}
-            </button>
-            <button onClick={() => setLogging(false)} style={{ padding: '10px 16px', borderRadius: 10, background: '#F9FAFB', color: '#4B5563', border: '1px solid #E5E7EB', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
 
-      {/* Progress bar */}
-      {budget > 0 && (
-        <div style={{ marginBottom: config.milestones.length > 0 ? 14 : 0 }}>
-          <div style={{ height: 7, background: '#E5E7EB', borderRadius: 4, overflow: 'hidden', marginBottom: 6 }}>
-            <div style={{ height: '100%', width: `${paidPct}%`, background: 'linear-gradient(90deg, #16A34A80, #16A34A)', borderRadius: 4, transition: 'width 1s ease' }} />
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#6B7280' }}>
-            <span><strong style={{ color: '#16A34A' }}>{fmt(totalPaid)}</strong> paid · {paidPct.toFixed(1)}%</span>
-            <span>{fmt(remaining)} remaining · {fmt(budget)}</span>
-          </div>
-        </div>
-      )}
-
-      {/* Custom: recent payments mini-list */}
-      {scheduleType === 'custom' && payments.length > 0 && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 12 }}>
-          {payments.slice(0, 5).map(p => (
-            <div key={p.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 12px', background: '#F9FAFB', borderRadius: 10 }}>
-              <div>
-                <div style={{ fontSize: 12, fontWeight: 700, color: '#111827' }}>{p.description || 'Payment'}</div>
-                <div style={{ fontSize: 10, color: '#6B7280' }}>{p.date || '—'}</div>
-              </div>
-              <div style={{ fontSize: 13, fontWeight: 800, color: '#16A34A' }}>{fmt(p.amount)}</div>
+          {/* End Date (computed, read-only) */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <span style={{ fontSize: 9, fontWeight: 800, color: `var(--text-secondary)`, textTransform: 'uppercase', letterSpacing: '.04em' }}>End Date</span>
+            <div style={{ fontSize: 12, fontWeight: 700, color: `var(--text-secondary)`, padding: '7px 0' }}>
+              {stageInfo.endDate
+                ? new Date(stageInfo.endDate + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+                : '—'}
             </div>
-          ))}
-          {payments.length > 5 && (
-            <div style={{ fontSize: 11, color: '#6B7280', textAlign: 'center', paddingTop: 4 }}>+{payments.length - 5} more payments</div>
-          )}
-        </div>
-      )}
-
-      {/* Milestone rows */}
-      {config.milestones.length > 0 && budget > 0 && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {config.milestones.map((m, idx) => {
-            const status = getMilestoneStatus(m);
-            const isPaid = status === 'paid';
-            const isDue = status === 'due';
-            return (
-              <div key={m.key} style={{
-                display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', borderRadius: 12,
-                background: isDue ? '#F0FDF4' : '#FAFAF9',
-                border: `1.5px solid ${isDue ? '#16A34A40' : isPaid ? '#16A34A20' : '#E5E7EB'}`,
-              }}>
-                <div style={{ width: 28, height: 28, borderRadius: 8, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: isPaid ? '#16A34A' : isDue ? '#F0FDF4' : '#E5E7EB', border: isDue ? '2px solid #16A34A' : 'none' }}>
-                  {isPaid ? <CheckCircle2 size={13} color="#fff" /> : <span style={{ fontSize: 10, fontWeight: 900, color: isDue ? '#16A34A' : '#6B7280' }}>{idx + 1}</span>}
-                </div>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: '#111827' }}>{m.label}</div>
-                  <div style={{ fontSize: 12, fontWeight: 800, color: isPaid ? '#16A34A' : isDue ? '#16A34A' : '#6B7280' }}>{fmt(budget * m.pct)}</div>
-                </div>
-                <div>
-                  {isPaid && <span style={{ fontSize: 10, fontWeight: 800, color: '#065F46', background: '#D1FAE5', padding: '3px 9px', borderRadius: 20 }}>Paid ✓</span>}
-                  {isDue && <span style={{ fontSize: 10, fontWeight: 800, color: '#92400E', background: '#FEF3C7', padding: '3px 9px', borderRadius: 20 }}>Due</span>}
-                  {status === 'upcoming' && <span style={{ fontSize: 10, color: '#6B7280', background: '#E5E7EB', padding: '3px 9px', borderRadius: 20 }}>Upcoming</span>}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function ProjectOperatingSystemCard({ project, props }) {
-  const [renderingFee, setRenderingFee] = useState(project.renderingFee || '');
-  const [quoteTotal, setQuoteTotal] = useState(project.projectTotal || project.budget || '');
-  const [addOn, setAddOn] = useState({ description: '', amount: '', timelineImpactDays: '' });
-  const [saving, setSaving] = useState('');
-  const fmt = v => `GHS ${Number(v || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
-  const projectTotal = Number(String(project.projectTotal || project.budget || 0).replace(/[^0-9.]/g, '')) || 0;
-  const addOnsTotal = Number(project.approvedAddOnsTotal || 0);
-
-  const run = async (key, fn) => {
-    if (saving) return;
-    setSaving(key);
-    try { await fn(); } finally { setSaving(''); }
-  };
-
-  return (
-    <div style={{ padding: '20px 24px', background: '#fff', borderRadius: 18, border: '1px solid #E5E7EB' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, marginBottom: 18 }}>
-        <div>
-          <div style={{ fontSize: 13, fontWeight: 900, color: '#111827' }}>Project Operating System</div>
-          <div style={{ fontSize: 11, color: '#6B7280', marginTop: 4 }}>Rendering gate, quote versioning, add-ons, and audit-ready totals.</div>
-        </div>
-        <div style={{ padding: '7px 12px', borderRadius: 12, background: '#F9FAFB', border: '1px solid #E5E7EB', fontSize: 11, fontWeight: 800, color: '#4B5563', whiteSpace: 'nowrap' }}>
-          {project.nextAction || 'Review next action'}
-        </div>
-      </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 18 }}>
-        {[
-          { label: 'Rendering', value: project.renderingStatus || 'not started', color: project.renderingFeePaid ? '#16A34A' : '#0F766E' },
-          { label: 'Quote', value: project.quoteStatus || 'not started', color: project.quoteApproved ? '#16A34A' : '#0891B2' },
-          { label: 'Ledger', value: `${fmt(projectTotal)} total`, color: '#111827' },
-        ].map(item => (
-          <div key={item.label} style={{ padding: 14, borderRadius: 14, background: '#F9FAFB', border: '1px solid #E5E7EB' }}>
-            <div style={{ fontSize: 10, fontWeight: 800, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '.06em' }}>{item.label}</div>
-            <div style={{ fontSize: 13, fontWeight: 900, color: item.color, marginTop: 5, textTransform: 'capitalize' }}>{String(item.value).replace(/_/g, ' ')}</div>
-          </div>
-        ))}
-      </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-        <div style={{ padding: 16, borderRadius: 16, background: '#FAFAF9', border: '1px solid #E5E7EB' }}>
-          <div style={{ fontSize: 12, fontWeight: 900, color: '#111827', marginBottom: 10 }}>Rendering Access Gate</div>
-          <input value={renderingFee} onChange={e => setRenderingFee(e.target.value)} type="number" placeholder="Rendering fee, e.g. 1500" style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: 10, border: '1px solid #E5E7EB', marginBottom: 8 }} />
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <button onClick={() => run('render-package', () => props.createRenderingPackage?.(project.id, { includedRevisions: 2 }))} style={{ padding: '9px 12px', borderRadius: 10, border: 'none', background: '#111827', color: '#fff', fontSize: 11, fontWeight: 800, cursor: 'pointer' }}>{saving === 'render-package' ? 'Saving...' : 'Create Package'}</button>
-            <button onClick={() => run('render-invoice', () => props.issueRenderingInvoice?.(project.id, renderingFee, 'paystack'))} style={{ padding: '9px 12px', borderRadius: 10, border: '1px solid #E5E7EB', background: '#fff', color: '#111827', fontSize: 11, fontWeight: 800, cursor: 'pointer' }}>{saving === 'render-invoice' ? 'Issuing...' : 'Issue Fee Invoice'}</button>
-          </div>
-        </div>
-
-        <div style={{ padding: 16, borderRadius: 16, background: '#FAFAF9', border: '1px solid #E5E7EB' }}>
-          <div style={{ fontSize: 12, fontWeight: 900, color: '#111827', marginBottom: 10 }}>Versioned Final Quote</div>
-          <input value={quoteTotal} onChange={e => setQuoteTotal(e.target.value)} type="number" placeholder="Final project quote" style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: 10, border: '1px solid #E5E7EB', marginBottom: 8 }} />
-          <button onClick={() => run('quote', () => props.createQuoteVersion?.(project.id, { total: quoteTotal, title: `${project.title} Final Quote` }))} style={{ padding: '9px 12px', borderRadius: 10, border: 'none', background: '#0891B2', color: '#fff', fontSize: 11, fontWeight: 800, cursor: 'pointer' }}>{saving === 'quote' ? 'Creating...' : 'Create Quote Version'}</button>
-        </div>
-      </div>
-
-      <div style={{ marginTop: 14, padding: 16, borderRadius: 16, background: '#FAFAF9', border: '1px solid #E5E7EB' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', marginBottom: 10 }}>
-          <div>
-            <div style={{ fontSize: 12, fontWeight: 900, color: '#111827' }}>Add-ons & Variations</div>
-            <div style={{ fontSize: 10, color: '#6B7280', marginTop: 2 }}>Approved add-ons: {fmt(addOnsTotal)}</div>
-          </div>
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 120px 120px auto', gap: 8 }}>
-          <input value={addOn.description} onChange={e => setAddOn(p => ({ ...p, description: e.target.value }))} placeholder="Add-on description" style={{ padding: '10px 12px', borderRadius: 10, border: '1px solid #E5E7EB' }} />
-          <input value={addOn.amount} onChange={e => setAddOn(p => ({ ...p, amount: e.target.value }))} type="number" placeholder="Amount" style={{ padding: '10px 12px', borderRadius: 10, border: '1px solid #E5E7EB' }} />
-          <input value={addOn.timelineImpactDays} onChange={e => setAddOn(p => ({ ...p, timelineImpactDays: e.target.value }))} type="number" placeholder="+ days" style={{ padding: '10px 12px', borderRadius: 10, border: '1px solid #E5E7EB' }} />
-          <button onClick={() => run('addon', async () => {
-            const id = await props.createAddOn?.(project.id, addOn);
-            setAddOn({ description: '', amount: '', timelineImpactDays: '' });
-            return id;
-          })} style={{ padding: '10px 14px', borderRadius: 10, border: 'none', background: '#16A34A', color: '#fff', fontSize: 11, fontWeight: 800, cursor: 'pointer' }}>{saving === 'addon' ? 'Adding...' : 'Add'}</button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── New Project Modal ────────────────────────────────────────────────────────
-const BD_ITEMS_CONFIG = [
-  { key: 'product',      label: 'Product / Materials', color: '#0F766E', icon: <Package size={13} /> },
-  { key: 'shipping',     label: 'Shipping & Freight',  color: '#0284C7', icon: <Truck size={13} /> },
-  { key: 'installation', label: 'Installation Labour', color: '#D97706', icon: <Wrench size={13} /> },
-];
-
-function NewProjectModal({ client, onClose, onCreate }) {
-  const [form, setForm] = useState({ title: '', projectType: 'full-service', budget: '', renderingFee: '', description: '', paymentSchedule: 'standard', projectDate: '' });
-  const [showBackdate, setShowBackdate] = useState(false);
-  const [showBreakdown, setShowBreakdown] = useState(false);
-  const [bd, setBd] = useState({
-    product:      { enabled: true,  amount: '' },
-    shipping:     { enabled: false, amount: '' },
-    installation: { enabled: false, amount: '' },
-    extras: [],
-  });
-  const [saving, setSaving] = useState(false);
-  const set = (k, v) => setForm(p => ({ ...p, [k]: v }));
-
-  const bdTotal = showBreakdown
-    ? BD_ITEMS_CONFIG.filter(i => bd[i.key].enabled).reduce((s, i) => s + (Number(bd[i.key].amount) || 0), 0)
-      + bd.extras.reduce((s, e) => s + (Number(e.amount) || 0), 0)
-    : null;
-
-  const toggleBd  = key => setBd(p => ({ ...p, [key]: { ...p[key], enabled: !p[key].enabled } }));
-  const setBdAmt  = (key, v) => setBd(p => ({ ...p, [key]: { ...p[key], amount: v } }));
-  const addExtra  = () => setBd(p => ({ ...p, extras: [...p.extras, { id: `ext_${Date.now()}`, label: '', amount: '' }] }));
-  const rmExtra   = id => setBd(p => ({ ...p, extras: p.extras.filter(e => e.id !== id) }));
-  const setExtra  = (id, f, v) => setBd(p => ({ ...p, extras: p.extras.map(e => e.id === id ? { ...e, [f]: v } : e) }));
-
-  const submit = async () => {
-    if (!form.title.trim()) return;
-    setSaving(true);
-    const payload = { ...form, clientId: client.id };
-    if (showBreakdown && bdTotal > 0) {
-      payload.breakdown = {
-        product:      { enabled: bd.product.enabled,      amount: Number(bd.product.amount)      || 0 },
-        shipping:     { enabled: bd.shipping.enabled,     amount: Number(bd.shipping.amount)     || 0 },
-        installation: { enabled: bd.installation.enabled, amount: Number(bd.installation.amount) || 0 },
-        extras: bd.extras.filter(e => e.label.trim()).map(e => ({ id: e.id, label: e.label.trim(), amount: Number(e.amount) || 0 })),
-      };
-      payload.budget = String(bdTotal);
-    }
-    await onCreate(payload);
-    setSaving(false);
-    onClose();
-  };
-
-  const lS = { fontSize: 11, fontWeight: 800, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '.06em', display: 'block', marginBottom: 8 };
-  const iS = { width: '100%', padding: '12px 16px', borderRadius: 12, border: '1.5px solid #E5E7EB', fontSize: 14, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' };
-  const fmtTotal = v => `GHS ${Number(v).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
-
-  return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20, overflowY: 'auto' }}>
-      <div style={{ background: '#fff', borderRadius: 24, width: '100%', maxWidth: 560, padding: 40, position: 'relative', boxShadow: '0 32px 80px rgba(0,0,0,.2)', margin: '20px auto' }}>
-        <button onClick={onClose} style={{ position: 'absolute', top: 20, right: 20, width: 36, height: 36, borderRadius: 10, border: '1px solid #E5E7EB', background: '#F9FAFB', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><X size={16} /></button>
-        <div style={{ fontSize: 11, fontWeight: 800, color: AC, textTransform: 'uppercase', letterSpacing: '.1em', marginBottom: 6 }}>New Project</div>
-        <div style={{ fontSize: 22, fontWeight: 900, color: '#111827', marginBottom: 28 }}>{client.name}</div>
-
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-
-          {/* Title */}
-          <div>
-            <label style={lS}>Project Title *</label>
-            <input value={form.title} onChange={e => set('title', e.target.value)} placeholder="e.g. East Legon Villa — Curtain Wall" style={iS} />
           </div>
 
-          {/* Project Type */}
-          <div>
-            <label style={lS}>Project Type</label>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-              {Object.entries(PROJECT_TYPES).map(([key, pt]) => (
-                <button key={key} onClick={() => set('projectType', key)} style={{ padding: '14px 16px', borderRadius: 14, border: `2px solid ${form.projectType === key ? pt.color : '#E5E7EB'}`, background: form.projectType === key ? `${pt.color}10` : '#fff', cursor: 'pointer', textAlign: 'left', transition: 'all .2s' }}>
-                  <div style={{ fontSize: 13, fontWeight: 800, color: form.projectType === key ? pt.color : '#111827', marginBottom: 4 }}>{pt.label}</div>
-                  <div style={{ fontSize: 11, color: '#6B7280', lineHeight: 1.4 }}>{pt.desc}</div>
+          {/* Override Badge & Reset */}
+          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10 }}>
+            {stageInfo.manualOverride ? (
+              <>
+                <span style={{ fontSize: 9, fontWeight: 800, color: '#D97706', background: '#FEF3C7', padding: '3px 8px', borderRadius: 20, textTransform: 'uppercase' }}>Overridden</span>
+                <button
+                  onClick={async () => {
+                    const updatedStageTimeline = { ...(selected.timeline || {}) };
+                    if (updatedStageTimeline[s.id]) {
+                      updatedStageTimeline[s.id] = { ...updatedStageTimeline[s.id], manualOverride: false };
+                      delete updatedStageTimeline[s.id].startDate;
+                    }
+                    const newTimeline = calculateTimeline(selected.createdAt || selected.projectDate, updatedStageTimeline, applicableStages);
+                    const lastStage = applicableStages[applicableStages.length - 1];
+                    const estComp = newTimeline[lastStage.id]?.endDate || '';
+                    await updateProject(selected.id, { timeline: newTimeline, estimatedCompletion: estComp });
+                  }}
+                  style={{ background: 'none', border: 'none', color: '#EF4444', fontSize: 11, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, padding: 8 }}
+                  title="Restore default sequential schedule"
+                >
+                  <RefreshCw size={12} /> Auto
                 </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Budget / Breakdown */}
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-              <label style={{ ...lS, marginBottom: 0 }}>Project Value (GHS)</label>
-              <button
-                type="button"
-                onClick={() => setShowBreakdown(p => !p)}
-                style={{ fontSize: 11, fontWeight: 800, color: showBreakdown ? AC : '#4B5563', background: showBreakdown ? '#FFF7ED' : '#F9FAFB', border: `1.5px solid ${showBreakdown ? '#0F766E50' : '#E5E7EB'}`, borderRadius: 8, padding: '5px 12px', cursor: 'pointer', transition: 'all .2s', whiteSpace: 'nowrap' }}
-              >
-                {showBreakdown ? '− Simple total' : '+ Add cost breakdown'}
-              </button>
-            </div>
-
-            {!showBreakdown ? (
-              <input value={form.budget} onChange={e => set('budget', e.target.value)} placeholder="e.g. 75000" type="number" style={iS} />
+              </>
             ) : (
-              <div style={{ background: '#FAFAF9', borderRadius: 16, border: '1.5px solid #E5E7EB', padding: '14px 14px 10px' }}>
-
-                {/* Core cost rows */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 7, marginBottom: 10 }}>
-                  {BD_ITEMS_CONFIG.map(({ key, label, color, icon }) => (
-                    <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 12, background: bd[key].enabled ? '#fff' : '#F5F3F0', border: `1.5px solid ${bd[key].enabled ? '#E5E7EB' : '#E5E7EB'}`, opacity: bd[key].enabled ? 1 : 0.55, transition: 'all .2s' }}>
-                      <button onClick={() => toggleBd(key)} style={{ width: 32, height: 18, borderRadius: 9, background: bd[key].enabled ? color : '#E0DAD4', border: 'none', cursor: 'pointer', position: 'relative', flexShrink: 0, transition: 'background .2s' }}>
-                        <div style={{ position: 'absolute', top: 1, left: bd[key].enabled ? 15 : 1, width: 16, height: 16, borderRadius: '50%', background: '#fff', transition: 'left .2s', boxShadow: '0 1px 3px rgba(0,0,0,.25)' }} />
-                      </button>
-                      <div style={{ width: 26, height: 26, borderRadius: 7, background: `${color}15`, display: 'flex', alignItems: 'center', justifyContent: 'center', color, flexShrink: 0 }}>{icon}</div>
-                      <div style={{ flex: 1, fontSize: 12, fontWeight: 700, color: '#111827' }}>{label}</div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 5, background: '#fff', border: '1.5px solid #E5E7EB', borderRadius: 9, padding: '5px 9px', flexShrink: 0 }}>
-                        <span style={{ fontSize: 11, color: '#6B7280', fontWeight: 700 }}>GHS</span>
-                        <input type="number" min="0" value={bd[key].amount} onChange={e => setBdAmt(key, e.target.value)} disabled={!bd[key].enabled} placeholder="0" style={{ width: 80, border: 'none', outline: 'none', fontSize: 13, fontWeight: 700, color: '#111827', background: 'transparent', fontFamily: 'inherit', textAlign: 'right' }} />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                {/* Extras */}
-                {bd.extras.map(extra => (
-                  <div key={extra.id} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 7 }}>
-                    <div style={{ width: 26, height: 26, borderRadius: 7, background: '#E5E7EB', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Plus size={11} color="#6B7280" /></div>
-                    <input value={extra.label} onChange={e => setExtra(extra.id, 'label', e.target.value)} placeholder="Extra item description" style={{ flex: 1, padding: '8px 11px', borderRadius: 9, border: '1.5px solid #E5E7EB', fontSize: 12, outline: 'none', fontFamily: 'inherit', background: '#fff' }} />
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 5, background: '#fff', border: '1.5px solid #E5E7EB', borderRadius: 9, padding: '5px 9px', flexShrink: 0 }}>
-                      <span style={{ fontSize: 11, color: '#6B7280', fontWeight: 700 }}>GHS</span>
-                      <input type="number" min="0" value={extra.amount} onChange={e => setExtra(extra.id, 'amount', e.target.value)} placeholder="0" style={{ width: 70, border: 'none', outline: 'none', fontSize: 13, fontWeight: 700, color: '#111827', background: 'transparent', fontFamily: 'inherit', textAlign: 'right' }} />
-                    </div>
-                    <button onClick={() => rmExtra(extra.id)} style={{ width: 28, height: 28, borderRadius: 7, border: '1.5px solid #E5E7EB', background: '#F9FAFB', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><X size={12} color="#6B7280" /></button>
-                  </div>
-                ))}
-
-                <button onClick={addExtra} style={{ fontSize: 11, fontWeight: 800, color: '#4B5563', background: 'transparent', border: 'none', cursor: 'pointer', padding: '4px 0 6px', display: 'flex', alignItems: 'center', gap: 5 }}>
-                  <Plus size={12} /> Add extra line
-                </button>
-
-                {bdTotal > 0 && (
-                  <div style={{ marginTop: 8, paddingTop: 12, borderTop: '1.5px solid #E5E7EB', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontSize: 11, fontWeight: 800, color: '#4B5563', textTransform: 'uppercase', letterSpacing: '.04em' }}>Total Project Value</span>
-                    <span style={{ fontSize: 18, fontWeight: 900, color: '#111827' }}>{fmtTotal(bdTotal)}</span>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-
-          <div>
-            <label style={lS}>Separate Rendering / CAD 3D Fee (GHS)</label>
-            <input value={form.renderingFee} onChange={e => set('renderingFee', e.target.value)} placeholder="e.g. 1500" type="number" style={iS} />
-            <div style={{ fontSize: 11, color: '#6B7280', marginTop: 6, lineHeight: 1.5 }}>
-              This is not part of the project sum. The client pays it to unlock the rendering package before quote discussion.
-            </div>
-          </div>
-
-          {/* Payment Schedule */}
-          <div>
-            <label style={lS}>Payment Schedule</label>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
-              {Object.entries(SCHEDULE_CONFIGS).map(([key, cfg]) => (
-                <button key={key} type="button" onClick={() => set('paymentSchedule', key)} style={{ padding: '12px 10px', borderRadius: 12, border: `2px solid ${form.paymentSchedule === key ? '#111827' : '#E5E7EB'}`, background: form.paymentSchedule === key ? '#111827' : '#fff', cursor: 'pointer', textAlign: 'left', transition: 'all .15s' }}>
-                  <div style={{ fontSize: 12, fontWeight: 800, color: form.paymentSchedule === key ? '#fff' : '#111827', marginBottom: 3 }}>{cfg.label}</div>
-                  <div style={{ fontSize: 10, color: form.paymentSchedule === key ? 'rgba(255,255,255,.6)' : '#6B7280', lineHeight: 1.4 }}>{cfg.sub}</div>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Description */}
-          <div>
-            <label style={lS}>Brief / Description</label>
-            <textarea value={form.description} onChange={e => set('description', e.target.value)} placeholder="Describe the scope, site location, and any special requirements..." rows={3} style={{ width: '100%', padding: '12px 16px', borderRadius: 12, border: '1.5px solid #E5E7EB', fontSize: 13, outline: 'none', resize: 'vertical', boxSizing: 'border-box', fontFamily: 'inherit', lineHeight: 1.6 }} />
-          </div>
-
-          {/* Backdate */}
-          <div>
-            <button
-              type="button"
-              onClick={() => setShowBackdate(p => !p)}
-              style={{ fontSize: 11, fontWeight: 800, color: showBackdate ? '#DC2626' : '#6B7280', background: 'transparent', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', gap: 5 }}
-            >
-              <Calendar size={12} />
-              {showBackdate ? 'Remove backdate' : 'Backdate this project'}
-            </button>
-            {showBackdate && (
-              <div style={{ marginTop: 10, padding: '14px 16px', background: '#FEF2F2', borderRadius: 12, border: '1.5px solid #FCA5A530' }}>
-                <div style={{ fontSize: 10, fontWeight: 800, color: '#DC2626', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 8 }}>Project Start Date</div>
-                <input
-                  type="date"
-                  value={form.projectDate}
-                  onChange={e => set('projectDate', e.target.value)}
-                  max={new Date().toISOString().slice(0, 10)}
-                  style={{ padding: '9px 12px', borderRadius: 10, border: '1.5px solid #FECACA', fontSize: 13, outline: 'none', fontFamily: 'inherit', background: '#fff' }}
-                />
-                <div style={{ fontSize: 11, color: '#DC2626', marginTop: 6, lineHeight: 1.5 }}>
-                  Sets the project creation date. Use for historical projects only.
-                </div>
-              </div>
+              <span style={{ fontSize: 9, fontWeight: 800, color: '#059669', background: '#F0FDF4', padding: '3px 8px', borderRadius: 20, textTransform: 'uppercase' }}>Auto Sequence</span>
             )}
           </div>
         </div>
 
-        <button
-          onClick={submit}
-          disabled={saving || !form.title.trim()}
-          style={{ marginTop: 28, width: '100%', height: 52, borderRadius: 14, background: form.title.trim() ? '#111827' : '#E5E7EB', color: '#fff', border: 'none', fontSize: 14, fontWeight: 800, cursor: form.title.trim() ? 'pointer' : 'default', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, transition: 'background .2s' }}
-        >
-          {saving ? <><Loader2 size={16} className="spin" /> Creating...</> : 'Create Project'}
-        </button>
+        {isCurrent && <div style={{ fontSize: 12, color: `var(--text-secondary)`, marginTop: 10, lineHeight: 1.5, padding: '0 4px' }}>{s.adminPrompt}</div>}
       </div>
     </div>
   );
 }
 
-// ─── Stage Advance Modal ──────────────────────────────────────────────────────
-function AdvanceModal({ project, stage, nextStage, onClose, onAdvance }) {
-  const [note, setNote] = useState('');
-  const [overrideDate, setOverrideDate] = useState('');
-  const [approvalOverride, setApprovalOverride] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const needsApproval = stage?.needsClientApproval || stage?.whoActs === 'client';
-
-  const submit = async () => {
-    setSaving(true);
-    const fullNote = [
-      note,
-      approvalOverride ? 'Client approval confirmed verbally / informally — proceeding by admin override.' : '',
-    ].filter(Boolean).join(' ');
-    await onAdvance(project.id, nextStage.id, fullNote, { overrideDate: overrideDate || null });
-    setSaving(false);
-    onClose();
-  };
-
-  return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-      <div style={{ background: '#fff', borderRadius: 24, width: '100%', maxWidth: 480, padding: 36, position: 'relative', boxShadow: '0 32px 80px rgba(0,0,0,.2)' }}>
-        <button onClick={onClose} style={{ position: 'absolute', top: 16, right: 16, width: 32, height: 32, borderRadius: 8, border: '1px solid #E5E7EB', background: '#F9FAFB', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><X size={14} /></button>
-        <div style={{ fontSize: 11, fontWeight: 800, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 6 }}>Advance Stage</div>
-        <div style={{ fontSize: 20, fontWeight: 900, color: '#111827', marginBottom: 4 }}>{project.title}</div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '16px 20px', background: '#F9FAFB', borderRadius: 14, margin: '20px 0', border: `1px solid ${nextStage.color}30` }}>
-          <div style={{ width: 36, height: 36, borderRadius: 10, background: `${nextStage.color}15`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-            {STAGE_ICONS[nextStage.id]}
-          </div>
-          <div>
-            <div style={{ fontSize: 11, color: '#6B7280', fontWeight: 700 }}>Moving to</div>
-            <div style={{ fontSize: 16, fontWeight: 800, color: nextStage.color }}>{nextStage.name}</div>
-            <div style={{ fontSize: 12, color: '#4B5563', marginTop: 2 }}>{nextStage.adminPrompt}</div>
-          </div>
-        </div>
-
-        {/* Client approval override (shown when current stage requires client action) */}
-        {needsApproval && (
-          <div style={{ marginBottom: 18, padding: '14px 16px', background: '#FFFBEB', borderRadius: 12, border: '1.5px solid #FDE68A' }}>
-            <div style={{ fontSize: 11, fontWeight: 800, color: '#92400E', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '.06em' }}>
-              ⚠ This stage normally requires client approval
-            </div>
-            <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer' }}>
-              <input
-                type="checkbox"
-                checked={approvalOverride}
-                onChange={e => setApprovalOverride(e.target.checked)}
-                style={{ marginTop: 2, width: 16, height: 16, flexShrink: 0, cursor: 'pointer' }}
-              />
-              <span style={{ fontSize: 13, color: '#78350F', lineHeight: 1.5 }}>
-                Client has already approved (verbally or informally). Proceed by admin override and log this in the project record.
-              </span>
-            </label>
-          </div>
-        )}
-
-        {/* Internal note */}
-        <div style={{ marginBottom: 16 }}>
-          <label style={{ fontSize: 11, fontWeight: 800, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '.06em', display: 'block', marginBottom: 8 }}>Internal Note (optional)</label>
-          <textarea value={note} onChange={e => setNote(e.target.value)} placeholder="Add context for your team about this stage transition..." rows={3} style={{ width: '100%', padding: '12px 16px', borderRadius: 12, border: '1.5px solid #E5E7EB', fontSize: 13, outline: 'none', resize: 'none', boxSizing: 'border-box', fontFamily: 'inherit', lineHeight: 1.6 }} />
-        </div>
-
-        {/* Backdate this stage transition */}
-        <div style={{ marginBottom: 20 }}>
-          <label style={{ fontSize: 11, fontWeight: 800, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '.06em', display: 'block', marginBottom: 8 }}>
-            <Calendar size={11} style={{ display: 'inline', marginRight: 5, verticalAlign: 'middle' }} />
-            Backdate transition (optional)
-          </label>
-          <input
-            type="date"
-            value={overrideDate}
-            onChange={e => setOverrideDate(e.target.value)}
-            max={new Date().toISOString().slice(0, 10)}
-            style={{ padding: '9px 12px', borderRadius: 10, border: '1.5px solid #E5E7EB', fontSize: 13, outline: 'none', fontFamily: 'inherit', color: overrideDate ? '#111827' : '#6B7280' }}
-          />
-          {overrideDate && (
-            <div style={{ fontSize: 11, color: '#4B5563', marginTop: 5 }}>Stage will be recorded as occurring on {overrideDate}</div>
-          )}
-        </div>
-
-        <div style={{ display: 'flex', gap: 10 }}>
-          <button onClick={onClose} style={{ flex: 1, height: 48, borderRadius: 12, border: '1.5px solid #E5E7EB', background: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Cancel</button>
-          <button
-            onClick={submit}
-            disabled={saving || (needsApproval && !approvalOverride)}
-            style={{ flex: 2, height: 48, borderRadius: 12, background: (needsApproval && !approvalOverride) ? '#E5E7EB' : nextStage.color, color: '#fff', border: 'none', fontSize: 14, fontWeight: 800, cursor: (needsApproval && !approvalOverride) ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, transition: 'background .2s' }}
-          >
-            {saving ? <><Loader2 size={15} className="spin" /> Advancing...</> : `Advance → ${nextStage.short}`}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── Shipping Details Form ────────────────────────────────────────────────────
-function ShippingDetailsCard({ project, updateShippingDetails }) {
-  const init = {
-    vesselName: project.shippingDetails?.vesselName || '',
-    blNumber: project.shippingDetails?.blNumber || '',
-    containerNumber: project.shippingDetails?.containerNumber || '',
-    eta: project.shippingDetails?.eta || '',
-    notes: project.shippingDetails?.notes || '',
-  };
-  const [form, setForm] = useState(init);
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
-
-  // Re-sync if project changes
-  useEffect(() => {
-    setForm({
-      vesselName: project.shippingDetails?.vesselName || '',
-      blNumber: project.shippingDetails?.blNumber || '',
-      containerNumber: project.shippingDetails?.containerNumber || '',
-      eta: project.shippingDetails?.eta || '',
-      notes: project.shippingDetails?.notes || '',
-    });
-    setSaved(false);
-  }, [project.id]);
-
-  const setF = (k, v) => { setForm(p => ({ ...p, [k]: v })); setSaved(false); };
-
-  const handleSave = async () => {
-    if (!updateShippingDetails) return;
-    setSaving(true);
-    await updateShippingDetails(project.id, form);
-    setSaving(false);
-    setSaved(true);
-  };
-
-  const inputStyle = {
-    width: '100%',
-    padding: '10px 14px',
-    borderRadius: 12,
-    border: '1.5px solid #E5E7EB',
-    fontSize: 13,
-    outline: 'none',
-    boxSizing: 'border-box',
-    fontFamily: 'inherit',
-  };
-
-  const labelStyle = {
-    fontSize: 11,
-    fontWeight: 800,
-    color: '#6B7280',
-    textTransform: 'uppercase',
-    letterSpacing: '.06em',
-    display: 'block',
-    marginBottom: 6,
-  };
-
-  return (
-    <div style={{ padding: '20px 24px', background: '#fff', borderRadius: 20, border: '1px solid #E5E7EB' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div style={{ width: 34, height: 34, borderRadius: 10, background: '#F0F9FF', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <Anchor size={15} color="#0284C7" />
-          </div>
-          <div style={{ fontSize: 13, fontWeight: 800, color: '#111827' }}>Shipping Details</div>
-        </div>
-        <button
-          onClick={handleSave}
-          disabled={saving}
-          style={{
-            height: 34, padding: '0 16px', borderRadius: 10,
-            background: saved ? '#F0FDF4' : '#111827',
-            color: saved ? '#16A34A' : '#fff',
-            border: saved ? '1.5px solid #16A34A40' : 'none',
-            fontSize: 12, fontWeight: 800, cursor: 'pointer',
-            display: 'flex', alignItems: 'center', gap: 6, transition: 'all .2s',
-          }}
-        >
-          {saving ? <><Loader2 size={13} className="spin" /> Saving...</> : saved ? '✓ Saved' : 'Save'}
-        </button>
-      </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-        <div>
-          <label style={labelStyle}>Vessel Name</label>
-          <input
-            value={form.vesselName}
-            onChange={e => setF('vesselName', e.target.value)}
-            placeholder="e.g. MSC Eleonora"
-            style={inputStyle}
-          />
-        </div>
-        <div>
-          <label style={labelStyle}>Bill of Lading Number</label>
-          <input
-            value={form.blNumber}
-            onChange={e => setF('blNumber', e.target.value)}
-            placeholder="e.g. MSCUAA123456"
-            style={inputStyle}
-          />
-        </div>
-        <div>
-          <label style={labelStyle}>Container Number</label>
-          <input
-            value={form.containerNumber}
-            onChange={e => setF('containerNumber', e.target.value)}
-            placeholder="e.g. MSCU1234567"
-            style={inputStyle}
-          />
-        </div>
-        <div>
-          <label style={labelStyle}>ETA</label>
-          <input
-            type="date"
-            value={form.eta}
-            onChange={e => setF('eta', e.target.value)}
-            style={inputStyle}
-          />
-        </div>
-      </div>
-
-      <div style={{ marginTop: 14 }}>
-        <label style={labelStyle}>Notes (optional)</label>
-        <textarea
-          value={form.notes}
-          onChange={e => setF('notes', e.target.value)}
-          placeholder="Port of discharge, customs notes, special instructions..."
-          rows={3}
-          style={{ ...inputStyle, resize: 'vertical', lineHeight: 1.6 }}
-        />
-      </div>
-    </div>
-  );
-}
-
-// ─── Project Economics ────────────────────────────────────────────────────────
-function ProjectEconomics({ project, user }) {
-  const costs = project.costs || {};
-  const [form, setForm] = useState({
-    product:      { enabled: costs.product?.enabled      ?? true,  amount: costs.product?.amount      || '' },
-    shipping:     { enabled: costs.shipping?.enabled     ?? false, amount: costs.shipping?.amount     || '' },
-    installation: { enabled: costs.installation?.enabled ?? false, amount: costs.installation?.amount || '' },
-    extras: costs.extras || [],
-  });
-  const [surcharges, setSurcharges] = useState(project.surcharges || []);
-  const [newSC, setNewSC] = useState({ label: '', amount: '', reason: '', date: new Date().toISOString().slice(0, 10) });
-  const [showAddSC, setShowAddSC] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [saved,  setSaved]  = useState(false);
-  const [savingSC, setSavingSC] = useState(false);
-
-  useEffect(() => {
-    const c = project.costs || {};
-    setForm({
-      product:      { enabled: c.product?.enabled      ?? true,  amount: c.product?.amount      || '' },
-      shipping:     { enabled: c.shipping?.enabled     ?? false, amount: c.shipping?.amount     || '' },
-      installation: { enabled: c.installation?.enabled ?? false, amount: c.installation?.amount || '' },
-      extras: c.extras || [],
-    });
-    setSurcharges(project.surcharges || []);
-    setSaved(false);
-  }, [project.id]);
-
-  const toggle   = key => { setForm(f => ({ ...f, [key]: { ...f[key], enabled: !f[key].enabled } })); setSaved(false); };
-  const setAmt   = (key, v) => { setForm(f => ({ ...f, [key]: { ...f[key], amount: v } })); setSaved(false); };
-  const addExtra = () => { setForm(f => ({ ...f, extras: [...f.extras, { id: `ext_${Date.now()}`, label: '', amount: '' }] })); setSaved(false); };
-  const rmExtra  = id => { setForm(f => ({ ...f, extras: f.extras.filter(e => e.id !== id) })); setSaved(false); };
-  const setEx    = (id, field, v) => { setForm(f => ({ ...f, extras: f.extras.map(e => e.id === id ? { ...e, [field]: v } : e) })); setSaved(false); };
-
-  const totalCOGS = BD_ITEMS_CONFIG.filter(i => form[i.key].enabled).reduce((s, i) => s + (Number(form[i.key].amount) || 0), 0)
-    + form.extras.reduce((s, e) => s + (Number(e.amount) || 0), 0);
-  const totalSurcharges = surcharges.reduce((s, sc) => s + (Number(sc.amount) || 0), 0);
-  const salePrice   = Number(project.budget) || 0;
-  const grossProfit = salePrice - totalCOGS;
-  const margin      = salePrice > 0 ? (grossProfit / salePrice) * 100 : 0;
-
-  const handleSave = async () => {
-    if (!db || !project?.id || saving) return;
-    setSaving(true);
-    try {
-      await updateDoc(doc(db, 'projects', project.id), {
-        costs: {
-          product:      { enabled: form.product.enabled,      amount: Number(form.product.amount)      || 0 },
-          shipping:     { enabled: form.shipping.enabled,     amount: Number(form.shipping.amount)     || 0 },
-          installation: { enabled: form.installation.enabled, amount: Number(form.installation.amount) || 0 },
-          extras: form.extras.filter(e => e.label?.trim()).map(e => ({ id: e.id, label: e.label.trim(), amount: Number(e.amount) || 0 })),
-        },
-      });
-      setSaved(true);
-    } catch (e) {
-      if (import.meta.env.DEV) console.error('[ProjectEconomics save]', e);
-    }
-    setSaving(false);
-  };
-
-  const handleAddSurcharge = async () => {
-    if (!newSC.label.trim() || !newSC.amount || !newSC.reason.trim()) return;
-    setSavingSC(true);
-    try {
-      const entry = {
-        id: `sc_${Date.now()}`,
-        label: newSC.label.trim(),
-        amount: Number(newSC.amount) || 0,
-        reason: newSC.reason.trim(),
-        date: newSC.date,
-        addedBy: user?.name || user?.displayName || 'Admin',
-        addedAt: new Date().toISOString(),
-      };
-      const updated = [...surcharges, entry];
-      const newBudget = salePrice + entry.amount;
-      await updateDoc(doc(db, 'projects', project.id), { surcharges: updated, budget: String(newBudget) });
-      setSurcharges(updated);
-      setNewSC({ label: '', amount: '', reason: '', date: new Date().toISOString().slice(0, 10) });
-      setShowAddSC(false);
-    } catch (e) {
-      if (import.meta.env.DEV) console.error('[Surcharge save]', e);
-    }
-    setSavingSC(false);
-  };
-
-  const removeSurcharge = async (id) => {
-    const sc = surcharges.find(s => s.id === id);
-    const updated = surcharges.filter(s => s.id !== id);
-    const newBudget = Math.max(0, salePrice - (sc?.amount || 0));
-    try {
-      await updateDoc(doc(db, 'projects', project.id), { surcharges: updated, budget: String(newBudget) });
-      setSurcharges(updated);
-    } catch (e) {
-      if (import.meta.env.DEV) console.error('[Surcharge remove]', e);
-    }
-  };
-
-  const fmt = v => `GHS ${Number(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-
-      {/* ── Internal Cost Breakdown (COGS) ── */}
-      <div style={{ padding: '20px 24px', background: '#fff', borderRadius: 18, border: '1px solid #E5E7EB' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div style={{ width: 34, height: 34, borderRadius: 10, background: '#FFF7ED', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <TrendingUp size={15} color="#D97706" />
-            </div>
-            <div>
-              <div style={{ fontSize: 13, fontWeight: 800, color: '#111827' }}>Internal Cost Breakdown</div>
-              <div style={{ fontSize: 11, color: '#6B7280' }}>Your costs vs sale price — not visible to client</div>
-            </div>
-          </div>
-          <button onClick={handleSave} disabled={saving} style={{ height: 34, padding: '0 16px', borderRadius: 10, background: saved ? '#F0FDF4' : '#111827', color: saved ? '#16A34A' : '#fff', border: saved ? '1.5px solid #16A34A40' : 'none', fontSize: 12, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, transition: 'all .2s' }}>
-            {saving ? <><Loader2 size={13} className="spin" /> Saving...</> : saved ? '✓ Saved' : 'Save'}
-          </button>
-        </div>
-
-        {/* Core cost rows */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 12 }}>
-          {BD_ITEMS_CONFIG.map(({ key, label, icon, color }) => (
-            <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', borderRadius: 12, background: form[key].enabled ? '#FAFAF9' : '#F9FAFB', border: `1.5px solid ${form[key].enabled ? '#E5E7EB' : '#E5E7EB'}`, opacity: form[key].enabled ? 1 : 0.55, transition: 'all .2s' }}>
-              <button onClick={() => toggle(key)} style={{ width: 36, height: 20, borderRadius: 10, background: form[key].enabled ? color : '#E5E7EB', border: 'none', cursor: 'pointer', position: 'relative', flexShrink: 0, transition: 'background .2s' }}>
-                <div style={{ position: 'absolute', top: 2, left: form[key].enabled ? 18 : 2, width: 16, height: 16, borderRadius: '50%', background: '#fff', transition: 'left .2s', boxShadow: '0 1px 3px rgba(0,0,0,.25)' }} />
-              </button>
-              <div style={{ width: 28, height: 28, borderRadius: 8, background: `${color}15`, display: 'flex', alignItems: 'center', justifyContent: 'center', color, flexShrink: 0 }}>{icon}</div>
-              <div style={{ flex: 1, fontSize: 12, fontWeight: 700, color: '#111827' }}>{label}</div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#fff', border: '1.5px solid #E5E7EB', borderRadius: 10, padding: '6px 10px' }}>
-                <span style={{ fontSize: 11, color: '#6B7280', fontWeight: 700, flexShrink: 0 }}>GHS</span>
-                <input type="number" min="0" value={form[key].amount} onChange={e => setAmt(key, e.target.value)} disabled={!form[key].enabled} placeholder="0.00" style={{ width: 90, border: 'none', outline: 'none', fontSize: 13, fontWeight: 700, color: '#111827', background: 'transparent', fontFamily: 'inherit', textAlign: 'right' }} />
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {/* Extras */}
-        {form.extras.map(extra => (
-          <div key={extra.id} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-            <div style={{ width: 28, height: 28, borderRadius: 8, background: '#E5E7EB', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Plus size={12} color="#6B7280" /></div>
-            <input value={extra.label} onChange={e => setEx(extra.id, 'label', e.target.value)} placeholder="Extra cost description" style={{ flex: 1, padding: '8px 12px', borderRadius: 9, border: '1.5px solid #E5E7EB', fontSize: 12, outline: 'none', fontFamily: 'inherit' }} />
-            <div style={{ display: 'flex', alignItems: 'center', gap: 5, background: '#fff', border: '1.5px solid #E5E7EB', borderRadius: 9, padding: '5px 9px', flexShrink: 0 }}>
-              <span style={{ fontSize: 11, color: '#6B7280', fontWeight: 700 }}>GHS</span>
-              <input type="number" min="0" value={extra.amount} onChange={e => setEx(extra.id, 'amount', e.target.value)} placeholder="0" style={{ width: 80, border: 'none', outline: 'none', fontSize: 13, fontWeight: 700, color: '#111827', background: 'transparent', fontFamily: 'inherit', textAlign: 'right' }} />
-            </div>
-            <button onClick={() => rmExtra(extra.id)} style={{ width: 28, height: 28, borderRadius: 7, border: '1.5px solid #E5E7EB', background: '#F9FAFB', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><X size={12} color="#6B7280" /></button>
-          </div>
-        ))}
-        <button onClick={addExtra} style={{ fontSize: 11, fontWeight: 800, color: '#4B5563', background: 'transparent', border: 'none', cursor: 'pointer', padding: '4px 0 14px', display: 'flex', alignItems: 'center', gap: 5 }}>
-          <Plus size={12} /> Add extra cost
-        </button>
-
-        {/* Summary strip */}
-        <div style={{ background: '#111827', borderRadius: 14, padding: '16px 20px', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
-          {[
-            { label: 'Total COGS',   value: fmt(totalCOGS),   color: '#fff' },
-            { label: 'Sale Price',   value: fmt(salePrice),   color: AC },
-            { label: 'Gross Profit', value: fmt(grossProfit), color: grossProfit >= 0 ? '#4ADE80' : '#F87171' },
-            { label: 'Margin',       value: `${margin.toFixed(1)}%`, color: margin >= 20 ? '#4ADE80' : margin >= 10 ? '#FBBF24' : '#F87171' },
-          ].map(({ label, value, color }) => (
-            <div key={label} style={{ textAlign: 'center' }}>
-              <div style={{ fontSize: 9, color: 'rgba(255,255,255,.4)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 4 }}>{label}</div>
-              <div style={{ fontSize: 14, fontWeight: 900, color }}>{value}</div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* ── Price Adjustments / Surcharges ── */}
-      <div style={{ padding: '20px 24px', background: '#fff', borderRadius: 18, border: '1px solid #E5E7EB' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: (surcharges.length > 0 || showAddSC) ? 16 : 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div style={{ width: 34, height: 34, borderRadius: 10, background: '#FEF2F2', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <AlertCircle size={15} color="#DC2626" />
-            </div>
-            <div>
-              <div style={{ fontSize: 13, fontWeight: 800, color: '#111827' }}>Price Adjustments</div>
-              <div style={{ fontSize: 11, color: '#6B7280' }}>Documented surcharges — visible to client with full reason</div>
-            </div>
-          </div>
-          <button onClick={() => setShowAddSC(p => !p)} style={{ height: 32, padding: '0 14px', borderRadius: 9, background: showAddSC ? '#F9FAFB' : '#111827', color: showAddSC ? '#4B5563' : '#fff', border: showAddSC ? '1.5px solid #E5E7EB' : 'none', fontSize: 12, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, transition: 'all .2s' }}>
-            {showAddSC ? 'Cancel' : <><Plus size={13} /> Add Surcharge</>}
-          </button>
-        </div>
-
-        {surcharges.length > 0 && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: showAddSC ? 16 : 0 }}>
-            {surcharges.map(sc => (
-              <div key={sc.id} style={{ padding: '14px 16px', borderRadius: 14, background: '#FEF2F2', border: '1.5px solid #FCA5A520' }}>
-                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                      <span style={{ fontSize: 13, fontWeight: 800, color: '#111827' }}>{sc.label}</span>
-                      <span style={{ fontSize: 12, fontWeight: 900, color: '#DC2626' }}>+{fmt(sc.amount)}</span>
-                    </div>
-                    <div style={{ fontSize: 12, color: '#4B5563', lineHeight: 1.5, marginBottom: 6 }}>{sc.reason}</div>
-                    <div style={{ fontSize: 10, color: '#6B7280', fontWeight: 600 }}>{sc.date} · Added by {sc.addedBy}</div>
-                  </div>
-                  <button onClick={() => removeSurcharge(sc.id)} style={{ width: 28, height: 28, borderRadius: 7, border: '1.5px solid #FECACA', background: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><X size={12} color="#DC2626" /></button>
-                </div>
-              </div>
-            ))}
-            <div style={{ fontSize: 12, fontWeight: 800, color: '#4B5563', textAlign: 'right' }}>
-              Total adjustments: <span style={{ color: '#DC2626' }}>+{fmt(totalSurcharges)}</span>
-            </div>
-          </div>
-        )}
-
-        {surcharges.length === 0 && !showAddSC && (
-          <div style={{ fontSize: 12, color: '#6B7280', padding: '6px 0' }}>No price adjustments on this project.</div>
-        )}
-
-        {showAddSC && (
-          <div style={{ background: '#FAFAF9', borderRadius: 14, border: '1.5px solid #E5E7EB', padding: 16 }}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 160px', gap: 10 }}>
-                <div>
-                  <div style={{ fontSize: 10, fontWeight: 800, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 6 }}>Adjustment Label *</div>
-                  <input value={newSC.label} onChange={e => setNewSC(p => ({ ...p, label: e.target.value }))} placeholder="e.g. Material price increase" style={{ width: '100%', padding: '9px 12px', borderRadius: 10, border: '1.5px solid #E5E7EB', fontSize: 13, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' }} />
-                </div>
-                <div>
-                  <div style={{ fontSize: 10, fontWeight: 800, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 6 }}>Amount (GHS) *</div>
-                  <input type="number" min="0" value={newSC.amount} onChange={e => setNewSC(p => ({ ...p, amount: e.target.value }))} placeholder="0.00" style={{ width: '100%', padding: '9px 12px', borderRadius: 10, border: '1.5px solid #E5E7EB', fontSize: 13, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' }} />
-                </div>
-              </div>
-              <div>
-                <div style={{ fontSize: 10, fontWeight: 800, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 6 }}>Reason / Explanation * (visible to client)</div>
-                <textarea value={newSC.reason} onChange={e => setNewSC(p => ({ ...p, reason: e.target.value }))} placeholder="Explain why this adjustment was necessary — the client will see this..." rows={3} style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #E5E7EB', fontSize: 13, outline: 'none', resize: 'vertical', boxSizing: 'border-box', fontFamily: 'inherit', lineHeight: 1.6 }} />
-              </div>
-              <div>
-                <div style={{ fontSize: 10, fontWeight: 800, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 6 }}>Effective Date</div>
-                <input type="date" value={newSC.date} onChange={e => setNewSC(p => ({ ...p, date: e.target.value }))} style={{ padding: '9px 12px', borderRadius: 10, border: '1.5px solid #E5E7EB', fontSize: 13, outline: 'none', fontFamily: 'inherit' }} />
-              </div>
-              <button onClick={handleAddSurcharge} disabled={savingSC || !newSC.label.trim() || !newSC.amount || !newSC.reason.trim()} style={{ height: 42, borderRadius: 11, background: (newSC.label.trim() && newSC.amount && newSC.reason.trim()) ? '#DC2626' : '#E5E7EB', color: '#fff', border: 'none', fontSize: 13, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, transition: 'background .2s' }}>
-                {savingSC ? <><Loader2 size={14} className="spin" /> Saving...</> : 'Add Price Adjustment'}
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ─── Document Vault ───────────────────────────────────────────────────────────
-function DocumentVault({ project, addProjectDocument, user }) {
-  const [docs, setDocs] = useState([]);
+// ─── SpecBriefManager ────────────────────────────────────────────────────────
+function SpecBriefManager({ project, updateProject, addProjectDocument, notify, brand }) {
+  const ac = brand?.color || 'var(--accent-secondary)';
   const [uploading, setUploading] = useState(false);
-  const [uploadingPhoto, setUploadingPhoto] = useState(false);
-  const fileInputRef = useRef(null);
-  const photoInputRef = useRef(null);
+  const [removing, setRemoving] = useState(false);
+  const [confirmRemove, setConfirmRemove] = useState(false);
+  const spec = project?.specDoc;
 
-  useEffect(() => {
-    if (!db || !project?.id) { setDocs([]); return; }
-    const q = query(
-      collection(db, 'projects', project.id, 'documents'),
-      orderBy('createdAt', 'desc')
-    );
-    const unsub = onSnapshot(q, snap => {
-      setDocs(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    });
-    return unsub;
-  }, [project?.id]);
-
-  const uploaderName = user?.name || user?.displayName || 'Staff';
-
-  const handleFileChange = async (e) => {
+  const handleUpload = async (e) => {
     const file = e.target.files?.[0];
-    if (!file || !addProjectDocument) return;
+    if (!file || !project?.id) return;
     setUploading(true);
-    await addProjectDocument(project.id, file, {
-      uploadedBy: uploaderName,
-      uploadedById: user?.uid || user?.id,
-      stageId: project.stageId,
-      docType: 'document',
-    });
+    try {
+      let url = '';
+      if (storage) {
+        const storageRef = ref(storage, `projects/${project.id}/spec/${Date.now()}_${file.name}`);
+        await uploadBytes(storageRef, file);
+        url = await getDownloadURL(storageRef);
+      } else {
+        url = URL.createObjectURL(file);
+      }
+      await updateDoc(doc(db, 'projects', project.id), {
+        specDoc: {
+          url,
+          name: file.name,
+          fileType: file.type,
+          version: Number(spec?.version || 0) + 1,
+          uploadedAt: new Date().toISOString(),
+          uploadedBy: 'admin',
+          status: 'pending',
+          reviewedAt: null,
+          reviewNote: '',
+          signedAt: null,
+          signedBy: '',
+          signedByUid: '',
+          signedByPhone: '',
+          signatureMethod: '',
+          signatureStamp: '',
+        }
+      });
+      // Notify the client that a spec doc is waiting for their review
+      if (project?.clientId && db) {
+        addDoc(collection(db, 'clients', project.clientId, 'messages'), {
+          text: `📄 Project specification v${Number(spec?.version || 0) + 1}, "${file.name}", has been shared for "${project.title || project.project}". After the initial deposit is verified, please review and sign it to authorise production.`,
+          senderRole: 'system',
+          isInternal: false,
+          readByAdmin: true,
+          readByClient: false,
+          createdAt: serverTimestamp(),
+        }).catch(() => {});
+      }
+      notify?.('success', 'Specification document sent to client for signature');
+    } catch (err) {
+      console.error(err);
+      notify?.('error', 'Upload failed — ' + (err.message || 'Unknown error'));
+    }
     setUploading(false);
-    if (fileInputRef.current) fileInputRef.current.value = '';
+    e.target.value = '';
   };
 
-  const handlePhotoChange = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file || !addProjectDocument) return;
-    setUploadingPhoto(true);
-    await addProjectDocument(project.id, file, {
-      uploadedBy: uploaderName,
-      uploadedById: user?.uid || user?.id,
-      stageId: project.stageId,
-      docType: 'progress_photo',
-      name: `Progress photo — Stage ${project.stageId} · ${new Date().toLocaleDateString('en-GB')}`,
-    });
-    setUploadingPhoto(false);
-    if (photoInputRef.current) photoInputRef.current.value = '';
+  const handleRemove = async () => {
+    if (!confirmRemove) { setConfirmRemove(true); return; }
+    setConfirmRemove(false);
+    setRemoving(true);
+    try {
+      await updateDoc(doc(db, 'projects', project.id), { specDoc: null });
+      notify?.('success', 'Specification document removed');
+    } catch (err) {
+      notify?.('error', 'Remove failed');
+    }
+    setRemoving(false);
   };
 
-  const formatSize = (bytes) => {
-    if (!bytes) return '';
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  };
-
-  const formatDate = (ts) => {
-    if (!ts) return '';
-    const d = ts?.toDate ? ts.toDate() : new Date(ts);
-    return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-  };
-
-  const fileIcon = (fileType) => {
-    if (!fileType) return <FileText size={14} color="#6B7280" />;
-    if (fileType.includes('pdf')) return <FileText size={14} color="#DC2626" />;
-    if (fileType.includes('image') || fileType.includes('jpg') || fileType.includes('png')) return <FileText size={14} color="#0F766E" />;
-    return <FileText size={14} color="#0284C7" />;
+  const statusMap = {
+    pending:  { label: 'Awaiting Client Signature', color: '#D97706', bg: '#FFF7ED', border: '#FDE68A' },
+    approved: { label: 'Approved · Signature Required', color: '#B45309', bg: '#FFFBEB', border: '#FDE68A' },
+    signed:   { label: 'Signed · Production Authorised ✓', color: '#15803D', bg: '#F0FDF4', border: '#BBF7D0' },
+    rejected: { label: 'Changes Requested', color: '#DC2626', bg: '#FEF2F2', border: '#FECACA' },
   };
 
   return (
-    <div style={{ padding: '20px 24px', background: '#fff', borderRadius: 18, border: '1px solid #E5E7EB' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
-        <div style={{ fontSize: 13, fontWeight: 800, color: '#111827' }}>Documents & Progress Photos</div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          {/* Progress photo button */}
-          <label style={{
-            height: 34, padding: '0 14px', borderRadius: 10,
-            background: '#0F766E15', color: '#0F766E', border: '1px solid #0F766E30',
-            fontSize: 12, fontWeight: 800, cursor: uploadingPhoto ? 'default' : 'pointer',
-            display: 'flex', alignItems: 'center', gap: 6,
-            opacity: uploadingPhoto ? 0.6 : 1, transition: 'opacity .2s',
-          }}>
-            <input
-              ref={photoInputRef}
-              type="file"
-              accept="image/*"
-              capture="environment"
-              style={{ display: 'none' }}
-              onChange={handlePhotoChange}
-              disabled={uploadingPhoto}
-            />
-            {uploadingPhoto ? <><Loader2 size={13} className="spin" /> Uploading...</> : <><Camera size={13} /> Progress Photo</>}
-          </label>
-          {/* Document upload button */}
-          <label style={{
-            height: 34, padding: '0 14px', borderRadius: 10,
-            background: '#111827', color: '#fff',
-            fontSize: 12, fontWeight: 800, cursor: uploading ? 'default' : 'pointer',
-            display: 'flex', alignItems: 'center', gap: 6,
-            opacity: uploading ? 0.6 : 1, transition: 'opacity .2s',
-          }}>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".pdf,.jpg,.png,.doc,.docx"
-              style={{ display: 'none' }}
-              onChange={handleFileChange}
-              disabled={uploading}
-            />
-            {uploading ? <><Loader2 size={13} className="spin" /> Uploading...</> : <><Upload size={13} /> Upload Document</>}
-          </label>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20, paddingBottom: 24 }}>
+      {/* Header */}
+      <div>
+        <div style={{ fontSize: 17, fontWeight: 900, color: 'var(--accent-secondary)', marginBottom: 4 }}>Project Specification & Brief</div>
+        <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+          Upload the final project specification, scope, deliverables, and approved design outcome. After the initial deposit is verified, the client must review and sign this document before production can begin.
         </div>
       </div>
 
-      {docs.length === 0 ? (
-        <div style={{ padding: '28px 0', textAlign: 'center', border: '1.5px dashed #E5E7EB', borderRadius: 12 }}>
-          <FileText size={28} color="#E5E7EB" style={{ marginBottom: 8 }} />
-          <div style={{ fontSize: 12, color: '#6B7280', fontWeight: 600 }}>No documents yet</div>
-          <div style={{ fontSize: 11, color: '#DFD9D1', marginTop: 4, lineHeight: 1.5 }}>Upload quotes, BOLs, and certificates here.</div>
+      {/* Current document */}
+      {spec?.url ? (
+        <div style={{ padding: '20px 24px', background: '#fff', borderRadius: 16, border: `1.5px solid ${statusMap[spec.status]?.border || 'var(--border-color)'}` }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, marginBottom: 14 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <div style={{ width: 44, height: 44, borderRadius: 12, background: '#EFF6FF', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <FileText size={20} color="#1D4ED8" />
+              </div>
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--accent-secondary)' }}>{spec.name || 'Project Specification'}</div>
+                <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 2 }}>
+                  Version {Number(spec.version || 1)} · Uploaded {spec.uploadedAt ? new Date(spec.uploadedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}
+                </div>
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0 }}>
+              <a href={spec.url} target="_blank" rel="noreferrer"
+                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 10, background: '#EFF6FF', border: '1px solid #BFDBFE', color: '#1D4ED8', fontSize: 12, fontWeight: 700, textDecoration: 'none' }}>
+                <ExternalLink size={12} /> View
+              </a>
+              {confirmRemove ? (
+                <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                  <span style={{ fontSize: 11, color: '#DC2626', fontWeight: 600 }}>Remove this doc?</span>
+                  <button onClick={handleRemove} style={{ padding: '5px 10px', borderRadius: 8, background: '#DC2626', border: 'none', color: '#fff', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>Yes, remove</button>
+                  <button onClick={() => setConfirmRemove(false)} style={{ padding: '5px 10px', borderRadius: 8, background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>Cancel</button>
+                </div>
+              ) : (
+                <button onClick={handleRemove} disabled={removing}
+                  style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 10, background: '#FEF2F2', border: '1px solid #FECACA', color: '#DC2626', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+                  <Trash2 size={12} /> {removing ? 'Removing…' : 'Remove'}
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Status */}
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '7px 14px', borderRadius: 20, background: statusMap[spec.status]?.bg || '#f5f5f5', border: `1px solid ${statusMap[spec.status]?.border || '#eee'}` }}>
+            <div style={{ width: 8, height: 8, borderRadius: '50%', background: statusMap[spec.status]?.color || '#999' }} />
+            <span style={{ fontSize: 12, fontWeight: 700, color: statusMap[spec.status]?.color || '#666' }}>
+              {statusMap[spec.status]?.label || spec.status}
+            </span>
+          </div>
+
+          {/* Client rejection note */}
+          {spec.status === 'rejected' && spec.reviewNote && (
+            <div style={{ marginTop: 14, padding: '12px 16px', background: '#FEF2F2', borderRadius: 12, border: '1px solid #FECACA' }}>
+              <div style={{ fontSize: 11, fontWeight: 800, color: '#DC2626', textTransform: 'uppercase', marginBottom: 4 }}>Client's feedback</div>
+              <div style={{ fontSize: 13, color: '#7F1D1D', lineHeight: 1.5 }}>"{spec.reviewNote}"</div>
+              <div style={{ fontSize: 11, color: '#9CA3AF', marginTop: 6 }}>
+                Responded {spec.reviewedAt ? new Date(spec.reviewedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'} by {spec.reviewedBy || 'Client'}
+              </div>
+            </div>
+          )}
+
+          {spec.status === 'signed' && spec.signedAt && (
+            <div style={{ marginTop: 14, padding: '10px 14px', background: '#F0FDF4', borderRadius: 10, border: '1px solid #BBF7D0', fontSize: 12, color: '#15803D', fontWeight: 600 }}>
+              Signed on {new Date(spec.signedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })} by {spec.signedBy || spec.reviewedBy || 'Client'}
+              {spec.signatureStamp && <div style={{ fontSize: 10, color: '#4B5563', marginTop: 4, fontFamily: 'monospace' }}>Audit stamp: {spec.signatureStamp}</div>}
+            </div>
+          )}
+
+          {/* Replace button */}
+          <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid var(--border-color)' }}>
+            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '9px 16px', borderRadius: 10, background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', fontSize: 12, fontWeight: 700, color: 'var(--accent-secondary)', cursor: uploading ? 'default' : 'pointer', opacity: uploading ? 0.6 : 1 }}>
+              <Upload size={13} /> {uploading ? 'Uploading…' : 'Replace Document'}
+              <input type="file" accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,.ppt,.pptx" style={{ display: 'none' }} onChange={handleUpload} disabled={uploading} />
+            </label>
+            <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 8 }}>Uploading a new version invalidates the previous signature and requires the client to sign again.</div>
+          </div>
         </div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {docs.map(doc => {
-            const isPhoto = doc.docType === 'progress_photo' || (doc.fileType || '').includes('image');
-            return (
-              <div key={doc.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', background: isPhoto ? '#FAF5FF' : '#F9FAFB', borderRadius: 12, border: `1px solid ${isPhoto ? '#E9D5FF' : '#E5E7EB'}` }}>
-                <div style={{ width: 32, height: 32, borderRadius: 8, background: isPhoto ? '#0F766E15' : '#fff', border: `1px solid ${isPhoto ? '#E9D5FF' : '#E5E7EB'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                  {isPhoto ? <Camera size={14} color="#0F766E" /> : fileIcon(doc.fileType)}
-                </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: '#111827', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{doc.name}</div>
-                  <div style={{ fontSize: 10, color: '#6B7280', marginTop: 2 }}>
-                    {doc.uploadedBy && <span style={{ color: isPhoto ? '#0F766E' : undefined }}>{doc.uploadedBy} · </span>}
-                    {formatDate(doc.createdAt)}{doc.size ? ` · ${formatSize(doc.size)}` : ''}
-                  </div>
-                </div>
-                {doc.url && (
-                  <a
-                    href={doc.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    style={{
-                      width: 30, height: 30, borderRadius: 8, background: '#fff', border: '1px solid #E5E7EB',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-                      color: '#4B5563', textDecoration: 'none', transition: 'background .15s',
-                    }}
-                    title={isPhoto ? 'View photo' : 'Download'}
-                  >
-                    <Download size={13} />
-                  </a>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ─── Project Conversation (Right Panel) ──────────────────────────────────────
-function ProjectConversation({ project, user, addProjectMessage }) {
-  const [messages, setMessages] = useState([]);
-  const [tab, setTab] = useState('client');
-  const [text, setText] = useState('');
-  const [sending, setSending] = useState(false);
-  const [translatingId, setTranslatingId] = useState(null);
-  const [editingId, setEditingId] = useState(null);
-  const [editText, setEditText] = useState('');
-  const [recording, setRecording] = useState(false);
-  const [recordingStartedAt, setRecordingStartedAt] = useState(null);
-  const [voiceSaving, setVoiceSaving] = useState(false);
-  const mediaRecorderRef = useRef(null);
-  const chunksRef = useRef([]);
-  const recordingStartedAtRef = useRef(null);
-  const bottomRef = useRef(null);
-
-  useEffect(() => {
-    if (!db || !project?.id) { setMessages([]); return; }
-    const q = query(collection(db, 'projects', project.id, 'messages'), orderBy('createdAt', 'asc'));
-    const unsub = onSnapshot(q, snap => {
-      setMessages(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-      setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
-    });
-    return unsub;
-  }, [project?.id]);
-
-  const visible = messages.filter(m => tab === 'client' ? !m.isInternal : m.isInternal || m.senderRole === 'system');
-
-  const send = async () => {
-    if (!text.trim() || sending) return;
-    const isInternal = tab === 'internal';
-    setSending(true);
-    await addProjectMessage(project.id, text.trim(), 'admin', isInternal);
-    setText('');
-    setSending(false);
-  };
-
-  const translate = async (messageId, targetLanguage = 'zh') => {
-    if (!functions || translatingId) return;
-    setTranslatingId(messageId);
-    try {
-      const fn = httpsCallable(functions, 'translateProjectMessage');
-      await fn({ projectId: project.id, messageId, targetLanguage });
-    } catch (err) {
-      alert(err.message || 'Translation failed');
-    } finally {
-      setTranslatingId(null);
-    }
-  };
-
-  const startEdit = (message) => {
-    setEditingId(message.id);
-    setEditText(message.text || '');
-  };
-
-  const saveEdit = async (message) => {
-    if (!db || !editText.trim()) return;
-    await updateDoc(doc(db, 'projects', project.id, 'messages', message.id), {
-      text: editText.trim(),
-      editedAt: serverTimestamp(),
-      editedBy: user?.uid || user?.id || 'admin',
-      updatedAt: serverTimestamp(),
-      editHistory: arrayUnion({
-        text: message.text || '',
-        editedAt: new Date().toISOString(),
-        editedBy: user?.uid || user?.id || 'admin',
-      }),
-    });
-    setEditingId(null);
-    setEditText('');
-  };
-
-  const startRecording = async () => {
-    if (!navigator.mediaDevices?.getUserMedia || recording) return;
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    const recorder = new MediaRecorder(stream);
-    chunksRef.current = [];
-    recorder.ondataavailable = event => {
-      if (event.data?.size) chunksRef.current.push(event.data);
-    };
-    recorder.onstop = async () => {
-      setVoiceSaving(true);
-      try {
-        const blob = new Blob(chunksRef.current, { type: recorder.mimeType || 'audio/webm' });
-        const duration = recordingStartedAtRef.current ? Math.round((Date.now() - recordingStartedAtRef.current) / 1000) : null;
-        const file = new File([blob], `voice-${Date.now()}.webm`, { type: blob.type });
-        const audioUrl = await uploadFile('project-voice-notes', `${project.id}/${Date.now()}-admin.webm`, file);
-        await addProjectMessage(project.id, 'Voice note', 'admin', tab === 'internal', {
-          type: 'voice',
-          audioUrl,
-          duration,
-        });
-      } finally {
-        stream.getTracks().forEach(track => track.stop());
-        setRecording(false);
-        recordingStartedAtRef.current = null;
-        setRecordingStartedAt(null);
-        setVoiceSaving(false);
-      }
-    };
-    mediaRecorderRef.current = recorder;
-    recordingStartedAtRef.current = Date.now();
-    setRecordingStartedAt(Date.now());
-    setRecording(true);
-    recorder.start();
-  };
-
-  const stopRecording = () => {
-    if (mediaRecorderRef.current?.state === 'recording') {
-      mediaRecorderRef.current.stop();
-    }
-  };
-
-  const roleColor = (role) => {
-    if (role === 'system') return '#6B7280';
-    if (role === 'admin') return '#111827';
-    if (role === 'client') return '#0F766E';
-    return '#059669';
-  };
-
-  const roleName = (role, name) => {
-    if (role === 'system') return 'System';
-    if (role === 'admin') return name || 'Westline Future Team';
-    if (role === 'client') return name || 'Client';
-    return name || 'Worker';
-  };
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      {/* Tabs */}
-      <div style={{ display: 'flex', gap: 4, padding: '0 0 16px 0', flexShrink: 0 }}>
-        {[
-          { id: 'client', label: 'Client Chat', icon: <MessageSquare size={13} /> },
-          { id: 'internal', label: 'Internal Notes', icon: <StickyNote size={13} /> },
-        ].map(t => (
-          <button key={t.id} onClick={() => setTab(t.id)} style={{ flex: 1, height: 36, borderRadius: 10, border: `1.5px solid ${tab === t.id ? '#111827' : '#E5E7EB'}`, background: tab === t.id ? '#111827' : '#fff', color: tab === t.id ? '#fff' : '#4B5563', fontSize: 11, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, transition: 'all .2s' }}>
-            {t.icon}{t.label}
-          </button>
-        ))}
-      </div>
-
-      {/* Messages */}
-      <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 12, paddingRight: 4, marginBottom: 16 }}>
-        {visible.length === 0 && (
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 32, textAlign: 'center' }}>
-            <MessageSquare size={36} color="#E5E7EB" style={{ marginBottom: 12 }} />
-            <div style={{ fontSize: 13, color: '#6B7280', fontWeight: 600 }}>{tab === 'client' ? 'No client messages yet' : 'No internal notes yet'}</div>
-            <div style={{ fontSize: 11, color: '#DFD9D1', marginTop: 4 }}>{tab === 'client' ? 'Start the conversation below.' : 'Add notes for your team.'}</div>
+        /* Upload zone */
+        <label style={{
+          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+          gap: 12, padding: '48px 32px', borderRadius: 16,
+          border: `2px dashed ${uploading ? ac : 'var(--border-color)'}`,
+          background: uploading ? `${ac}08` : 'var(--bg-secondary)',
+          cursor: uploading ? 'default' : 'pointer', transition: 'all .2s',
+        }}
+          onMouseOver={e => { if (!uploading) e.currentTarget.style.borderColor = ac; }}
+          onMouseOut={e => { if (!uploading) e.currentTarget.style.borderColor = 'var(--border-color)'; }}
+        >
+          <div style={{ width: 56, height: 56, borderRadius: 16, background: uploading ? `${ac}20` : '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 8px rgba(0,0,0,.08)' }}>
+            {uploading ? <Loader2 size={24} color={ac} style={{ animation: 'spin 1s linear infinite' }} /> : <Upload size={24} color={ac} />}
           </div>
-        )}
-        {visible.map(m => {
-          const isAdmin = m.senderRole === 'admin';
-          const isSystem = m.senderRole === 'system';
-          const translated = m.translations?.zh?.text;
-          const canEdit = isAdmin && !isSystem && m.type !== 'voice';
-          return (
-            <div key={m.id} style={{ display: 'flex', flexDirection: 'column', alignItems: isAdmin ? 'flex-end' : 'flex-start' }}>
-              {!isSystem && (
-                <div style={{ fontSize: 10, fontWeight: 700, color: roleColor(m.senderRole), marginBottom: 4, textTransform: 'uppercase', letterSpacing: '.04em' }}>
-                  {roleName(m.senderRole, m.senderName)}
-                </div>
-              )}
-              <div style={{
-                maxWidth: '88%', padding: isSystem ? '10px 16px' : '12px 16px',
-                borderRadius: isAdmin ? '18px 18px 4px 18px' : isSystem ? 12 : '18px 18px 18px 4px',
-                background: isAdmin ? '#111827' : isSystem ? '#F9FAFB' : '#fff',
-                color: isAdmin ? '#fff' : isSystem ? '#6B7280' : '#111827',
-                fontSize: isSystem ? 11 : 13,
-                border: isSystem ? '1px dashed #E5E7EB' : isAdmin ? 'none' : '1px solid #E5E7EB',
-                fontStyle: isSystem ? 'italic' : 'normal',
-                lineHeight: 1.5,
-              }}>
-                {editingId === m.id ? (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    <textarea value={editText} onChange={e => setEditText(e.target.value)} rows={3} style={{ width: 260, border: '1px solid #E5E7EB', borderRadius: 10, padding: 10, fontFamily: 'inherit', fontSize: 13 }} />
-                    <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-                      <button onClick={() => setEditingId(null)} style={{ border: 'none', background: '#F9FAFB', borderRadius: 8, padding: '6px 10px', fontSize: 11, fontWeight: 800, cursor: 'pointer' }}>Cancel</button>
-                      <button onClick={() => saveEdit(m)} style={{ border: 'none', background: '#16A34A', color: '#fff', borderRadius: 8, padding: '6px 10px', fontSize: 11, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}><Save size={12} /> Save</button>
-                    </div>
-                  </div>
-                ) : m.type === 'voice' && m.audioUrl ? (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    <div style={{ fontWeight: 800 }}>{m.text || 'Voice note'}{m.duration ? ` · ${m.duration}s` : ''}</div>
-                    <audio controls src={m.audioUrl} style={{ width: 260, maxWidth: '100%' }} />
-                    {m.transcript && <div style={{ fontSize: 12, opacity: .8 }}>{m.transcript}</div>}
-                  </div>
-                ) : (
-                  m.text
-                )}
-                {m.editedAt && <span style={{ display: 'block', fontSize: 10, opacity: .55, marginTop: 6 }}>Edited</span>}
-                {translated && (
-                  <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px solid ${isAdmin ? 'rgba(255,255,255,.18)' : '#E5E7EB'}`, fontSize: 12, opacity: .9 }}>
-                    <strong>中文:</strong> {translated}
-                  </div>
-                )}
-              </div>
-              {!isSystem && tab === 'client' && (
-                <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
-                  <button onClick={() => translate(m.id, 'zh')} disabled={translatingId === m.id} style={{ border: 'none', background: 'transparent', color: '#6B7280', fontSize: 10, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
-                    <Languages size={11} /> {translatingId === m.id ? 'Translating...' : 'Translate 中文'}
-                  </button>
-                  {canEdit && (
-                    <button onClick={() => startEdit(m)} style={{ border: 'none', background: 'transparent', color: '#6B7280', fontSize: 10, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
-                      <Pencil size={11} /> Edit
-                    </button>
-                  )}
-                </div>
-              )}
-              <div style={{ fontSize: 10, color: '#DFD9D1', marginTop: 4 }}>
-                {m.createdAt?.seconds ? new Date(m.createdAt.seconds * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'now'}
-              </div>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--accent-secondary)', marginBottom: 4 }}>
+              {uploading ? 'Uploading…' : 'Upload Specification Document'}
             </div>
-          );
-        })}
-        <div ref={bottomRef} />
+            <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+              PDF, Word, PowerPoint, or Image — max 20 MB
+            </div>
+          </div>
+          <input type="file" accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,.ppt,.pptx" style={{ display: 'none' }} onChange={handleUpload} disabled={uploading} />
+        </label>
+      )}
+
+      {/* Workflow explanation */}
+      <div style={{ padding: '16px 20px', background: '#fff', borderRadius: 14, border: '1px solid var(--border-color)' }}>
+        <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 10 }}>How it works</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {[
+            { step: '1', text: 'Upload the spec/brief document here' },
+            { step: '2', text: "Client sees a highlighted card on their portal with a link to open the document" },
+            { step: '3', text: 'Client approves or requests changes with a note' },
+            { step: '4', text: 'Status updates here in real time — review their response before proceeding to production' },
+          ].map(({ step, text }) => (
+            <div key={step} style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+              <div style={{ width: 22, height: 22, borderRadius: '50%', background: `${ac}15`, color: ac, fontSize: 11, fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 1 }}>{step}</div>
+              <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.5 }}>{text}</div>
+            </div>
+          ))}
+        </div>
       </div>
 
-      {/* Input */}
-      <div style={{ flexShrink: 0, display: 'flex', gap: 8, paddingTop: 12, borderTop: '1px solid #E5E7EB' }}>
-        <textarea
-          value={text}
-          onChange={e => setText(e.target.value)}
-          onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }}
-          placeholder={tab === 'client' ? 'Message client...' : 'Internal note (team only)...'}
-          rows={2}
-          style={{ flex: 1, padding: '10px 14px', borderRadius: 12, border: '1.5px solid #E5E7EB', fontSize: 13, outline: 'none', resize: 'none', boxSizing: 'border-box', fontFamily: 'inherit', lineHeight: 1.5, background: tab === 'internal' ? '#FEFDF5' : '#fff' }}
-        />
-        <button
-          onClick={recording ? stopRecording : startRecording}
-          disabled={voiceSaving}
-          style={{ width: 44, height: 44, borderRadius: 12, background: recording ? '#EF4444' : '#F9FAFB', color: recording ? '#fff' : '#4B5563', border: '1px solid #E5E7EB', cursor: voiceSaving ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', alignSelf: 'flex-end', flexShrink: 0 }}
-          title={recording ? 'Stop recording' : 'Record voice note'}
-        >
-          {voiceSaving ? <Loader2 size={16} className="spin" /> : recording ? <Square size={15} /> : <Mic size={16} />}
-        </button>
-        <button
-          onClick={send}
-          disabled={!text.trim() || sending}
-          style={{ width: 44, height: 44, borderRadius: 12, background: text.trim() ? '#111827' : '#E5E7EB', color: '#fff', border: 'none', cursor: text.trim() ? 'pointer' : 'default', display: 'flex', alignItems: 'center', justifyContent: 'center', alignSelf: 'flex-end', flexShrink: 0, transition: 'background .2s' }}
-        >
-          {sending ? <Loader2 size={16} className="spin" /> : <Send size={16} />}
-        </button>
-      </div>
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   );
 }
@@ -1484,9 +382,12 @@ export default function ClientHub({ clientId, dbClients = [], onBack, ...props }
   const [selectedId, setSelectedId] = useState(null);
   const [showNewModal, setShowNewModal] = useState(false);
   const [showAdvanceModal, setShowAdvanceModal] = useState(false);
-  const [advanceSaving, setAdvanceSaving] = useState(false);
+  const [activeTab, setActiveTab] = useState('overview');
+  const [settingDate, setSettingDate] = useState(false);
+  const [estDate, setEstDate] = useState('');
+  const [showClientPreview, setShowClientPreview] = useState(false);
+  const [showRequestPaymentModal, setShowRequestPaymentModal] = useState(false);
 
-  // Subscribe to client's projects in real-time
   useEffect(() => {
     if (!db || !client) { setLoadingProjects(false); return; }
     const q = query(collection(db, 'projects'), orderBy('createdAt', 'desc'));
@@ -1497,7 +398,11 @@ export default function ClientHub({ clientId, dbClients = [], onBack, ...props }
         (p.clientIds || []).includes(client.id) || (p.clientIds || []).includes(client.phone)
       );
       setProjects(mine);
-      if (mine.length > 0 && !selectedId) setSelectedId(mine[0].id);
+      setSelectedId(prev => {
+        if (!prev && mine.length > 0) return mine[0].id;
+        if (prev && mine.length > 0 && !mine.find(p => p.id === prev) && prev !== 'MESSAGES') return mine[0].id;
+        return prev;
+      });
       setLoadingProjects(false);
     });
     return unsub;
@@ -1506,7 +411,24 @@ export default function ClientHub({ clientId, dbClients = [], onBack, ...props }
 
   const selected = projects.find(p => p.id === selectedId);
 
-  // Which stages apply to this project type?
+  useEffect(() => {
+    if (selected?.estimatedCompletion) {
+      const d = selected.estimatedCompletion?.toDate
+        ? selected.estimatedCompletion.toDate()
+        : new Date(selected.estimatedCompletion);
+      if (!isNaN(d)) setEstDate(d.toISOString().slice(0, 10));
+    } else {
+      setEstDate('');
+    }
+  }, [selected?.id, selected?.estimatedCompletion]);
+
+  const saveEstDate = async () => {
+    if (!db || !selected || !estDate) return;
+    setSettingDate(true);
+    await updateDoc(doc(db, 'projects', selected.id), { estimatedCompletion: new Date(estDate).toISOString() });
+    setSettingDate(false);
+  };
+
   const applicableStages = selected
     ? CLIENT_PROJECT_STAGES.filter(s => {
         const typeStages = PROJECT_TYPES[selected.projectType]?.stages || CLIENT_PROJECT_STAGES.map(s => s.id);
@@ -1518,404 +440,1033 @@ export default function ClientHub({ clientId, dbClients = [], onBack, ...props }
   const currentIdx = applicableStages.findIndex(s => s.id === selected?.stageId);
   const nextStage = applicableStages[currentIdx + 1];
 
+  // Compute timeline at component level so overview + timeline tab both use the same live data
+  const computedTimeline = selected && applicableStages.length > 0
+    ? calculateTimeline(selected.createdAt || selected.projectDate, selected.timeline || {}, applicableStages)
+    : {};
+
+  // Calendar span: first stage start → last stage end (same calculation the Timeline tab shows)
+  // This is the authoritative "total duration" — it reflects actual dates, not just a sum of days.
+  const _firstStageId = applicableStages[0]?.id;
+  const _lastStageId  = applicableStages[applicableStages.length - 1]?.id;
+  const _spanStart    = computedTimeline[_firstStageId]?.startDate;
+  const _spanEnd      = computedTimeline[_lastStageId]?.endDate;
+  const totalCalendarDays = (_spanStart && _spanEnd)
+    ? Math.ceil((new Date(_spanEnd) - new Date(_spanStart)) / (1000 * 60 * 60 * 24))
+    : Object.values(computedTimeline).reduce((s, st) => s + (st.durationDays || 0), 0);
+
+  const fmt = v => `GH₵ ${Number(v || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+  // Tab names aligned with client portal for consistency:
+  // Client sees: Progress, Design Vault, Approvals, Photos, Payments, Add-ons, Documents
+  // Admin manages: Overview, Spec, Timeline, Payments, Design Vault, Documents, Team
+  const TABS = [
+    { id: 'overview',   label: 'Overview',   icon: <Briefcase size={14} /> },
+    { id: 'spec',       label: 'Project Brief', icon: <FileText size={14} /> },
+    { id: 'timeline',   label: 'Timeline',   icon: <Calendar size={14} /> },
+    { id: 'financials', label: 'Payments',   icon: <DollarSign size={14} /> },
+    { id: 'renderings', label: 'Designs',    icon: <PenTool size={14} /> },
+    { id: 'vault',      label: 'Vault',      icon: <ShieldCheck size={14} /> },
+    { id: 'uploads',    label: 'Uploads',    icon: <Camera size={14} /> },
+    { id: 'team',       label: 'Team',       icon: <Users size={14} /> },
+    { id: 'messages',   label: 'Messages',   icon: <MessageSquare size={14} /> }
+  ];
+
   if (!client) return (
     <div style={{ padding: 60, textAlign: 'center' }}>
-      <AlertCircle size={40} color="#6B7280" style={{ marginBottom: 12 }} />
-      <div style={{ fontSize: 18, fontWeight: 800, color: '#111827' }}>Client not found</div>
-      <button onClick={onBack} style={{ marginTop: 20, padding: '10px 24px', borderRadius: 12, background: '#111827', color: '#fff', border: 'none', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Go Back</button>
+      <AlertCircle size={40} color="var(--text-secondary)" style={{ marginBottom: 12 }} />
+      <div style={{ fontSize: 18, fontWeight: 800, color: `var(--accent-secondary)` }}>Client not found</div>
+      <button onClick={onBack} style={{ marginTop: 20, padding: '10px 24px', borderRadius: 12, background: `var(--accent-secondary)`, color: '#fff', border: 'none', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Go Back</button>
     </div>
   );
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 80px)', overflow: 'hidden' }}>
 
-      {/* ── TOP BAR ── */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 0 20px 0', flexShrink: 0, borderBottom: '1px solid #E5E7EB', marginBottom: 20 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          <button onClick={onBack} style={{ width: 40, height: 40, borderRadius: 12, background: '#F9FAFB', border: '1px solid #E5E7EB', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
-            <ArrowLeft size={17} />
+      {/* TOP BAR */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 0 16px 0', flexShrink: 0, borderBottom: '1px solid var(--border-color)', marginBottom: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+          <button onClick={onBack} style={{ width: 38, height: 38, borderRadius: 11, background: `var(--bg-secondary)`, border: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+            <ArrowLeft size={16} />
           </button>
-          <div style={{ width: 44, height: 44, borderRadius: 14, background: ac, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, fontWeight: 900, color: '#111827', flexShrink: 0 }}>
+          <div style={{ width: 44, height: 44, borderRadius: 13, background: ac, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, fontWeight: 900, color: `var(--accent-secondary)`, flexShrink: 0 }}>
             {(client.name || 'C').slice(0, 1).toUpperCase()}
           </div>
           <div>
-            <div style={{ fontSize: 20, fontWeight: 900, color: '#111827', lineHeight: 1.2 }}>{client.name}</div>
-            <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 3 }}>
-              <span style={{ fontSize: 11, color: '#6B7280', fontWeight: 600 }}>{client.phone}</span>
+            <div style={{ fontSize: 20, fontWeight: 900, color: `var(--accent-secondary)`, lineHeight: 1.2 }}>{client.name}</div>
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 2 }}>
+              {client.phone && <span style={{ fontSize: 11, color: `var(--text-secondary)`, fontWeight: 600 }}>{client.phone}</span>}
               <PSBadge s={client.status || 'Active'} />
-              <span style={{ fontSize: 11, color: '#6B7280' }}>{projects.length} project{projects.length !== 1 ? 's' : ''}</span>
+              <span style={{ fontSize: 11, color: `var(--text-secondary)` }}>{projects.length} project{projects.length !== 1 ? 's' : ''}</span>
+              <span style={{ fontSize: 11, color: '#16A34A', fontWeight: 700 }}>{projects.filter(p => p.status !== 'Completed').length} active</span>
             </div>
           </div>
         </div>
-        <button
-          onClick={() => setShowNewModal(true)}
-          style={{ height: 40, padding: '0 20px', borderRadius: 12, background: '#111827', color: '#fff', border: 'none', fontSize: 13, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}
-        >
-          <Plus size={15} /> New Project
-        </button>
+        <div style={{ display: 'flex', gap: 10 }}>
+          {selected && (
+            <button onClick={() => setShowClientPreview(true)} title="See what this client sees right now" style={{ height: 40, padding: '0 16px', borderRadius: 12, background: '#fff', color: `var(--accent-secondary)`, border: '1.5px solid var(--border-color)', fontSize: 13, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}>
+              👁 Preview as Client
+            </button>
+          )}
+          <button onClick={() => setShowNewModal(true)} style={{ height: 40, padding: '0 20px', borderRadius: 12, background: `var(--accent-secondary)`, color: '#fff', border: 'none', fontSize: 13, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Plus size={15} /> New Project
+          </button>
+        </div>
       </div>
 
-      {/* ── 3-PANEL BODY ── */}
-      <div style={{ flex: 1, display: 'grid', gridTemplateColumns: '240px 1fr 340px', gap: 20, overflow: 'hidden' }}>
+      {/* 2-PANEL BODY */}
+      <div style={{ flex: 1, display: 'grid', gridTemplateColumns: '220px 1fr', gap: 20, overflow: 'hidden' }}>
 
-        {/* LEFT — Projects List */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, overflowY: 'auto' }}>
-          {/* Client info card */}
-          <div style={{ padding: 20, background: '#111827', borderRadius: 18, color: '#fff' }}>
-            <div style={{ fontSize: 10, fontWeight: 800, color: ac, textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 12 }}>Client Overview</div>
-            {[
-              { label: 'Joined', value: client.joined ? new Date(client.joined).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : 'N/A' },
-              { label: 'Projects', value: projects.length },
-              { label: 'Active', value: projects.filter(p => p.status !== 'Completed').length },
-              { label: 'Completed', value: projects.filter(p => p.status === 'Completed').length },
-            ].map(row => (
-              <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10, fontSize: 12 }}>
-                <span style={{ opacity: 0.55 }}>{row.label}</span>
-                <span style={{ fontWeight: 800 }}>{row.value}</span>
+        {/* LEFT SIDEBAR */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, overflowY: 'auto' }}>
+          {(() => {
+            const activeProjects = projects.filter(p => p.status !== 'Completed').length;
+            const pendingInvoices = (props.invoices || []).filter(i => ['Sent', 'Overdue'].includes(i.status) && i.type !== 'Quotation').length;
+            const unsignedQuotes = (props.approvals || []).filter(a => ['Quotation', 'quotation'].includes(a.type) && a.status === 'Sent').length;
+
+            return (
+              <div style={{ padding: '16px 18px', background: 'linear-gradient(135deg, rgba(255,255,255,0.9), rgba(250,250,249,0.5))', backdropFilter: 'blur(10px)', border: '1px solid rgba(200,169,110,0.3)', borderRadius: 20, color: 'var(--accent-secondary)', marginBottom: 14, boxShadow: '0 8px 32px rgba(0,0,0,0.04)' }}>
+                <div style={{ display: 'flex', gap: 12 }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 10, fontWeight: 800, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 2 }}>Active</div>
+                    <div style={{ fontSize: 18, fontWeight: 900, color: 'var(--accent-secondary)' }}>{activeProjects}</div>
+                  </div>
+                  <div style={{ width: 1, background: 'var(--border-color)' }} />
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 10, fontWeight: 800, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 2 }}>Unpaid</div>
+                    <div style={{ fontSize: 18, fontWeight: 900, color: pendingInvoices > 0 ? '#DC2626' : 'var(--accent-secondary)' }}>{pendingInvoices}</div>
+                  </div>
+                  <div style={{ width: 1, background: 'var(--border-color)' }} />
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 10, fontWeight: 800, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 2 }}>Unsigned</div>
+                    <div style={{ fontSize: 18, fontWeight: 900, color: unsignedQuotes > 0 ? '#D97706' : 'var(--accent-secondary)' }}>{unsignedQuotes}</div>
+                  </div>
+                </div>
               </div>
-            ))}
-          </div>
+            );
+          })()}
+          <button
+            onClick={() => { setSelectedId('MESSAGES'); setActiveTab('chat'); }}
+            style={{ width: '100%', textAlign: 'left', padding: '13px 14px', borderRadius: 13, border: `2px solid ${selectedId === 'MESSAGES' ? ac : 'transparent'}`, background: selectedId === 'MESSAGES' ? `${ac}10` : `var(--bg-secondary)`, cursor: 'pointer', transition: 'all .2s', marginBottom: 20, display: 'flex', alignItems: 'center', gap: 10 }}
+          >
+            <MessageSquare size={16} color={selectedId === 'MESSAGES' ? ac : 'var(--text-secondary)'} />
+            <div style={{ fontSize: 13, fontWeight: 800, color: selectedId === 'MESSAGES' ? ac : 'var(--text-secondary)' }}>Client Messages</div>
+          </button>
 
-          {/* Project List */}
-          <div style={{ fontSize: 10, fontWeight: 800, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '.08em', paddingLeft: 2 }}>Projects</div>
+          <div style={{ fontSize: 9, fontWeight: 800, color: `var(--text-secondary)`, textTransform: 'uppercase', letterSpacing: '.1em', paddingLeft: 2, paddingBottom: 4 }}>Projects</div>
 
           {loadingProjects ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {[1, 2].map(i => <div key={i} style={{ height: 72, borderRadius: 14, background: '#F9FAFB', animation: 'pulse 1.5s infinite' }} />)}
+              {[1, 2].map(i => <div key={i} style={{ height: 72, borderRadius: 14, background: `var(--bg-secondary)`, animation: 'pulse 1.5s infinite' }} />)}
             </div>
           ) : projects.length === 0 ? (
-            <div style={{ padding: 24, textAlign: 'center', border: '1.5px dashed #E5E7EB', borderRadius: 14 }}>
-              <Briefcase size={28} color="#E5E7EB" style={{ marginBottom: 8 }} />
-              <div style={{ fontSize: 12, color: '#6B7280', fontWeight: 600 }}>No projects yet</div>
-              <button onClick={() => setShowNewModal(true)} style={{ marginTop: 10, fontSize: 11, fontWeight: 700, color: ac, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>+ Create first project</button>
+            <div style={{ padding: 24, textAlign: 'center', border: '1.5px dashed var(--border-color)', borderRadius: 14 }}>
+              <Briefcase size={24} color="var(--border-color)" style={{ marginBottom: 8 }} />
+              <div style={{ fontSize: 12, color: `var(--text-secondary)`, fontWeight: 600 }}>No projects yet</div>
+              <button onClick={() => setShowNewModal(true)} style={{ marginTop: 8, fontSize: 11, fontWeight: 700, color: ac, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>+ Create first project</button>
             </div>
-          ) : (
-            projects.map(p => {
+          ) : (() => {
+            const sortedProjects = [...projects].sort((a, b) => {
+              const aHasUnpaid = (props.invoices || []).some(i => i.projectId === a.id && ['Sent', 'Overdue'].includes(i.status));
+              const bHasUnpaid = (props.invoices || []).some(i => i.projectId === b.id && ['Sent', 'Overdue'].includes(i.status));
+              if (aHasUnpaid && !bHasUnpaid) return -1;
+              if (!aHasUnpaid && bHasUnpaid) return 1;
+              return 0;
+            });
+
+            return sortedProjects.map(p => {
               const stg = CLIENT_PROJECT_STAGES.find(s => s.id === p.stageId);
               const isActive = p.id === selectedId;
+              const hasAction = (props.invoices || []).some(i => i.projectId === p.id && ['Sent', 'Overdue'].includes(i.status));
+
               return (
-                <button
-                  key={p.id}
-                  onClick={() => setSelectedId(p.id)}
-                  style={{
-                    width: '100%', textAlign: 'left', padding: '14px 16px', borderRadius: 14,
-                    border: `2px solid ${isActive ? ac : 'transparent'}`,
-                    background: isActive ? `${ac}10` : '#F9FAFB',
-                    cursor: 'pointer', transition: 'all .2s',
-                  }}
-                >
-                  <div style={{ fontSize: 13, fontWeight: 800, color: '#111827', marginBottom: 4, lineHeight: 1.3 }}>{p.title}</div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <span style={{ fontSize: 10, fontWeight: 700, color: stg?.color || '#6B7280', background: `${stg?.color || '#6B7280'}15`, padding: '2px 8px', borderRadius: 20 }}>{stg?.short || 'Stage 1'}</span>
-                    <span style={{ fontSize: 10, color: '#6B7280' }}>{PROJECT_TYPES[p.projectType]?.label || 'Full Service'}</span>
+                <button key={p.id} onClick={() => { setSelectedId(p.id); setActiveTab('overview'); }}
+                  style={{ width: '100%', textAlign: 'left', padding: '14px 16px', borderRadius: 14, border: `1.5px solid ${isActive ? ac : hasAction ? '#FCA5A5' : 'transparent'}`, background: isActive ? `${ac}10` : hasAction ? '#FEF2F2' : `var(--bg-secondary)`, cursor: 'pointer', transition: 'all .2s', position: 'relative', overflow: 'hidden' }}>
+                  
+                  {hasAction && <div style={{ position: 'absolute', top: 14, right: 14, width: 8, height: 8, borderRadius: '50%', background: '#EF4444', boxShadow: '0 0 8px rgba(239,68,68,0.6)' }} />}
+                  
+                  <div style={{ fontSize: 13, fontWeight: 800, color: hasAction ? '#991B1B' : `var(--accent-secondary)`, marginBottom: 4, paddingRight: 16 }}>{p.project || p.title}</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                    <span style={{ fontSize: 9, fontWeight: 800, color: stg?.color || `var(--text-secondary)`, background: `${stg?.color || `var(--text-secondary)`}18`, padding: '3px 8px', borderRadius: 20 }}>{stg?.short || 'Stage 1'}</span>
+                    <span style={{ fontSize: 9, color: hasAction ? '#B91C1C' : `var(--text-secondary)` }}>{p.status === 'Completed' ? '✓ Done' : hasAction ? 'Action Required' : 'Active'}</span>
                   </div>
-                  <div style={{ marginTop: 8, height: 3, background: '#E5E7EB', borderRadius: 2, overflow: 'hidden' }}>
-                    <div style={{ height: '100%', width: `${stg?.pct || 5}%`, background: stg?.color || ac, borderRadius: 2 }} />
+                  <div style={{ height: 4, background: hasAction ? '#FECACA' : `var(--border-color)`, borderRadius: 2, overflow: 'hidden' }}>
+                    <div style={{ height: '100%', width: `${stg?.pct || 5}%`, background: hasAction ? '#EF4444' : (stg?.color || ac), borderRadius: 2 }} />
                   </div>
                 </button>
               );
-            })
-          )}
+            });
+          })()}
         </div>
 
-        {/* CENTER — Project Details + Stage Timeline */}
-        <div style={{ overflowY: 'auto', paddingRight: 4 }}>
-          {!selected ? (
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', textAlign: 'center', padding: 40 }}>
-              <Briefcase size={48} color="#E5E7EB" style={{ marginBottom: 16 }} />
-              <div style={{ fontSize: 18, fontWeight: 800, color: '#111827', marginBottom: 8 }}>Select a project</div>
-              <div style={{ fontSize: 13, color: '#6B7280' }}>Choose a project from the left or create a new one.</div>
+        {/* RIGHT — Tabbed Main */}
+        <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          {selectedId === 'MESSAGES' ? (
+            <div style={{ height: 'calc(100vh - 160px)', display: 'flex', flexDirection: 'column', background: '#fff', borderRadius: 16, border: '1px solid var(--border-color)', padding: '16px 20px', minHeight: 400 }}>
+              <div style={{ fontSize: 16, fontWeight: 900, color: `var(--accent-secondary)`, marginBottom: 12, flexShrink: 0 }}>Unified Client Chat</div>
+              <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+                <WorldClassChat
+                  clientId={client.id}
+                  user={props.user}
+                  accentColor={ac}
+                  addClientMessage={props.addClientMessage}
+                  isAdmin={true}
+                  height="100%"
+                  projects={projects.map(p => ({ id: p.id, title: p.title }))}
+                  viewerLanguage={props.lang || 'en'}
+                />
+              </div>
+            </div>
+          ) : !selected ? (
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: 40 }}>
+              <Briefcase size={48} color="var(--border-color)" style={{ marginBottom: 16 }} />
+              <div style={{ fontSize: 18, fontWeight: 800, color: `var(--accent-secondary)`, marginBottom: 8 }}>Select a project</div>
+              <div style={{ fontSize: 13, color: `var(--text-secondary)` }}>Choose a project from the sidebar or create a new one.</div>
             </div>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-
-              {/* Project Header */}
-              <div style={{ padding: '20px 24px', background: '#F9FAFB', borderRadius: 18, border: '1px solid #E5E7EB' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                  <div>
-                    <div style={{ fontSize: 11, fontWeight: 800, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 4 }}>
-                      {PROJECT_TYPES[selected.projectType]?.label || 'Full Service'}
+            <>
+              {/* Project Title Bar */}
+              <div key={`title-${selected.id}`} style={{ padding: '14px 20px', background: `var(--bg-secondary)`, borderRadius: 16, border: '1px solid var(--border-color)', marginBottom: 14, flexShrink: 0 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 11, fontWeight: 800, color: `var(--text-secondary)`, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 3 }}>
+                      {PROJECT_TYPES[selected.projectType]?.label || 'Full Service'} &middot; ID {selected.id.slice(0, 8).toUpperCase()}
                     </div>
-                    <div style={{ fontSize: 22, fontWeight: 900, color: '#111827' }}>{selected.title}</div>
-                    {selected.description && <div style={{ fontSize: 13, color: '#4B5563', marginTop: 6, lineHeight: 1.5 }}>{selected.description}</div>}
+                    <div style={{ fontSize: 20, fontWeight: 900, color: `var(--accent-secondary)`, lineHeight: 1.2 }}>{selected.project || selected.title}</div>
                   </div>
-                  <div style={{ fontSize: 10, fontWeight: 800, color: currentStageObj?.color || ac, background: `${currentStageObj?.color || ac}15`, padding: '6px 14px', borderRadius: 20, flexShrink: 0 }}>
-                    {currentStageObj?.pct || 5}% Complete
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <label style={{ fontSize: 10, fontWeight: 700, color: `var(--text-secondary)`, whiteSpace: 'nowrap' }}>Est. Completion</label>
+                      <input type="date" value={estDate} onChange={e => setEstDate(e.target.value)} onBlur={saveEstDate}
+                        style={{ padding: '5px 10px', borderRadius: 9, border: '1.5px solid var(--border-color)', fontSize: 12, fontFamily: 'inherit', outline: 'none', color: `var(--accent-secondary)`, background: '#fff', cursor: 'pointer' }} />
+                      {settingDate && <Loader2 size={12} color="var(--text-secondary)" style={{ animation: 'spin 1s linear infinite' }} />}
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <div style={{ fontSize: 10, fontWeight: 800, color: currentStageObj?.color || ac, background: `${currentStageObj?.color || ac}15`, padding: '5px 12px', borderRadius: 20 }}>
+                        {currentStageObj?.pct || 5}% complete
+                      </div>
+                      {nextStage && (
+                        <button onClick={() => setShowAdvanceModal(true)}
+                          style={{ height: 34, padding: '0 14px', borderRadius: 10, background: currentStageObj?.color || ac, color: '#fff', border: 'none', fontSize: 12, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}>
+                          Advance <ChevronRight size={13} />
+                        </button>
+                      )}
+                      {!nextStage && <div style={{ fontSize: 11, fontWeight: 800, color: '#16A34A', background: '#F0FDF4', padding: '5px 12px', borderRadius: 20 }}>✓ All Done</div>}
+                    </div>
                   </div>
                 </div>
-
-                <div style={{ display: 'flex', gap: 24, marginTop: 16, paddingTop: 16, borderTop: '1px solid #E5E7EB' }}>
+                <div style={{ display: 'flex', gap: 20, marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--border-color)', flexWrap: 'wrap', alignItems: 'center' }}>
                   {selected.budget && (
                     <div>
-                      <div style={{ fontSize: 10, color: '#6B7280', fontWeight: 700 }}>Budget</div>
-                      <div style={{ fontSize: 14, fontWeight: 800, color: '#111827' }}>GHS {Number(String(selected.projectTotal || selected.budget).replace(/[^0-9.]/g, '') || 0).toLocaleString()}</div>
+                      <div style={{ fontSize: 9, color: `var(--text-secondary)`, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.06em' }}>Budget</div>
+                      <div style={{ fontSize: 14, fontWeight: 900, color: `var(--accent-secondary)` }}>{fmt(selected.budget)}</div>
                     </div>
                   )}
                   <div>
-                    <div style={{ fontSize: 10, color: '#6B7280', fontWeight: 700 }}>Created</div>
-                    <div style={{ fontSize: 14, fontWeight: 800, color: '#111827' }}>
-                      {selected.createdAt?.seconds ? new Date(selected.createdAt.seconds * 1000).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : 'Recently'}
+                    <div style={{ fontSize: 9, color: `var(--text-secondary)`, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.06em' }}>Current Stage</div>
+                    <div style={{ fontSize: 13, fontWeight: 800, color: currentStageObj?.color || ac }}>{currentStageObj?.name || '—'}</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 9, color: `var(--text-secondary)`, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.06em' }}>Created</div>
+                    <div style={{ fontSize: 13, fontWeight: 800, color: `var(--accent-secondary)` }}>
+                      {selected.createdAt?.seconds ? new Date(selected.createdAt.seconds * 1000).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Recently'}
                     </div>
                   </div>
                   <div>
-                    <div style={{ fontSize: 10, color: '#6B7280', fontWeight: 700 }}>ID</div>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: '#6B7280', fontFamily: 'monospace' }}>{selected.id.slice(0, 8).toUpperCase()}</div>
+                    <div style={{ fontSize: 9, color: `var(--text-secondary)`, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.06em' }}>Total Duration</div>
+                    <div style={{ fontSize: 13, fontWeight: 800, color: `var(--accent-secondary)` }}>{totalCalendarDays} days</div>
                   </div>
                 </div>
-
-                {/* Overall progress bar */}
-                <div style={{ marginTop: 16 }}>
-                  <div style={{ height: 6, background: '#E5E7EB', borderRadius: 3, overflow: 'hidden' }}>
-                    <div style={{ height: '100%', width: `${currentStageObj?.pct || 5}%`, background: currentStageObj?.color || ac, borderRadius: 3, transition: 'width 1s ease' }} />
-                  </div>
+                <div style={{ marginTop: 10, height: 5, background: `var(--border-color)`, borderRadius: 3, overflow: 'hidden' }}>
+                  <div style={{ height: '100%', width: `${currentStageObj?.pct || 5}%`, background: currentStageObj?.color || ac, borderRadius: 3, transition: 'width 1s ease' }} />
                 </div>
               </div>
 
-              {/* Current Stage Action Card */}
-              {currentStageObj && selected.status !== 'Completed' && (
-                <div style={{ padding: '20px 24px', background: '#fff', borderRadius: 18, border: `2px solid ${currentStageObj.color}30` }}>
-                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16 }}>
-                    <div style={{ display: 'flex', gap: 14, flex: 1 }}>
-                      <div style={{ width: 44, height: 44, borderRadius: 14, background: `${currentStageObj.color}15`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: currentStageObj.color }}>
-                        {STAGE_ICONS[currentStageObj.id]}
-                      </div>
-                      <div>
-                        <div style={{ fontSize: 10, fontWeight: 800, color: currentStageObj.color, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 4 }}>
-                          Current Stage — {currentStageObj.id} of {applicableStages.length}
+              {(() => {
+                const projectInvoices = (props.invoices || []).filter(i => i.projectId === selected.id || i.parentId === selected.id);
+                const projectApprovals = (props.approvals || []).filter(a => a.projectId === selected.id);
+                const pendingQuote = projectApprovals.find(a => ['Quotation', 'quotation'].includes(a.type) && a.status === 'Sent');
+                const pendingSpec = selected.specDoc?.url && selected.specDoc?.status !== 'signed';
+                const unpaidInvoice = projectInvoices.find(i => ['Sent', 'Overdue'].includes(i.status) && !['Quotation', 'quotation'].includes(i.type));
+                const verificationPending = projectInvoices.find(i =>
+                  i.awaitingConfirmation === true ||
+                  i.status?.toLowerCase() === 'verification pending'
+                );
+
+                const blocker = pendingQuote ? { msg: 'Client needs to sign Quotation / Contract', type: 'client' }
+                  : pendingSpec ? { msg: 'Client needs to sign Project Specification before Production', type: 'client' }
+                  : verificationPending ? { msg: `Client has notified offline payment for (${verificationPending.title}). Pending your verification.`, type: 'admin' }
+                  : unpaidInvoice ? { msg: `Client has unpaid invoice (${unpaidInvoice.title || 'Invoice'})`, type: 'client' }
+                  : selected.stageId === 1 && !selected.specDoc?.url ? { msg: 'Admin needs to generate Specification / Quote', type: 'admin' }
+                  : null;
+
+                return (
+                  <div style={{ marginBottom: 16 }}>
+                    {blocker && (
+                      <div style={{ padding: '12px 16px', borderRadius: 12, background: blocker.type === 'admin' ? '#FEF2F2' : '#FFFBEB', border: `1.5px solid ${blocker.type === 'admin' ? '#FECACA' : '#FDE68A'}`, display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
+                        <div style={{ fontSize: 16 }}>{blocker.type === 'admin' ? '⚠️' : '⏳'}</div>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: 11, fontWeight: 800, color: blocker.type === 'admin' ? '#991B1B' : '#B45309', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 2 }}>Current Blocker</div>
+                          <div style={{ fontSize: 13, color: blocker.type === 'admin' ? '#7F1D1D' : '#92400E', fontWeight: 600 }}>{blocker.msg}</div>
                         </div>
-                        <div style={{ fontSize: 17, fontWeight: 900, color: '#111827', marginBottom: 6 }}>{currentStageObj.name}</div>
-                        <div style={{ fontSize: 13, color: '#4B5563', lineHeight: 1.5, marginBottom: 8 }}>{currentStageObj.adminPrompt}</div>
-                        {currentStageObj.whoActs === 'client' && (
-                          <div style={{ fontSize: 11, fontWeight: 700, color: '#0F766E', background: '#ECFDF5', padding: '4px 12px', borderRadius: 20, display: 'inline-block' }}>
-                            ⏳ Waiting on client
-                          </div>
-                        )}
-                        {currentStageObj.whoActs === 'worker' && (
-                          <div style={{ fontSize: 11, fontWeight: 700, color: '#059669', background: '#F0FDF4', padding: '4px 12px', borderRadius: 20, display: 'inline-block' }}>
-                            🔧 Field team task
-                          </div>
+                        {blocker.type === 'client' && (
+                          <button onClick={() => setShowRequestPaymentModal(true)} style={{ flexShrink: 0, padding: '6px 12px', borderRadius: 8, background: '#D97706', color: '#fff', border: 'none', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
+                            Send Reminder
+                          </button>
                         )}
                       </div>
-                    </div>
-                    {nextStage && (
-                      <button
-                        onClick={() => setShowAdvanceModal(true)}
-                        style={{ height: 40, padding: '0 18px', borderRadius: 12, background: currentStageObj.color, color: '#fff', border: 'none', fontSize: 12, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0, whiteSpace: 'nowrap' }}
-                      >
-                        Advance <ChevronRight size={14} />
-                      </button>
                     )}
-                    {!nextStage && (
-                      <div style={{ fontSize: 11, fontWeight: 800, color: '#16A34A', background: '#F0FDF4', padding: '6px 14px', borderRadius: 12 }}>✓ All Stages Done</div>
-                    )}
+                    
                   </div>
-                </div>
-              )}
+                );
+              })()}
 
-              {/* Completed badge */}
-              {selected.status === 'Completed' && (
-                <div style={{ padding: '20px 24px', background: 'linear-gradient(135deg, #F0FDF4, #DCFCE7)', borderRadius: 18, border: '2px solid #16A34A30', display: 'flex', alignItems: 'center', gap: 16 }}>
-                  <div style={{ width: 44, height: 44, borderRadius: 14, background: '#16A34A', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                    <Star size={20} color="#fff" />
-                  </div>
-                  <div>
-                    <div style={{ fontSize: 16, fontWeight: 900, color: '#16A34A' }}>Project Complete</div>
-                    <div style={{ fontSize: 13, color: '#4B5563' }}>All stages finished. Handover documents should be issued.</div>
-                  </div>
-                </div>
-              )}
+              {/* Tab Bar */}
+              <div style={{ position: 'sticky', top: -16, zIndex: 10, display: 'flex', gap: 4, marginBottom: 14, flexShrink: 0, background: 'rgba(250, 250, 249, 0.85)', backdropFilter: 'blur(12px)', padding: 6, borderRadius: 14, border: '1px solid var(--border-color)', margin: '0 -4px 14px -4px' }}>
+                {TABS.map(tab => (
+                  <button key={tab.id} onClick={() => setActiveTab(tab.id)}
+                    style={{ flex: 1, height: 34, borderRadius: 10, background: activeTab === tab.id ? '#fff' : 'transparent', color: activeTab === tab.id ? `var(--accent-secondary)` : `var(--text-secondary)`, border: activeTab === tab.id ? '1px solid var(--border-color)' : '1px solid transparent', fontSize: 11, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, transition: 'all .18s', boxShadow: activeTab === tab.id ? '0 1px 4px rgba(0,0,0,.07)' : 'none' }}>
+                    {tab.icon}{tab.label}
+                  </button>
+                ))}
+              </div>
 
-              <ProjectOperatingSystemCard project={selected} props={props} />
+              {/* Tab Content */}
+              <div key={selected.id} style={{ flex: 1, overflowY: 'auto', paddingRight: 2 }}>
 
-              {/* ── Shipping Details Card ── */}
-              {selected.stageId === 7 && (
-                <ShippingDetailsCard
-                  project={selected}
-                  updateShippingDetails={props.updateShippingDetails}
-                />
-              )}
+                {/* DESIGN VAULT (RENDERINGS) */}
+                {activeTab === 'renderings' && (
+                  <AdminRenderingManager project={selected} brand={brand} renderingPackages={props.renderingPackages} invoices={props.invoices} notify={props.notify} createInvoice={props.createInvoice} />
+                )}
 
-              {/* Payment Schedule */}
-              <PaymentScheduleCard project={selected} createInvoice={props.createInvoice} notify={props.notify} />
+                {/* SPEC & BRIEF */}
+                {activeTab === 'spec' && (
+                  <SpecBriefManager project={selected} updateProject={props.updateProject} addProjectDocument={props.addProjectDocument} notify={props.notify} brand={brand} />
+                )}
 
-              {/* Project Economics */}
-              <ProjectEconomics project={selected} user={props.user} />
+                {/* OVERVIEW */}
+                {activeTab === 'overview' && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
 
-              {/* Stage Timeline */}
-              <div style={{ padding: '20px 24px', background: '#fff', borderRadius: 18, border: '1px solid #E5E7EB' }}>
-                <div style={{ fontSize: 13, fontWeight: 800, color: '#111827', marginBottom: 20 }}>Project Timeline</div>
-                <div style={{ position: 'relative' }}>
-                  <div style={{ position: 'absolute', left: 16, top: 0, bottom: 0, width: 2, background: '#E5E7EB', zIndex: 0 }} />
-                  {applicableStages.map((s, idx) => {
-                    const isCurrent = s.id === selected.stageId;
-                    const isPast = (selected.stageId || 1) > s.id;
-                    const stageHistEntry = (selected.stageHistory || []).find(h => h.stageId === s.id);
-                    return (
-                      <div key={s.id} style={{ position: 'relative', display: 'flex', gap: 16, marginBottom: idx < applicableStages.length - 1 ? 20 : 0, paddingLeft: 44, zIndex: 1 }}>
-                        {/* Circle */}
+                    {/* ── CLIENT VIEW MIRROR — what the client sees right now ── */}
+                    {(() => {
+                      const projectInvoices = (props.invoices || []).filter(i => i.projectId === selected.id || i.parentId === selected.id);
+                      const projectPackages = (props.renderingPackages || []).filter(pkg => pkg.projectId === selected.id);
+                      const projectAddOns = (props.addOns || []).filter(a => a.projectId === selected.id);
+                      const isPaid = (s) => ['paid', 'paid in full'].includes(String(s || '').toLowerCase());
+
+                      // Mirror Client Next Action logic exactly
+                      const renderingInv = projectInvoices.find(i =>
+                        i.id === selected.renderingFeeInvoiceId ||
+                        ['rendering', 'design', 'rendering fee'].includes((i.type || '').toLowerCase())
+                      );
+                      const renderingPaid = !!selected.renderingFeePaid || (renderingInv && isPaid(renderingInv.status));
+                      const needsRenderingPayment = selected.kickoffMode === 'rendering-first' && !renderingPaid;
+                      const needsContractSign = !selected.contractAccepted && (selected.kickoffMode === 'rendering-first' ? renderingPaid : true);
+                      const lockedRendering = projectPackages.find(pkg => {
+                        const linkedInv = projectInvoices.find(i => i.id === pkg.linkedInvoiceId);
+                        return linkedInv && !isPaid(linkedInv.status) && !pkg.unlocked;
+                      });
+                      const reviewRendering = projectPackages.find(pkg => {
+                        const linkedInv = projectInvoices.find(i => i.id === pkg.linkedInvoiceId);
+                        return (pkg.unlocked || isPaid(linkedInv?.status)) && pkg.status !== 'Approved';
+                      });
+                      const pendingQuote = projectInvoices.find(i =>
+                        ['Quotation', 'quote', 'quotation'].includes(i.type || i.documentKind) &&
+                        !['approved'].includes(String(i.status || '').toLowerCase()) && !isPaid(i.status)
+                      );
+                      const pendingAddOn = projectAddOns.find(a => ['Pending', 'Pending Approval', 'Priced'].includes(a.status || a.approvalStatus));
+                      const unpaidInvoice = projectInvoices.find(i =>
+                        !isPaid(i.status) && i.type !== 'Quotation' && i.documentKind !== 'quotation' &&
+                        (i.status === 'Overdue' || i.status === 'Sent' || (i.due != null && i.due !== ''))
+                      );
+                      const specPending = selected.specDoc?.url && selected.specDoc?.status !== 'signed';
+
+                      // Determine what client is currently being shown
+                      let clientSeeing, clientAction, clientWaitingOn, urgency;
+                      if (needsRenderingPayment) {
+                        clientSeeing = '🚦 Kickoff Gate — Step 1: Pay Rendering Fee';
+                        clientAction = renderingInv ? `Pay GH₵ ${Number(renderingInv.amount || 0).toLocaleString()} rendering invoice` : 'Waiting for rendering invoice to be created';
+                        clientWaitingOn = renderingInv ? 'Client' : 'Admin (create invoice)';
+                        urgency = renderingInv ? '#D97706' : '#DC2626';
+                      } else if (needsContractSign) {
+                        clientSeeing = '🚦 Kickoff Gate — Step 2: Sign Contract';
+                        clientAction = 'Read & sign project agreement';
+                        clientWaitingOn = 'Client';
+                        urgency = '#D97706';
+                      } else if (specPending) {
+                        clientSeeing = '📄 Project Specification Signature Required';
+                        clientAction = 'Review and sign the final project specification';
+                        clientWaitingOn = 'Client';
+                        urgency = '#1D4ED8';
+                      } else if (lockedRendering) {
+                        clientSeeing = '🔒 Locked Rendering Package';
+                        clientAction = 'Pay invoice to unlock design package';
+                        clientWaitingOn = 'Client';
+                        urgency = '#D97706';
+                      } else if (reviewRendering) {
+                        clientSeeing = '🎨 Review Rendering Package';
+                        clientAction = 'Review, leave pins, approve or request changes';
+                        clientWaitingOn = 'Client';
+                        urgency = AC;
+                      } else if (pendingQuote) {
+                        clientSeeing = '💰 Quote Awaiting Approval';
+                        clientAction = `Review quote: ${pendingQuote.title || pendingQuote.id}`;
+                        clientWaitingOn = 'Client';
+                        urgency = AC;
+                      } else if (pendingAddOn) {
+                        clientSeeing = '🎁 Add-on Decision Needed';
+                        clientAction = `Approve/reject: ${pendingAddOn.title || pendingAddOn.description}`;
+                        clientWaitingOn = 'Client';
+                        urgency = '#B45309';
+                      } else if (unpaidInvoice) {
+                        clientSeeing = '💳 Payment Pending';
+                        clientAction = `Pay invoice: ${unpaidInvoice.title || ''} (GH₵ ${Number(unpaidInvoice.amount || 0).toLocaleString()})`;
+                        clientWaitingOn = 'Client';
+                        urgency = '#16A34A';
+                      } else {
+                        clientSeeing = `✅ Stage ${selected.stageId}: ${currentStageObj?.name || 'In Progress'}`;
+                        clientAction = currentStageObj?.clientMsg || 'Project moving forward — no action required';
+                        clientWaitingOn = currentStageObj?.whoActs === 'client' ? 'Client' : currentStageObj?.whoActs === 'worker' ? 'Field Team' : 'Admin/Production';
+                        urgency = '#16A34A';
+                      }
+
+                      return (
                         <div style={{
-                          position: 'absolute', left: 0, top: 0, width: 34, height: 34, borderRadius: '50%',
-                          background: isPast ? s.color : isCurrent ? '#fff' : '#F9FAFB',
-                          border: isPast ? `2px solid ${s.color}` : isCurrent ? `2.5px solid ${s.color}` : '2px solid #E5E7EB',
-                          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2,
-                          boxShadow: isCurrent ? `0 0 0 4px ${s.color}20` : 'none',
-                          color: isPast ? '#fff' : s.color,
-                          transition: 'all .3s',
+                          padding: '18px 22px',
+                          background: `linear-gradient(135deg, ${urgency}08 0%, #fff 100%)`,
+                          border: `1.5px solid ${urgency}30`,
+                          borderRadius: 16,
+                          position: 'relative',
+                          overflow: 'hidden',
                         }}>
-                          {isPast ? <CheckCircle2 size={14} /> : STAGE_ICONS[s.id]}
-                        </div>
-
-                        {/* Content */}
-                        <div style={{ flex: 1, paddingTop: 6, paddingBottom: idx < applicableStages.length - 1 ? 0 : 0 }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                            <span style={{ fontSize: 14, fontWeight: isCurrent ? 900 : isPast ? 700 : 500, color: isPast ? '#4B5563' : isCurrent ? '#111827' : '#6B7280' }}>{s.name}</span>
-                            {isCurrent && <span style={{ fontSize: 9, fontWeight: 800, color: s.color, background: `${s.color}15`, padding: '2px 8px', borderRadius: 20, textTransform: 'uppercase', letterSpacing: '.06em' }}>Now</span>}
-                            {(isPast || isCurrent) && stageHistEntry?.timestamp && (() => {
-                              const d = stageHistEntry.timestamp?.toDate ? stageHistEntry.timestamp.toDate() : new Date(stageHistEntry.timestamp);
-                              const label = d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
-                              const daysIn = isCurrent ? Math.max(0, Math.floor((Date.now() - d.getTime()) / 86400000)) : null;
-                              return (
-                                <span style={{ fontSize: 10, color: '#6B7280', display: 'flex', alignItems: 'center', gap: 4 }}>
-                                  {label}
-                                  {daysIn !== null && <span style={{ fontWeight: 700, color: '#4B5563' }}>· {daysIn}d in stage</span>}
-                                </span>
-                              );
-                            })()}
+                          <div style={{ position: 'absolute', top: 0, right: 0, padding: '4px 12px', background: urgency, color: '#fff', fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.08em', borderBottomLeftRadius: 10 }}>
+                            Client's View
                           </div>
-                          {isCurrent && <div style={{ fontSize: 12, color: '#4B5563', marginTop: 3 }}>{s.adminPrompt}</div>}
-                          {isPast && stageHistEntry?.note && stageHistEntry.note !== 'Stage advanced' && stageHistEntry.note !== 'Project created' && (
-                            <div style={{ fontSize: 11, color: '#6B7280', marginTop: 2, fontStyle: 'italic' }}>{stageHistEntry.note}</div>
-                          )}
-
-                          {/* ── Quote Approval Badge (Stage 2) ── */}
-                          {s.id === 2 && (isPast || isCurrent) && (
-                            <div style={{ marginTop: 8 }}>
-                              {selected.quoteApproved === true ? (
-                                <span style={{
-                                  display: 'inline-flex', alignItems: 'center', gap: 5,
-                                  fontSize: 10, fontWeight: 800, color: '#16A34A',
-                                  background: '#F0FDF4', border: '1px solid #BBF7D0',
-                                  padding: '3px 10px', borderRadius: 20,
-                                }}>
-                                  Client Approved ✓ Quote
-                                  {selected.quoteApprovedAt && (() => {
-                                    const d = selected.quoteApprovedAt?.toDate
-                                      ? selected.quoteApprovedAt.toDate()
-                                      : new Date(selected.quoteApprovedAt);
-                                    return (
-                                      <span style={{ fontWeight: 600, opacity: 0.75 }}>
-                                        · {d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
-                                      </span>
-                                    );
-                                  })()}
-                                </span>
-                              ) : isCurrent ? (
-                                <span style={{
-                                  display: 'inline-flex', alignItems: 'center', gap: 5,
-                                  fontSize: 10, fontWeight: 800, color: '#92400E',
-                                  background: '#FFFBEB', border: '1px solid #FDE68A',
-                                  padding: '3px 10px', borderRadius: 20,
-                                }}>
-                                  ⏳ Awaiting client approval
-                                </span>
-                              ) : null}
+                          <div style={{ fontSize: 10, fontWeight: 800, color: urgency, textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 8, marginTop: 14 }}>
+                            What your client sees right now
+                          </div>
+                          <div style={{ fontSize: 16, fontWeight: 900, color: 'var(--accent-secondary)', marginBottom: 4 }}>
+                            {clientSeeing}
+                          </div>
+                          <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.5, marginBottom: 12 }}>
+                            {clientAction}
+                          </div>
+                          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+                            <div style={{
+                              padding: '5px 12px',
+                              background: clientWaitingOn === 'Client' ? '#FEF3C7' : clientWaitingOn.includes('Admin') ? '#FEE2E2' : '#E0F2FE',
+                              color: clientWaitingOn === 'Client' ? '#92400E' : clientWaitingOn.includes('Admin') ? '#991B1B' : '#075985',
+                              fontSize: 11,
+                              fontWeight: 800,
+                              borderRadius: 20,
+                            }}>
+                              ⏳ Waiting on: {clientWaitingOn}
                             </div>
-                          )}
+                            {selected.kickoffGateCleared && (
+                              <div style={{ padding: '5px 12px', background: '#F0FDF4', color: '#15803D', fontSize: 11, fontWeight: 800, borderRadius: 20 }}>
+                                ✓ Kickoff Complete
+                              </div>
+                            )}
+                            {selected.contractAccepted && (
+                              <div style={{ padding: '5px 12px', background: '#F0FDF4', color: '#15803D', fontSize: 11, fontWeight: 800, borderRadius: 20 }}>
+                                ✓ Contract Signed
+                              </div>
+                            )}
+                            {renderingPaid && (
+                              <div style={{ padding: '5px 12px', background: '#F0FDF4', color: '#15803D', fontSize: 11, fontWeight: 800, borderRadius: 20 }}>
+                                ✓ Rendering Fee Paid
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })()}
+
+                    {currentStageObj && selected.status !== 'Completed' && (
+                      <div style={{ padding: '18px 22px', background: '#fff', borderRadius: 16, border: `2px solid ${currentStageObj.color}30` }}>
+                        <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>
+                          <div style={{ width: 48, height: 48, borderRadius: 14, background: `${currentStageObj.color}15`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: currentStageObj.color, fontSize: 22 }}>
+                            {STAGE_ICONS[currentStageObj.id]}
+                          </div>
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontSize: 10, fontWeight: 800, color: currentStageObj.color, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 4 }}>
+                              Active Stage {currentStageObj.id} of {applicableStages.length} &middot; ~{computedTimeline[currentStageObj.id]?.durationDays || currentStageObj.days} days for this stage
+                            </div>
+                            <div style={{ fontSize: 17, fontWeight: 900, color: `var(--accent-secondary)`, marginBottom: 6 }}>{currentStageObj.name}</div>
+                            <div style={{ fontSize: 13, color: `var(--text-secondary)`, lineHeight: 1.5 }}>{currentStageObj.adminPrompt}</div>
+                            <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
+                              {currentStageObj.whoActs === 'client' && <span style={{ fontSize: 11, fontWeight: 700, color: '#92400E', background: '#FFFBEB', padding: '4px 12px', borderRadius: 20, border: '1px solid #FDE68A' }}>⏳ Waiting on client</span>}
+                              {currentStageObj.whoActs === 'worker' && <span style={{ fontSize: 11, fontWeight: 700, color: '#059669', background: '#F0FDF4', padding: '4px 12px', borderRadius: 20, border: '1px solid #A7F3D0' }}>🔧 Field team task</span>}
+                              {currentStageObj.whoActs === 'admin' && <span style={{ fontSize: 11, fontWeight: 700, color: `var(--accent-secondary)`, background: `var(--bg-secondary)`, padding: '4px 12px', borderRadius: 20, border: '1px solid var(--border-color)' }}>👤 Admin action needed</span>}
+                            </div>
+                          </div>
                         </div>
                       </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Assigned Workers */}
-              <div style={{ padding: '20px 24px', background: '#fff', borderRadius: 18, border: '1px solid #E5E7EB' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-                  <div style={{ fontSize: 13, fontWeight: 800, color: '#111827' }}>Assigned Team</div>
-                </div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                  {teamMembers.map(m => {
-                    const assigned = (selected.assignedWorkers || []).includes(m.id?.toString() || m.email);
-                    return (
-                      <button
-                        key={m.id}
-                        onClick={() => props.assignWorkerToProject && props.assignWorkerToProject(selected.id, m.id?.toString() || m.email)}
-                        style={{
-                          display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px',
-                          borderRadius: 12, border: `1.5px solid ${assigned ? '#111827' : '#E5E7EB'}`,
-                          background: assigned ? '#111827' : '#F9FAFB',
-                          color: assigned ? '#fff' : '#4B5563',
-                          cursor: 'pointer', fontSize: 12, fontWeight: 700, transition: 'all .2s',
-                        }}
-                      >
-                        <div style={{ width: 22, height: 22, borderRadius: '50%', background: assigned ? '#fff' : '#E5E7EB', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 800, color: assigned ? '#111827' : '#6B7280', flexShrink: 0 }}>
-                          {(m.name || m.email || '?').slice(0, 1).toUpperCase()}
+                    )}
+                    {selected.stageId === 4 && <ShippingDetailsCard project={selected} updateShippingDetails={props.updateShippingDetails} />}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+                      {[
+                        { label: 'Project Type', value: PROJECT_TYPES[selected.projectType]?.label || 'Full Service', icon: '📋' },
+                        { label: 'Quote Status', value: selected.quoteApproved ? '✅ Approved' : '⏳ Pending', icon: '💳' },
+                        { label: 'Team', value: `${new Set([...(selected.assignedWorkers || []), ...(selected.assignedStaff || []), ...(selected.projectManagerId ? [selected.projectManagerId] : [])]).size} assigned`, icon: '👥' },
+                        { label: 'Spec Document', value: !selected.specDoc?.url ? 'Not uploaded' : selected.specDoc.status === 'signed' ? '✅ Signed' : selected.specDoc.status === 'rejected' ? '🔴 Changes Req.' : '⏳ Signature Required', icon: '📄' },
+                        { label: 'Contract', value: selected.contractAccepted ? '✅ Signed' : '⏳ Not signed', icon: '📝' },
+                        { label: 'Change Req.', value: selected.changeRequestPending ? '⚠️ Pending' : 'None', icon: '🔄' },
+                      ].map(item => (
+                        <div key={item.label} style={{ padding: '14px 16px', background: '#fff', borderRadius: 14, border: '1px solid var(--border-color)' }}>
+                          <div style={{ fontSize: 20, marginBottom: 6 }}>{item.icon}</div>
+                          <div style={{ fontSize: 9, fontWeight: 700, color: `var(--text-secondary)`, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 4 }}>{item.label}</div>
+                          <div style={{ fontSize: 13, fontWeight: 800, color: `var(--accent-secondary)` }}>{item.value}</div>
                         </div>
-                        {(m.name || m.email || 'Staff').split(' ')[0]}
-                        {assigned && <UserCheck size={12} />}
+                      ))}
+                    </div>
+                    {selected.description && (
+                      <div style={{ padding: '16px 20px', background: '#fff', borderRadius: 14, border: '1px solid var(--border-color)' }}>
+                        <div style={{ fontSize: 9, fontWeight: 800, color: `var(--text-secondary)`, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 8 }}>Description</div>
+                        <div style={{ fontSize: 13, color: `var(--text-secondary)`, lineHeight: 1.6 }}>{selected.description}</div>
+                      </div>
+                    )}
+
+                    {/* ── KICKOFF GATE UNCONFIGURED WARNING ── */}
+                    {!selected.kickoffMode && !selected.kickoffGateCleared && (
+                      <div style={{ padding: '12px 16px', background: '#FFFBEB', border: '1.5px solid #FDE68A', borderRadius: 12, display: 'flex', alignItems: 'center', gap: 10, fontSize: 13 }}>
+                        <AlertCircle size={16} color="#D97706" style={{ flexShrink: 0 }} />
+                        <div>
+                          <span style={{ fontWeight: 800, color: '#92400E' }}>Kickoff gate not configured.</span>
+                          <span style={{ color: '#B45309', marginLeft: 6 }}>Choose a kickoff mode below or clear the gate to unlock client access.</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* ── KICKOFF GATE CONTROLS ── */}
+                    <div style={{ padding: '20px 24px', background: '#fff', borderRadius: 14, border: '1.5px solid var(--border-color)' }}>
+                      <div style={{ fontSize: 11, fontWeight: 800, color: `var(--text-secondary)`, textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span>🚦</span> Kickoff Gate
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+
+                        {/* Rendering toggle */}
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
+                          <div>
+                            <div style={{ fontSize: 13, fontWeight: 700, color: `var(--accent-secondary)` }}>Requires 3D Rendering</div>
+                            <div style={{ fontSize: 11, color: `var(--text-secondary)`, marginTop: 2 }}>
+                              Client must pay rendering fee before signing contract
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => props.updateProject?.(selected.id, {
+                              kickoffMode: selected.kickoffMode === 'rendering-first' ? 'direct-kickoff' : 'rendering-first'
+                            })}
+                            style={{
+                              width: 48, height: 28, borderRadius: 14, border: 'none', cursor: 'pointer',
+                              background: selected.kickoffMode === 'rendering-first' ? `var(--accent-secondary)` : '#e5e7eb',
+                              position: 'relative', transition: 'background .2s', flexShrink: 0,
+                            }}
+                          >
+                            <div style={{
+                              position: 'absolute', top: 3, left: selected.kickoffMode === 'rendering-first' ? 23 : 3,
+                              width: 22, height: 22, borderRadius: '50%', background: '#fff',
+                              boxShadow: '0 1px 4px rgba(0,0,0,.2)', transition: 'left .2s',
+                            }} />
+                          </button>
+                        </div>
+
+                        {/* Status indicators */}
+                        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                          {selected.kickoffMode === 'rendering-first' && (
+                            <span style={{
+                              fontSize: 11, fontWeight: 700, padding: '4px 12px', borderRadius: 20,
+                              background: selected.renderingFeePaid ? '#F0FDF4' : '#FEF3C7',
+                              color: selected.renderingFeePaid ? '#15803D' : '#92400E',
+                              border: `1px solid ${selected.renderingFeePaid ? '#BBF7D0' : '#FDE68A'}`,
+                            }}>
+                              {selected.renderingFeePaid ? '✓ Rendering Paid' : '⏳ Rendering Unpaid'}
+                            </span>
+                          )}
+                          <span style={{
+                            fontSize: 11, fontWeight: 700, padding: '4px 12px', borderRadius: 20,
+                            background: selected.contractAccepted ? '#F0FDF4' : '#FEF3C7',
+                            color: selected.contractAccepted ? '#15803D' : '#92400E',
+                            border: `1px solid ${selected.contractAccepted ? '#BBF7D0' : '#FDE68A'}`,
+                          }}>
+                            {selected.contractAccepted ? '✓ Contract Signed' : '⏳ Contract Pending'}
+                          </span>
+                          {selected.kickoffGateCleared && (
+                            <span style={{ fontSize: 11, fontWeight: 700, padding: '4px 12px', borderRadius: 20, background: '#EFF6FF', color: '#1D4ED8', border: '1px solid #BFDBFE' }}>
+                              🔓 Gate Manually Cleared
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Offline rendering payment recording */}
+                        {selected.kickoffMode === 'rendering-first' && !selected.renderingFeePaid && (() => {
+                          const renderingInv = (props.invoices || []).find(i =>
+                            i.projectId === selected.id &&
+                            (i.id === selected.renderingFeeInvoiceId || ['rendering','design','rendering fee','renderingfee'].includes((i.type || '').toLowerCase()))
+                          );
+                          return (
+                            <button
+                              onClick={async () => {
+                                if (!window.confirm('Confirm that the rendering fee has been received offline (cash / bank transfer)? This will unlock the client\'s design vault.')) return;
+                                if (renderingInv?.id) {
+                                  const { updateDoc, doc: fsDoc } = await import('firebase/firestore');
+                                  const { db: fsDb } = await import('../../lib/firebase');
+                                  await updateDoc(fsDoc(fsDb, 'invoices', renderingInv.id), { status: 'Paid', paidAt: new Date().toISOString(), amountPaid: renderingInv.amount || renderingInv.total });
+                                }
+                                // Also unlock any linked rendering packages
+                                const pkgs = (props.renderingPackages || []).filter(p => p.projectId === selected.id);
+                                for (const pkg of pkgs) {
+                                  const { updateDoc, doc: fsDoc } = await import('firebase/firestore');
+                                  const { db: fsDb } = await import('../../lib/firebase');
+                                  await updateDoc(fsDoc(fsDb, 'renderingPackages', pkg.id), { unlocked: true, status: 'Paid / Unlocked' });
+                                }
+                                await props.updateProject?.(selected.id, { renderingFeePaid: true, renderingFeeUnlockedAt: new Date().toISOString() });
+                                if (selected.stageId < 2) {
+                                  await props.updateProjectStage?.(selected.id, 2, 'Rendering fee paid offline, advancing to Design & Rendering', { silent: true });
+                                }
+                                props.notify?.('success', 'Rendering fee recorded as paid. Client portal unlocked.');
+                              }}
+                              style={{ padding: '10px 16px', borderRadius: 10, border: '1px solid #BBF7D0', background: '#F0FDF4', color: '#15803D', fontSize: 12, fontWeight: 700, cursor: 'pointer', alignSelf: 'flex-start' }}
+                            >
+                              ✅ Mark Rendering Fee Paid (Offline)
+                            </button>
+                          );
+                        })()}
+                        {/* Manual gate override */}
+                        {!selected.kickoffGateCleared ? (
+                          <button
+                            onClick={() => props.updateProject?.(selected.id, { kickoffGateCleared: true })}
+                            style={{ padding: '10px 16px', borderRadius: 10, border: '1px solid #BFDBFE', background: '#EFF6FF', color: '#1D4ED8', fontSize: 12, fontWeight: 700, cursor: 'pointer', alignSelf: 'flex-start' }}
+                          >
+                            🔓 Give full portal access
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => props.updateProject?.(selected.id, { kickoffGateCleared: false })}
+                            style={{ padding: '10px 16px', borderRadius: 10, border: '1px solid #FECACA', background: '#FEF2F2', color: '#DC2626', fontSize: 12, fontWeight: 700, cursor: 'pointer', alignSelf: 'flex-start' }}
+                          >
+                            🔒 Re-enable Gate
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                  </div>
+                )}
+
+                {/* TIMELINE */}
+                {activeTab === 'timeline' && (() => {
+                  const firstStage = applicableStages[0];
+                  const lastStage  = applicableStages[applicableStages.length - 1];
+                  const minDateObj = new Date(computedTimeline[firstStage?.id]?.startDate || selected.createdAt);
+                  const maxDateObj = new Date(computedTimeline[lastStage?.id]?.endDate   || selected.createdAt);
+                  const minDate    = minDateObj.getTime();
+                  const maxDate    = maxDateObj.getTime();
+                  const totalTime  = maxDate - minDate || 1;
+                  // Use the same value as the overview card so they always agree
+                  const totalProjectDays = totalCalendarDays;
+
+                  return (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 24, paddingBottom: 24 }}>
+                      {/* STATS STRIP */}
+                      <div style={{ padding: '16px 24px', background: `var(--bg-secondary)`, borderRadius: 18, border: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div>
+                          <div style={{ fontSize: 10, fontWeight: 800, color: `var(--text-secondary)`, textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 3 }}>Calculated Span</div>
+                          <div style={{ fontSize: 22, fontWeight: 900, color: `var(--accent-secondary)` }}>{totalProjectDays} calendar days</div>
+                        </div>
+                        {estDate && (
+                          <div style={{ textAlign: 'right' }}>
+                            <div style={{ fontSize: 10, fontWeight: 700, color: `var(--text-secondary)`, textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 3 }}>Est. Completion</div>
+                            <div style={{ fontSize: 15, fontWeight: 800, color: ac }}>{new Date(estDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}</div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* GANTT CHART VISUALIZER */}
+                      <div style={{ padding: '24px', background: '#fff', borderRadius: 20, border: '1px solid var(--border-color)', boxShadow: '0 4px 20px rgba(0,0,0,0.02)' }}>
+                        <div style={{ fontSize: 13, fontWeight: 800, color: `var(--accent-secondary)`, marginBottom: 20, display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span style={{ width: 8, height: 8, borderRadius: '50%', background: ac }} />
+                          Gantt Visual Timeline
+                        </div>
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 14, position: 'relative' }}>
+                          {/* Horizontal Grid Lines */}
+                          <div style={{ position: 'absolute', left: '210px', right: 0, top: 0, bottom: 0, display: 'flex', justifyContent: 'space-between', pointerEvents: 'none', zIndex: 0 }}>
+                            {[0, 25, 50, 75, 100].map(pct => (
+                              <div key={pct} style={{ width: 1, borderLeft: '1px dashed var(--border-color)', height: '100%' }} />
+                            ))}
+                          </div>
+
+                          {applicableStages.map(s => {
+                            const stageInfo = computedTimeline[s.id] || {};
+                            const stTime = new Date(stageInfo.startDate).getTime();
+                            const enTime = new Date(stageInfo.endDate).getTime();
+
+                            const leftPercent = Math.max(0, Math.min(100, ((stTime - minDate) / totalTime) * 100));
+                            const widthPercent = Math.max(2, Math.min(100 - leftPercent, ((enTime - stTime) / totalTime) * 100));
+
+                            const isCurrent = s.id === selected.stageId;
+                            const isPast = (selected.stageId || 1) > s.id;
+
+                            return (
+                              <div key={s.id} style={{ display: 'flex', alignItems: 'center', height: 28, zIndex: 1 }}>
+                                {/* Stage Name Label */}
+                                <div style={{ width: 200, fontSize: 11, fontWeight: 800, color: isCurrent ? `var(--accent-secondary)` : `var(--text-secondary)`, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', paddingRight: 10 }}>
+                                  {s.name}
+                                </div>
+                                {/* Gantt Bar Container */}
+                                <div style={{ flex: 1, height: '100%', position: 'relative', background: '#FAFAF9', borderRadius: 6, overflow: 'hidden', border: '1px solid var(--border-color)' }}>
+                                  <div
+                                    style={{
+                                      position: 'absolute',
+                                      left: `${leftPercent}%`,
+                                      width: `${widthPercent}%`,
+                                      height: '100%',
+                                      background: s.color,
+                                      opacity: isCurrent ? 1 : isPast ? 0.6 : 0.25,
+                                      borderRadius: 5,
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      fontSize: 9,
+                                      fontWeight: 900,
+                                      color: '#fff',
+                                      boxShadow: isCurrent ? `0 0 12px ${s.color}60` : 'none',
+                                      transition: 'all 0.3s'
+                                    }}
+                                    title={`${s.name}: ${stageInfo.startDate} to ${stageInfo.endDate} (${stageInfo.durationDays} days)`}
+                                  >
+                                    <span style={{ opacity: widthPercent > 12 ? 1 : 0, transition: 'opacity 0.2s', textShadow: '0 1px 2px rgba(0,0,0,0.2)' }}>
+                                      {stageInfo.durationDays}d
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+
+                        {/* Gantt Footer (Dates Timeline) */}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', paddingLeft: 160, marginTop: 12, fontSize: 9, color: `var(--text-secondary)`, fontWeight: 700 }}>
+                          <span>{minDateObj.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</span>
+                          <span>{new Date(minDate + totalTime * 0.25).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</span>
+                          <span>{new Date(minDate + totalTime * 0.50).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</span>
+                          <span>{new Date(minDate + totalTime * 0.75).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</span>
+                          <span>{maxDateObj.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</span>
+                        </div>
+                      </div>
+
+                      {/* STAGE SCHEDULER & DETAILS LIST */}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                        <div style={{ fontSize: 13, fontWeight: 800, color: `var(--accent-secondary)`, display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#16A34A' }} />
+                          Stage Dates & Schedule Settings
+                        </div>
+
+                        <div style={{ position: 'relative', paddingLeft: 44 }}>
+                          <div style={{ position: 'absolute', left: 16, top: 12, bottom: 12, width: 2, background: `var(--border-color)`, zIndex: 0 }} />
+
+                          {applicableStages.map((s, idx) => {
+                            const isCurrent = s.id === selected.stageId;
+                            const isPast = (selected.stageId || 1) > s.id;
+                            const stageInfo = computedTimeline[s.id] || {};
+
+                            return (
+                              <React.Fragment key={s.id}>
+                                <StageSchedulerRow
+                                  s={s}
+                                  idx={idx}
+                                  stageInfo={stageInfo}
+                                  selected={selected}
+                                  applicableStages={applicableStages}
+                                  updateProject={props.updateProject}
+                                  invoices={props.invoices}
+                                />
+                              </React.Fragment>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                    </div>
+                  );
+                })()}
+
+                {/* FINANCIALS */}
+                {activeTab === 'financials' && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                    <PaymentScheduleCard project={selected} createInvoice={props.createInvoice} notify={props.notify} brand={brand} invoices={props.invoices} />
+                    <ProjectInvoicesLedger project={selected} client={client} invoices={props.invoices} brand={brand} updateInvoice={props.updateInvoice} deleteInvoice={props.deleteInvoice} notify={props.notify} user={props.user} updateProjectStage={props.updateProjectStage} updateProject={props.updateProject} />
+                    <ProjectEconomics project={selected} user={props.user} />
+                    <div style={{ height: 1, background: 'var(--border-color)', margin: '16px 0' }} />
+                    <AdminAddOnManager project={selected} brand={brand} addOns={props.addOns} invoices={props.invoices} createInvoice={props.createInvoice} />
+                  </div>
+                )}
+
+                {/* VAULT */}
+                {activeTab === 'vault' && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+                    <DocumentVault project={selected} addProjectDocument={props.addProjectDocument} user={props.user} />
+                    <SecureVault 
+                      projectId={selected.id} 
+                      user={props.user}
+                      onAdminUploadVault={async (file) => {
+                        const { ref, uploadBytes, getDownloadURL } = await import('firebase/storage');
+                        const { collection, addDoc, serverTimestamp } = await import('firebase/firestore');
+                        try {
+                          const storageRef = ref(storage, `projects/${selected.id}/vault/${Date.now()}_${file.name}`);
+                          await uploadBytes(storageRef, file);
+                          const url = await getDownloadURL(storageRef);
+                          await addDoc(collection(db, 'projects', selected.id, 'vault'), {
+                            name: file.name,
+                            url,
+                            requiresSignature: true,
+                            signatureData: null,
+                            uploadedAt: serverTimestamp(),
+                            uploadedBy: props.user?.name || 'Admin',
+                            projectId: selected.id
+                          });
+                          props.notify?.('Uploaded to Vault', 'success');
+                        } catch (e) {
+                          console.error('Vault upload error:', e);
+                          props.notify?.('Upload failed', 'error');
+                        }
+                      }}
+                    />
+                  </div>
+                )}
+
+                {/* UPLOADS */}
+                {activeTab === 'uploads' && (
+                  <div style={{ background: 'var(--bg-secondary)', borderRadius: 16, padding: 24, border: '1px solid var(--border-color)' }}>
+                    <ClientUploadsTab projectId={selected.id} user={props.user} brand={props.brand} />
+                  </div>
+                )}
+
+                {/* TEAM */}
+                {activeTab === 'team' && (() => {
+                  const assignedIds = new Set([
+                    ...(selected.assignedWorkers || []),
+                    ...(selected.assignedStaff || []),
+                    ...(selected.projectManagerId ? [selected.projectManagerId] : []),
+                  ]);
+                  const assignedList = teamMembers.filter(m => assignedIds.has(m.uid || m.id?.toString()) || assignedIds.has(m.email));
+                  const availList    = teamMembers.filter(m => !assignedIds.has(m.uid || m.id?.toString()) && !assignedIds.has(m.email));
+                  const MemberCard = ({ m }) => {
+                    const assigned = assignedIds.has(m.uid || m.id?.toString()) || assignedIds.has(m.email);
+                    const isWorker = m.role === 'worker' || /worker|installer|field|technician|technical team lead/i.test(m.jobRole || '');
+                    const isManager = selected.projectManagerId === (m.uid || m.id);
+                    const initials = (m.name || m.email || '?').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+                    return (
+                      <button onClick={() => props.assignWorkerToProject?.(selected.id, m.uid || m.id?.toString() || m.email)}
+                        style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 16px', borderRadius: 14, border: `2px solid ${assigned ? ac : `var(--border-color)`}`, background: assigned ? `${ac}14` : `var(--bg-secondary)`, cursor: 'pointer', transition: 'all .18s', minWidth: 200, textAlign: 'left' }}>
+                        <div style={{ width: 36, height: 36, borderRadius: '50%', background: assigned ? ac : `var(--border-color)`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 900, color: assigned ? '#fff' : `var(--text-secondary)`, flexShrink: 0 }}>
+                          {initials}
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 13, fontWeight: 700, color: `var(--accent-secondary)`, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{m.name || m.email || 'Staff'}</div>
+                          <div style={{ fontSize: 10, color: assigned ? ac : `var(--text-secondary)`, fontWeight: 600, marginTop: 1 }}>
+                            {m.jobRole || m.role || 'Team Member'} · {isManager ? 'Project Manager' : isWorker ? 'Field Crew' : 'Project Staff'}
+                          </div>
+                        </div>
+                        {assigned && <UserCheck size={15} color={ac} style={{ flexShrink: 0 }} />}
                       </button>
                     );
-                  })}
-                  {teamMembers.length === 0 && <div style={{ fontSize: 12, color: '#6B7280' }}>No team members configured.</div>}
-                </div>
-              </div>
+                  };
+                  return (
+                    <div style={{ paddingBottom: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
+                      {/* Header */}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div>
+                          <div style={{ fontSize: 14, fontWeight: 900, color: `var(--accent-secondary)` }}>Team Assignment</div>
+                          <div style={{ fontSize: 11, color: `var(--text-secondary)`, marginTop: 2 }}>Assignments are role-aware: staff manage the project, while workers receive it in Field Ops.</div>
+                        </div>
+                        <div style={{ fontSize: 12, fontWeight: 800, color: ac, background: `${ac}15`, padding: '5px 12px', borderRadius: 8 }}>
+                          {assignedList.length} assigned
+                        </div>
+                      </div>
 
-              {/* ── Document Vault ── */}
-              <DocumentVault
-                project={selected}
-                addProjectDocument={props.addProjectDocument}
-                user={props.user}
-              />
+                      {/* Assigned */}
+                      {assignedList.length > 0 && (
+                        <div style={{ padding: '16px 18px', background: `${ac}08`, borderRadius: 14, border: `1.5px solid ${ac}30` }}>
+                          <div style={{ fontSize: 9, fontWeight: 900, color: ac, textTransform: 'uppercase', letterSpacing: '2px', marginBottom: 12 }}>Assigned to this project</div>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+                            {assignedList.map(m => <MemberCard key={m.id || m.email} m={m} />)}
+                          </div>
+                        </div>
+                      )}
 
-            </div>
-          )}
-        </div>
+                      {/* Available */}
+                      <div style={{ padding: '16px 18px', background: '#fff', borderRadius: 14, border: '1px solid var(--border-color)' }}>
+                        <div style={{ fontSize: 9, fontWeight: 900, color: `var(--text-secondary)`, textTransform: 'uppercase', letterSpacing: '2px', marginBottom: 12 }}>
+                          {assignedList.length > 0 ? 'Available to add' : 'All team members'}
+                        </div>
+                        {availList.length > 0 ? (
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+                            {availList.map(m => <MemberCard key={m.id || m.email} m={m} />)}
+                          </div>
+                        ) : (
+                          <div style={{ fontSize: 12, color: `var(--text-secondary)`, fontStyle: 'italic' }}>All team members are assigned to this project.</div>
+                        )}
+                        {teamMembers.length === 0 && (
+                          <div style={{ fontSize: 12, color: `var(--text-secondary)` }}>No staff configured yet. Add team members from Staff Accounts.</div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()}
 
-        {/* RIGHT — Conversation */}
-        <div style={{ display: 'flex', flexDirection: 'column', borderLeft: '1px solid #E5E7EB', paddingLeft: 20, overflow: 'hidden' }}>
-          {selected ? (
-            <>
-              <div style={{ marginBottom: 16, flexShrink: 0 }}>
-                <div style={{ fontSize: 14, fontWeight: 900, color: '#111827' }}>Conversation</div>
-                <div style={{ fontSize: 11, color: '#6B7280', marginTop: 2 }}>{selected.title}</div>
-              </div>
-              <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-                <ProjectConversation
-                  project={selected}
-                  user={props.user}
-                  addProjectMessage={props.addProjectMessage}
-                />
+                {/* MESSAGES */}
+                {activeTab === 'messages' && (
+                  <div style={{ background: '#fff', borderRadius: 16, border: '1px solid var(--border-color)', overflow: 'hidden', height: 600, display: 'flex', flexDirection: 'column' }}>
+                    <WorldClassChat 
+                      clientId={selected.clientId} 
+                      user={props.user} 
+                      isAdmin={true} 
+                      accentColor={brand.color || 'var(--accent-secondary)'} 
+                      projects={projects.filter(w => w.clientId === selected.clientId)} 
+                      viewerLanguage={props.lang || 'en'}
+                    />
+                  </div>
+                )}
               </div>
             </>
-          ) : (
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center' }}>
-              <MessageSquare size={36} color="#E5E7EB" style={{ marginBottom: 12 }} />
-              <div style={{ fontSize: 13, color: '#6B7280', fontWeight: 600 }}>Select a project</div>
-              <div style={{ fontSize: 11, color: '#DFD9D1', marginTop: 4 }}>The conversation thread will appear here.</div>
-            </div>
           )}
         </div>
       </div>
 
-      {/* ── Modals ── */}
       {showNewModal && (
-        <NewProjectModal
-          client={client}
-          teamMembers={teamMembers}
-          onClose={() => setShowNewModal(false)}
-          onCreate={props.createClientProject}
-        />
+        <NewProjectModal client={client} teamMembers={teamMembers} onClose={() => setShowNewModal(false)} onCreate={props.createClientProject} />
       )}
-
       {showAdvanceModal && selected && nextStage && (
-        <AdvanceModal
+        <AdvanceModal project={selected} stage={currentStageObj} nextStage={nextStage} invoices={props.invoices || []} onClose={() => setShowAdvanceModal(false)} onAdvance={props.updateProjectStage} />
+      )}
+      {showRequestPaymentModal && selected && (
+        <RequestPaymentModal
+          client={client}
           project={selected}
-          stage={currentStageObj}
-          nextStage={nextStage}
-          onClose={() => setShowAdvanceModal(false)}
-          onAdvance={props.updateProjectStage}
+          invoices={props.invoices || []}
+          onClose={() => setShowRequestPaymentModal(false)}
+          notify={props.notify}
+          ac={props.ac}
         />
       )}
+      {showClientPreview && selected && (
+        <ClientPreviewModal
+          project={selected}
+          client={client}
+          invoices={props.invoices || []}
+          renderingPackages={props.renderingPackages || []}
+          addOns={props.addOns || []}
+          brand={brand}
+          onClose={() => setShowClientPreview(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+// ─── Client Preview Modal — shows admin exactly what the client sees ─────────
+function ClientPreviewModal({ project, client, invoices, renderingPackages, addOns, brand, onClose }) {
+  const ac = brand?.color || AC;
+  const projectInvoices = invoices.filter(i => i.projectId === project.id || i.parentId === project.id);
+  const projectPackages = renderingPackages.filter(pkg => pkg.projectId === project.id);
+  const projectAddOns = addOns.filter(a => a.projectId === project.id);
+  const isPaid = (s) => ['paid', 'paid in full'].includes(String(s || '').toLowerCase());
+
+  // Replicate KickoffGate / Next Action logic
+  const renderingInv = projectInvoices.find(i =>
+    i.id === project.renderingFeeInvoiceId ||
+    ['rendering', 'design', 'rendering fee'].includes((i.type || '').toLowerCase())
+  );
+  const renderingPaid = !!project.renderingFeePaid || (renderingInv && isPaid(renderingInv.status));
+  const requiresRendering = project.kickoffMode === 'rendering-first';
+  const contractSigned = !!project.contractAccepted;
+  const kickoffActive = (requiresRendering && !renderingPaid) || !contractSigned;
+
+  const currentStage = CLIENT_PROJECT_STAGES.find(s => s.id === project.stageId);
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)',
+      backdropFilter: 'blur(6px)', zIndex: 9999,
+      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20
+    }} onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} style={{
+        background: '#F8F6F3', borderRadius: 24, maxWidth: 480, width: '100%',
+        maxHeight: '90vh', overflow: 'hidden', display: 'flex', flexDirection: 'column',
+        boxShadow: '0 24px 80px rgba(0,0,0,0.4)'
+      }}>
+        {/* Header */}
+        <div style={{ padding: '20px 24px', background: `var(--accent-secondary)`, color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <div style={{ fontSize: 10, fontWeight: 800, opacity: 0.7, textTransform: 'uppercase', letterSpacing: '.1em', marginBottom: 4 }}>👁 Client View Preview</div>
+            <div style={{ fontSize: 15, fontWeight: 900 }}>{client?.name} · {project.title}</div>
+          </div>
+          <button onClick={onClose} style={{ width: 32, height: 32, borderRadius: 10, background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <X size={16} />
+          </button>
+        </div>
+
+        {/* Phone-frame body */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: 20, background: '#EDEAE6' }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 12, textAlign: 'center' }}>
+            This is what your client sees right now
+          </div>
+
+          {/* Kickoff Gate Preview */}
+          {kickoffActive ? (
+            <div style={{ background: 'linear-gradient(135deg, var(--accent-secondary), #4A3B32)', borderRadius: 18, padding: '22px 20px', color: '#fff', marginBottom: 14 }}>
+              <div style={{ fontSize: 10, fontWeight: 700, opacity: 0.7, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '.1em' }}>
+                🚦 Kickoff Gate
+              </div>
+              <div style={{ fontSize: 20, fontWeight: 900, marginBottom: 6 }}>
+                {requiresRendering && !renderingPaid ? '3D Rendering Fee' : 'Sign Your Contract'}
+              </div>
+              <div style={{ fontSize: 12, opacity: 0.75, lineHeight: 1.5 }}>
+                {requiresRendering && !renderingPaid
+                  ? `Pay GH₵ ${Number(renderingInv?.amount || project.renderingFee || 0).toLocaleString()} rendering fee to unlock the portal`
+                  : 'Read & sign the project agreement to begin'}
+              </div>
+              <div style={{ marginTop: 14, fontSize: 11, fontWeight: 700, padding: '6px 10px', background: 'rgba(255,255,255,0.15)', borderRadius: 8, display: 'inline-block' }}>
+                Step {requiresRendering && !renderingPaid ? 1 : 2} of {requiresRendering ? 2 : 1}
+              </div>
+            </div>
+          ) : (
+            <>
+              {/* Project Overview Card */}
+              <div style={{ background: '#fff', borderRadius: 18, padding: 18, marginBottom: 14, border: '1px solid var(--border-color)' }}>
+                <div style={{ fontSize: 10, fontWeight: 800, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '.1em', marginBottom: 6 }}>Project Overview</div>
+                <div style={{ fontSize: 17, fontWeight: 900, color: 'var(--accent-secondary)', marginBottom: 4 }}>{project.title}</div>
+                <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 12 }}>
+                  Stage {project.stageId} of {CLIENT_PROJECT_STAGES.length} · {currentStage?.short}
+                </div>
+                {currentStage && (
+                  <div style={{ padding: 10, background: `${currentStage.color}10`, borderRadius: 10, fontSize: 12, color: currentStage.color, fontWeight: 700 }}>
+                    {currentStage.emoji} {currentStage.clientMsg}
+                  </div>
+                )}
+              </div>
+
+              {/* Visible tabs */}
+              <div style={{ background: '#fff', borderRadius: 16, padding: 12, fontSize: 11, color: 'var(--text-secondary)' }}>
+                <div style={{ fontWeight: 800, marginBottom: 8 }}>Available Tabs:</div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  {['Progress', project.kickoffMode !== 'direct-kickoff' && 'Designs', 'Approvals', project.stageId >= 6 ? 'Photos' : '🔒Photos', 'Payments', 'Add-ons', 'Documents'].filter(Boolean).map(t => (
+                    <span key={t} style={{ padding: '4px 10px', background: 'var(--bg-secondary)', borderRadius: 12, fontSize: 10, fontWeight: 700 }}>{t}</span>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* Open real portal link */}
+          <div style={{ marginTop: 16, padding: 14, background: '#fff', borderRadius: 14, fontSize: 11, color: 'var(--text-secondary)', textAlign: 'center' }}>
+            Need the real portal? Visit <a href="/portal" target="_blank" rel="noreferrer" style={{ color: ac, fontWeight: 700 }}>/portal</a> while logged in as this client.
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

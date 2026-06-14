@@ -1,18 +1,9 @@
 /**
- * Compatibility wrapper for the legacy Arkesel service.
- *
- * Arkesel API keys must stay server-side. This module preserves the old API
- * while delegating delivery to the authenticated Cloud Function path.
+ * ArkeselService — REMOVED
+ * All messaging is handled server-side via Meta WhatsApp Cloud API.
+ * This stub exists only to prevent import errors from any legacy call site.
  */
-
-import { MessengerService } from './MessengerService';
-
 export const ArkeselService = {
-  sendOTP: async (phone, code) => {
-    return MessengerService.sendOTP(phone, code);
-  },
-
-  sendMessage: async (phone, message) => {
-    return MessengerService.sendMessage(phone, message);
-  }
+  sendOTP:     async () => ({ success: false, removed: true }),
+  sendMessage: async () => ({ success: false, removed: true }),
 };

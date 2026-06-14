@@ -46,7 +46,7 @@ export default function FieldUpload({ dbClients, clients, handleMediaUpload, ...
   );
 
   return (
-    <div style={{ minHeight: '100vh', background: '#F9FAFB', padding: '20px' }}>
+    <div style={{ minHeight: '100vh', background: `var(--bg-secondary)`, padding: '20px' }}>
        <div style={{ maxWidth: 500, margin: '0 auto' }}>
           <header style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 32 }}>
              <button onClick={() => navigate(-1)} style={{ background: '#fff', border: 'none', width: 40, height: 40, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><ArrowLeft size={20}/></button>
@@ -55,11 +55,11 @@ export default function FieldUpload({ dbClients, clients, handleMediaUpload, ...
 
           <div style={{ background: '#fff', padding: 24, borderRadius: 32, boxShadow: '0 10px 30px rgba(0,0,0,0.05)' }}>
              <div style={{ marginBottom: 24 }}>
-                <label style={{ fontSize: 10, fontWeight: 900, textTransform: 'uppercase', color: '#6B7280', display: 'block', marginBottom: 8 }}>Select Project</label>
+                <label style={{ fontSize: 10, fontWeight: 900, textTransform: 'uppercase', color: `var(--text-secondary)`, display: 'block', marginBottom: 8 }}>Select Project</label>
                 <select 
                   value={selectedProjectId} 
                   onChange={e => setSelectedProjectId(e.target.value)}
-                  style={{ width: '100%', height: 56, borderRadius: 16, border: '1px solid #E5E7EB', background: '#F9FAFB', padding: '0 16px', fontSize: 16, fontWeight: 600 }}
+                  style={{ width: '100%', height: 56, borderRadius: 16, border: '1px solid var(--border-color)', background: `var(--bg-secondary)`, padding: '0 16px', fontSize: 16, fontWeight: 600 }}
                 >
                    <option value="">Choose Project...</option>
                    {clients.map(p => (
@@ -69,14 +69,14 @@ export default function FieldUpload({ dbClients, clients, handleMediaUpload, ...
              </div>
 
              <div style={{ marginBottom: 24 }}>
-                <label style={{ fontSize: 10, fontWeight: 900, textTransform: 'uppercase', color: '#6B7280', display: 'block', marginBottom: 8 }}>Snap or Select Photo</label>
-                <div style={{ position: 'relative', width: '100%', height: 200, background: '#F9FAFB', border: '2px dashed #E5E7EB', borderRadius: 24, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+                <label style={{ fontSize: 10, fontWeight: 900, textTransform: 'uppercase', color: `var(--text-secondary)`, display: 'block', marginBottom: 8 }}>Snap or Select Photo</label>
+                <div style={{ position: 'relative', width: '100%', height: 200, background: `var(--bg-secondary)`, border: '2px dashed var(--border-color)', borderRadius: 24, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
                    {file ? (
                      <img src={URL.createObjectURL(file)} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                    ) : (
                      <>
-                        <Camera size={48} color="#6B7280" />
-                        <span style={{ fontSize: 12, color: '#6B7280', marginTop: 8 }}>Tap to Open Camera</span>
+                        <Camera size={48} color="var(--text-secondary)" />
+                        <span style={{ fontSize: 12, color: `var(--text-secondary)`, marginTop: 8 }}>Tap to Open Camera</span>
                      </>
                    )}
                    <input type="file" accept="image/*" capture="environment" onChange={onFileChange} style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer' }} />
@@ -84,12 +84,12 @@ export default function FieldUpload({ dbClients, clients, handleMediaUpload, ...
              </div>
 
              <div style={{ marginBottom: 32 }}>
-                <label style={{ fontSize: 10, fontWeight: 900, textTransform: 'uppercase', color: '#6B7280', display: 'block', marginBottom: 8 }}>Work Summary</label>
+                <label style={{ fontSize: 10, fontWeight: 900, textTransform: 'uppercase', color: `var(--text-secondary)`, display: 'block', marginBottom: 8 }}>Work Summary</label>
                 <textarea 
                   value={caption} 
                   onChange={e => setCaption(e.target.value)}
                   placeholder="e.g. 'Installation of 12mm Tempered Glass Partition complete.'"
-                  style={{ width: '100%', height: 120, borderRadius: 16, border: '1px solid #E5E7EB', background: '#F9FAFB', padding: 16, fontSize: 14, resize: 'none' }}
+                  style={{ width: '100%', height: 120, borderRadius: 16, border: '1px solid var(--border-color)', background: `var(--bg-secondary)`, padding: 16, fontSize: 14, resize: 'none' }}
                 />
              </div>
 
@@ -97,7 +97,7 @@ export default function FieldUpload({ dbClients, clients, handleMediaUpload, ...
                onClick={onSubmit}
                disabled={!file || !selectedProjectId || uploading}
                style={{ 
-                 width: '100%', height: 64, borderRadius: 20, background: '#111827', color: '#fff', 
+                 width: '100%', height: 64, borderRadius: 20, background: `var(--accent-secondary)`, color: '#fff', 
                  border: 'none', fontSize: 18, fontWeight: 800, display: 'flex', alignItems: 'center', 
                  justifyContent: 'center', gap: 12, opacity: (!file || !selectedProjectId || uploading) ? 0.5 : 1
                }}

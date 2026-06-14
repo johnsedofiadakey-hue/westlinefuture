@@ -30,9 +30,9 @@ export default function AdminProjectGallery({ projectId, media = [], uploadMedia
        </div>
 
        {showAdd && (
-         <div style={{ background: '#F9FAFB', padding: 20, borderRadius: 12, marginBottom: 24, display: 'flex', gap: 20 }}>
+         <div style={{ background: `var(--bg-secondary)`, padding: 20, borderRadius: 12, marginBottom: 24, display: 'flex', gap: 20 }}>
             <div style={{ width: 120, height: 120, borderRadius: 12, border: '2px dashed #DFD9D1', overflow: 'hidden', position: 'relative', background: '#fff' }}>
-               {nm.preview ? <img src={nm.preview} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Camera size={24} color="#6B7280" /></div>}
+               {nm.preview ? <img src={nm.preview} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Camera size={24} color="var(--text-secondary)" /></div>}
                <input type="file" accept="image/*" onChange={e => onFile(e.target.files[0])} style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer' }} />
             </div>
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -56,7 +56,7 @@ export default function AdminProjectGallery({ projectId, media = [], uploadMedia
                <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: '4px 8px', background: 'rgba(0,0,0,.6)', color: '#fff', fontSize: 9 }}>{PROJECT_STAGES.find(s => s.id === m.stageId)?.name}</div>
             </div>
           ))}
-          {myMedia.length === 0 && <div className="lxf" style={{ color: '#6B7280', fontSize: 12, fontStyle: 'italic', gridColumn: '1/-1' }}>No progress photos uploaded yet.</div>}
+          {myMedia.length === 0 && <div className="lxf" style={{ color: `var(--text-secondary)`, fontSize: 12, fontStyle: 'italic', gridColumn: '1/-1' }}>No progress photos uploaded yet.</div>}
        </div>
     </div>
   );

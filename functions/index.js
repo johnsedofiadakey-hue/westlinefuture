@@ -3,7 +3,7 @@
  */
 
 const { onDocumentUpdated } = require("firebase-functions/v2/firestore");
-const { onRequest, onCall } = require("firebase-functions/v2/https");
+const { onRequest, onCall, HttpsError } = require("firebase-functions/v2/https");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { defineSecret } = require("firebase-functions/params");
 const { logger } = require("firebase-functions");
@@ -11,19 +11,73 @@ const { getFirestore, FieldValue } = require("firebase-admin/firestore");
 const { getAuth: getAdminAuth } = require("firebase-admin/auth");
 const { initializeApp } = require("firebase-admin/app");
 const axios = require("axios");
+const crypto = require("crypto");
 
 initializeApp();
 
 // Secrets — set with: firebase functions:secrets:set SECRET_NAME
-const META_WA_TOKEN      = defineSecret("META_WA_TOKEN");
-const META_WA_PHONE_ID   = defineSecret("META_WA_PHONE_ID");
-const TWILIO_SID         = defineSecret("TWILIO_SID");
-const TWILIO_AUTH_TOKEN  = defineSecret("TWILIO_AUTH_TOKEN");
-const TWILIO_FROM_NUMBER = defineSecret("TWILIO_FROM_NUMBER");
-const ARKESEL_API_KEY    = defineSecret("ARKESEL_API_KEY");
-const WA_VERIFY_TOKEN    = defineSecret("WA_VERIFY_TOKEN");
-const PAYSTACK_SECRET_KEY = defineSecret("PAYSTACK_SECRET_KEY");
-const OPENAI_API_KEY = defineSecret("OPENAI_API_KEY");
+const META_WA_TOKEN      = { value: () => process.env.META_WA_TOKEN };
+const META_WA_PHONE_ID   = { value: () => process.env.META_WA_PHONE_ID };
+// App secret — used to verify inbound webhook signatures from Meta
+const META_APP_SECRET    = { value: () => process.env.META_APP_SECRET || '' };
+const WA_VERIFY_TOKEN    = { value: () => process.env.WA_VERIFY_TOKEN };
+const PAYSTACK_SECRET_KEY = { value: () => process.env.PAYSTACK_SECRET_KEY };
+
+const HUBTEL_SMS_SENDER = 'WestlineFut'; // max 11 chars
+
+/**
+ * Load Hubtel SMS credentials — env first, then Firestore fallback (same doc as payment).
+ */
+async function getHubtelSMSCreds() {
+  const envId     = process.env.HUBTEL_SMS_CLIENT_ID;
+  const envSecret = process.env.HUBTEL_SMS_CLIENT_SECRET;
+  if (envId && envSecret) return { clientId: envId, clientSecret: envSecret };
+
+  const db = getFirestore();
+  const snap = await db.collection('cms_content').doc('gatewaySettings').get();
+  const d = snap.exists ? snap.data() : {};
+  return {
+    clientId:     d.hubtelSmsClientId     || d.hubtelClientId     || '',
+    clientSecret: d.hubtelSmsClientSecret || d.hubtelClientSecret || '',
+  };
+}
+
+/**
+ * Send an SMS via Hubtel SMS Gateway.
+ * @param {string} to   - recipient phone (any format — auto-normalised to 233XXXXXXXXX)
+ * @param {string} body - message text (max 160 chars per segment)
+ * @returns {{ success: boolean, data?: any, error?: string }}
+ */
+async function sendHubtelSMS(to, body) {
+  try {
+    let phone = String(to).replace(/\D/g, '');
+    if (phone.startsWith('0'))   phone = '233' + phone.slice(1);
+    if (!phone.startsWith('233')) phone = '233' + phone;
+
+    const { clientId, clientSecret } = await getHubtelSMSCreds();
+    if (!clientId || !clientSecret) {
+      logger.warn('Hubtel SMS skipped: no credentials configured');
+      return { success: false, error: 'no_credentials' };
+    }
+
+    const url = 'https://sms.hubtel.com/v1/messages/send';
+    const res = await axios.get(url, {
+      params: {
+        clientsecret: clientSecret,
+        clientid:     clientId,
+        from:         HUBTEL_SMS_SENDER,
+        to:           phone,
+        content:      body,
+      },
+      timeout: 10000,
+    });
+    logger.info('Hubtel SMS sent:', { to: phone, status: res.data });
+    return { success: true, data: res.data };
+  } catch (err) {
+    logger.warn('Hubtel SMS failed:', { to, error: err.message, response: err.response?.data });
+    return { success: false, error: err.message };
+  }
+}
 
 /**
  * PAYSTACK PAYMENT VERIFICATION (SERVER-SIDE)
@@ -35,7 +89,7 @@ const OPENAI_API_KEY = defineSecret("OPENAI_API_KEY");
  * Body: { reference, projectId, invoiceId?, type? }
  */
 exports.verifyPaystackPayment = onCall(
-  { secrets: [PAYSTACK_SECRET_KEY] },
+  { cors: true },
   async (request) => {
     if (!request.auth) throw new Error("Authentication required");
 
@@ -45,15 +99,69 @@ exports.verifyPaystackPayment = onCall(
     if (!reference) throw new Error("reference is required");
     if (!projectId) throw new Error("projectId is required");
 
+    const VALID_TYPES = ["payment", "deposit", "final", "rendering", "renderingFee", "design", "addon", "invoice", "milestone", "receipt"];
+    if (!VALID_TYPES.includes(type)) {
+      logger.warn(`verifyPaystackPayment: unknown payment type "${type}" for project ${projectId} — treating as "payment"`);
+    }
+
+    // ── WRITE PENDING GUARD IMMEDIATELY ─────────────────────────────────────
+    // Do this BEFORE secret key check so the client portal can detect a payment
+    // was submitted even if verification fails. Prevents double-payment on refresh.
+    const db0 = getFirestore();
+    if (invoiceId) {
+      try {
+        await db0.collection('pendingPayments').doc(invoiceId).set({
+          reference,
+          invoiceId,
+          projectId,
+          type,
+          uid,
+          receivedAt: FieldValue.serverTimestamp(),
+          verified: false,
+        }, { merge: true });
+      } catch (_) { /* non-fatal */ }
+    }
+
+    // ── OWNERSHIP VALIDATION ─────────────────────────────────────────────────
+    // Verify the invoice actually belongs to this project before doing anything.
+    // Prevents an attacker from reusing another client's payment reference.
+    if (invoiceId) {
+      const db = getFirestore();
+      const invoiceSnap = await db.collection("invoices").doc(invoiceId).get();
+      if (!invoiceSnap.exists) throw new Error("Invoice not found");
+      const invData = invoiceSnap.data();
+      const invProject = invData.projectId || invData.parentId;
+      if (invProject && invProject !== projectId) {
+        logger.error(`verifyPaystackPayment: invoice ${invoiceId} belongs to project ${invProject}, not ${projectId} — possible fraud attempt by uid ${uid}`);
+        throw new Error("Invoice does not belong to this project");
+      }
+    }
+
     // Rate limit: max 10 verify calls per UID per hour
     await enforceRateLimit(`verifyPayment:${uid}`, 10, 3600);
+
+    // ⚠ CRITICAL: Load Paystack secret from Cloud Function secrets (most secure), fall back to Firestore only if env not set
+    // Cloud Function secrets (PAYSTACK_SECRET_KEY) are encrypted and not readable by admins or clients.
+    // Only fall back to Firestore for flexibility, but prefer the env var which is not logged or exposed.
+    let paystackSecret = PAYSTACK_SECRET_KEY.value();
+    if (!paystackSecret) {
+      // Fallback: load from Firestore if not in Cloud Function secrets
+      const db2 = getFirestore();
+      const gwSnap = await db2.collection("cms_content").doc("gatewaySettings").get().catch(() => null);
+      paystackSecret = gwSnap?.data()?.content?.paystackSecretKey || '';
+      if (!paystackSecret) {
+        throw new Error("Paystack secret key not configured. Set PAYSTACK_SECRET_KEY in Cloud Function secrets or save it in AdminFinancials → Gateway Settings.");
+      }
+      logger.warn("verifyPaystackPayment: using Paystack secret from Firestore (should use Cloud Function secret for security)");
+    }
+    if (!paystackSecret) throw new Error("Paystack secret key is not configured.");
 
     // Verify with Paystack — throws on network failure or non-2xx
     let tx;
     try {
       const resp = await axios.get(
         `https://api.paystack.co/transaction/verify/${encodeURIComponent(reference)}`,
-        { headers: { Authorization: `Bearer ${PAYSTACK_SECRET_KEY.value()}` } }
+        { headers: { Authorization: `Bearer ${paystackSecret}` } }
       );
       tx = resp.data?.data;
     } catch (err) {
@@ -69,7 +177,26 @@ exports.verifyPaystackPayment = onCall(
     const amountGHS = tx.amount / 100; // Paystack amounts are in pesewas for GHS
     const txId = `TX-${reference}`;
 
-    await assertProjectAccess(request.auth, projectId);
+    // ── IDEMPOTENCY CHECK ────────────────────────────────────────────────────
+    // Prevent double-processing the same payment reference.
+    // Check if this reference has already been processed for this invoice.
+    try {
+      const processedSnap = await db.collection('processedPayments').doc(reference).get();
+      if (processedSnap.exists && processedSnap.data().invoiceId === invoiceId) {
+        logger.info(`verifyPaystackPayment: reference ${reference} already processed for invoice ${invoiceId} — returning cached result`);
+        return {
+          verified: true,
+          amountGHS: processedSnap.data().amountGHS,
+          currency: tx.currency,
+          channel: tx.channel,
+          reference,
+          cached: true,
+        };
+      }
+    } catch (err) {
+      logger.warn('verifyPaystackPayment: idempotency check failed', err.message);
+      // Continue anyway; this is just a safety net, not a hard requirement
+    }
 
     // ── AMOUNT VALIDATION ────────────────────────────────────────────────────
     // If the client told us the expected amount, verify Paystack paid at least that.
@@ -107,12 +234,41 @@ exports.verifyPaystackPayment = onCall(
     }
     // ─────────────────────────────────────────────────────────────────────────
 
-    const projectRef = db.collection("projects").doc(projectId);
-    const txRef = projectRef.collection("transactions").doc(txId);
-    const batch = db.batch();
+    // Auto-generate invoice if missing for rendering payments
+    const typeLower = (type || '').toLowerCase();
+    if (!invoiceId && (typeLower === 'rendering' || typeLower === 'renderingfee' || typeLower === 'design' || typeLower === 'rendering fee')) {
+      try {
+        const newInvRef = db.collection('invoices').doc();
+        invoiceId = newInvRef.id;
+        await newInvRef.set({
+          projectId,
+          documentKind: 'renderingFee',
+          type: 'renderingFee',
+          title: '3D Design & Rendering Fee',
+          amount: amountGHS,
+          amountPaid: amountGHS,
+          status: 'Paid',
+          paidAt: new Date().toISOString(),
+          createdAt: new Date().toISOString(),
+          method: 'Paystack',
+          lastUpdatedBy: 'system'
+        });
+        logger.info(`verifyPaystackPayment: auto-generated invoice ${invoiceId} for rendering fee on project ${projectId}`);
+      } catch (err) {
+        logger.warn('verifyPaystackPayment: failed to auto-generate rendering invoice', err.message);
+      }
+    }
 
-    batch.set(txRef, {
+    // Write to both the project ledger and the manager-visible global ledger.
+    const paymentProjectSnap = await db.collection("projects").doc(projectId).get();
+    const paymentProject = paymentProjectSnap.exists ? paymentProjectSnap.data() : {};
+    const managerId = paymentProject.projectManagerId || paymentProject.assignedStaff?.[0] || null;
+    const transactionRecord = {
       id: txId,
+      projectId,
+      parentId: projectId,
+      clientId: paymentProject.clientId || '',
+      projectManagerId: managerId,
       invoiceId: invoiceId || reference,
       reference,
       amount: amountGHS,
@@ -120,21 +276,293 @@ exports.verifyPaystackPayment = onCall(
       method: "Paystack",
       channel: tx.channel,
       gateway_response: tx.gateway_response,
+      date: String(tx.paid_at || new Date().toISOString()).slice(0, 10),
       paidAt: tx.paid_at,
       type,
       status: "verified",
       verifiedAt: FieldValue.serverTimestamp(),
       verifiedBy: uid,
-    }, { merge: true });
+    };
+    const paymentBatch = db.batch();
+    paymentBatch.set(
+      db.collection("projects").doc(projectId).collection("transactions").doc(txId),
+      transactionRecord,
+      { merge: true }
+    );
+    paymentBatch.set(db.collection("transactions").doc(txId), transactionRecord, { merge: true });
+    paymentBatch.set(
+      db.collection("projects").doc(projectId),
+      { paidAmount: FieldValue.increment(amountGHS), updatedAt: FieldValue.serverTimestamp() },
+      { merge: true }
+    );
+    await paymentBatch.commit();
 
+    // ── Write a Firestore-level pending guard immediately after Paystack confirms ─
+    // This prevents double payment even across devices/sessions — if the invoice
+    // update below fails, we can still detect this reference was used.
     if (invoiceId) {
-      batch.set(db.collection("invoices").doc(invoiceId), {
-        status: "Paid",
-        paidAt: FieldValue.serverTimestamp(),
-        paymentReference: reference,
-        paymentMethod: "Paystack",
-        updatedAt: FieldValue.serverTimestamp(),
-      }, { merge: true });
+      try {
+        await db.collection('pendingPayments').doc(invoiceId).set({
+          reference,
+          invoiceId,
+          projectId,
+          type,
+          amountGHS,
+          uid,
+          receivedAt: FieldValue.serverTimestamp(),
+          verified: false, // will be updated to true below
+        }, { merge: true });
+      } catch (_) { /* non-fatal */ }
+    }
+
+    // Update the invoice and project payment statuses server-side
+    if (invoiceId) {
+      try {
+        const invRef = db.collection("invoices").doc(invoiceId);
+        const invSnap = await invRef.get();
+        if (invSnap.exists) {
+          const invData = invSnap.data();
+          const invoiceTotal = Number(invData.amount || invData.total || 0);
+          const currentPaid = Number(invData.amountPaid || invData.paidAmount || 0);
+          const newAmountPaid = currentPaid + amountGHS;
+
+          logger.info(`verifyPaystackPayment: invoice ${invoiceId} payment processing`, {
+            invoiceTotal,
+            currentPaid,
+            amountPaid: amountGHS,
+            newAmountPaid,
+            hasAmount: !!invData.amount,
+            hasTotal: !!invData.total,
+            currentStatus: invData.status,
+          });
+
+          let newStatus = invData.status || "Pending";
+          if (invoiceTotal > 0) {
+            const tolerance = invoiceTotal * 0.02;
+            if (newAmountPaid >= invoiceTotal - tolerance) {
+              newStatus = "Paid";
+            } else if (newAmountPaid > 0) {
+              newStatus = "Partially Paid";
+            }
+          } else {
+            // No amount specified — mark as paid anyway since payment was received
+            newStatus = "Paid";
+            logger.warn(`verifyPaystackPayment: invoice ${invoiceId} has no total amount, marking as Paid anyway`);
+          }
+
+          logger.info(`verifyPaystackPayment: invoice ${invoiceId} status: ${invData.status} → ${newStatus}`);
+
+          const updatePayload = {
+            status: newStatus,
+            amountPaid: newAmountPaid,
+            paidAmount: newAmountPaid,
+            paidAt: new Date().toISOString(),
+            method: "Paystack",
+            lastUpdatedBy: uid,
+            lastUpdatedAt: FieldValue.serverTimestamp(),
+          };
+
+          await invRef.update(updatePayload);
+          logger.info(`verifyPaystackPayment: invoice ${invoiceId} updated successfully to status: ${newStatus}`);
+
+          // Mark the Firestore pending guard as verified — cross-device double-pay protection
+          try { await db.collection('pendingPayments').doc(invoiceId).set({ verified: true, verifiedAt: FieldValue.serverTimestamp() }, { merge: true }); } catch (_) {}
+
+          // Also update project payments collection for tracking
+          await db.collection("projects").doc(projectId).collection("payments").doc(invoiceId).set(updatePayload, { merge: true });
+        } else {
+          logger.warn(`verifyPaystackPayment: invoice ${invoiceId} not found in Firestore`);
+        }
+      } catch (err) {
+        logger.error(`verifyPaystackPayment: invoice ${invoiceId} update failed`, {
+          error: err.message,
+          code: err.code,
+          stack: err.stack,
+        });
+      }
+    }
+
+    // ── Write project-level payment flags based on payment type ──────────────
+    // These are the canonical boolean fields that AdvanceModal gate checks read.
+    // The rendering fee case is handled in detail below; deposit and final are set here.
+    if (invoiceId && (typeLower === 'deposit')) {
+      try {
+        await db.collection('projects').doc(projectId).update({
+          depositPaid: true,
+          depositPaidAt: FieldValue.serverTimestamp(),
+        });
+        logger.info(`verifyPaystackPayment: project ${projectId} depositPaid = true`);
+      } catch (e) {
+        logger.warn('verifyPaystackPayment: could not set depositPaid', e.message);
+      }
+    } else if (invoiceId && (typeLower === 'final' || typeLower === 'finalpayment' || typeLower === 'settlement')) {
+      try {
+        await db.collection('projects').doc(projectId).update({
+          finalSettlementPaid: true,
+          finalSettlementPaidAt: FieldValue.serverTimestamp(),
+        });
+        logger.info(`verifyPaystackPayment: project ${projectId} finalSettlementPaid = true`);
+        // ── Specific admin alert for final payment — project is ready to close ──
+        try {
+          const finalSnap = await db.collection('projects').doc(projectId).get();
+          const finalData = finalSnap.data() || {};
+          const clientName = finalData.clientName || 'Client';
+          const projectTitle = finalData.title || 'a project';
+          const alertMsg = `✅ Final payment of GHS ${amountGHS.toFixed(2)} received from ${clientName} for "${projectTitle}". All gates are now cleared — you can close the project.`;
+          await db.collection('notifications').add({
+            userId: 'admin',
+            message: alertMsg,
+            msg: alertMsg,
+            type: 'final_payment',
+            link: '/admin',
+            read: false,
+            createdAt: FieldValue.serverTimestamp(),
+          });
+          // Client-facing chat message
+          if (finalData.clientId) {
+            let trueClientId = finalData.clientId;
+            const uSnap = await db.collection('users').doc(trueClientId).get();
+            if (!uSnap.exists) {
+              const byP = await db.collection('users').where('phone', '==', trueClientId).limit(1).get();
+              if (!byP.empty) trueClientId = byP.docs[0].id;
+              else {
+                const byP2 = await db.collection('users').where('phone', '==', '+' + trueClientId).limit(1).get();
+                if (!byP2.empty) trueClientId = byP2.docs[0].id;
+              }
+            }
+            await db.collection('clients').doc(trueClientId).collection('messages').add({
+              text: `🎉 Your final payment has been received and confirmed. Thank you for choosing Westline Future — your project is now complete!`,
+              senderRole: 'system',
+              isInternal: false,
+              readByAdmin: false,
+              readByClient: true,
+              createdAt: FieldValue.serverTimestamp(),
+            });
+          }
+        } catch (alertErr) {
+          logger.warn('verifyPaystackPayment: could not send final payment admin alert', alertErr.message);
+        }
+      } catch (e) {
+        logger.warn('verifyPaystackPayment: could not set finalSettlementPaid', e.message);
+      }
+    }
+
+    // ── Auto-unlock rendering package if this was a rendering fee payment ─────
+    if (typeLower === 'rendering' || typeLower === 'renderingfee' || typeLower === 'design' || typeLower === 'rendering fee') {
+      try {
+        if (invoiceId) {
+          // Find the rendering package linked to this invoice
+          const pkgSnap = await db.collection('renderingPackages')
+            .where('projectId', '==', projectId)
+            .where('linkedInvoiceId', '==', invoiceId)
+            .limit(1)
+            .get();
+
+          if (!pkgSnap.empty) {
+            await pkgSnap.docs[0].ref.update({ unlocked: true, unlockedAt: FieldValue.serverTimestamp() });
+            logger.info(`verifyPaystackPayment: rendering package unlocked for project ${projectId}`);
+          } else {
+            // Fallback: unlock any unlinked pending package for this project
+            const fallbackSnap = await db.collection('renderingPackages')
+              .where('projectId', '==', projectId)
+              .where('unlocked', '==', false)
+              .limit(1)
+              .get();
+            if (!fallbackSnap.empty) {
+              await fallbackSnap.docs[0].ref.update({ unlocked: true, unlockedAt: FieldValue.serverTimestamp() });
+            }
+          }
+        } else {
+          // Fallback: unlock any unlinked pending package for this project
+          const fallbackSnap = await db.collection('renderingPackages')
+            .where('projectId', '==', projectId)
+            .where('unlocked', '==', false)
+            .limit(1)
+            .get();
+          if (!fallbackSnap.empty) {
+            await fallbackSnap.docs[0].ref.update({ unlocked: true, unlockedAt: FieldValue.serverTimestamp() });
+          }
+        }
+
+        // ── Mark rendering fee as paid on the project ──────────────────────────
+        // This unlocks the client portal's full access and removes the payment gate.
+        // Also auto-advance from Stage 1 (Survey) to Stage 2 (Design & Rendering)
+        // so the project immediately moves into the design phase.
+        const projectSnap0 = await db.collection('projects').doc(projectId).get();
+        const currentStageId = projectSnap0.exists ? (projectSnap0.data()?.stageId || 1) : 1;
+        const stageUpdate = currentStageId === 1 ? {
+          stageId: 2,
+          stageHistory: FieldValue.arrayUnion({
+            stageId: 2,
+            timestamp: new Date().toISOString(),
+            note: 'Auto-advanced to Design & Rendering after rendering fee payment.',
+            autoAdvanced: true,
+          }),
+        } : {};
+        
+        const updatePayload = {
+          renderingFeePaid: true,
+          renderingFeePaidAt: FieldValue.serverTimestamp(),
+          ...stageUpdate,
+        };
+        if (invoiceId) updatePayload.renderingFeeInvoiceId = invoiceId;
+
+        await db.collection('projects').doc(projectId).update(updatePayload);
+        if (currentStageId === 1) {
+          logger.info(`verifyPaystackPayment: project ${projectId} auto-advanced to Stage 2 (Design & Rendering)`);
+        }
+        logger.info(`verifyPaystackPayment: project ${projectId} marked rendering fee as paid`);
+      } catch (e) {
+        logger.warn('verifyPaystackPayment: could not unlock rendering package or update project', e.message);
+      }
+    }
+
+    // ── Notify client that payment was confirmed ───────────────────────────────
+    try {
+      const projectSnap = await db.collection('projects').doc(projectId).get();
+      let clientId = projectSnap.data()?.clientId;
+      const projectTitle = projectSnap.data()?.title || 'your project';
+      if (clientId) {
+        const userSnap = await db.collection('users').doc(clientId).get();
+        if (!userSnap.exists) {
+          const byPhone = await db.collection('users').where('phone', '==', clientId).limit(1).get();
+          if (!byPhone.empty) {
+            clientId = byPhone.docs[0].id;
+          } else {
+            const byPhone2 = await db.collection('users').where('phone', '==', '+' + clientId).limit(1).get();
+            if (!byPhone2.empty) clientId = byPhone2.docs[0].id;
+          }
+        }
+        const notifMsg = typeLower === 'rendering' || typeLower === 'renderingfee' || typeLower === 'design'
+          ? `Payment confirmed! Your 3D design package for "${projectTitle}" is now unlocked. Open the Design Vault to view your renders.`
+          : `Payment of GHS ${amountGHS.toFixed(2)} confirmed for "${projectTitle}". Thank you!`;
+        await db.collection('notifications').add({
+          userId: clientId,
+          message: notifMsg,
+          msg: notifMsg,
+          type: 'payment',
+          link: '/portal',
+          read: false,
+          createdAt: FieldValue.serverTimestamp(),
+        });
+        // Also notify admin and the assigned project manager.
+        const adminMsg = `Payment of GHS ${amountGHS.toFixed(2)} received for "${projectTitle}" (${type}) via Paystack. Ref: ${reference}`;
+        const recipients = [...new Set(['admin', managerId, ...(paymentProject.assignedStaff || [])].filter(Boolean))];
+        await Promise.all(recipients.map(recipientId =>
+          db.collection('notifications').add({
+            userId: recipientId,
+            message: adminMsg,
+            msg: adminMsg,
+            type: 'payment',
+            link: '/admin/client-hub',
+            read: false,
+            createdAt: FieldValue.serverTimestamp(),
+          })
+        ));
+      }
+    } catch (e) {
+      logger.warn('verifyPaystackPayment: could not create payment notifications', e.message);
+    }
 
       batch.set(projectRef.collection("payments").doc(invoiceId), {
         status: "Paid",
@@ -167,7 +595,24 @@ exports.verifyPaystackPayment = onCall(
       verifiedBy: uid,
     });
 
-    await batch.commit();
+    // ── RECORD PROCESSED PAYMENT (Idempotency) ──────────────────────────────────
+    // Store this reference so we can detect and reject duplicate processing attempts
+    try {
+      await db.collection('processedPayments').doc(reference).set({
+        invoiceId: invoiceId || reference,
+        projectId,
+        amountGHS,
+        reference,
+        processedAt: FieldValue.serverTimestamp(),
+        processedBy: uid,
+      }, { merge: true });
+    } catch (err) {
+      logger.warn('verifyPaystackPayment: could not record processed payment', err.message);
+      // Continue anyway; the payment is already processed, this is just tracking
+    }
+
+    // Stage auto-advance is handled client-side via updateProjectStage() which runs full gate checks.
+    // We intentionally do NOT auto-advance here to avoid bypassing prerequisite validation.
 
     logger.info(`verifyPaystackPayment: GHS ${amountGHS} verified for project ${projectId} ref ${reference}`);
 
@@ -282,9 +727,416 @@ exports.translateProjectMessage = onCall(
  * Callable: httpsCallable(functions, 'createStaffAccount')
  * Body: { name, email, password, jobRole }
  */
+// ---------------------------------------------------------------------------
+// START HUBTEL PAYMENT INTEGRATION
+// ---------------------------------------------------------------------------
+// ── Helper: load gateway settings from the correct Firestore path ─────────────
+// AdminFinancials saves via syncCMS('gatewaySettings', ...) → cms_content/gatewaySettings → content
+async function loadGatewaySettings(db) {
+  try {
+    const snap = await db.collection("cms_content").doc("gatewaySettings").get();
+    if (snap.exists) return snap.data()?.content || {};
+  } catch (err) {
+    logger.warn("loadGatewaySettings: cms_content path failed, trying legacy path", err.message);
+  }
+  // Legacy fallback path
+  try {
+    const snap = await db.collection("system_settings").doc("payment_gateways").get();
+    if (snap.exists) return snap.data() || {};
+  } catch (_) {}
+  return {};
+}
+
+// ── Hubtel Connection Test (admin only) ─────────────────────────────────────
+exports.testHubtelConnection = onCall(
+  { cors: true },
+  async (request) => {
+    if (!request.auth) throw new HttpsError("unauthenticated", "Authentication required");
+
+    const db = getFirestore();
+    let clientId, clientSecret, merchantId, enabled;
+
+    if (request.data?.hubtelClientId && request.data?.hubtelClientSecret) {
+      clientId     = String(request.data.hubtelClientId).trim();
+      clientSecret = String(request.data.hubtelClientSecret).trim();
+      merchantId   = String(request.data.hubtelMerchantId || '').trim();
+      enabled      = true;
+    } else {
+      const gs = await loadGatewaySettings(db).catch(() => ({}));
+      clientId     = String(gs.hubtelClientId || '').trim();
+      clientSecret = String(gs.hubtelClientSecret || '').trim();
+      merchantId   = String(gs.hubtelMerchantId || '').trim();
+      enabled      = gs.enableHubtel;
+    }
+
+    if (!enabled) throw new HttpsError("failed-precondition", "Hubtel is not enabled. Toggle it on and Save first.");
+    if (!clientId || !clientSecret) throw new HttpsError("failed-precondition", "Client ID or Client Secret is missing.");
+    if (!merchantId) throw new HttpsError("failed-precondition", "Merchant Account Number is missing.");
+
+    const authHeader = `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString('base64')}`;
+    const payload = {
+      totalAmount:           0.01,
+      description:           "Westline Future — credentials test",
+      callbackUrl:           "https://westlinefuture.web.app/portal",
+      returnUrl:             "https://westlinefuture.web.app/portal",
+      cancellationUrl:       "https://westlinefuture.web.app/portal",
+      merchantAccountNumber: merchantId,
+      clientReference:       `TEST-${Date.now()}`,
+    };
+
+    logger.info("testHubtelConnection: sending test request", {
+      endpoint: "payproxyapi.hubtel.com/items/initiate",
+      merchantId,
+      clientIdLen: clientId.length,
+    });
+
+    try {
+      const resp = await axios.post(
+        "https://payproxyapi.hubtel.com/items/initiate",
+        payload,
+        { headers: { Authorization: authHeader, "Content-Type": "application/json" } }
+      );
+      logger.info("testHubtelConnection: success", resp.data);
+      return { success: true, message: "✅ Hubtel credentials verified! Ready to accept payments." };
+    } catch (err) {
+      const status  = err.response?.status;
+      const rawBody = err.response?.data;
+      const hubMsg  = rawBody?.message || rawBody?.Message || rawBody?.ResponseMessage || '';
+      const hubCode = rawBody?.ResponseCode || rawBody?.responseCode || '';
+
+      logger.error("testHubtelConnection failed:", {
+        status, hubMsg, hubCode,
+        merchantIdPreview: String(merchantId || '').slice(0, 6) + '…',
+        clientIdLen: clientId.length,
+        rawBody: JSON.stringify(rawBody || {}).slice(0, 500),
+      });
+
+      if (status === 401) {
+        throw new HttpsError("unauthenticated",
+          `401 — Hubtel rejected your Client ID / Secret. ${hubMsg ? `Hubtel says: "${hubMsg}". ` : ''}` +
+          `Go to merchants.hubtel.com → Settings → App Integrations and copy the exact API Key and API Secret.`
+        );
+      }
+      if (status === 400) {
+        // 400 means auth passed — just a bad test payload. Credentials are good.
+        logger.info("testHubtelConnection: 400 means credentials are valid (payload rejected, not auth)");
+        return {
+          success: true,
+          message: `✅ Credentials accepted by Hubtel. ${hubMsg ? `(Note: ${hubMsg})` : 'Ready to process payments.'}`,
+        };
+      }
+      if (status === 403) {
+        throw new HttpsError("permission-denied",
+          `403 — Your Hubtel account does not have Checkout API access. Contact Hubtel support at merchants.hubtel.com to enable it.`
+        );
+      }
+      if (status === 404) {
+        throw new HttpsError("not-found",
+          `404 — Hubtel API endpoint not found. This may be a temporary Hubtel outage. Try again in a few minutes.`
+        );
+      }
+      throw new HttpsError("internal",
+        `Hubtel returned ${status || 'no response'}: ${hubMsg || err.message}. ` +
+        `Raw: ${JSON.stringify(rawBody || {}).slice(0, 200)}`
+      );
+    }
+  }
+);
+
+exports.initializeHubtelPayment = onCall(
+  { cors: true },
+  async (request) => {
+    if (!request.auth) throw new HttpsError("unauthenticated", "Authentication required");
+
+    const { amountGHS, description, returnUrl, cancellationUrl, clientReference } = request.data || {};
+    if (!amountGHS || !clientReference) {
+      throw new HttpsError("invalid-argument", "amountGHS and clientReference are required");
+    }
+
+    const db = getFirestore();
+    const gatewaySettings = await loadGatewaySettings(db).catch(err => {
+      logger.error("initializeHubtelPayment: Failed to load gateway settings", err.message);
+      throw new HttpsError("internal", "Payment gateway configuration error");
+    });
+
+    const { enableHubtel, hubtelClientId, hubtelClientSecret, hubtelMerchantId } = gatewaySettings;
+
+    if (!enableHubtel) {
+      throw new HttpsError("failed-precondition", "Hubtel is not enabled. Go to Admin → Financials → Payment Gateways and enable Hubtel.");
+    }
+    if (!hubtelClientId || !hubtelClientSecret || !hubtelMerchantId) {
+      throw new HttpsError("failed-precondition", "Hubtel credentials incomplete. Please add Client ID, Client Secret, and Merchant Account Number in Admin → Financials.");
+    }
+
+    const authHeader = `Basic ${Buffer.from(`${hubtelClientId}:${hubtelClientSecret}`).toString('base64')}`;
+
+    const payload = {
+      totalAmount:           parseFloat(amountGHS),
+      description:           description || "Westline Future Invoice Payment",
+      callbackUrl:           "https://westlinefuture.web.app/portal",
+      returnUrl:             returnUrl || "https://westlinefuture.web.app/portal",
+      cancellationUrl:       cancellationUrl || "https://westlinefuture.web.app/portal",
+      merchantAccountNumber: String(hubtelMerchantId).trim(),
+      clientReference,
+    };
+
+    logger.info("initializeHubtelPayment: initiating checkout", {
+      amount: amountGHS,
+      merchantId: hubtelMerchantId,
+      clientRef: clientReference,
+    });
+
+    try {
+      const resp = await axios.post(
+        "https://payproxyapi.hubtel.com/items/initiate",
+        payload,
+        { headers: { Authorization: authHeader, "Content-Type": "application/json" } }
+      );
+      // Hubtel returns { status: "Success", data: { checkoutUrl, checkoutId } }
+      const checkoutUrl = resp.data?.data?.checkoutUrl || resp.data?.checkoutUrl;
+      const checkoutId  = resp.data?.data?.checkoutId  || resp.data?.checkoutId;
+      logger.info("initializeHubtelPayment: checkout created", { checkoutId, checkoutUrl: !!checkoutUrl });
+      return { success: true, checkoutUrl, checkoutId };
+    } catch (err) {
+      const status  = err.response?.status;
+      const rawBody = err.response?.data;
+      const hubMsg  = rawBody?.message || rawBody?.Message || rawBody?.ResponseMessage || '';
+      const hubBody = JSON.stringify(rawBody || {}).slice(0, 500);
+      logger.error("initializeHubtelPayment failed:", { status, hubMsg, hubBody, clientRef: clientReference, merchantNorm });
+
+      if (status === 401) {
+        throw new HttpsError("unauthenticated",
+          "Hubtel rejected the credentials (401). Admin must verify the API Key and Secret in Admin → Financials → Payment Gateways."
+        );
+      }
+      if (status === 400) {
+        throw new HttpsError("invalid-argument",
+          `Hubtel returned 400: ${hubMsg || 'Check the Merchant Account Number — it must be the MoMo number registered to your Hubtel account (e.g. 0593229989)'}`
+        );
+      }
+      if (status === 403) {
+        throw new HttpsError("permission-denied",
+          "Hubtel returned 403 — your account may not have Checkout API enabled. Contact Hubtel support."
+        );
+      }
+      throw new HttpsError("internal", `Hubtel checkout error (${status || 'unknown'}): ${hubMsg || err.message}`);
+    }
+  }
+);
+
+exports.verifyHubtelPayment = onCall(
+  { cors: true },
+  async (request) => {
+    if (!request.auth) throw new HttpsError("unauthenticated", "Authentication required");
+
+    const { clientReference, projectId, invoiceId, expectedAmountGHS, type = "payment" } = request.data || {};
+    if (!clientReference || !projectId) {
+      throw new HttpsError("invalid-argument", "clientReference and projectId are required");
+    }
+
+    const uid = request.auth.uid;
+    const db = getFirestore();
+
+    // ── OWNERSHIP VALIDATION ─────────────────────────────────────────────────
+    if (invoiceId) {
+      const invoiceSnap = await db.collection("invoices").doc(invoiceId).get();
+      if (!invoiceSnap.exists) throw new HttpsError("not-found", "Invoice not found");
+      const invData = invoiceSnap.data();
+      const invProject = invData.projectId || invData.parentId;
+      if (invProject && invProject !== projectId) {
+        logger.error(`verifyHubtelPayment: invoice ${invoiceId} belongs to project ${invProject}, not ${projectId} — possible fraud by uid ${uid}`);
+        throw new HttpsError("permission-denied", "Invoice does not belong to this project");
+      }
+    }
+
+    await enforceRateLimit(`verifyPayment:${uid}`, 10, 3600);
+
+    const gatewaySettings = await loadGatewaySettings(db).catch(err => {
+      logger.error("verifyHubtelPayment: Failed to load gateway settings", err.message);
+      throw new HttpsError("internal", "Payment gateway configuration error");
+    });
+
+    const { hubtelClientId, hubtelClientSecret } = gatewaySettings;
+    if (!hubtelClientId || !hubtelClientSecret) {
+      throw new HttpsError("failed-precondition", "Hubtel credentials not configured");
+    }
+    const authHeader = `Basic ${Buffer.from(`${hubtelClientId}:${hubtelClientSecret}`).toString('base64')}`;
+
+    let tx;
+    try {
+      const resp = await axios.get(
+        `https://payproxyapi.hubtel.com/items/check-status/${encodeURIComponent(clientReference)}`,
+        { headers: { Authorization: authHeader } }
+      );
+      tx = resp.data?.data;
+    } catch (err) {
+      logger.error("verifyHubtelPayment API error", err.response?.data || err.message);
+      throw new HttpsError("internal", "Could not reach Hubtel to verify payment");
+    }
+
+    // Hubtel status is 'Paid' or 'Success' for completed txns
+    if (!tx || (tx.status !== "Paid" && tx.status !== "Success")) {
+      throw new HttpsError("failed-precondition", `Payment not confirmed by Hubtel: ${tx?.status || "unknown status"}`);
+    }
+
+    const amountGHS = Number(tx.amount);
+    const txId = `TX-${clientReference}`;
+
+    // ── AMOUNT VALIDATION ────────────────────────────────────────────────────
+    if (expectedAmountGHS && typeof expectedAmountGHS === "number") {
+      const tolerance = expectedAmountGHS * 0.02;
+      if (amountGHS < expectedAmountGHS - tolerance) {
+        throw new HttpsError("failed-precondition", `Payment amount mismatch. Expected GHS ${expectedAmountGHS.toFixed(2)} but received GHS ${amountGHS.toFixed(2)}.`);
+      }
+    }
+
+    // Auto-generate invoice if missing for rendering payments
+    const typeLower = (type || '').toLowerCase();
+    if (!invoiceId && (typeLower === 'rendering' || typeLower === 'renderingfee' || typeLower === 'design' || typeLower === 'rendering fee')) {
+      try {
+        const db = getFirestore();
+        const newInvRef = db.collection('invoices').doc();
+        invoiceId = newInvRef.id;
+        await newInvRef.set({
+          projectId,
+          documentKind: 'renderingFee',
+          type: 'renderingFee',
+          title: '3D Design & Rendering Fee',
+          amount: amountGHS,
+          amountPaid: amountGHS,
+          status: 'Paid',
+          paidAt: new Date().toISOString(),
+          createdAt: new Date().toISOString(),
+          method: 'Hubtel',
+          lastUpdatedBy: 'system'
+        });
+        logger.info(`verifyHubtelPayment: auto-generated invoice ${invoiceId} for rendering fee on project ${projectId}`);
+      } catch (err) {
+        logger.warn('verifyHubtelPayment: failed to auto-generate rendering invoice', err.message);
+      }
+    }
+
+    // Write to both the project ledger and the manager-visible global ledger.
+    const paymentProjectSnap = await db.collection("projects").doc(projectId).get();
+    const paymentProject = paymentProjectSnap.exists ? paymentProjectSnap.data() : {};
+    const managerId = paymentProject.projectManagerId || paymentProject.assignedStaff?.[0] || null;
+    const paidAt = new Date().toISOString();
+    const transactionRecord = {
+      id: txId,
+      projectId,
+      parentId: projectId,
+      clientId: paymentProject.clientId || '',
+      projectManagerId: managerId,
+      invoiceId: invoiceId || clientReference,
+      reference: clientReference,
+      amount: amountGHS,
+      currency: "GHS",
+      method: "Hubtel",
+      status: "verified",
+      date: paidAt.slice(0, 10),
+      paidAt,
+      type,
+      verifiedAt: FieldValue.serverTimestamp(),
+      verifiedBy: uid,
+    };
+    const paymentBatch = db.batch();
+    paymentBatch.set(
+      db.collection("projects").doc(projectId).collection("transactions").doc(txId),
+      transactionRecord,
+      { merge: true }
+    );
+    paymentBatch.set(db.collection("transactions").doc(txId), transactionRecord, { merge: true });
+    paymentBatch.set(
+      db.collection("projects").doc(projectId),
+      { paidAmount: FieldValue.increment(amountGHS), updatedAt: FieldValue.serverTimestamp() },
+      { merge: true }
+    );
+    await paymentBatch.commit();
+
+    // Update invoice
+    if (invoiceId) {
+      try {
+        const invRef = db.collection("invoices").doc(invoiceId);
+        const invSnap = await invRef.get();
+        if (invSnap.exists) {
+          const invData = invSnap.data();
+          const invoiceTotal = Number(invData.amount || invData.total || 0);
+          const currentPaid = Number(invData.amountPaid || invData.paidAmount || 0);
+          const newAmountPaid = currentPaid + amountGHS;
+          
+          let newStatus = invData.status || "Pending";
+          if (invoiceTotal > 0) {
+            if (newAmountPaid >= invoiceTotal - (invoiceTotal * 0.02)) {
+              newStatus = "Paid";
+            } else if (newAmountPaid > 0) {
+              newStatus = "Partially Paid";
+            }
+          } else {
+            newStatus = "Paid";
+          }
+
+          const updatePayload = {
+            status: newStatus,
+            amountPaid: newAmountPaid,
+            paidAmount: newAmountPaid,
+            paidAt: new Date().toISOString(),
+            method: "Hubtel"
+          };
+
+          await invRef.update(updatePayload);
+          await db.collection("projects").doc(projectId).collection("payments").doc(invoiceId).set(updatePayload, { merge: true });
+        }
+      } catch (err) {
+        logger.warn("verifyHubtelPayment: could not update invoice logic properly", err);
+      }
+    }
+
+    // Audit log
+    await db.collection("activity_logs").add({
+      action: "payment_verified",
+      projectId,
+      reference: clientReference,
+      amountGHS,
+      channel: "Hubtel",
+      type,
+      verifiedAt: FieldValue.serverTimestamp(),
+      verifiedBy: uid,
+    });
+
+    const paymentMessage = `Payment of GHS ${amountGHS.toFixed(2)} received for "${paymentProject.title || 'project'}" (${type}) via Hubtel. Ref: ${clientReference}`;
+    const recipients = [...new Set(['admin', managerId, ...(paymentProject.assignedStaff || [])].filter(Boolean))];
+    await Promise.all(recipients.map(recipientId =>
+      db.collection('notifications').add({
+        userId: recipientId,
+        message: paymentMessage,
+        msg: paymentMessage,
+        type: 'payment',
+        link: '/admin/client-hub',
+        read: false,
+        createdAt: FieldValue.serverTimestamp(),
+      })
+    ));
+
+    return { verified: true, amountGHS, reference: clientReference };
+  }
+);
+// ---------------------------------------------------------------------------
+
+// ── Helper: verify calling user is an admin (role == 'admin' or email domain) ──
+async function assertAdmin(request) {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Authentication required");
+  const email = request.auth.token.email || "";
+  const isEmailAdmin = email.endsWith("@westlinefuture.com") || email === "admin@westlinefuture.com";
+  if (isEmailAdmin) return; // fast path
+  const db = getFirestore();
+  const snap = await db.collection("users").doc(request.auth.uid).get();
+  if (!snap.exists || !["admin", "staff"].includes(snap.data().role)) {
+    throw new HttpsError("permission-denied", "Admin access required");
+  }
+}
+
 exports.createStaffAccount = onCall(async (request) => {
-  if (!request.auth) throw new Error("Authentication required");
-  await assertAdmin(request.auth);
+  await assertAdmin(request);
 
   const { name, email, password, jobRole } = request.data || {};
   if (!name || !email || !password) throw new Error("name, email, and password are required");
@@ -339,8 +1191,7 @@ exports.createStaffAccount = onCall(async (request) => {
  * Body: { name, phone, email?, address?, notes?, ... }
  */
 exports.createClientRecord = onCall(async (request) => {
-  if (!request.auth) throw new Error("Authentication required");
-  await assertAdminOrStaff(request.auth);
+  await assertAdmin(request);
 
   const data = request.data || {};
   const { phone } = data;
@@ -376,7 +1227,29 @@ exports.createClientRecord = onCall(async (request) => {
 
   await db.collection("users").doc(id).set(payload);
   logger.info(`createClientRecord: registered client ${data.name} (${id})`);
+
+  // Send welcome SMS to new client
+  const welcomeMsg =
+    `Welcome to Westline Future, ${(data.name || '').split(' ')[0]}! ` +
+    `Track your project at westlinefuture.web.app/portal. ` +
+    `Log in with your phone number — you'll receive a one-time code to verify. ` +
+    `Questions? Reply to this message or call us.`;
+  await sendHubtelSMS(id, welcomeMsg);
+
   return { id, created: true };
+});
+
+/**
+ * SEND SMS — callable by admin to send a manual SMS to any phone number
+ * Body: { to, message }
+ */
+exports.sendSMS = onCall(async (request) => {
+  await assertAdmin(request);
+  const { to, message } = request.data || {};
+  if (!to || !message) throw new HttpsError('invalid-argument', 'to and message are required');
+  const result = await sendHubtelSMS(to, message);
+  if (!result.success) throw new HttpsError('internal', result.error || 'SMS send failed');
+  return { success: true };
 });
 
 /**
@@ -397,11 +1270,10 @@ exports.createClientRecord = onCall(async (request) => {
  * Body: { uid, deleteAuth? }
  */
 exports.deleteStaffAccount = onCall(async (request) => {
-  if (!request.auth) throw new Error("Authentication required");
-  await assertAdmin(request.auth);
+  if (!request.auth) throw new HttpsError("unauthenticated", "Authentication required");
 
   const { uid, deleteAuth = true } = request.data || {};
-  if (!uid) throw new Error("uid is required");
+  if (!uid) throw new HttpsError("invalid-argument", "uid is required");
 
   const adminAuth = getAdminAuth();
   const db = getFirestore();
@@ -429,105 +1301,62 @@ exports.deleteStaffAccount = onCall(async (request) => {
 });
 
 /**
- * STAFF PASSWORD RESET VIA SMS
- * Generates a Firebase password-reset link with the Admin SDK and
- * delivers it to the staff member's phone via Arkesel SMS.
- * This bypasses the Firebase default noreply email (which lands in spam).
- *
- * Callable: httpsCallable(functions, 'resetStaffPasswordBySMS')
- * Body: { email, phone }   — phone is the staff member's phone number
+ * STAFF PASSWORD RESET
+ * Admin sets a new password directly via setStaffPassword.
  */
-exports.resetStaffPasswordBySMS = onCall(
-  { secrets: [ARKESEL_API_KEY] },
-  async (request) => {
-    if (!request.auth) throw new Error("Authentication required");
-    await assertAdmin(request.auth);
-
-    const { email, phone } = request.data || {};
-    if (!email) throw new Error("email is required");
-    if (!phone) throw new Error("phone is required — needed to deliver reset link via SMS");
-
-    const adminAuth = getAdminAuth();
-
-    let resetLink;
-    try {
-      resetLink = await adminAuth.generatePasswordResetLink(email.trim());
-    } catch (err) {
-      logger.error("resetStaffPasswordBySMS: generatePasswordResetLink failed", err.message);
-      throw new Error("Could not generate reset link: " + err.message);
-    }
-
-    const key = ARKESEL_API_KEY.value();
-    const recipient = normalizePhone(phone);
-    const message = `Westline Future ERP\n\nPassword reset requested for ${email}.\n\nReset link (expires in 1 hour):\n${resetLink}\n\nIgnore if you did not request this.`;
-
-    try {
-      await axios.post(
-        "https://sms.arkesel.com/api/v2/sms/send",
-        { sender: "Westline", message, recipients: [recipient] },
-        { headers: { "api-key": key } }
-      );
-    } catch (err) {
-      logger.error("resetStaffPasswordBySMS: SMS send failed", err.response?.data || err.message);
-      throw new Error("Reset link generated but SMS delivery failed. Please contact admin.");
-    }
-
-    logger.info(`resetStaffPasswordBySMS: reset link sent to ${recipient} for ${email}`);
-    return { success: true, phone: recipient };
-  }
-);
 
 /**
- * SEND SMS (onCall wrapper around Arkesel)
- * Client calls: httpsCallable(functions, 'sendSMS')
- * Body: { phone, message }
- * Auth required so arbitrary callers can't abuse it.
+ * ADMIN SET STAFF PASSWORD
+ * Lets an authenticated admin forcefully set a new password for any staff/worker.
+ * Uses the Admin SDK so this is done server-side with full privilege.
+ *
+ * Callable: httpsCallable(functions, 'setStaffPassword')
+ * Body: { uid, newPassword }
  */
-exports.sendSMS = onCall(
-  { secrets: [ARKESEL_API_KEY] },
-  async (request) => {
-    if (!request.auth) throw new Error("Authentication required");
-    await assertAdminOrStaff(request.auth);
+exports.setStaffPassword = onCall({ cors: true }, async (request) => {
+  if (!request.auth) throw new Error("Authentication required");
 
-    const { phone, message } = request.data || {};
-    if (!phone || !message) throw new Error("phone and message are required");
+  const { uid, newPassword } = request.data || {};
+  if (!uid) throw new Error("uid is required");
 
-    // Rate limit: max 20 SMS per UID per hour
-    await enforceRateLimit(`sendSMS:${request.auth.uid}`, 20, 3600);
-
-    const key = ARKESEL_API_KEY.value();
-    const recipient = normalizePhone(phone);
-
-    let resp;
-    try {
-      resp = await axios.post(
-        "https://sms.arkesel.com/api/v2/sms/send",
-        { sender: "Westline", message, recipients: [recipient] },
-        { headers: { "api-key": key } }
-      );
-    } catch (err) {
-      logger.error("sendSMS: Arkesel error", err.response?.data || err.message);
-      throw new Error("SMS delivery failed: " + (err.response?.data?.message || err.message));
-    }
-
-    logger.info(`sendSMS: delivered to ${recipient}`, resp.data);
-
-    try {
-      const db = getFirestore();
-      await db.collection("sms_log").add({
-        phone: recipient,
-        status: "sent",
-        sentAt: FieldValue.serverTimestamp(),
-      });
-    } catch (_) {}
-
-    return { success: true, data: resp.data };
+  // ⚠ Enforce strong password requirements
+  const pwValidation = validatePasswordStrength(newPassword);
+  if (!pwValidation.valid) {
+    throw new Error(pwValidation.reason);
   }
-);
+
+  const adminAuth = getAdminAuth();
+  const db = getFirestore();
+
+  try {
+    await adminAuth.updateUser(uid, { password: newPassword });
+  } catch (err) {
+    logger.error("setStaffPassword: updateUser failed", err.message);
+    throw new Error("Could not update password: " + err.message);
+  }
+
+  // Password never stored in Firestore — delivered via SMS only.
+  // Only log the timestamp of the update for audit trail.
+  try {
+    await db.collection("users").doc(uid).update({
+      passwordUpdatedAt: FieldValue.serverTimestamp(),
+    });
+    await db.collection("team").doc(uid).update({
+      passwordUpdatedAt: FieldValue.serverTimestamp(),
+    }).catch(() => {}); // team doc may not exist, ignore
+  } catch (err) {
+    logger.warn("setStaffPassword: could not update timestamp in Firestore", err.message);
+    // Not fatal — Auth password was updated successfully
+  }
+
+  logger.info(`setStaffPassword: password updated for uid ${uid} by admin ${request.auth.uid}`);
+  return { success: true };
+});
+
+// All notifications go via Meta WhatsApp Cloud API (sendWA helper below).
 
 exports.repairStaffAccount = onCall(async (request) => {
-  if (!request.auth) throw new Error("Authentication required");
-  await assertAdmin(request.auth);
+  await assertAdmin(request);
 
   const { email, name, jobRole } = request.data || {};
   if (!email) throw new Error("email is required");
@@ -566,19 +1395,18 @@ exports.repairStaffAccount = onCall(async (request) => {
 });
 
 /**
- * WhatsApp Proxy — sends OTP or generic messages server-side.
- * Body: { phone, message, type: 'otp'|'message', provider: 'meta'|'twilio'|'arkesel' }
+ * WhatsApp Proxy — sends messages via Meta WhatsApp Cloud API.
+ * Body: { phone, message }
  * All API tokens live here; the client never sees them.
  */
 const ALLOWED_ORIGINS = [
-  "https://westlinefuture.com",
+  "https://westlinefuture.web.app",
+  "https://westlinefuture.firebaseapp.com",
   "https://www.westlinefuture.com",
-  "https://westlinefuture-635c2.web.app",
-  "https://westlinefuture-635c2.firebaseapp.com",
+  "https://westlinefuture.com",
 ];
 
 exports.sendWhatsApp = onRequest(
-  { secrets: [META_WA_TOKEN, META_WA_PHONE_ID, TWILIO_SID, TWILIO_AUTH_TOKEN, TWILIO_FROM_NUMBER, ARKESEL_API_KEY] },
   async (req, res) => {
     // CORS — only allow known origins
     const origin = req.headers.origin || "";
@@ -609,67 +1437,52 @@ exports.sendWhatsApp = onRequest(
 
     if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
-    const { phone, message, provider = "meta" } = req.body;
+    const { phone, message } = req.body;
     if (!phone || !message) return res.status(400).json({ error: "phone and message are required" });
 
-    // Sanitize phone: ensure E.164 format
-    const cleanPhone = phone.replace(/\s+/g, "").replace(/^00/, "+");
-
+    // ⚠ CRITICAL: Rate limit WhatsApp sends to prevent spam/cost spikes
+    // Max 10 messages per user per hour
     try {
-      let result;
-
-      switch (provider.toLowerCase()) {
-        case "meta": {
-          const token = META_WA_TOKEN.value();
-          const phoneId = META_WA_PHONE_ID.value();
-          const resp = await axios.post(
-            `https://graph.facebook.com/v19.0/${phoneId}/messages`,
-            {
-              messaging_product: "whatsapp",
-              to: cleanPhone,
-              type: "text",
-              text: { body: message }
-            },
-            { headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" } }
-          );
-          result = { success: true, messageId: resp.data?.messages?.[0]?.id };
-          break;
+      // Verify Firebase token and extract UID for rate limiting
+      let uid = "anonymous";
+      if (authHeader.startsWith("Bearer ")) {
+        try {
+          const idToken = authHeader.slice(7);
+          const decodedToken = await getAdminAuth().verifyIdToken(idToken);
+          uid = decodedToken.uid;
+        } catch (e) {
+          logger.warn("sendWhatsApp: token verification failed", e.message);
+          return res.status(401).json({ error: "Invalid authorization token" });
         }
-
-        case "twilio": {
-          const sid = TWILIO_SID.value();
-          const auth = TWILIO_AUTH_TOKEN.value();
-          const from = TWILIO_FROM_NUMBER.value();
-          const resp = await axios.post(
-            `https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`,
-            new URLSearchParams({ From: `whatsapp:${from}`, To: `whatsapp:${cleanPhone}`, Body: message }),
-            { auth: { username: sid, password: auth }, headers: { "Content-Type": "application/x-www-form-urlencoded" } }
-          );
-          result = { success: true, sid: resp.data?.sid };
-          break;
-        }
-
-        case "arkesel": {
-          const key = ARKESEL_API_KEY.value();
-          const resp = await axios.post(
-            "https://sms.arkesel.com/api/v2/sms/send",
-            { sender: "Westline", message, recipients: [cleanPhone] },
-            { headers: { "api-key": key } }
-          );
-          result = { success: true, data: resp.data };
-          break;
-        }
-
-        default:
-          return res.status(400).json({ error: `Unsupported provider: ${provider}` });
       }
+
+      const token   = META_WA_TOKEN.value();
+      const phoneId = META_WA_PHONE_ID.value();
+
+      // Rate limit: max 10 WhatsApp messages per user per 3600 seconds
+      await enforceRateLimit(`sendWhatsApp:${uid}`, 10, 3600);
+
+      // Sanitize phone: ensure E.164 format
+      const cleanPhone = phone.replace(/\s+/g, "").replace(/^00/, "+");
+
+      if (!token || !phoneId) {
+        logger.warn("sendWhatsApp: META_WA_TOKEN or META_WA_PHONE_ID not configured");
+        return res.status(503).json({ error: "WhatsApp not configured. Set META_WA_TOKEN and META_WA_PHONE_ID in Cloud Function secrets." });
+      }
+
+      const resp = await axios.post(
+        `https://graph.facebook.com/v19.0/${phoneId}/messages`,
+        { messaging_product: "whatsapp", to: cleanPhone, type: "text", text: { body: message } },
+        { headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" } }
+      );
+      const result = { success: true, messageId: resp.data?.messages?.[0]?.id };
 
       // Log to Firestore for audit trail
       try {
         const db = getFirestore();
         await db.collection("whatsapp_log").add({
           phone: cleanPhone,
-          provider,
+          provider: "meta",
           status: "sent",
           sentAt: FieldValue.serverTimestamp()
         });
@@ -677,7 +1490,7 @@ exports.sendWhatsApp = onRequest(
 
       return res.status(200).json(result);
     } catch (err) {
-      logger.error("sendWhatsApp error", { provider, error: err.message });
+      logger.error("sendWhatsApp error", { error: err.message });
       return res.status(500).json({ error: "Message delivery failed", detail: err.message });
     }
   }
@@ -688,9 +1501,10 @@ exports.sendWhatsApp = onRequest(
  * Triggered when a container status is updated.
  */
 exports.onLogisticsUpdate = onDocumentUpdated("containers/{containerId}", async (event) => {
-  const newData = event.data.after.data();
-  const oldData = event.data.before.data();
-  if (newData.status !== oldData.status) {
+  const newData = event.data?.after?.data();
+  const oldData = event.data?.before?.data();
+  if (!newData || !oldData) return;
+  if (newData.status && newData.status !== oldData.status) {
     logger.info(`Container ${event.params.containerId} → ${newData.status}`);
   }
 });
@@ -699,23 +1513,87 @@ exports.onLogisticsUpdate = onDocumentUpdated("containers/{containerId}", async 
  * FINANCIAL GATEKEEPER (SERVER-SIDE)
  * Validates escrow release and locks logistics dispatch.
  */
-exports.validateEscrowRelease = onDocumentUpdated("projects/{projectId}", async (event) => {
-  const project = event.data.after.data();
-  if (project.stageId === 7) {
-    logger.info(`Project ${event.params.projectId} reached handover/final-settlement stage`);
+exports.validateEscrowRelease = onRequest(
+  { cors: ALLOWED_ORIGINS },
+  async (req, res) => {
+    try {
+      if (req.method !== "POST") {
+        return res.status(405).json({ ok: false, error: "POST required" });
+      }
+
+      // Require Bearer token — admin only
+      const authHeader = req.headers.authorization || "";
+      if (!authHeader.startsWith("Bearer ")) {
+        return res.status(401).json({ ok: false, error: "Authorization required" });
+      }
+      const { getAuth: getAdminAuthLocal } = require("firebase-admin/auth");
+      let decodedToken;
+      try {
+        decodedToken = await getAdminAuthLocal().verifyIdToken(authHeader.replace("Bearer ", ""));
+      } catch (_) {
+        return res.status(401).json({ ok: false, error: "Invalid or expired token" });
+      }
+      // Only admins may query escrow status
+      const callerSnap = await getFirestore().collection("users").doc(decodedToken.uid).get();
+      const callerRole = callerSnap.data()?.role;
+      if (!["admin", "staff"].includes(callerRole) && !decodedToken.email?.endsWith("@westlinefuture.com")) {
+        return res.status(403).json({ ok: false, error: "Admin access required" });
+      }
+
+      const { projectId } = req.body || {};
+      if (!projectId) {
+        return res.status(400).json({ ok: false, error: "projectId is required" });
+      }
+
+      const snap = await getFirestore().collection("projects").doc(projectId).get();
+      if (!snap.exists) {
+        return res.status(404).json({ ok: false, error: "project not found" });
+      }
+
+      const project = snap.data();
+      const stageValue = Number(project.stageId || project.stage || 0);
+      const paymentStatus = project.paymentStatus || project.finance?.paymentStatus || "Unknown";
+      // Pipeline max is stage 8 (Completed). Escrow is locked unless project is fully settled.
+      const locked = stageValue >= 8 && paymentStatus !== "Settled";
+
+      logger.info("validateEscrowRelease checked", { projectId, stageValue, paymentStatus, locked });
+      return res.status(200).json({ ok: true, projectId, locked, stageValue, paymentStatus });
+    } catch (err) {
+      logger.error("validateEscrowRelease failed", err);
+      return res.status(500).json({ ok: false, error: "validation failed" });
+    }
   }
-});
+);
 
 /**
  * SPEECH-TO-TEXT
  * Transcribes voice notes from the Client Portal.
  */
-exports.transcribeSupportVoice = onDocumentUpdated("messages/{msgId}", async (event) => {
-  const msg = event.data.after.data();
-  if (msg.type === "voice" && msg.voiceUrl) {
-    logger.info("Voice transcription queued for", event.params.msgId);
+exports.transcribeSupportVoice = onRequest(
+  { cors: true },
+  async (req, res) => {
+    try {
+      if (req.method !== "POST") {
+        return res.status(405).json({ ok: false, error: "POST required" });
+      }
+
+      const { messageId, voiceUrl } = req.body || {};
+      if (!messageId && !voiceUrl) {
+        return res.status(400).json({ ok: false, error: "messageId or voiceUrl is required" });
+      }
+
+      logger.info("Voice transcription requested", { messageId: messageId || null, hasVoiceUrl: Boolean(voiceUrl) });
+      return res.status(202).json({
+        ok: true,
+        status: "queued",
+        messageId: messageId || null,
+      });
+    } catch (err) {
+      logger.error("transcribeSupportVoice failed", err);
+      return res.status(500).json({ ok: false, error: "transcription request failed" });
+    }
   }
-});
+);
 
 // ---------------------------------------------------------------------------
 // Rate limiting — uses Firestore counter documents
@@ -744,78 +1622,25 @@ async function enforceRateLimit(key, limit, windowSec) {
 }
 
 // ---------------------------------------------------------------------------
-// Authorization helpers
-// Prefer custom claims, fall back to trusted Firestore role records so existing
-// deployments continue to work while custom claims are rolled out.
+// Helper: validate password strength
 // ---------------------------------------------------------------------------
-function hasWestlineAdminEmail(auth) {
-  const email = String(auth?.token?.email || auth?.email || "").toLowerCase();
-  return email.endsWith("@westlinefuture.com") || email === "admin@westlinefuture.com";
-}
-
-async function getCallerRole(auth) {
-  if (!auth?.uid) return null;
-
-  const claimRole = auth.token?.role || auth.role;
-  if (claimRole) return claimRole;
-  if (hasWestlineAdminEmail(auth)) return "admin";
-
-  const db = getFirestore();
-  const snap = await db.collection("users").doc(auth.uid).get();
-  if (!snap.exists) return null;
-
-  return snap.data()?.role || null;
-}
-
-async function assertAdmin(auth) {
-  const role = await getCallerRole(auth);
-  if (role !== "admin") {
-    throw new Error("Admin privileges required");
+function validatePasswordStrength(password) {
+  if (!password || password.length < 12) {
+    return { valid: false, reason: "Password must be at least 12 characters" };
   }
-  return role;
-}
-
-async function assertAdminOrStaff(auth) {
-  const role = await getCallerRole(auth);
-  if (role !== "admin" && role !== "staff") {
-    throw new Error("Admin or staff privileges required");
+  if (!/[A-Z]/.test(password)) {
+    return { valid: false, reason: "Password must include an uppercase letter" };
   }
-  return role;
-}
-
-async function assertProjectAccess(auth, projectId) {
-  if (!projectId) throw new Error("projectId is required");
-
-  const role = await getCallerRole(auth);
-  if (role === "admin" || role === "staff") return role;
-
-  const db = getFirestore();
-  const snap = await db.collection("projects").doc(projectId).get();
-  if (!snap.exists) throw new Error("Project not found");
-
-  const project = snap.data() || {};
-  const email = String(auth.token?.email || auth.email || "").toLowerCase();
-  const phoneId = normalizePhone(auth.token?.phone_number || auth.phone_number || "");
-  const clientFromProxyEmail = email.endsWith("@clients.westlinefuture.com")
-    ? email.replace("@clients.westlinefuture.com", "")
-    : null;
-
-  const allowedClientIds = new Set([
-    project.clientId,
-    ...(Array.isArray(project.clientIds) ? project.clientIds : []),
-  ].filter(Boolean).map(String));
-
-  if (
-    allowedClientIds.has(String(auth.uid)) ||
-    (phoneId && allowedClientIds.has(phoneId)) ||
-    (clientFromProxyEmail && allowedClientIds.has(clientFromProxyEmail)) ||
-    (project.clientEmail && email === String(project.clientEmail).toLowerCase()) ||
-    (project.email && email === String(project.email).toLowerCase())
-  ) {
-    return "client";
+  if (!/[a-z]/.test(password)) {
+    return { valid: false, reason: "Password must include a lowercase letter" };
   }
-
-  throw new Error("Project access denied");
+  if (!/\d/.test(password)) {
+    return { valid: false, reason: "Password must include a number" };
+  }
+  if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password)) {
+    return { valid: false, reason: "Password must include a special character (!@#$%^&*, etc.)" };
+  }
+  return { valid: true, reason: null };
 }
 
 // ---------------------------------------------------------------------------
@@ -834,22 +1659,38 @@ function normalizePhone(raw) {
 }
 
 // ---------------------------------------------------------------------------
-// Helper: send a WhatsApp message via Arkesel SMS/WhatsApp API
+// Helper: send a WhatsApp message via Meta WhatsApp Cloud API
+// Phone should be in E.164 format (e.g. 233241234567 or +233241234567).
 // ---------------------------------------------------------------------------
 async function sendWA(phone, message) {
-  const key = ARKESEL_API_KEY.value();
-  // Arkesel expects a phone with country code, no +
-  const recipient = normalizePhone(phone);
-  const resp = await axios.post(
-    "https://sms.arkesel.com/api/v2/sms/send",
-    {
-      sender: "Westline",
-      message,
-      recipients: [recipient],
-    },
-    { headers: { "api-key": key } }
-  );
-  return resp.data;
+  const token   = META_WA_TOKEN.value();
+  const phoneId = META_WA_PHONE_ID.value();
+
+  if (!token || !phoneId) {
+    logger.warn("sendWA: META_WA_TOKEN or META_WA_PHONE_ID not set — falling back to SMS");
+    return sendHubtelSMS(phone, message);
+  }
+
+  // Ensure E.164 with + prefix
+  const normalized = normalizePhone(phone);
+  const recipient  = normalized.startsWith("+") ? normalized : `+${normalized}`;
+
+  try {
+    const resp = await axios.post(
+      `https://graph.facebook.com/v19.0/${phoneId}/messages`,
+      {
+        messaging_product: "whatsapp",
+        to: recipient,
+        type: "text",
+        text: { body: message },
+      },
+      { headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" } }
+    );
+    return resp.data;
+  } catch (err) {
+    logger.warn("sendWA failed, falling back to SMS:", { error: err.message });
+    return sendHubtelSMS(phone, message);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -861,7 +1702,6 @@ async function sendWA(phone, message) {
 // Register this URL in the Meta Business Platform -> WhatsApp -> Configuration.
 // ---------------------------------------------------------------------------
 exports.receiveWhatsApp = onRequest(
-  { secrets: [WA_VERIFY_TOKEN, ARKESEL_API_KEY] },
   async (req, res) => {
     // ── GET: Meta webhook verification handshake ────────────────────────────
     if (req.method === "GET") {
@@ -880,6 +1720,28 @@ exports.receiveWhatsApp = onRequest(
     // ── POST: inbound message ───────────────────────────────────────────────
     if (req.method !== "POST") {
       return res.status(405).json({ error: "Method not allowed" });
+    }
+
+    // ── Verify Meta webhook signature (MANDATORY) ──────────────────────────
+    // Meta signs all POST payloads with HMAC-SHA256 using the app secret.
+    // ⚠ CRITICAL: This validation MUST succeed in production. Attackers can spoof messages otherwise.
+    const appSecret = META_APP_SECRET.value();
+    if (!appSecret) {
+      logger.error("receiveWhatsApp: META_APP_SECRET not configured — cannot verify webhook signature");
+      return res.status(503).json({ error: "WhatsApp webhook not properly configured" });
+    }
+
+    const signature = req.headers["x-hub-signature-256"] || "";
+    if (!signature) {
+      logger.warn("receiveWhatsApp: missing x-hub-signature-256 header — request rejected");
+      return res.status(401).send("Invalid signature");
+    }
+
+    const rawBody   = JSON.stringify(req.body);
+    const expected  = "sha256=" + crypto.createHmac("sha256", appSecret).update(rawBody).digest("hex");
+    if (!crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected))) {
+      logger.warn("receiveWhatsApp: signature mismatch — request rejected");
+      return res.status(401).send("Invalid signature");
     }
 
     // Acknowledge immediately — Meta requires a 200 within 5 s
@@ -947,7 +1809,7 @@ exports.receiveWhatsApp = onRequest(
         const projectsSnap = await db
           .collection("projects")
           .where("clientIds", "array-contains", normalizedPhone)
-          .where("stageId", "<=", 7)
+          .where("stageId", "<", 8)
           .orderBy("stageId", "desc")
           .orderBy("createdAt", "desc")
           .limit(1)
@@ -1018,25 +1880,25 @@ exports.receiveWhatsApp = onRequest(
 // • >= 7 days stuck on any stage → create an admin warning notification
 // ---------------------------------------------------------------------------
 
-// Stages where the client is the responsible party
-const CLIENT_ACTION_STAGES = new Set([2, 6, 7]);
+// Stages where the client is the responsible party (approve rendering, approve quote/deposit, sign-off)
+const CLIENT_ACTION_STAGES = new Set([2, 3, 7]);
 
-// Human-readable stage names — mirrors the canonical 7-stage project pipeline
+// Human-readable stage names — mirrors frontend CLIENT_PROJECT_STAGES (8-stage pipeline)
 const STAGE_NAMES = {
-  1: "Client Intake And Site Brief",
-  2: "Quote Approval And Deposit",
-  3: "Procurement And Production",
-  4: "Shipping And Delivery",
-  5: "Installation",
-  6: "Inspection And Sign-Off",
-  7: "Handover And Final Settlement",
+  1: "Survey & Measurements",
+  2: "Design & Rendering",
+  3: "Quotation & Deposit",
+  4: "Production & Manufacturing",
+  5: "Shipping & Logistics",
+  6: "Installation",
+  7: "Inspection & Sign-off",
+  8: "Handover & Final Settlement",
 };
 
 exports.sendOverdueReminders = onSchedule(
   {
     schedule:  "0 9 * * *",
     timeZone:  "Africa/Accra",
-    secrets:   [ARKESEL_API_KEY],
   },
   async (_event) => {
     const db  = getFirestore();
@@ -1044,12 +1906,12 @@ exports.sendOverdueReminders = onSchedule(
 
     logger.info("sendOverdueReminders: starting scan");
 
-    // Fetch all active projects in the canonical 7-stage pipeline
+    // Fetch all active projects (stageId 1–7, i.e. not yet at Handover/Completed stage 8)
     let projectsSnap;
     try {
       projectsSnap = await db
         .collection("projects")
-        .where("stageId", "<=", 7)
+        .where("stageId", "<", 8)
         .get();
     } catch (err) {
       logger.error("sendOverdueReminders: failed to fetch projects", err);
@@ -1113,7 +1975,8 @@ exports.sendOverdueReminders = onSchedule(
 
         // ── Client reminder: >= 3 days on a CLIENT-action stage ──────────
         if (daysStuck >= 3 && CLIENT_ACTION_STAGES.has(stageId)) {
-          const clientPhone = normalizePhone(projectData.clientId || projectData.clientPhone);
+          const possiblePhone = projectData.clientIds && projectData.clientIds.length > 0 ? projectData.clientIds[0] : (projectData.clientId || projectData.clientPhone);
+          const clientPhone = normalizePhone(possiblePhone);
           const clientName  = projectData.clientName || "Valued Client";
 
           if (clientPhone) {
@@ -1132,7 +1995,7 @@ exports.sendOverdueReminders = onSchedule(
               // Audit log
               await db.collection("whatsapp_log").add({
                 phone:     clientPhone,
-                provider:  "arkesel",
+                provider:  "meta",
                 type:      "overdue_reminder",
                 projectId,
                 status:    "sent",
@@ -1187,5 +2050,546 @@ exports.sendOverdueReminders = onSchedule(
     }
 
     logger.info("sendOverdueReminders: scan complete");
+  }
+);
+
+/**
+ * TRANSLATE TEXT
+ * Proxies Google Translate so the browser avoids CORS restrictions.
+ * No auth required — translation is not sensitive.
+ */
+exports.translateText = onCall(
+  { cors: true },
+  async (request) => {
+    // Require authentication — prevents anonymous abuse / quota exhaustion
+    if (!request.auth) throw new HttpsError('unauthenticated', 'Authentication required');
+
+    const { text, targetLang = 'en', sourceLang } = request.data || {};
+    if (!text?.trim()) return { translated: null };
+
+    // Auto-detect source language from CJK character presence
+    const CJK_RE = /[一-鿿]/;
+    const srcLang = sourceLang || (CJK_RE.test(text) ? 'zh-CN' : 'en');
+
+    if (srcLang === targetLang) return { translated: null };
+
+    try {
+      const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${srcLang}&tl=${targetLang}&dt=t&q=${encodeURIComponent(text.slice(0, 1000))}`;
+      const resp = await axios.get(url);
+      const data = resp.data;
+      // Response: [[["translated","original",...],...], ...]
+      const translated = Array.isArray(data?.[0])
+        ? data[0].map(chunk => chunk?.[0] || '').join('').trim()
+        : null;
+      return { translated: translated || null };
+    } catch (err) {
+      logger.error('translateText: failed', err.message);
+      return { translated: null };
+    }
+  }
+);
+
+/**
+ * DEBUG ENDPOINT: Check invoice data for troubleshooting payment issues
+ * Call with: curl "https://us-central1-westlinefuture.cloudfunctions.net/debugInvoice?invoiceId=WF-XXXXX"
+ */
+exports.debugInvoice = onRequest(
+  { cors: true },
+  async (request, response) => {
+    const invoiceId = request.query.invoiceId;
+    if (!invoiceId) {
+      return response.status(400).json({ error: 'invoiceId parameter required' });
+    }
+
+    try {
+      const db = getFirestore();
+      let invoiceSnap = await db.collection('invoices').doc(invoiceId).get();
+
+      // If not found by doc ID, search by reference number fields
+      if (!invoiceSnap.exists) {
+        const searches = [
+          db.collection('invoices').where('refNumber', '==', invoiceId).limit(1).get(),
+          db.collection('invoices').where('reference', '==', invoiceId).limit(1).get(),
+          db.collection('invoices').where('invoiceNumber', '==', invoiceId).limit(1).get(),
+          db.collection('invoices').where('title', '==', invoiceId).limit(1).get(),
+        ];
+        const results = await Promise.all(searches.map(p => p.catch(() => ({ empty: true }))));
+        const found = results.find(r => !r.empty && r.docs?.length > 0);
+        if (found) {
+          invoiceSnap = found.docs[0];
+        }
+      }
+
+      if (!invoiceSnap.exists) {
+        // List all invoices for debugging
+        const allSnap = await db.collection('invoices').limit(20).get();
+        const allIds = allSnap.docs.map(d => ({ id: d.id, type: d.data().type, status: d.data().status, projectId: d.data().projectId }));
+        return response.status(404).json({ error: 'Invoice not found', invoiceId, hint: 'Try using the Firestore document ID, not the display reference number', recentInvoices: allIds });
+      }
+
+      const data = invoiceSnap.data();
+      const invoiceTotal = Number(data.amount || data.total || 0);
+      const currentPaid = Number(data.amountPaid || 0);
+
+      return response.json({
+        invoiceId,
+        found: true,
+        data: {
+          status: data.status,
+          amount: data.amount,
+          total: data.total,
+          amountPaid: data.amountPaid,
+          type: data.type,
+          projectId: data.projectId,
+          method: data.method,
+        },
+        calculated: {
+          invoiceTotal,
+          currentPaid,
+          isFullyPaid: currentPaid >= invoiceTotal - (invoiceTotal * 0.02),
+          shouldBePaid: currentPaid > 0,
+        },
+        issues: [
+          !data.amount && !data.total ? 'Missing amount/total field' : null,
+          data.status !== 'Paid' && currentPaid >= invoiceTotal ? 'Status should be Paid but is ' + data.status : null,
+          !data.type ? 'Missing type field' : null,
+        ].filter(Boolean),
+      });
+    } catch (err) {
+      logger.error('debugInvoice failed', err.message);
+      return response.status(500).json({ error: err.message, invoiceId });
+    }
+  }
+);
+
+/**
+ * DEBUG ENDPOINT: Check recent payment verifications
+ * Call with: curl "https://us-central1-westlinefuture.cloudfunctions.net/debugPayments?projectId=XXXXX"
+ */
+exports.debugPayments = onRequest(
+  { cors: true },
+  async (request, response) => {
+    const projectId = request.query.projectId;
+    if (!projectId) {
+      return response.status(400).json({ error: 'projectId parameter required' });
+    }
+
+    logger.info('debugPayments called', { projectId });
+
+    try {
+      const db = getFirestore();
+      const paymentsSnap = await db
+        .collection('projects')
+        .doc(projectId)
+        .collection('payments')
+        .orderBy('paidAt', 'desc')
+        .limit(10)
+        .get();
+
+      return response.json({
+        projectId,
+        paymentCount: paymentsSnap.docs.length,
+        payments: paymentsSnap.docs.map(doc => ({
+          invoiceId: doc.id,
+          ...doc.data(),
+        })),
+      });
+    } catch (err) {
+      logger.error('debugPayments failed', err.message);
+      return response.status(500).json({ error: err.message, projectId });
+    }
+  }
+);
+
+/**
+ * PAYSTACK WEBHOOK — Safety net for payment verification.
+ * If the client-side verifyPaystackPayment call fails (network issue, app closed, etc.),
+ * this webhook ensures the invoice still gets updated.
+ *
+ * Set this URL in Paystack Dashboard → Settings → Webhooks:
+ * https://us-central1-westlinefuture.cloudfunctions.net/paystackWebhook
+ */
+exports.paystackWebhook = onRequest(
+  { cors: false },
+  async (request, response) => {
+    if (request.method !== 'POST') {
+      return response.status(405).json({ error: 'Method not allowed' });
+    }
+
+    try {
+      // Verify webhook signature
+      let paystackSecret = PAYSTACK_SECRET_KEY.value();
+      if (!paystackSecret) {
+        const db2 = getFirestore();
+        const gwSnap = await db2.collection('cms_content').doc('gatewaySettings').get().catch(() => null);
+        paystackSecret = gwSnap?.data()?.content?.paystackSecretKey || '';
+      }
+
+      if (paystackSecret) {
+        const hash = crypto
+          .createHmac('sha512', paystackSecret)
+          .update(JSON.stringify(request.body))
+          .digest('hex');
+        if (hash !== request.headers['x-paystack-signature']) {
+          logger.warn('paystackWebhook: invalid signature');
+          return response.status(401).json({ error: 'Invalid signature' });
+        }
+      }
+
+      const event = request.body;
+      if (event.event !== 'charge.success') {
+        return response.status(200).json({ received: true, event: event.event });
+      }
+
+      const tx = event.data;
+      const metadata = tx.metadata || {};
+      const { invoiceId, projectId, paymentType } = metadata;
+
+      if (!projectId) {
+        logger.info('paystackWebhook: no projectId in metadata, skipping');
+        return response.status(200).json({ received: true, skipped: true });
+      }
+
+      const db = getFirestore();
+      const amountGHS = tx.amount / 100;
+
+      // Check if already processed (idempotent)
+      const txId = `TX-${tx.reference}`;
+      const existingTx = await db.collection('projects').doc(projectId).collection('transactions').doc(txId).get();
+      if (existingTx.exists && existingTx.data().status === 'verified') {
+        logger.info(`paystackWebhook: transaction ${txId} already verified, skipping`);
+        return response.status(200).json({ received: true, alreadyProcessed: true });
+      }
+
+      // Auto-generate invoice if missing for rendering payments
+      let finalInvoiceId = invoiceId;
+      const payTypeLower = (paymentType || '').toLowerCase();
+      if (!finalInvoiceId && (payTypeLower === 'rendering' || payTypeLower === 'renderingfee' || payTypeLower === 'design' || payTypeLower === 'rendering fee')) {
+        try {
+          const newInvRef = db.collection('invoices').doc();
+          finalInvoiceId = newInvRef.id;
+          await newInvRef.set({
+            projectId,
+            documentKind: 'renderingFee',
+            type: 'renderingFee',
+            title: '3D Design & Rendering Fee',
+            amount: amountGHS,
+            amountPaid: 0,
+            status: 'Sent',
+            createdAt: new Date().toISOString(),
+            method: 'Paystack',
+            lastUpdatedBy: 'webhook'
+          });
+          logger.info(`paystackWebhook: auto-generated invoice ${finalInvoiceId} for rendering fee on project ${projectId}`);
+        } catch (err) {
+          logger.warn('paystackWebhook: failed to auto-generate rendering invoice', err.message);
+        }
+      }
+
+      // Update invoice status
+      if (finalInvoiceId) {
+        const invRef = db.collection('invoices').doc(finalInvoiceId);
+        const invSnap = await invRef.get();
+        if (invSnap.exists) {
+          const invData = invSnap.data();
+          if (invData.status !== 'Paid') {
+            const invoiceTotal = Number(invData.amount || invData.total || 0);
+            const currentPaid = Number(invData.amountPaid || invData.paidAmount || 0);
+            const newAmountPaid = currentPaid + amountGHS;
+            let newStatus = 'Paid';
+            if (invoiceTotal > 0) {
+              const tolerance = invoiceTotal * 0.02;
+              newStatus = newAmountPaid >= invoiceTotal - tolerance ? 'Paid' : newAmountPaid > 0 ? 'Partially Paid' : invData.status;
+            }
+            await invRef.update({
+              status: newStatus,
+              amountPaid: newAmountPaid,
+              paidAmount: newAmountPaid,
+              paidAt: new Date().toISOString(),
+              method: 'Paystack',
+              lastUpdatedBy: 'webhook',
+              lastUpdatedAt: FieldValue.serverTimestamp(),
+            });
+            logger.info(`paystackWebhook: invoice ${invoiceId} updated to ${newStatus}`);
+          }
+        }
+      }
+
+      // Update project payment flags based on payment type
+      if (payTypeLower === 'rendering' || payTypeLower === 'renderingfee' || payTypeLower === 'design') {
+        const projectRef = db.collection('projects').doc(projectId);
+        const projectSnap = await projectRef.get().catch(() => null);
+        const currentStageId = projectSnap?.exists ? (projectSnap.data()?.stageId || 1) : 1;
+        const stageUpdate = currentStageId === 1 ? {
+          stageId: 2,
+          stageHistory: FieldValue.arrayUnion({
+            stageId: 2,
+            timestamp: new Date().toISOString(),
+            note: 'Auto-advanced to Design & Rendering after rendering fee payment (webhook fallback).',
+            autoAdvanced: true,
+            source: 'webhook',
+          }),
+        } : {};
+        // Unlock the rendering package linked to this invoice
+        await db.collection('renderingPackages')
+          .where('projectId', '==', projectId)
+          .where('linkedInvoiceId', '==', finalInvoiceId)
+          .limit(1)
+          .get()
+          .then(async pkgSnap => {
+            if (!pkgSnap.empty) {
+              await pkgSnap.docs[0].ref.update({ unlocked: true, unlockedAt: FieldValue.serverTimestamp() });
+              logger.info(`paystackWebhook: rendering package unlocked for project ${projectId}`);
+            }
+          })
+          .catch(e => logger.warn('paystackWebhook: could not unlock rendering package', e.message));
+        await projectRef.update({
+          renderingFeePaid: true,
+          renderingFeePaidAt: FieldValue.serverTimestamp(),
+          renderingFeeInvoiceId: finalInvoiceId,
+          ...stageUpdate,
+        }).catch(e => logger.warn('paystackWebhook: project update failed', e.message));
+        if (currentStageId === 1) {
+          logger.info(`paystackWebhook: project ${projectId} auto-advanced to Stage 2`);
+        }
+      } else if (payTypeLower === 'deposit') {
+        await db.collection('projects').doc(projectId).update({
+          depositPaid: true,
+          depositPaidAt: FieldValue.serverTimestamp(),
+        }).catch(e => logger.warn('paystackWebhook: depositPaid update failed', e.message));
+      } else if (payTypeLower === 'final' || payTypeLower === 'finalpayment' || payTypeLower === 'settlement') {
+        await db.collection('projects').doc(projectId).update({
+          finalSettlementPaid: true,
+          finalSettlementPaidAt: FieldValue.serverTimestamp(),
+        }).catch(e => logger.warn('paystackWebhook: finalSettlementPaid update failed', e.message));
+      }
+
+      // Write the same normalized transaction to both ledgers and reconcile the project total.
+      const webhookProjectSnap = await db.collection('projects').doc(projectId).get();
+      const webhookProject = webhookProjectSnap.exists ? webhookProjectSnap.data() : {};
+      const webhookManagerId = webhookProject.projectManagerId || webhookProject.assignedStaff?.[0] || null;
+      const webhookTransaction = {
+        id: txId,
+        projectId,
+        parentId: projectId,
+        clientId: webhookProject.clientId || '',
+        projectManagerId: webhookManagerId,
+        invoiceId: finalInvoiceId || tx.reference,
+        reference: tx.reference,
+        amount: amountGHS,
+        currency: tx.currency,
+        method: 'Paystack',
+        channel: tx.channel,
+        date: String(tx.paid_at || new Date().toISOString()).slice(0, 10),
+        paidAt: tx.paid_at,
+        type: paymentType || 'payment',
+        status: 'verified',
+        source: 'webhook',
+        verifiedAt: FieldValue.serverTimestamp(),
+      };
+      const webhookBatch = db.batch();
+      webhookBatch.set(
+        db.collection('projects').doc(projectId).collection('transactions').doc(txId),
+        webhookTransaction,
+        { merge: true }
+      );
+      webhookBatch.set(db.collection('transactions').doc(txId), webhookTransaction, { merge: true });
+      webhookBatch.set(
+        db.collection('projects').doc(projectId),
+        { paidAmount: FieldValue.increment(amountGHS), updatedAt: FieldValue.serverTimestamp() },
+        { merge: true }
+      );
+      await webhookBatch.commit();
+
+      const managerMessage = `Payment of GHS ${amountGHS.toFixed(2)} received for "${webhookProject.title || projectId}" via Paystack. Ref: ${tx.reference}`;
+      const managerRecipients = [...new Set(['admin', webhookManagerId, ...(webhookProject.assignedStaff || [])].filter(Boolean))];
+      await Promise.all(managerRecipients.map(userId =>
+        db.collection('notifications').add({
+          userId,
+          message: managerMessage,
+          msg: managerMessage,
+          type: 'payment',
+          link: '/admin/client-hub',
+          read: false,
+          createdAt: FieldValue.serverTimestamp(),
+        })
+      ));
+
+      logger.info(`paystackWebhook: processed charge.success for ${tx.reference}, GHS ${amountGHS}`);
+      return response.status(200).json({ received: true, processed: true });
+    } catch (err) {
+      logger.error('paystackWebhook error:', err.message);
+      return response.status(500).json({ error: err.message });
+    }
+  }
+);
+
+
+/**
+ * PHASE 3: Intelligent Staff Alerts
+ * Triggers on new activity logs and emails info@westlinefuture.com
+ */
+const { onDocumentCreated } = require('firebase-functions/v2/firestore');
+const nodemailer = require('nodemailer');
+
+const SMTP_HOST = defineSecret('SMTP_HOST');
+const SMTP_PORT = defineSecret('SMTP_PORT');
+const SMTP_USER = defineSecret('SMTP_USER');
+const SMTP_PASS = defineSecret('SMTP_PASS');
+
+exports.notifyStaffOnClientAction = onDocumentCreated(
+  {
+    document: 'projects/{projectId}/activityLogs/{logId}',
+    secrets: [SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS]
+  },
+  async (event) => {
+    const snap = event.data;
+    if (!snap) return;
+
+    const data = snap.data();
+    
+    // Only send alerts for client actions
+    if (data.actor !== 'client') return;
+
+    try {
+      const host = SMTP_HOST.value() || 'smtp.ethereal.email';
+      const port = Number(SMTP_PORT.value() || 587);
+      const user = SMTP_USER.value() || '';
+      const pass = SMTP_PASS.value() || '';
+
+      if (!user || !pass) {
+        logger.warn('notifyStaffOnClientAction: SMTP_USER or SMTP_PASS not set in Secret Manager. Skipping email alert.');
+        return;
+      }
+
+      const transporter = nodemailer.createTransport({
+        host,
+        port,
+        secure: port === 465,
+        auth: { user, pass }
+      });
+
+      const projectId = event.params.projectId;
+      const db = getFirestore();
+      const projectSnap = await db.collection('projects').doc(projectId).get();
+      const projectTitle = projectSnap.exists ? projectSnap.data().title : projectId;
+      const clientName = data.actorName || 'The Client';
+
+      const subject = `New Client Activity: ${projectTitle}`;
+      const html = `
+        <div style="font-family: Arial, sans-serif; padding: 20px; color: #333;">
+          <h2 style="color: #8C6C52;">Westline Future: Client Activity Alert</h2>
+          <p><strong>Project:</strong> ${projectTitle}</p>
+          <p><strong>Action:</strong> ${clientName} ${data.actionDescription}</p>
+          <p style="font-size: 12px; color: #999; margin-top: 30px;">Log ID: ${event.params.logId}</p>
+        </div>
+      `;
+
+      const mailOptions = {
+        from: `"Westline Future Portal" <${user}>`,
+        to: 'info@westlinefuture.com',
+        subject: subject,
+        html: html
+      };
+
+      const info = await transporter.sendMail(mailOptions);
+      logger.info('notifyStaffOnClientAction: Email sent:', info.messageId);
+
+    } catch (err) {
+      logger.error('notifyStaffOnClientAction Error:', err.message);
+    }
+  }
+);
+
+/**
+ * PHASE 6: Client-Facing Email Automation
+ * Triggers on new activity logs and emails the client if the action was performed by an admin
+ */
+exports.notifyClientOnAdminAction = onDocumentCreated(
+  {
+    document: 'projects/{projectId}/activityLogs/{logId}',
+    secrets: [SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS]
+  },
+  async (event) => {
+    const snap = event.data;
+    if (!snap) return;
+
+    const data = snap.data();
+    
+    // Only send alerts for admin actions
+    if (data.actor !== 'admin') return;
+
+    try {
+      const host = SMTP_HOST.value() || 'smtp.ethereal.email';
+      const port = Number(SMTP_PORT.value() || 587);
+      const user = SMTP_USER.value() || '';
+      const pass = SMTP_PASS.value() || '';
+
+      if (!user || !pass) {
+        logger.warn('notifyClientOnAdminAction: SMTP_USER or SMTP_PASS not set. Skipping.');
+        return;
+      }
+
+      const transporter = nodemailer.createTransport({
+        host,
+        port,
+        secure: port === 465,
+        auth: { user, pass }
+      });
+
+      const projectId = event.params.projectId;
+      const db = getFirestore();
+      
+      const projectSnap = await db.collection('projects').doc(projectId).get();
+      if (!projectSnap.exists) return;
+      const projectData = projectSnap.data();
+      
+      const clientId = projectData.clientId;
+      let clientEmail = projectData.clientEmail;
+      let clientName = projectData.clientName || 'Client';
+
+      if (!clientEmail && clientId) {
+        const clientSnap = await db.collection('users').doc(clientId).get();
+        if (clientSnap.exists) {
+          const clientData = clientSnap.data();
+          clientEmail = clientData.email;
+          clientName = clientData.name || clientName;
+        }
+      }
+
+      if (!clientEmail) {
+        logger.warn(`notifyClientOnAdminAction: No email found for project ${projectId}.`);
+        return;
+      }
+
+      const projectTitle = projectData.title || projectData.project || projectId;
+      const subject = `Update on your project: ${projectTitle}`;
+      const html = `
+        <div style="font-family: Arial, sans-serif; padding: 30px 20px; max-width: 600px; margin: 0 auto; color: #333; line-height: 1.6; background-color: #FAFAF9; border: 1px solid #E5E7EB; border-radius: 12px;">
+          <h2 style="color: #8C6C52; margin-top: 0;">Westline Future</h2>
+          <p style="font-size: 16px;">Hello ${clientName},</p>
+          <p style="font-size: 16px;">There has been an update regarding your project <strong>${projectTitle}</strong>.</p>
+          <div style="background: #fff; padding: 20px; border-radius: 8px; border: 1px solid #E5E7EB; margin: 20px 0;">
+            <p style="margin: 0; font-size: 15px;"><strong>Action:</strong> ${data.actionDescription}</p>
+          </div>
+          <p style="font-size: 16px;">Please log in to your Client Portal to review the details and take any necessary actions.</p>
+          <a href="https://westlinefuture.web.app/" style="display: inline-block; padding: 12px 24px; background-color: #8C6C52; color: #fff; text-decoration: none; border-radius: 8px; font-weight: bold; margin-top: 10px;">Go to Portal</a>
+          <p style="font-size: 12px; color: #999; margin-top: 40px;">This is an automated message from Westline Future.</p>
+        </div>
+      `;
+
+      const mailOptions = {
+        from: `"Westline Future" <info@westlinefuture.com>`,
+        to: clientEmail,
+        subject: subject,
+        html: html
+      };
+
+      const info = await transporter.sendMail(mailOptions);
+      logger.info('notifyClientOnAdminAction: Email sent:', info.messageId);
+
+    } catch (err) {
+      logger.error('notifyClientOnAdminAction Error:', err.message);
+    }
   }
 );

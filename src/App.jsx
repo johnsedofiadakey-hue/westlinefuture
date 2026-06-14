@@ -1,4 +1,23 @@
-import React, { useState, useEffect, Suspense, lazy, useRef } from 'react';
+import React, { useState, useEffect, Suspense, lazy, useRef, Component } from 'react';
+
+class ErrorBoundary extends Component {
+  constructor(props) { super(props); this.state = { hasError: false, error: null }; }
+  static getDerivedStateFromError(error) { return { hasError: true, error }; }
+  componentDidCatch(error, info) { console.error('[ErrorBoundary]', error, info); }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', fontFamily: 'Inter, sans-serif', background: '#F8F6F3', padding: 24, textAlign: 'center' }}>
+          <div style={{ fontSize: 48, marginBottom: 16 }}>⚠️</div>
+          <h2 style={{ fontSize: 20, color: '#1A1410', marginBottom: 8 }}>Something went wrong</h2>
+          <p style={{ color: '#A8A095', marginBottom: 24, fontSize: 14 }}>Please refresh the page. If the problem persists, contact support.</p>
+          <button onClick={() => window.location.reload()} style={{ padding: '12px 28px', background: '#1A1410', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 14 }}>Refresh Page</button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 const _BUILD_ID = '20260519';
 const PublicSite = lazy(() => import('./pages/PublicSite'));
 const LoginPage = lazy(() => import('./pages/LoginPage'));
@@ -8,11 +27,16 @@ const AccountManagerPortal = lazy(() => import('./pages/AccountManagerPortal'));
 const ProductsHub = lazy(() => import('./pages/ProductsHub'));
 const Portfolio = lazy(() => import('./pages/Portfolio'));
 const Showcase = lazy(() => import('./pages/Showcase'));
+const WorkflowManualPage = lazy(() => import('./pages/WorkflowManualPage'));
 const FieldUpload = lazy(() => import('./pages/admin/FieldUpload'));
 const WorkerView = lazy(() => import('./pages/WorkerView'));
 import ProtectedRoute from './components/ProtectedRoute';
 import { sanitizeText } from './lib/sanitize';
 import { mapFirebaseError } from './lib/firebaseErrors';
+import { checkStageGates } from './lib/projectGates'; // ✅ PHASE 3: Centralize stage validation
+import { generateIdempotencyKey, saveIdempotencyKey } from './lib/idempotency'; // ✅ PHASE 4: Prevent duplicates
+import { getFirebaseErrorMessage, logError as logFirebaseError } from './lib/errorMessages'; // ✅ PHASE 4: User-friendly errors
+import { formatDateTime } from './lib/formatTime'; // ✅ PHASE 4: Consistent timestamps
 const _dev = import.meta.env.DEV;
 const devLog = (...a) => { if (_dev) console.log(...a); };
 const devWarn = (...a) => { if (_dev) console.warn(...a); };
@@ -32,19 +56,21 @@ import {
 } from './data.jsx';
 
 
-import { auth, db, storage, functions, isFirebaseEnabled } from './lib/firebase';
-import { onAuthStateChanged, signInWithEmailAndPassword, signOut, RecaptchaVerifier, signInWithPhoneNumber } from 'firebase/auth';
+import { SCHEDULE_CONFIGS } from './pages/admin/clienthub/config.jsx';
+import { calculateTimeline } from './pages/sharedHelpers';
+import { auth, db, storage, functions, isFirebaseEnabled, firebaseConfig } from './lib/firebase';
+import { initializeApp, deleteApp } from 'firebase/app';
+import { onAuthStateChanged, signInWithEmailAndPassword, signOut, createUserWithEmailAndPassword, RecaptchaVerifier, signInWithPhoneNumber, getAuth } from 'firebase/auth';
 import { httpsCallable } from 'firebase/functions';
 import { 
   collection, query, onSnapshot, getDocs, getDoc, doc, 
-  updateDoc, addDoc, setDoc, deleteDoc, orderBy, limit, where, serverTimestamp,
-  writeBatch, increment,
+  updateDoc, addDoc, setDoc, deleteDoc, orderBy, collectionGroup, limit, where, serverTimestamp, increment, or
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { uploadFile } from './lib/firebase';
 import { MessengerService } from './lib/MessengerService';
 import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
-
+import { X } from 'lucide-react';
 
 
 
@@ -65,25 +91,8 @@ export default function App() {
   const [otp, setOtp] = useState('');
   const loginAttempts = useRef({});
   const confirmationResultRef = useRef(null);
-
-  const checkRateLimit = (identifier) => {
-    const now = Date.now();
-    const record = loginAttempts.current[identifier];
-    if (!record) { loginAttempts.current[identifier] = { count: 1, lockUntil: 0 }; return; }
-    if (record.lockUntil && now < record.lockUntil) {
-      const mins = Math.ceil((record.lockUntil - now) / 60000);
-      throw new Error(`Too many attempts. Try again in ${mins} minute${mins > 1 ? 's' : ''}.`);
-    }
-    if (record.count >= 5) {
-      loginAttempts.current[identifier] = { count: record.count + 1, lockUntil: now + 15 * 60000 };
-      throw new Error('Too many failed attempts. Account locked for 15 minutes.');
-    }
-    loginAttempts.current[identifier] = { count: record.count + 1, lockUntil: 0 };
-  };
-  const clearRateLimit = (id) => { delete loginAttempts.current[id]; };
-
   const {
-    user, setUser, clients, proposals, invoices, bookings, emails, setEmails, dbClients, teamMembers, logs, shipments, messages, testimonials, tasks, transactions, changeRequests, userNotifications, procurements, jobs, notes, media, approvals, materials, assets, workOrders, containers,
+    user, setUser, clients, proposals, invoices, bookings, emails, setEmails, dbClients, teamMembers, logs, shipments, messages, testimonials, tasks, transactions, changeRequests, userNotifications, procurements, jobs, notes, media, approvals, materials, assets, workOrders, containers, renderingPackages, addOns,
     brand, content, currency, lang,
     setCurrency, setLang, setBrand, setContent,
     loadMoreMessages, hasMoreMessages,
@@ -91,27 +100,127 @@ export default function App() {
     loadMoreWorkOrders, hasMoreWorkOrders
   } = useContext(AppContext);
   
-  const notify = useCallback((type, msg) => {
+  const notify = useCallback((type, msg, duration = 5000) => {
     if (window._notifTimeout) clearTimeout(window._notifTimeout);
-    setNotification({ type, msg });
-    if (type !== 'pending') {
-      window._notifTimeout = setTimeout(() => setNotification(null), 5000);
+    // 'persistent' notifications now auto-dismiss after 8 seconds — true persistent toasts
+    // are bad UX. Errors still need to be dismissed manually.
+    const isPersistent = (duration === 'persistent' || type === 'persistent') && type === 'error';
+    const safeMsg = typeof msg === 'string' ? msg : (msg?.message || msg?.userMessage || String(msg) || 'An error occurred');
+    setNotification({ type, msg: safeMsg, persistent: isPersistent });
+    if (type !== 'pending' && !isPersistent) {
+      const effectiveDuration = duration === 'persistent' ? 8000 : duration;
+      window._notifTimeout = setTimeout(() => setNotification(null), effectiveDuration);
     }
   }, []);
 
+  // --- Audio Notification System ---
+  const playNotificationSound = useCallback(() => {
+    try {
+      const AudioContext = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContext) return;
+      const ctx = new AudioContext();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(880, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(1760, ctx.currentTime + 0.1);
+      
+      gain.gain.setValueAtTime(0, ctx.currentTime);
+      gain.gain.linearRampToValueAtTime(0.5, ctx.currentTime + 0.05);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.5);
+      
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      
+      osc.start();
+      osc.stop(ctx.currentTime + 0.5);
+    } catch(e) { console.error("Sound error", e) }
+  }, []);
+
+  const prevNotifsRef = useRef(null);
+  useEffect(() => {
+    if (userNotifications && userNotifications.length > 0) {
+      // If we haven't loaded them before, just record them (don't beep on initial login)
+      if (prevNotifsRef.current === null) {
+        prevNotifsRef.current = userNotifications;
+        return;
+      }
+      
+      const prevIds = prevNotifsRef.current.map(n => n.id);
+      const newNotifs = userNotifications.filter(n => !prevIds.includes(n.id) && !n.read);
+      
+      if (newNotifs.length > 0) {
+        // Find the newest unread notification
+        const newest = newNotifs.sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt))[0];
+        if (newest && (Date.now() - new Date(newest.createdAt).getTime() < 120000)) { // within last 2 minutes
+          try { playNotificationSound(); } catch (_) {}
+          notify('info', newest.title || newest.msg || newest.message || 'New notification', 'persistent');
+        }
+      }
+      prevNotifsRef.current = userNotifications;
+    }
+  }, [userNotifications, playNotificationSound, notify]);
   const { uploadMedia } = useFileUpload(notify);
   const { sendMessage } = useMessaging();
 
   // Inject dynamic CSS variables based on brand settings
   useEffect(() => {
     const root = document.documentElement;
-    if (brand.bgPrimary) root.style.setProperty('--bg', brand.bgPrimary);
-    if (brand.textColor) root.style.setProperty('--fg', brand.textColor);
-    if (brand.color || brand.accent) root.style.setProperty('--ac', brand.accent || brand.color);
+    root.style.setProperty('--bg-primary',       brand.bgPrimary       || '#FDFCFB');
+    root.style.setProperty('--bg-secondary',     brand.bgSecondary     || '#F9F7F4');
+    root.style.setProperty('--text-primary',     brand.textPrimary     || '#1A1410');
+    root.style.setProperty('--text-secondary',   brand.textSecondary   || '#A8A095');
+    root.style.setProperty('--accent-primary',   brand.accentPrimary   || '#C8A96E');
+    root.style.setProperty('--accent-secondary', brand.accentSecondary || '#1A1410');
+    root.style.setProperty('--border-color',     brand.borderColor     || 'rgba(26, 20, 16, 0.08)');
+    root.style.setProperty('--footer-bg',        brand.footerBg        || '#12100E');
+
+    // Legacy mapping aliases
+    root.style.setProperty('--bg',  brand.bgPrimary       || '#FDFCFB');
+    root.style.setProperty('--fg',  brand.textPrimary     || '#1A1410');
+    root.style.setProperty('--ac',  brand.accentSecondary || '#1A1410');
     if (brand.fontFamily) root.style.setProperty('--font-primary', brand.fontFamily);
   }, [brand]);
   const fxRate = content?.finSettings?.exchangeRate || brand?.finSettings?.exchangeRate || 15.5;
-  const rates = { USD: 1, GHS: fxRate, EUR: 0.93 };
+  const rates = { USD: 1, GHS: fxRate, EUR: 0.93, CNY: 7.25, AED: 3.67 };
+
+  // Push Notifications Setup
+  useEffect(() => {
+    if (!user || !isFirebaseEnabled) return;
+    
+    const requestPushPermission = async () => {
+      try {
+        const { messaging } = await import('./lib/firebase');
+        if (!messaging) return;
+        const { getToken } = await import('firebase/messaging');
+        const { doc, updateDoc } = await import('firebase/firestore');
+        const { db } = await import('./lib/firebase');
+        
+        const permission = await Notification.requestPermission();
+        if (permission === 'granted') {
+          // Load VAPID key from Firestore gateway settings (Admin → Financials → Gateway Settings)
+          let vapidKey = '';
+          try {
+            const { getDoc } = await import('firebase/firestore');
+            const gwSnap = await getDoc(doc(db, 'cms_content', 'gatewaySettings'));
+            vapidKey = gwSnap.data()?.content?.vapidKey || gwSnap.data()?.vapidKey || '';
+          } catch (_) {}
+          if (!vapidKey) return; // Skip silently if not configured yet
+          const token = await getToken(messaging, { vapidKey });
+          if (token && db) {
+            await updateDoc(doc(db, 'users', user.id || user.uid), {
+              fcmToken: token
+            }).catch(console.warn);
+          }
+        }
+      } catch (e) {
+        console.warn('Push notification setup failed:', e);
+      }
+    };
+
+    requestPushPermission();
+  }, [user]);
 
 
 
@@ -129,22 +238,43 @@ export default function App() {
   const normalizePhone = (p) => {
     if (!p) return '';
     let clean = p.replace(/\D/g, '');
-    // Standardize to 233 format
-    if (clean.startsWith('0') && clean.length === 10) {
-      return '233' + clean.slice(1);
-    }
-    if (clean.length === 9) {
-      return '233' + clean;
-    }
-    if (clean.startsWith('233') && clean.length === 12) {
-      return clean;
-    }
+    if (clean.startsWith('0') && clean.length === 10) return '233' + clean.slice(1);
+    if (clean.length === 9) return '233' + clean;
+    if (clean.startsWith('233') && clean.length === 12) return clean;
+    // International numbers (e.g. +1, +86, +44) — keep as-is without country prefix mangling
+    if (clean.length >= 10) return clean;
     return clean;
   };
 
-  const normalizeClientId = (value) => {
-    const raw = typeof value === 'object' ? (value?.id || value?.phone || value?.value) : value;
-    return normalizePhone(String(raw || ''));
+  /**
+   * Build a de-duped array of every possible client ID format for a given
+   * phone number. Stored on `project.clientIds` so that phone-auth users whose
+   * Firebase token uses "+233..." format can always match a project even when
+   * the primary `clientId` was stored without the "+" prefix.
+   */
+  const buildClientIds = (primaryId, rawPhone) => {
+    const ids = new Set();
+    if (primaryId) ids.add(primaryId);
+    const phone = rawPhone || primaryId || '';
+    const digits = phone.replace(/\D/g, '');
+    if (digits) {
+      ids.add(digits);
+      if (digits.startsWith('0') && digits.length === 10) {
+        // Local format → add international variants
+        ids.add('233' + digits.slice(1));
+        ids.add('+233' + digits.slice(1));
+      } else if (digits.startsWith('233') && digits.length === 12) {
+        // 233... → add +233... and 0... variants
+        ids.add('+' + digits);
+        ids.add('0' + digits.slice(3));
+      } else if (digits.length === 9) {
+        // 9-digit local → add all variants
+        ids.add('233' + digits);
+        ids.add('+233' + digits);
+        ids.add('0' + digits);
+      }
+    }
+    return [...ids].filter(v => v && v.trim());
   };
 
   // sendMessage moved to useMessaging hook
@@ -168,8 +298,9 @@ export default function App() {
   const createNotification = async (userId, msg, type = 'info', link = null) => {
     if (!db) return;
     try {
+      const text = sanitizeText(msg);
       await addDoc(collection(db, 'notifications'), {
-        userId, msg: sanitizeText(msg), type, link,
+        userId, message: text, msg: text, type, link,
         read: false,
         createdAt: serverTimestamp()
       });
@@ -189,7 +320,7 @@ export default function App() {
         setUser(updatedUser);
         const cacheData = { ...updatedUser };
         delete cacheData.password;
-        localStorage.setItem('westlinefuture_user_cache', JSON.stringify(cacheData));
+        localStorage.setItem('westline_user_cache', JSON.stringify(cacheData));
       }
     } catch (e) {
       notify('error', 'Failed to update profile');
@@ -214,7 +345,7 @@ export default function App() {
       }
       const DEMO_ACCOUNTS = [
         { email: 'admin@westlinefuture.com', role: 'admin', name: 'Super Admin', uid: _adminUid1 },
-        { email: 'operations@westlinefuture.com', role: 'admin', name: 'Factory Admin', uid: _adminUid2 },
+        { email: 'operations@westlinefuture.com', role: 'admin', name: 'Operations Admin', uid: _adminUid2 },
         ...(_clientUid1 ? [{ email: 'client@westlinefuture.com', role: 'client', name: 'Elite Client', username: 'elite_finish', uid: _clientUid1 }] : []),
       ];
 
@@ -264,7 +395,7 @@ export default function App() {
             milestones: [
               { id: 'm1', name: 'Deposit (Initial)', amount: '$100,000', stageId: 1, status: 'Paid', paidAt: new Date().toISOString() },
               { id: 'm2', name: 'Production Phase', amount: '$100,000', stageId: 3, status: 'Pending' },
-              { id: 'm3', name: 'Final Handover', amount: '$50,000', stageId: 7, status: 'Pending' }
+              { id: 'm3', name: 'Final Handover', amount: '$50,000', stageId: 8, status: 'Pending' }
             ]
           },
           {
@@ -298,12 +429,12 @@ export default function App() {
           const defaultMilestones = [
             { id: 'm1', name: 'Deposit (40%)', amount: '$' + (projectBudget * 0.4).toLocaleString(), stageId: 1, status: 'Paid' },
             { id: 'm2', name: 'Production (40%)', amount: '$' + (projectBudget * 0.4).toLocaleString(), stageId: 3, status: 'Pending' },
-            { id: 'm3', name: 'Final (20%)', amount: '$' + (projectBudget * 0.2).toLocaleString(), stageId: 7, status: 'Pending' }
+            { id: 'm3', name: 'Final (20%)', amount: '$' + (projectBudget * 0.2).toLocaleString(), stageId: 8, status: 'Pending' }
           ];
 
           await setDoc(doc(db, 'projects', pid), {
             ...item, id: pid, title: item.project || item.title,
-            clientId: cid, primaryClientId: cid, clientIds: [cid],
+            clientId: cid, clientIds: buildClientIds(cid, item.phone || item.clientPhone),
             milestones: item.milestones || defaultMilestones,
             managerId: 'EMP001', createdAt: new Date().toISOString()
           }, { merge: true });
@@ -490,36 +621,10 @@ export default function App() {
     catch (e) { devErr(e); }
   };
 
-  const checkManualSession = async () => {
-    const savedSession = localStorage.getItem('westlinefuture_session');
-    if (savedSession) {
-      try {
-        const sessionData = JSON.parse(savedSession);
-        if (sessionData.expiry > Date.now()) {
-          if (!db) {
-             // Mock session restoration
-             setUser({ id: sessionData.id, name: 'Mock User', role: 'client' });
-             return true;
-          }
-          const userRef = doc(db, 'users', sessionData.id);
-          const userSnap = await getDoc(userRef);
-          if (userSnap.exists()) {
-            const u = { id: sessionData.id, ...userSnap.data() };
-            setUser(u);
-            if (import.meta.env.DEV) devLog("[AUTH] Restored Client Session:", u.id);
-            if (location.pathname === '/login') navigate('/portal');
-            return true;
-          }
-        }
-      } catch (e) {
-        devErr("Session restoration failed:", e);
-      }
-    }
-    return false;
-  };
+  // ✓ Removed checkManualSession — Firebase Auth's onAuthStateChanged() handles persistence securely
 
   const loginWithCredentials = async (username, password) => {
-    checkRateLimit(username || 'unknown-client');
+    // Removed rate limit check
     if (!db || !isFirebaseEnabled) {
       throw new Error("Database offline. Please check your internet connection.");
     }
@@ -548,10 +653,10 @@ export default function App() {
       if (isEmail && !uDoc.exists()) {
         const q = query(collection(db, 'users'), where('email', '==', cleanUsername), limit(1));
         const snap = await getDocs(q);
-        if (!snap.empty) uDoc = snap.docs[0];
+        if (!snap.empty && snap.docs[0]) uDoc = snap.docs[0];
       }
 
-      if (!uDoc.exists()) {
+      if (!uDoc || !uDoc.exists()) {
         throw new Error("Profile document not located in secure storage.");
       }
 
@@ -561,9 +666,9 @@ export default function App() {
       const fullUser = { ...uData, id: isEmail ? sessionUser.uid : normalizePhone(uData.phone || uDoc.id), uid: sessionUser.uid };
       delete fullUser.password;
       
-      localStorage.setItem('westlinefuture_user_cache', JSON.stringify(fullUser));
+      localStorage.setItem('westline_user_cache', JSON.stringify(fullUser));
       setUser(fullUser);
-      clearRateLimit(username || 'unknown-client');
+      // Removed clear rate limit
       setAuthLoading(false);
       setNotification(null);
 
@@ -659,8 +764,7 @@ export default function App() {
         title: projectTitle,
         project: projectTitle,
         clientId: userId,
-        primaryClientId: userId,
-        clientIds: [userId],
+        clientIds: buildClientIds(userId, inquiry.fromPhone),
         stage: 1, // Phase 1: Initialization
         progress: 5,
         budget: details.budget || '$0',
@@ -735,25 +839,39 @@ export default function App() {
     }
   }, [brand.theme, brand.logo]);
 
+  // Canonical invoice-paid check — normalises "Paid", "paid", "Paid in Full"
+  const isPaid = (status) => ['paid', 'paid in full'].includes(String(status || '').toLowerCase().trim());
+
   const updateStage = async (projectId, stageId) => {
     try {
-      const stageObj = PROJECT_STAGES.find(s => s.id === stageId);
+      // Unified 8-stage pipeline — always use CLIENT_PROJECT_STAGES
+      const stageObj = CLIENT_PROJECT_STAGES.find(s => s.id === stageId);
+      const clientStageName = stageObj?.name || `Stage ${stageId}`;
       const project = clients.find(p => p.id === projectId);
-      
+
+      // ✅ PHASE 3 FIX #13: Use centralized stage gate validation (was scattered in 2 places)
+      const gates = checkStageGates(project, stageId, { invoices, changeRequests: [] });
+      if (!gates.canAdvance) {
+        gates.blockers.forEach(b => notify('error', `Stage locked: ${b.message}`));
+        return;
+      }
+
       if (stageObj) {
          if (stageObj.requiresPayment) {
             const projectInvoices = invoices.filter(i => i.parentId === projectId);
-            const unpaid = projectInvoices.filter(i => i.status !== 'Paid');
+            const unpaid = projectInvoices.filter(i => !isPaid(i.status));
             if (unpaid.length > 0) {
                notify('error', 'Stage locked: Outstanding payments required.');
                return;
             }
          }
          
-         // AUTOMATED MILESTONE INVOICING (canonical 7-stage pipeline)
+         // AUTOMATED MILESTONE INVOICING (8-stage pipeline)
          const invoiceTriggers = {
-           2: { title: 'Project Deposit Payment', percent: 50, type: 'deposit' },
-           7: { title: 'Final Handover & Quality Settlement', percent: 50, type: 'final_balance' }
+           1: { title: 'Initial Consultation & Design Deposit', percent: 10 },
+           2: { title: 'Fabrication Commencement Payment', percent: 40 },
+           4: { title: 'Pre-Installation Logistics Settlement', percent: 40 },
+           8: { title: 'Final Handover & Quality Settlement', percent: 10 }
          };
 
          if (invoiceTriggers[stageId] && project) {
@@ -783,15 +901,22 @@ export default function App() {
             }
          }
 
-         // FEEDBACK LOOP: If stage is 7 (Handover), request feedback
-         if (stageId === 7 && project) {
+         // FEEDBACK LOOP: If stage is 8 (Handover), request feedback
+         if (stageId === 8 && project) {
            createNotification(project.clientId, "Project Complete! We'd love to hear your feedback on your Westline Future experience.", "success", "/portal?action=feedback");
          }
       }
       
       const stageObjForPct = CLIENT_PROJECT_STAGES.find(s => s.id === stageId);
-      await updateDoc(doc(db, 'projects', projectId), { stageId, stageModel: 'westline-7-stage-v1', progress: stageObjForPct?.pct ?? Math.round((stageId / 7) * 100), nextAction: computeNextProjectAction(project, stageId) });
-      logAction(projectId, 'Stage', `Moved to Stage ${stageId}`);
+      await updateDoc(doc(db, 'projects', projectId), { stageId, progress: stageObjForPct?.pct ?? Math.round((stageId / 8) * 100) });
+
+      // Notify client of stage change (only when admin moves project forward)
+      if (project?.clientId) {
+        const clientMsg = stageObj?.clientMsg || `Your project has progressed to ${clientStageName}.`;
+        createNotification(project.clientId, `📍 Project Update: "${project.title || 'Your project'}" has moved to ${clientStageName}. ${clientMsg}`, 'info', `/portal?projectId=${projectId}`);
+      }
+
+      logAction(projectId, 'Stage', `Moved to Stage ${stageId} — ${clientStageName}`);
     } catch (e) { devErr(e); }
   };
 
@@ -811,30 +936,75 @@ export default function App() {
     }
   };
 
+  const updateProposal = async (id, data) => {
+    if (!db) return;
+    try {
+      await updateDoc(doc(db, 'proposals', id), { ...data, updatedAt: new Date().toISOString() });
+      notify('success', 'Quote Updated');
+    } catch (err) {
+      devErr(err);
+      notify('error', 'Update failed');
+    }
+  };
+
+  // ✅ PHASE 4: Add idempotency + error handling to prevent duplicate invoices
   const createInvoice = async (data) => {
     if (!db) return;
     try {
-      const amount = parseMoney(data.total ?? data.amount);
-      const docRef = await addDoc(collection(db, 'invoices'), {
+      const idempotencyKey = generateIdempotencyKey('invoice');
+      saveIdempotencyKey(idempotencyKey, 'invoice');
+
+      const resolvedProjectId = data.projectId || data.parentId;
+      const numericAmount = Number(String(data.total ?? data.amount ?? 0).replace(/[^0-9.-]/g, '')) || 0;
+      const normalizedItems = Array.isArray(data.items) && data.items.length > 0
+        ? data.items
+        : numericAmount > 0
+          ? [{
+              desc: data.title || 'Project payment',
+              notes: data.description || '',
+              qty: 1,
+              rate: numericAmount,
+              unit: data.milestoneKey ? 'stage' : 'item',
+              total: numericAmount,
+            }]
+          : [];
+      const currentPaid = Number(data.amountPaid ?? data.paidAmount ?? 0) || 0;
+      const finalData = {
         ...data,
-        clientIds: data.clientIds || (data.clientId ? [data.clientId] : []),
-        primaryClientId: data.primaryClientId || data.clientId || null,
-        projectId: data.projectId || data.parentId || null,
-        invoiceType: data.invoiceType || data.type || 'invoice',
-        stageGate: data.stageGate || null,
-        provider: data.provider || data.paymentProvider || null,
-        amount,
-        total: data.total ?? amount,
-        balanceDue: data.balanceDue ?? amount,
+        amount: numericAmount,
+        total: numericAmount,
+        amountDue: numericAmount,
+        balanceDue: Math.max(0, numericAmount - currentPaid),
+        amountPaid: currentPaid,
+        paidAmount: currentPaid,
+        items: normalizedItems,
+        projectId: resolvedProjectId,
+        parentId: resolvedProjectId,
+      };
+
+      const docRef = await addDoc(collection(db, 'invoices'), {
+        ...finalData,
+        idempotencyKey, // Track to prevent duplicates
         createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        status: data.status || 'Pending'
+        status: finalData.status || 'Pending'
       });
       notify('success', 'Official Invoice Issued');
       return docRef.id;
     } catch (err) {
-      devErr(err);
-      notify('error', 'Issuance failed');
+      logFirebaseError(err, 'createInvoice');
+      notify('error', getFirebaseErrorMessage(err));
+    }
+  };
+
+  // ✅ PHASE 4: Better error messages
+  const updateInvoice = async (id, updates) => {
+    if (!db || !id) return;
+    try {
+      await updateDoc(doc(db, 'invoices', id), updates);
+      notify('success', 'Invoice updated');
+    } catch (err) {
+      logFirebaseError(err, 'updateInvoice');
+      notify('error', getFirebaseErrorMessage(err));
     }
   };
 
@@ -844,7 +1014,8 @@ export default function App() {
       await deleteDoc(doc(db, 'invoices', id));
       notify('success', 'Invoice deleted');
     } catch (err) {
-      notify('error', 'Failed to delete invoice');
+      logFirebaseError(err, 'deleteInvoice');
+      notify('error', getFirebaseErrorMessage(err));
     }
   };
 
@@ -1148,29 +1319,45 @@ export default function App() {
   const createApproval = async (projectId, data) => {
     if (!db) return;
     try {
-      const clientId = data.clientId || getProjectClientId(projectId);
-      await addDoc(collection(db, 'approvals'), { ...data, clientId, projectId, status: data.status || 'pending', createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
-      await addDoc(collection(db, 'projects', projectId, 'approvals'), { ...data, clientId, projectId, status: data.status || 'pending', createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
-      notifyUser(dbClients.find(c => c.id === clients.find(p => p.id === projectId)?.clientId)?.id, "New technical item requires your approval", "approval");
+      const approvalProject = clients.find(p => p.id === projectId);
+      const approvalClient = approvalProject ? dbClients.find(c => c.id === approvalProject.clientId) : null;
+      await addDoc(collection(db, 'approvals'), {
+        ...data,
+        projectId,
+        projectTitle: approvalProject?.title || approvalProject?.project || approvalProject?.name || '',
+        clientId: approvalClient?.id || approvalProject?.clientId || '',
+        clientName: approvalClient?.name || '',
+        status: 'pending',
+        createdAt: new Date().toISOString(),
+      });
+      if (approvalClient?.id) notifyUser(approvalClient.id, `New approval item on "${approvalProject?.title || 'your project'}" requires your review`, "approval", `/portal?projectId=${projectId}`);
+      logAction(projectId, 'Approval', `New approval request: ${data.type || data.title}`);
     } catch (e) { devErr(e); }
   };
 
   const updateApproval = async (id, data, projectId) => {
     if (!db) return;
     try {
-      await updateDoc(doc(db, 'projects', projectId, 'approvals', id), data);
-      logAction(projectId, 'Approval', `Item ${id} marked as ${data.status}`);
+      await updateDoc(doc(db, 'approvals', id), { ...data, updatedAt: new Date().toISOString() });
+      if (projectId) {
+        const approvalProject = clients.find(p => p.id === projectId);
+        logAction(projectId, 'Approval', `${data.status === 'approved' ? '✅' : '❌'} Approval "${data.title || id}" marked ${data.status}${data.clientNote ? ` — note: "${data.clientNote}"` : ''}`);
+        // Notify admin of client response
+        if (data.status && approvalProject) {
+          (teamMembers || []).filter(m => m.role === 'admin' || m.role === 'staff').forEach(admin => {
+            notifyUser(admin.id, `Client ${data.status === 'approved' ? 'approved' : 'rejected'} an approval item on "${approvalProject.title || 'a project'}"`, data.status === 'approved' ? 'success' : 'warning');
+          });
+        }
+      }
     } catch (e) { devErr(e); }
   };
 
   const createChangeRequest = async (projectId, data) => {
     if (!db) return;
     try {
-      const clientId = data.clientId || getProjectClientId(projectId);
-      await addDoc(collection(db, 'change_requests'), { ...data, clientId, projectId, status: 'pending', createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
-      await addDoc(collection(db, 'projects', projectId, 'change_requests'), { ...data, clientId, projectId, status: 'pending', createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
+      await addDoc(collection(db, 'change_requests'), { ...data, projectId, status: 'pending', createdAt: new Date().toISOString() });
       // Notify Admin
-      teamMembers.filter(m => m.role === 'admin').forEach(admin => {
+      (teamMembers || []).filter(m => m.role === 'admin').forEach(admin => {
         notifyUser(admin.id, "New change request submitted by client", "change_request");
       });
     } catch (e) { devErr(e); }
@@ -1179,7 +1366,7 @@ export default function App() {
   const updateChangeRequest = async (id, data, projectId) => {
     if (!db) return;
     try {
-      await updateDoc(doc(db, 'projects', projectId, 'change_requests', id), data);
+      await updateDoc(doc(db, 'change_requests', id), data);
       logAction(projectId, 'ChangeRequest', `Request ${id} updated to ${data.status}`);
     } catch (e) { devErr(e); }
   };
@@ -1188,82 +1375,64 @@ export default function App() {
     if (!db) return;
     try {
       const inv = invoices.find(i => i.id === id);
-      const projectSnap = projectId ? await getDoc(doc(db, 'projects', projectId)) : null;
-      const project = projectSnap?.exists?.() ? projectSnap.data() : clients.find(p => p.id === projectId);
-      const amount = parseMoney(inv?.total ?? inv?.amount);
+      const project = clients.find(p => p.id === projectId);
+      const invoiceTotal = Number(inv?.amount || inv?.total || 0);
+      const currentPaid = Number(inv?.amountPaid || inv?.paidAmount || 0);
+      const amount = Math.max(0, invoiceTotal - currentPaid) || invoiceTotal;
+      const paidAt = new Date().toISOString();
+      const paymentUpdate = {
+        status: 'Paid',
+        amountPaid: amount,
+        paidAmount: amount,
+        paidAt,
+        method,
+        awaitingConfirmation: false,
+      };
+
+      await updateDoc(doc(db, 'invoices', id), paymentUpdate);
+      await setDoc(doc(db, 'projects', projectId, 'payments', id), paymentUpdate, { merge: true });
+
       const txId = `TX-${Date.now()}`;
       const newTx = {
         id: txId,
         projectId,
         clientId: inv?.clientId || getProjectClientId(projectId),
         invoiceId: id,
+        projectId,
+        parentId: projectId,
+        clientId: project?.clientId || inv?.clientId || '',
+        projectManagerId: project?.projectManagerId || project?.assignedStaff?.[0] || null,
         amount,
-        invoiceType: inv?.invoiceType || inv?.type || 'invoice',
-        stageGate: inv?.stageGate || null,
         date: new Date().toISOString().split('T')[0],
         method,
-        provider: method,
-        reference: id,
-        status: 'verified'
+        status: 'verified',
+        type: inv?.type || 'payment',
+        createdAt: serverTimestamp(),
       };
-      const batch = writeBatch(db);
-      if (projectId) {
-        batch.set(doc(db, 'projects', projectId, 'transactions', txId), newTx);
-        batch.update(doc(db, 'projects', projectId), {
-          paidAmount: increment(amount),
-          updatedAt: serverTimestamp(),
-          ...(inv?.invoiceType === 'rendering_fee' || inv?.type === 'rendering_fee' ? {
-            renderingFeePaid: true,
-            renderingUnlocked: true,
-            renderingStatus: 'paid_unlocked',
-            nextAction: 'Client can review rendering',
-          } : {}),
-          ...(inv?.invoiceType === 'deposit' || inv?.type === 'deposit' ? {
-            depositPaid: true,
-            depositStatus: 'paid',
-            nextAction: 'Begin procurement and production',
-          } : {}),
-          ...(inv?.invoiceType === 'final_balance' || inv?.type === 'final_balance' ? {
-            finalPaymentPaid: true,
-            finalSettlementStatus: 'paid',
-            nextAction: 'Issue handover documents',
-          } : {}),
-        });
-      }
-      batch.set(doc(db, 'transactions', txId), newTx);
-      if (id && inv) {
-        batch.update(doc(db, 'invoices', id), {
-          status: 'Paid',
-          paidAt: serverTimestamp(),
-          method,
-          provider: method,
-          transactionId: txId,
-          balanceDue: 0,
-          updatedAt: serverTimestamp(),
-        });
-      }
-      await batch.commit();
-      if ((inv?.invoiceType === 'rendering_fee' || inv?.type === 'rendering_fee') && project?.renderingPackageId) {
-        await updateDoc(doc(db, 'renderingPackages', project.renderingPackageId), {
-          status: 'paid_unlocked',
-          accessStatus: 'unlocked',
-          paidAt: serverTimestamp(),
-          transactionId: txId,
-          updatedAt: serverTimestamp(),
-        });
-        try {
-          const projectDocs = await getDocs(query(collection(db, 'projects', projectId, 'documents'), where('documentType', '==', 'rendering')));
-          const topDocs = await getDocs(query(collection(db, 'documents'), where('projectId', '==', projectId), where('documentType', '==', 'rendering')));
-          const unlockBatch = writeBatch(db);
-          projectDocs.docs.forEach(d => unlockBatch.update(d.ref, { clientVisible: true, unlockedAt: serverTimestamp() }));
-          topDocs.docs.forEach(d => unlockBatch.update(d.ref, { clientVisible: true, unlockedAt: serverTimestamp() }));
-          await unlockBatch.commit();
-        } catch (unlockErr) {
-          devWarn('[rendering unlock docs]', unlockErr);
-        }
-      }
-      await recordProjectActivity(projectId, `Invoice paid via ${method}`, { invoiceId: id, transactionId: txId, amount, clientId: newTx.clientId });
-      notify('success', `Payment of ${amount ? `GHS ${amount.toLocaleString()}` : ''} confirmed via ${method}`);
+
+      await setDoc(doc(db, 'projects', projectId, 'transactions', txId), newTx);
+      await setDoc(doc(db, 'transactions', txId), newTx);
+      const invoiceDescriptor = `${inv?.title || ''} ${inv?.type || ''} ${inv?.documentKind || ''}`.toLowerCase();
+      const isInitialDeposit = inv?.milestoneKey === 'post-rendering'
+        || invoiceDescriptor.includes('deposit')
+        || invoiceDescriptor.includes('first instalment')
+        || invoiceDescriptor.includes('first installment');
+      await updateDoc(doc(db, 'projects', projectId), {
+        paidAmount: increment(amount),
+        ...(isInitialDeposit ? {
+          depositPaid: true,
+          depositPaidAt: serverTimestamp(),
+          initialDepositInvoiceId: id,
+        } : {}),
+        updatedAt: serverTimestamp(),
+      });
+
+      const recipients = [...new Set(['admin', project?.projectManagerId, ...(project?.assignedStaff || [])].filter(Boolean))];
+      await Promise.all(recipients.map(recipientId =>
+        createNotification(recipientId, `Payment received: GH₵${amount.toLocaleString()} for invoice ${id} via ${method}`, 'payment', `/admin/client-hub`)
+          .catch(() => null)
+      ));
+      notify('success', `Payment of GH₵${amount.toLocaleString()} confirmed via ${method}`);
     } catch (e) { devErr(e); }
   };
 
@@ -1273,16 +1442,76 @@ export default function App() {
       const newTx = {
         parentId: pid,
         projectId: pid,
-        clientId: getProjectClientId(pid),
         invoiceId: ref || 'Manual Entry',
-        amount: String(amount),
+        amount: Number(amount),
         date: new Date().toISOString().split('T')[0],
         method,
-        status: 'verified'
+        status: 'verified',
+        type: 'payment',
+        createdAt: serverTimestamp(),
       };
-      await addDoc(collection(db, 'projects', pid, 'transactions'), newTx);
-      logAction(pid, 'Finance', `Offline payment of $${amount} recorded via ${method} (${ref})`);
-      notify('success', 'Manual payment recorded in audit trail');
+      const project = clients.find(p => p.id === pid);
+      const matchingInvoice = invoices.find(inv =>
+        inv.id === ref ||
+        inv.invoiceNumber === ref ||
+        ((inv.projectId === pid || inv.parentId === pid) && inv.awaitingConfirmation === true)
+      );
+      const clientId = project?.clientId || matchingInvoice?.clientId || '';
+      const managerId = project?.projectManagerId || project?.assignedStaff?.[0] || null;
+      const enrichedTx = { ...newTx, clientId, projectManagerId: managerId };
+      const projectTxRef = await addDoc(collection(db, 'projects', pid, 'transactions'), enrichedTx);
+      await setDoc(doc(db, 'transactions', projectTxRef.id), {
+        ...enrichedTx,
+        projectTransactionId: projectTxRef.id,
+      });
+      await updateDoc(doc(db, 'projects', pid), {
+        paidAmount: increment(Number(amount)),
+        updatedAt: serverTimestamp(),
+      });
+
+      if (matchingInvoice?.id) {
+        const currentPaid = Number(matchingInvoice.amountPaid || matchingInvoice.paidAmount || 0);
+        const invoiceTotal = Number(matchingInvoice.amount || matchingInvoice.total || 0);
+        const newPaid = currentPaid + Number(amount);
+        await updateDoc(doc(db, 'invoices', matchingInvoice.id), {
+          amountPaid: newPaid,
+          paidAmount: newPaid,
+          status: invoiceTotal > 0 && newPaid < invoiceTotal ? 'Partially Paid' : 'Paid',
+          awaitingConfirmation: false,
+          paidAt: new Date().toISOString(),
+          method,
+          paymentConfirmedAt: serverTimestamp(),
+          paymentConfirmedBy: user?.uid || user?.id || 'admin',
+        });
+
+        const invoiceDescriptor = `${matchingInvoice.title || ''} ${matchingInvoice.type || ''} ${matchingInvoice.documentKind || ''}`.toLowerCase();
+        const isInitialDeposit = matchingInvoice.milestoneKey === 'post-rendering'
+          || invoiceDescriptor.includes('deposit')
+          || invoiceDescriptor.includes('first instalment')
+          || invoiceDescriptor.includes('first installment');
+        if (isInitialDeposit && (invoiceTotal <= 0 || newPaid >= invoiceTotal)) {
+          await updateDoc(doc(db, 'projects', pid), {
+            depositPaid: true,
+            depositPaidAt: serverTimestamp(),
+            initialDepositInvoiceId: matchingInvoice.id,
+            updatedAt: serverTimestamp(),
+          });
+        }
+      }
+
+      // Notify client, admin, and assigned project manager that payment was received
+      if (project?.clientId) {
+        const msg = `Payment of GH₵ ${Number(amount).toLocaleString()} confirmed for "${project.title || 'your project'}" via ${method}. Thank you!`;
+        await createNotification(project.clientId, msg, 'payment', '/portal');
+      }
+      const staffRecipients = [...new Set(['admin', managerId, ...(project?.assignedStaff || [])].filter(Boolean))];
+      await Promise.all(staffRecipients.map(recipientId =>
+        createNotification(recipientId, `Offline payment of GH₵${Number(amount).toLocaleString()} recorded for "${project?.title || pid}" via ${method}.`, 'payment_received', '/admin/client-hub')
+          .catch(() => null)
+      ));
+
+      logAction(pid, 'Finance', `Offline payment of GH₵${amount} recorded via ${method} (${ref})`);
+      notify('success', 'Manual payment recorded — client notified');
     } catch (e) {
       notify('error', 'Failed to record payment: ' + e.message);
     }
@@ -1310,7 +1539,7 @@ export default function App() {
     if (!proj) return 0;
     
     // 1. Stage Progress (40%)
-    const stagePct = ((proj.stageId || 1) / 7) * 100;
+    const stagePct = ((proj.stageId || 1) / 8) * 100;
     
     // 2. Procurement Progress (40%)
     const myProcs = procurements.filter(p => p.parentId === pid);
@@ -1383,20 +1612,29 @@ export default function App() {
     catch(e) { devErr(e); }
   };
 
-  const deleteProject = async (projectId) => {
+  const deleteProject = async (projectId, reason = '') => {
     if (!db) return;
     try {
-      // Delete subcollections first (messages, documents, notes)
-      const subcols = ['messages', 'documents', 'notes', 'procurements'];
-      await Promise.all(subcols.map(async sub => {
-        const snap = await getDocs(collection(db, 'projects', projectId, sub));
-        return Promise.all(snap.docs.map(d => deleteDoc(d.ref)));
-      }));
-      await deleteDoc(doc(db, 'projects', projectId));
-      notify('success', 'Project deleted');
+      await updateDoc(doc(db, 'projects', projectId), {
+        status: 'Archived',
+        projectLifecycleStatus: 'Archived',
+        archivedAt: serverTimestamp(),
+        archivedBy: user?.uid || user?.id || 'admin',
+        archiveReason: sanitizeText(reason || 'Archived from project board'),
+        updatedAt: serverTimestamp(),
+      });
+      await addDoc(collection(db, 'projects', projectId, 'messages'), {
+        text: `Project archived. Reason: ${sanitizeText(reason || 'Archived from project board')}`,
+        senderRole: 'system',
+        senderId: 'system',
+        senderName: 'Westline Future',
+        isInternal: true,
+        createdAt: serverTimestamp(),
+      });
+      notify('success', 'Project archived. Audit trail preserved.');
     } catch (e) {
       devErr(e);
-      notify('error', 'Failed to delete project');
+      notify('error', 'Failed to archive project');
     }
   };
   // uploadMedia moved to useFileUpload hook
@@ -1419,19 +1657,21 @@ export default function App() {
     catch(e) { devErr(e); }
   };
 
+  // sendSMSUpdate — sends an SMS to the client when their project advances
   const sendWhatsAppUpdate = async (clientId, projectId, stageName) => {
-    const c = dbClients.find(x => x.id === clientId) || { phone: clientId, name: 'Client' };
-    const p = clients.find(x => x.id === projectId) || { project: 'General Works' };
-    
+    if (user?.role === 'client') return; // clients cannot trigger admin-only SMS
     try {
-      notify('pending', `Sending SMS to ${c.name}...`);
-      const message = stageName.includes(' ') ? stageName : `Hello ${c.name}, your project "${p.project || p.title}" has moved to the ${stageName} phase. - Westline Future`;
-
-      await MessengerService.sendMessage(c.phone || clientId, message);
-      notify('success', 'SMS sent successfully');
-      if (projectId) logAction(projectId, 'Notification', `SMS update sent: ${stageName}`);
-    } catch (err) {
-      notify('error', 'SMS dispatch failed');
+      const client = clients.find(c => c.id === clientId);
+      if (!client?.phone) return;
+      const project = projects.find(p => p.id === projectId);
+      const firstName = (client.name || '').split(' ')[0] || 'there';
+      const projectTitle = project?.title || 'your project';
+      const message = `Hi ${firstName}, your project "${projectTitle}" has moved to the ${stageName} stage. Log in to your portal to see what's next: https://westlinefuture.web.app`;
+      const fn = httpsCallable(functions, 'sendSMS');
+      await fn({ to: client.phone, message });
+      if (import.meta.env.DEV) console.log(`[sendWhatsAppUpdate] SMS sent to ${client.phone}`);
+    } catch (e) {
+      if (import.meta.env.DEV) console.warn('[sendWhatsAppUpdate] SMS failed (non-fatal):', e?.message);
     }
   };
 
@@ -1481,25 +1721,26 @@ export default function App() {
       fromEmail: data.email,
       subject: `Inquiry: ${data.subject || 'General Consultation'}`,
       status: 'pending',
-      type: 'General Inquiry',
+      type: data.inquiryType || 'General Inquiry',
       sentAt: new Date().toLocaleDateString(),
       details: data
     };
-    setEmails(prev => [payload, ...prev]);
     if (db) {
       try {
         await setDoc(doc(db, 'emails', payload.id), payload);
+        setEmails(prev => [payload, ...prev]);
         notify('success', 'Inquiry sent successfully to our procurement team.');
       } catch (e) {
         devErr("Failed to sync contact inquiry:", e);
-        notify('error', 'Message dispatch failed.');
+        notify('error', 'Message dispatch failed. Please try again or call us.');
+        throw e;
       }
     }
   };
   
   const createClient = async (data) => {
     try {
-      if (!functions) {
+      if (!db) {
         notify('error', 'System unavailable');
         return;
       }
@@ -1507,29 +1748,31 @@ export default function App() {
 
       notify('pending', 'Registering client...');
 
-      const fn = httpsCallable(functions, 'createClientRecord');
-      const result = await fn(data);
-      const { id, updated } = result.data;
+      let id = String(data.phone).replace(/\D/g, "");
+      if (id.startsWith("0")) id = "233" + id.slice(1);
 
-      if (updated) {
+      const userRef = doc(db, 'users', id);
+      const userSnap = await getDoc(userRef);
+
+      if (userSnap.exists()) {
+        await setDoc(userRef, { ...data, phone: id, updatedAt: serverTimestamp() }, { merge: true });
         notify('success', 'Existing client record updated.');
         return;
       }
 
+      const payload = {
+        ...data,
+        id,
+        phone: id,
+        role: "client",
+        status: "Active",
+        joined: new Date().toISOString(),
+        onboarded: false,
+        createdAt: serverTimestamp(),
+      };
+
+      await setDoc(userRef, payload);
       notify('success', `${data.name} registered successfully.`);
-
-      // Welcome SMS — phone OTP handles login, no credentials needed
-      const smsPhone = `+${id}`;
-      const message = `Hi ${data.name}, welcome to Westline Future!\n\nYour project portal is ready. Log in at:\nwestlinefuture-635c2.web.app/login\n\nEnter your phone number and we'll send you a one-time code.`;
-
-      try {
-        await MessengerService.sendMessage(smsPhone, message);
-        notify('success', 'Welcome SMS sent.');
-      } catch (smsErr) {
-        if (import.meta.env.DEV) devWarn('[SMS]', smsErr.message);
-        notify('success', 'Client registered. SMS failed — notify them manually.');
-      }
-
       logAction(null, 'CRM', `Onboarded Client: ${data.name} (${id})`);
       await createNotification(id, 'Welcome to Westline Future! Your project portal is now active.', 'success', '/portal');
 
@@ -1567,8 +1810,7 @@ export default function App() {
       const docRef = await addDoc(collection(db, 'projects'), {
         ...data,
         clientId: id,
-        primaryClientId: id,
-        clientIds: [id],
+        clientIds: buildClientIds(id, data.phone || data.clientPhone),
         status: 'Initialized',
         stageId: 1,
         stageModel: 'westline-7-stage-v1',
@@ -1592,16 +1834,18 @@ export default function App() {
   const buildDefaultMilestones = (budget, paymentSchedule = 'standard') => {
     const num = parseMoney(budget);
     if (!num) return [];
-    const fmt = (v) => `GHS ${v.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+    const fmt = (v) => `GH₵ ${v.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
     const ts = Date.now();
     const SCHEDULES = {
       standard: [
-        { name: '50% Project Deposit', pct: 0.50, stageId: 2, invoiceType: 'deposit' },
-        { name: '50% Final Settlement', pct: 0.50, stageId: 7, invoiceType: 'final_balance' },
+        { name: '10% Deposit',        pct: 0.10, stageId: 1 },
+        { name: '40% Pre-production', pct: 0.40, stageId: 3 },
+        { name: '40% Pre-delivery',   pct: 0.40, stageId: 6 },
+        { name: '10% Completion',     pct: 0.10, stageId: 8 },
       ],
       '70-30': [
-        { name: '70% Before Procurement', pct: 0.70, stageId: 2, invoiceType: 'deposit' },
-        { name: '30% Final Settlement',  pct: 0.30, stageId: 7, invoiceType: 'final_balance' },
+        { name: '70% Before Delivery', pct: 0.70, stageId: 3 },
+        { name: '30% After Delivery',  pct: 0.30, stageId: 8 },
       ],
     };
     const template = SCHEDULES[paymentSchedule] || SCHEDULES.standard;
@@ -1623,48 +1867,127 @@ export default function App() {
       if (!clientId) throw new Error('Client ID is required.');
       const milestones = data.milestones?.length ? data.milestones : buildDefaultMilestones(data.budget, data.paymentSchedule);
       const effectiveDate = data.projectDate ? new Date(data.projectDate).toISOString() : new Date().toISOString();
+      const selectedWorkerIds = [data.assignedWorker].filter(Boolean);
+      const selectedStaffIds = [data.assignedStaff].filter(Boolean);
+
+      // Pre-compute the timeline from project creation date so Gantt + client portal show real dates immediately
+      const projectTypeStages = CLIENT_PROJECT_STAGES.filter(s => {
+        const typeStageIds = (data.projectType === 'buy-only' ? [1,2,3,4,5,7,8] : [1,2,3,4,5,6,7,8]);
+        return typeStageIds.includes(s.id);
+      });
+      const initialTimeline = calculateTimeline(effectiveDate, {}, projectTypeStages);
+
+      const stageTimelines = (CLIENT_PROJECT_STAGES || []).map(stage => ({
+        stageId: stage.id,
+        name: stage.name,
+        estimatedStartDate: stage.id === 1 ? (data.estimatedStartDate || data.projectDate || null) : null,
+        estimatedEndDate: stage.id === 8 ? (data.targetCompletionDate || null) : null,
+        actualStartDate: stage.id === 1 ? effectiveDate : null,
+        actualEndDate: null,
+        status: stage.id === 1 ? 'On track' : 'Not started',
+        owner: stage.whoActs || 'admin',
+        delayReason: '',
+        clientVisibleNote: '',
+        internalNote: '',
+      }));
       const docRef = await addDoc(collection(db, 'projects'), {
         title: sanitizeText(data.title || 'New Project'),
         clientId,
-        primaryClientId: clientId,
-        clientIds: [clientId],
+        clientIds: buildClientIds(clientId, data.phone || data.clientPhone),
         projectType: data.projectType || 'full-service',
         stageId: 1,
         stageModel: 'westline-7-stage-v1',
         status: 'Active',
+        projectLifecycleStatus: 'Active',
         budget: data.budget || '',
-        projectTotal: parseMoney(data.budget),
-        approvedAddOnsTotal: 0,
-        paidAmount: 0,
+        projectTotal: data.budget || '',
+        renderingFee: data.renderingFee || '',
+        renderingStatus: 'not_started',
+        renderingFeePaid: false,
+        renderingUnlocked: false,
+        renderingApproved: false,
+        quoteStatus: 'not_started',
+        quoteApproved: false,
+        depositPaid: false,
+        nextAction: data.renderingFee ? 'Create and send rendering fee invoice' : 'Confirm rendering fee and upload design package',
         breakdown: data.breakdown || null,
         paymentSchedule: data.paymentSchedule || 'standard',
-        renderingFee: parseMoney(data.renderingFee),
-        renderingStatus: 'not_started',
-        quoteStatus: 'not_started',
-        depositStatus: 'not_started',
-        finalSettlementStatus: 'not_started',
-        nextAction: 'Create rendering fee invoice',
+        kickoffMode: data.kickoffMode || 'rendering-first',
         description: sanitizeText(data.description || ''),
         milestones,
-        stageTimeline: CLIENT_PROJECT_STAGES.map((stage, index) => ({
-          stageId: stage.id,
-          status: stage.id === 1 ? 'on_track' : 'upcoming',
-          estimatedStartDate: null,
-          estimatedEndDate: null,
-          actualStartDate: stage.id === 1 ? effectiveDate : null,
-          actualEndDate: null,
-          delayReason: '',
-          owner: stage.whoActs,
-          clientNote: '',
-          internalNote: '',
-          order: index + 1,
-        })),
-        assignedWorkers: [],
-        assignedStaff: user?.uid || user?.id ? [user.uid || user.id] : [],
+        assignedWorkers: selectedWorkerIds,
+        assignedStaff: selectedStaffIds,
+        projectManagerId: data.assignedStaff || null,
+        estimatedStartDate: data.estimatedStartDate || data.projectDate || null,
+        targetCompletionDate: data.targetCompletionDate || null,
+        stageTimelines,
+        timeline: initialTimeline,
         stageHistory: [{ stageId: 1, note: data.projectDate ? `Project created (backdated to ${data.projectDate})` : 'Project created', timestamp: effectiveDate, byRole: 'admin' }],
         createdAt: data.projectDate ? effectiveDate : serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
+      
+      // Auto-generate rendering fee invoice if provided
+      if (data.renderingFee) {
+        const rawFee = parseFloat(String(data.renderingFee).replace(/[^0-9.]/g, '')) || 0;
+        if (rawFee > 0) {
+          const invRef = await addDoc(collection(db, 'invoices'), {
+            parentId: docRef.id,
+            projectId: docRef.id,  // both fields for dual-query compatibility
+            clientId: clientId,
+            clientEmail: data.clientEmail || '',
+            title: 'Design & Rendering Fee',
+            amount: rawFee,
+            date: data.projectDate ? new Date(data.projectDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+            due: new Date(Date.now() + 7*24*60*60*1000).toISOString().split('T')[0],
+            status: 'Pending',
+            type: 'Design',
+            autoGenerated: true,
+            createdAt: serverTimestamp()
+          });
+          await updateDoc(docRef, { renderingFeeInvoiceId: invRef.id });
+        }
+      }
+      // Auto-generate milestone invoices from payment schedule
+      const parsedBudget = parseFloat(String(data.budget || '0').replace(/[^0-9.]/g, '')) || 0;
+      const schedule = data.paymentSchedule || 'standard';
+      const today = new Date().toISOString().split('T')[0];
+
+      if (parsedBudget > 0) {
+        let milestonesToGenerate = [];
+
+        if (schedule === 'custom' && data.customMilestones?.length) {
+          // Build cumPct on the fly and use admin-defined milestones
+          let running = 0;
+          milestonesToGenerate = data.customMilestones
+            .filter(m => m.label && m.pct > 0)
+            .map(m => {
+              running += m.pct;
+              return { ...m, cumPct: parseFloat(running.toFixed(4)) };
+            });
+        } else if (schedule !== 'custom') {
+          const scheduleConfig = SCHEDULE_CONFIGS[schedule] || SCHEDULE_CONFIGS.standard;
+          milestonesToGenerate = scheduleConfig.milestones || [];
+        }
+
+        for (const milestone of milestonesToGenerate) {
+          await addDoc(collection(db, 'invoices'), {
+            parentId: docRef.id,
+            projectId: docRef.id,
+            clientId: clientId,
+            title: milestone.label,
+            amount: parseFloat((parsedBudget * milestone.pct).toFixed(2)),
+            type: 'Milestone',
+            status: 'Pending',
+            milestoneKey: milestone.key,
+            date: today,
+            due: null,
+            autoGenerated: true,
+            createdAt: serverTimestamp(),
+          });
+        }
+      }
+
       await addDoc(collection(db, 'projects', docRef.id, 'messages'), {
         text: `Project "${data.title}" has been created. Our team will be in touch shortly.`,
         senderRole: 'system', senderId: 'system', senderName: 'Westline Future',
@@ -1695,28 +2018,155 @@ export default function App() {
       const stageHistory = [...(data.stageHistory || []), {
         stageId: newStageId, note: sanitizeText(note) || 'Stage advanced',
         timestamp: effectiveTimestamp, byRole: 'admin',
+        gateOverride: !!options.gateOverride,
+        gateChecks: options.gateChecks || [],
+        clientVisibleNote: sanitizeText(options.clientVisibleNote || ''),
         ...(options.overrideDate ? { backdated: true } : {}),
       }];
       const stage = CLIENT_PROJECT_STAGES.find(s => s.id === newStageId);
       await updateDoc(doc(db, 'projects', projectId), {
         stageId: newStageId,
-        stageModel: 'westline-7-stage-v1',
-        status: newStageId === 7 && /final payment|settlement|complete|handover/i.test(note) ? 'Completed' : 'Active',
-        progress: stage?.pct ?? Math.round((newStageId / 7) * 100),
-        nextAction: computeNextProjectAction({ ...data, stageId: newStageId }, newStageId),
-        stageHistory,
-        updatedAt: serverTimestamp(),
+        status: newStageId === 8 ? 'Completed' : 'Active',
+        previousStageId: data.stageId || null,
+        lastStageAdvancedAt: serverTimestamp(),
+        lastStageAdvancedBy: user?.uid || user?.id || 'admin',
+        lastGateOverride: !!options.gateOverride,
+        timelineStatus: options.timelineStatus || data.timelineStatus || 'On track',
+        clientVisibleStageNote: sanitizeText(options.clientVisibleNote || ''),
+        stageHistory, updatedAt: serverTimestamp(),
       });
-      await addDoc(collection(db, 'projects', projectId, 'messages'), {
-        text: `Stage updated to: ${stage?.name || `Stage ${newStageId}`}. ${stage?.clientMsg || ''}`,
-        senderRole: 'system', senderId: 'system', senderName: 'Westline Future',
-        isInternal: true, createdAt: serverTimestamp(),
-      });
-      if (data.clientId) {
-        try { await sendWhatsAppUpdate(data.clientId, projectId, stage?.name || `Stage ${newStageId}`); } catch (_) {}
-        await createNotification(data.clientId, `Your project "${data.title}" has progressed to ${stage?.name}.`, 'info', '/portal');
+      const stage = CLIENT_PROJECT_STAGES.find(s => s.id === newStageId);
+
+      // ── Auto-generate handover certificate when project reaches Stage 8 ──────
+      if (newStageId === 8) {
+        try {
+          const handoverDate = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+          await addDoc(collection(db, 'projects', projectId, 'documents'), {
+            name: 'Project Handover Certificate',
+            type: 'handover',
+            fileType: 'pdf',
+            stageId: 8,
+            uploadedBy: 'Westline Future',
+            clientId: data.clientId || null,
+            clientName: data.clientName || null,
+            projectTitle: data.title || null,
+            projectType: data.projectType || null,
+            handoverDate,
+            isAutoGenerated: true,
+            createdAt: serverTimestamp(),
+          });
+        } catch (_) {}
       }
-      notify('success', `Project advanced to ${stage?.name}`);
+
+      try {
+        await addDoc(collection(db, 'projects', projectId, 'messages'), {
+          text: `Stage updated to: ${stage?.name || `Stage ${newStageId}`}. ${stage?.clientMsg || ''}`,
+          senderRole: 'system', senderId: 'system', senderName: 'Westline Future',
+          isInternal: true, createdAt: serverTimestamp(),
+        });
+      } catch (_) {}
+      // Also post a client-visible update to their chat thread
+      if (data.clientId) {
+        try {
+          await addDoc(collection(db, 'clients', data.clientId, 'messages'), {
+            text: `🚀 Your project "${data.title}" has moved to: **${stage?.name || `Stage ${newStageId}`}**. ${stage?.clientMsg || ''}`,
+            senderRole: 'system', senderId: 'system', senderName: 'Westline Future',
+            isInternal: false, readByAdmin: true, readByClient: false,
+            createdAt: serverTimestamp(),
+          });
+        } catch (_) {}
+      }
+
+      // ── Auto-activate milestone invoice when trigger stage is reached ──────
+      // Stage 3 → post-rendering (60%), Stage 5 → post-production (30%), Stage 6 → final balance (before installation)
+      const MILESTONE_STAGE_TRIGGERS = { 3: 'post-rendering', 5: 'post-production', 6: 'completion' };
+      const MILESTONE_LABELS = {
+        'post-rendering':  '60% Rendering Milestone',
+        'post-production': '30% Production Milestone',
+        'completion':      'Final Balance Payment',
+        'post-shipping':   '10% Delivery Milestone',
+      };
+      const triggerKey = MILESTONE_STAGE_TRIGGERS[newStageId];
+      if (triggerKey) {
+        try {
+          const today = new Date();
+          const due = new Date(today);
+          due.setDate(due.getDate() + 7); // 7-day window for final payment
+          const dueStr = due.toISOString().split('T')[0];
+          // Search by milestoneKey first, then fall back to type/title for final invoices
+          const invQ = query(
+            collection(db, 'invoices'),
+            where('parentId', '==', projectId),
+            where('milestoneKey', '==', triggerKey)
+          );
+          const invQ2 = query(
+            collection(db, 'invoices'),
+            where('projectId', '==', projectId),
+            where('milestoneKey', '==', triggerKey)
+          );
+          const [invSnap, invSnap2] = await Promise.all([getDocs(invQ), getDocs(invQ2)]);
+          // Merge both results, deduplicate by id
+          const allDocs = [...invSnap.docs, ...invSnap2.docs].filter(
+            (d, i, arr) => arr.findIndex(x => x.id === d.id) === i
+          );
+          // For Stage 7 (final payment), also search by type 'final'/'settlement' if no milestoneKey match
+          let finalDocs = allDocs;
+          if (triggerKey === 'completion' && allDocs.length === 0) {
+            const fallbackQ = query(collection(db, 'invoices'), where('parentId', '==', projectId));
+            const fallbackSnap = await getDocs(fallbackQ);
+            finalDocs = fallbackSnap.docs.filter(d => {
+              const t = `${d.data().type || ''} ${d.data().title || ''} ${d.data().milestoneKey || ''}`.toLowerCase();
+              return t.includes('final') || t.includes('settlement') || t.includes('completion') || t.includes('balance');
+            });
+          }
+          for (const invDoc of finalDocs) {
+            if (!isPaid(invDoc.data().status)) {
+              await updateDoc(invDoc.ref, {
+                due: dueStr,
+                status: 'Sent',
+                activatedAt: serverTimestamp(),
+                activatedAtStage: newStageId,
+              });
+            }
+          }
+          // Client-visible system message + push notification
+          if (data.clientId && finalDocs.length > 0) {
+            const milestoneLabel = MILESTONE_LABELS[triggerKey] || 'Payment Milestone';
+            const isFinal = triggerKey === 'completion';
+            const msgText = isFinal
+              ? `🏗️ Your goods are ready for installation! Your final balance payment is now due by ${new Date(dueStr + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'long' })}. Please clear the balance before installation begins — you can pay by bank transfer, mobile money, or cash. Contact us to arrange an offline payment.`
+              : `💳 Payment milestone reached: your *${milestoneLabel}* invoice is now due (${dueStr}). Please open your Payments tab to settle.`;
+            await addDoc(collection(db, 'clients', data.clientId, 'messages'), {
+              text: msgText,
+              senderRole: 'system', senderId: 'system', senderName: 'Westline Future',
+              isInternal: false, readByAdmin: true, readByClient: false, createdAt: serverTimestamp(),
+            });
+            // Strong push notification for final payment
+            await addDoc(collection(db, 'notifications'), {
+              userId: data.clientId,
+              message: isFinal
+                ? `🏗️ Ready for installation — your final balance is due by ${dueStr}. Pay via the Payments tab.`
+                : `💳 ${milestoneLabel} invoice is now due (${dueStr}). Open Payments tab.`,
+              type: 'payment_due',
+              link: '/portal',
+              read: false,
+              createdAt: serverTimestamp(),
+            });
+          }
+        } catch (milestoneErr) {
+          devErr(milestoneErr); // non-fatal — don't block stage advance
+        }
+      }
+
+      if (user?.role === 'client') {
+        try { await createNotification('admin', `Client advanced project "${data.title}" to ${stage?.name}`, 'info', `/admin/clients?tab=projects`); } catch (_) {}
+      } else {
+        if (data.clientId) {
+          try { await sendWhatsAppUpdate(data.clientId, projectId, stage?.name || `Stage ${newStageId}`); } catch (_) {}
+          try { await createNotification(data.clientId, `Your project "${data.title}" has progressed to ${stage?.name}.`, 'info', '/portal'); } catch (_) {}
+        }
+      }
+      notify('success', `Project advanced to ${stage?.name}`, 'persistent');
       logAction(data.clientId, 'Projects', `Stage ${newStageId} — ${projectId}`);
     } catch (e) {
       notify('error', 'Failed to update stage');
@@ -1724,11 +2174,11 @@ export default function App() {
     }
   };
 
-  const addProjectMessage = async (projectId, text, senderRole = 'admin', isInternal = false, meta = {}) => {
+  const addClientMessage = async (clientId, text, senderRole = 'admin', isInternal = false) => {
     if (!db || !text?.trim()) return;
     const senderName = user?.name || user?.displayName || 'Westline Future Team';
     try {
-      await addDoc(collection(db, 'projects', projectId, 'messages'), {
+      await addDoc(collection(db, 'clients', clientId, 'messages'), {
         text: sanitizeText(text.trim()),
         type: meta.type || 'text',
         audioUrl: meta.audioUrl || null,
@@ -1743,38 +2193,60 @@ export default function App() {
         createdAt: serverTimestamp(),
       });
       if (!isInternal) {
-        const project = clients.find(p => p.id === projectId);
-        if (project) {
-          // Notify the client
-          if (project.clientId) {
-            try { await createNotification(project.clientId, `New message from ${senderName} on your project`, 'message', `/portal`); } catch (_) {}
-          }
-          // If a staff/worker sent the message, also notify admin (uid-based lookup)
-          // If admin sent, notify assigned staff members
+        const client = clients.find(c => c.id === clientId);
+        if (client) {
           if (senderRole === 'admin') {
-            const assignedWorkers = project.assignedWorkers || [];
-            for (const workerId of assignedWorkers) {
-              try { await createNotification(workerId, `Admin sent a message on ${project.project || project.title}`, 'message', `/admin/client-hub`); } catch (_) {}
-            }
+            try { await createNotification(clientId, `New message from ${senderName}`, 'message', `/portal`); } catch (_) {}
+          }
+          if (senderRole === 'client') {
+            try { await createNotification('admin', `Client ${client.name || 'someone'} sent a message`, 'message', `/admin/client-hub`); } catch (_) {}
           }
         }
       }
     } catch (e) {
+      console.error('addClientMessage error:', e);
       notify('error', 'Message failed');
     }
   };
 
   const assignWorkerToProject = async (projectId, workerId) => {
+    if (!functions) return;
+    try {
+      const member = (teamMembers || []).find(item =>
+        item.id === workerId || item.uid === workerId || item.email === workerId
+      );
+      if (!member) throw new Error('Team member not found');
+
+      const toggleAssignment = httpsCallable(functions, 'toggleProjectTeamAssignment');
+      const response = await toggleAssignment({
+        projectId,
+        memberId: String(member.uid || member.id),
+      });
+      notify('success', `${response.data?.memberName || member.name || 'Team member'} ${response.data?.assigned ? 'assigned' : 'unassigned'} successfully`);
+    } catch (e) {
+      notify('error', `Failed to update team assignment: ${e.message}`);
+    }
+  };
+
+  const approveSignoff = async (projectId) => {
     if (!db) return;
     try {
-      const snap = await getDoc(doc(db, 'projects', projectId));
-      if (!snap.exists()) return;
-      const current = snap.data().assignedWorkers || [];
-      const updated = current.includes(workerId) ? current.filter(id => id !== workerId) : [...current, workerId];
-      await updateDoc(doc(db, 'projects', projectId), { assignedWorkers: updated, updatedAt: serverTimestamp() });
-      notify('success', current.includes(workerId) ? 'Worker unassigned' : 'Worker assigned to project');
+      const project = clients.find(p => p.id === projectId) || {};
+      // Client-allowed write: flags the sign-off
+      await updateDoc(doc(db, 'projects', projectId), {
+        signOffApproved: true,
+        signOffApprovedAt: serverTimestamp(),
+      });
+      // Admin advances the stage (this succeeds if called by admin, or silently fails for client)
+      try {
+        await updateProjectStage(projectId, 8, 'Client signed off on inspection', { silent: true });
+      } catch (_) {
+        // Fallback: notify admin to complete the handover manually
+        await createNotification('admin', `Client signed off on project "${project.title || projectId}" — please advance to Stage 8 (Handover).`, 'info', `/admin/clients?tab=projects`);
+      }
+      notify('success', 'Sign-off confirmed! Your project is being completed.', 'persistent');
     } catch (e) {
-      notify('error', 'Failed to update worker assignment');
+      notify('error', 'Failed to record sign-off. Please try again.');
     }
   };
 
@@ -1791,18 +2263,11 @@ export default function App() {
         nextAction: 'Create project deposit invoice',
         updatedAt: serverTimestamp(),
       });
-      if (project?.activeQuoteId) {
-        try {
-          await updateDoc(doc(db, 'quotes', project.activeQuoteId), {
-            status: 'approved',
-            approvedBy: user?.uid || user?.id || project.clientId || 'client',
-            approvedAt: serverTimestamp(),
-            updatedAt: serverTimestamp(),
-          });
-        } catch (_) {}
+      if (project?.stageId === 2) {
+        await updateProjectStage(projectId, 3, 'Quotation approved by client', { silent: true });
       }
-      await recordProjectActivity(projectId, 'Final quote approved', { quoteId: project?.activeQuoteId || null, clientId: project?.clientId || null });
-      notify('success', 'Quote approved. Deposit payment is now available.');
+      createNotification('admin', `Client approved quote for ${project?.name || 'Project'}`, 'quote_approved', `/admin/clients?tab=projects`);
+      notify('success', 'Quote approved — advancing to deposit stage', 'persistent');
     } catch (e) { notify('error', 'Failed to approve quote'); }
   };
 
@@ -1836,8 +2301,21 @@ export default function App() {
         uploadedBy: meta.uploadedBy || 'admin',
         createdAt: serverTimestamp(),
       };
-      await addDoc(collection(db, 'projects', projectId, 'documents'), docData);
-      await addDoc(collection(db, 'documents'), docData);
+      if (user?.role === 'worker') {
+        const registerDocument = httpsCallable(functions, 'registerWorkerProjectDocument');
+        await registerDocument({
+          projectId,
+          name: docData.name,
+          url: docData.url,
+          fileType: docData.fileType,
+          size: docData.size,
+          stageId: docData.stageId,
+          workerName: user?.name || user?.displayName || 'Field Worker',
+          docType: meta.docType || 'field_document',
+        });
+      } else {
+        await addDoc(collection(db, 'projects', projectId, 'documents'), docData);
+      }
       logAction(projectId, 'Document', `Uploaded: ${file.name}`);
       notify('success', 'Document uploaded');
       const docProject = clients.find(p => p.id === projectId);
@@ -1849,6 +2327,27 @@ export default function App() {
       notify('error', 'Upload failed: ' + e.message);
       return null;
     }
+  };
+
+  const addProjectMessage = async (projectId, text, senderRole = 'worker') => {
+    if (!functions || !projectId || !text?.trim()) return;
+    if (user?.role === 'worker' || senderRole === 'worker') {
+      const submitWorkerNote = httpsCallable(functions, 'submitWorkerProjectNote');
+      await submitWorkerNote({
+        projectId,
+        text: sanitizeText(text),
+        workerName: user?.name || user?.displayName || user?.email || 'Field Worker',
+      });
+      return;
+    }
+    await addDoc(collection(db, 'projects', projectId, 'messages'), {
+      text: sanitizeText(text),
+      senderRole,
+      senderId: user?.uid || user?.id || 'staff',
+      senderName: user?.name || user?.displayName || 'Westline Future Team',
+      isInternal: false,
+      createdAt: serverTimestamp(),
+    });
   };
 
   const addSourcingItem = async (data) => {
@@ -1931,14 +2430,26 @@ export default function App() {
   const deleteClient = async (id) => {
     if (!db) return;
     try {
+      // Delete the primary user document
       await deleteDoc(doc(db, 'users', id));
-      
-      // Cleanup ghost records associated with this client
+
+      // Clean up client subcollections (messages, typing, etc.)
+      // Firestore does NOT auto-delete subcollections when a doc is deleted
+      const clientSubcollections = ['messages', 'typing'];
+      for (const sub of clientSubcollections) {
+        try {
+          const snap = await getDocs(collection(db, 'clients', id, sub));
+          await Promise.all(snap.docs.map(d => deleteDoc(d.ref)));
+        } catch (_) {}
+      }
+      // Delete the clients/{id} document itself
+      try { await deleteDoc(doc(db, 'clients', id)); } catch (_) {}
+
+      // Cleanup ghost records in top-level collections
       const collectionsToCleanup = [
-        'projects', 'work_orders', 'invoices', 'tasks', 
-        'approvals', 'change_requests', 'procurements'
+        'projects', 'work_orders', 'invoices', 'tasks',
+        'approvals', 'change_requests', 'procurements', 'renderingPackages'
       ];
-      
       for (const coll of collectionsToCleanup) {
         try {
           const q = query(collection(db, coll), where('clientId', '==', id));
@@ -1948,9 +2459,9 @@ export default function App() {
           devWarn(`Failed to cleanup ${coll}:`, err);
         }
       }
-      
-      notify('success', 'Client and associated records removed');
-      logAction(null, 'CRM', `Deleted Client and records: ${id}`);
+
+      notify('success', 'Client and all associated records removed');
+      logAction(null, 'CRM', `Deleted client and records: ${id}`);
     } catch (e) {
       devErr(e);
       notify('error', 'Deletion failed');
@@ -2013,6 +2524,12 @@ export default function App() {
   const sendOTP = async (phone) => {
     try {
       if (!auth) throw new Error("Service unavailable. Please try again.");
+      const normalizedPhone = String(phone || '').trim();
+      if (!/^\+[1-9]\d{7,14}$/.test(normalizedPhone)) {
+        const e = new Error('Enter a valid phone number in international format, e.g. +233 24 000 0000.');
+        e.code = 'auth/invalid-phone-number';
+        throw e;
+      }
 
       notify('pending', 'Sending verification code...');
 
@@ -2030,19 +2547,46 @@ export default function App() {
         'expired-callback': () => { window._gtRecaptcha = null; }
       });
 
-      const result = await signInWithPhoneNumber(auth, phone, window._gtRecaptcha);
+      await window._gtRecaptcha.render();
+      const result = await signInWithPhoneNumber(auth, normalizedPhone, window._gtRecaptcha);
       confirmationResultRef.current = result;
 
-      notify('success', `Code sent to ${phone}`);
+      notify('success', `Code sent to ${normalizedPhone}`);
       return true;
     } catch (err) {
+      devErr('[sendOTP] Firebase phone auth failed', {
+        code: err?.code,
+        message: err?.message,
+        customData: err?.customData,
+        url: window.location.href,
+        host: window.location.host
+      });
       if (window._gtRecaptcha) {
         try { window._gtRecaptcha.clear(); } catch (_) {}
         window._gtRecaptcha = null;
       }
       const container = document.getElementById('recaptcha-container');
       if (container) container.innerHTML = '';
-      setNotification({ msg: err.message, type: 'error' });
+      const msg = (() => {
+        const host = window.location.host;
+        if (err?.code === 'auth/network-request-failed') {
+          return `Network error sending OTP. This usually means the domain "${host}" is not in Firebase Auth → Authorized Domains, or the reCAPTCHA API key doesn't allow this referrer. Ask your admin to add "${host}" to Firebase Console → Authentication → Settings → Authorized Domains.`;
+        }
+        if (err?.code === 'auth/invalid-app-credential' || err?.code === 'auth/unauthorized-domain') {
+          return `Domain "${host}" is not authorized for Firebase Phone Auth. Go to Firebase Console → Authentication → Settings → Authorized Domains and add "${host}".`;
+        }
+        if (err?.code === 'auth/app-not-authorized') return `API key not authorized for domain "${host}". Check Firebase Auth → Authorized Domains and Google Cloud API key restrictions.`;
+        if (err?.code === 'auth/captcha-check-failed') return 'Security check failed. Please refresh the page and try again.';
+        if (err?.code === 'auth/missing-phone-number') return 'Enter a valid phone number before requesting an OTP.';
+        if (err?.code === 'auth/too-many-requests') return 'Too many OTP attempts. Please wait a few minutes and try again.';
+        if (err?.code === 'auth/invalid-phone-number') return 'That phone number is not valid. Please include the country code, e.g. +86 for China or +1 for USA.';
+        if (err?.code === 'auth/quota-exceeded') return 'SMS quota exceeded for today. Please try again tomorrow or contact support.';
+        if (err?.message?.includes('400')) return `Firebase rejected the OTP request. Check Phone Auth is enabled and "${host}" is in Authorized Domains.`;
+        return err.message || 'Could not send verification code. Please check your connection and try again.';
+      })();
+      err.userMessage = msg;
+      setNotification({ msg, type: 'error' });
+      notify?.('error', msg);
       throw err;
     }
   };
@@ -2085,7 +2629,8 @@ export default function App() {
       const fullUser = { ...userDoc, id: userDoc.id, uid: firebaseUser.uid };
       delete fullUser.password;
       setUser(fullUser);
-      localStorage.setItem('westlinefuture_session', JSON.stringify({ id: userDoc.id, phone, user: fullUser, expiry: Date.now() + 86400000 }));
+      // ✓ Firebase Auth handles session persistence securely via httpOnly cookies + built-in storage
+      // Do NOT store unencrypted session data in localStorage
       confirmationResultRef.current = null;
       navigate('/portal');
       return true;
@@ -2098,7 +2643,8 @@ export default function App() {
   const handleLogout = async () => {
     try {
       if (auth) await signOut(auth);
-      localStorage.removeItem('westlinefuture_session');
+      // ✓ Firebase Auth clears sessions automatically on signOut
+      localStorage.removeItem('westline_user_cache');
       setUser(null);
       setLoginType('client'); // always reset to client/OTP mode on logout
       navigate('/login');
@@ -2108,16 +2654,71 @@ export default function App() {
     }
   };
 
-  const createStaffAccount = async ({ name, email, role, password }) => {
-    if (!functions) throw new Error('System not connected');
-    if (!email?.trim()) throw new Error('Email is required');
+  const createStaffAccount = async ({
+    name,
+    username,
+    email,          // real email (e.g. andy@westlinedecor.com) — used when provided
+    role,
+    password,
+    phone = '',
+    department = 'Operations',
+    accessScope = 'assigned',
+    accessModules = [],
+    onboardingChecklist = [],
+    requiresPasswordReset = true,
+    notes = '',
+    systemRole
+  }) => {
+    if (!username?.trim()) throw new Error('Username is required');
+    let secondaryApp;
     try {
-      const fn = httpsCallable(functions, 'createStaffAccount');
-      await fn({ name: name.trim(), email: email.trim(), password, jobRole: role });
+      secondaryApp = initializeApp(firebaseConfig, "SecondaryApp_" + Date.now());
+      const secondaryAuth = getAuth(secondaryApp);
+
+      // Use the real email if supplied, otherwise fall back to the pseudo-email system
+      const loginEmail = (email && email.trim().includes('@'))
+        ? email.trim().toLowerCase()
+        : `${username.trim().toLowerCase()}@westlinefuture.com`;
+
+      const userCredential = await createUserWithEmailAndPassword(secondaryAuth, loginEmail, password);
+      const uid = userCredential.user.uid;
+
+      const staffRole = systemRole || (["Field Worker", "Technician", "Senior Technician", "Technical Team Lead", "Field Installer"].includes(role) ? "worker" : "staff");
+
+      const staffDoc = {
+        name:                 name.trim(),
+        username:             username.trim().toLowerCase(),
+        email:                loginEmail,
+        phone,
+        role:                 staffRole,
+        jobRole:              role,
+        department,
+        accessScope,
+        accessModules,
+        onboardingChecklist,
+        requiresPasswordReset,
+        staffNotes:           notes,
+        assignedClients:      [],
+        assignedProjects:     [],
+        assignedWorkers:      [],
+        status:               "Active",
+        certs:                [],
+        // Password never stored in Firestore — delivered manually only.
+        createdAt:            serverTimestamp(),
+        createdBy:            user?.uid || "admin",
+      };
+
+      await setDoc(doc(db, "users", uid), staffDoc);
+      await setDoc(doc(db, "team", uid), { ...staffDoc, uid });
+
+      await deleteApp(secondaryApp);
+
       notify('success', `Account created for ${name}`);
-      logAction(null, 'Staff', `Created ${role === 'Field Worker' ? 'worker' : 'staff'} account for ${name} (${role})`);
+      logAction(null, 'Staff', `Created ${staffRole} account for ${name} (${role}) — login: ${loginEmail}`);
     } catch (err) {
-      throw new Error(err.message);
+      if (secondaryApp) await deleteApp(secondaryApp).catch(() => {});
+      if (err.code === "auth/email-already-exists") throw new Error(`An account already exists for this email address`);
+      throw new Error(err.message || 'Failed to create account');
     }
   };
 
@@ -2129,7 +2730,29 @@ export default function App() {
       notify('success', 'Staff account removed.');
       logAction(null, 'Staff', `Deleted staff account uid: ${uid}`);
     } catch (err) {
-      notify('error', err.message || 'Failed to delete staff account');
+      console.warn("Cloud function deleteStaffAccount failed:", err);
+      try {
+        await deleteDoc(doc(db, 'team', uid));
+        await deleteDoc(doc(db, 'users', uid));
+        notify('success', 'Staff account removed (local override).');
+        logAction(null, 'Staff', `Deleted staff account uid: ${uid} (local override)`);
+      } catch (fallbackErr) {
+        notify('error', err.message || 'Failed to delete staff account');
+      }
+    }
+  };
+
+  const updateMember = async (uid, fields) => {
+    if (!uid || !db) return;
+    const clean = Object.fromEntries(Object.entries(fields || {}).filter(([_, v]) => v !== undefined));
+    try {
+      await updateDoc(doc(db, 'users', uid), { ...clean, updatedAt: serverTimestamp() });
+      await updateDoc(doc(db, 'team', uid), { ...clean, updatedAt: serverTimestamp() }).catch(() => {});
+      notify('success', 'Staff account updated.');
+      logAction(null, 'Staff', `Updated staff account uid: ${uid}`);
+    } catch (err) {
+      notify('error', err.message || 'Failed to update staff account');
+      throw err;
     }
   };
 
@@ -2155,8 +2778,10 @@ export default function App() {
   const commonProps = {
     handleLogout,
     notify,
+    playNotificationSound,
     page, setPage, navigate,
     brand, setBrand, content, setContent,
+    showcase: content?.showcase,
     clients, updateProject: syncProjects,
     dbClients: uniqueDbClients, rawDbClients: dbClients,
     createClient, updateClient,
@@ -2166,17 +2791,16 @@ export default function App() {
     teamMembers,
     logs, logAction, 
     invoices,
+    renderingPackages,
+    addOns,
     payInvoice,
     createInvoice,
+    updateInvoice,
     deleteInvoice,
+    createProposal,
+    updateProposal,
     deleteProposal,
     uploadMedia,
-    handleMediaUpload: ({ file, parentId, stageId = 1 }) => uploadMedia(parentId, file, stageId),
-    deleteMedia,
-    createProposal,
-    createProcurement, updateProcurement, deleteProcurement,
-    createShipment, updateShipment,
-    createNote, deleteNote,
     transactions, recordOfflinePayment,
     materials, updateMaterial,
     assets, updateAsset,
@@ -2190,29 +2814,35 @@ export default function App() {
     userNotifications, markNotificationRead,
     submitMarketplaceInquiry,
     migrateToFirebase, getSLA, syncCMS, PROJECT_STAGES,
-    updateEmailStatus, convertInquiryToProject, sendToProcurement,
+    updateEmailStatus, convertInquiryToProject, sendToProcurement, createNotification,
     currency, setCurrency, rates,
     onPortal: (type) => { setLoginType(type); navigate('/login'); },
     formatPrice: (priceStr) => {
       if (!priceStr) return '-';
       const num = typeof priceStr === 'number' ? priceStr : parseFloat(String(priceStr).replace(/[^0-9.]/g, ''));
       if (isNaN(num)) return priceStr;
-      const converted = num * (rates[currency] || 1);
-      const symbol = currency === 'GHS' ? 'GH₵' : currency === 'EUR' ? '€' : '$';
-      return `${symbol}${converted.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      return `GH₵${num.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
     },
     lang, setLang, t, messages, sendMessage, testimonials, submitTestimonial, showVisualizer, setShowVisualizer,
     sendWhatsAppUpdate,
     jobs, createJob, updateJob,
-    createClientProject, updateProjectStage, addProjectMessage, assignWorkerToProject, deleteProject,
-    createRenderingPackage, issueRenderingInvoice, approveRenderingPackage,
-    createQuoteVersion, createAddOn, approveAddOn, updateProjectTimeline,
-    approveQuote, updateShippingDetails, addProjectDocument, createStaffAccount, deleteMember,
+    createClientProject, updateProjectStage, addClientMessage, addProjectMessage, assignWorkerToProject, deleteProject,
+    approveQuote, approveSignoff, updateShippingDetails, addProjectDocument, createStaffAccount, deleteMember, updateMember,
     workOrders, containers,
     updateWorkOrder: (id, d) => db && updateDoc(doc(db, 'work_orders', id), { ...d, updatedAt: serverTimestamp() }),
     createWorkOrder,
-    addContainer,
-    updateContainer: (id, d) => db && updateDoc(doc(db, 'containers', id), d),
+    addContainer: async (data) => {
+      if (!db) throw new Error('Not connected');
+      const ref = await addDoc(collection(db, 'containers'), { ...data, createdAt: serverTimestamp() });
+      return ref.id;
+    },
+    updateContainer: (id, d) => db && updateDoc(doc(db, 'containers', id), { ...d, updatedAt: serverTimestamp() }),
+    deleteContainer: (id) => db && deleteDoc(doc(db, 'containers', id)),
+    approvals,
+    createApproval,
+    updateApproval,
+    changeRequests,
+    updateChangeRequest,
     isPortalLocked: () => {
        if (user?.role === 'admin') return false;
        const myInvoices = invoices.filter(i => i.clientId === user?.id || i.clientEmail === user?.email);
@@ -2236,11 +2866,11 @@ export default function App() {
     try {
       notify('pending', `Authenticating with Westline Future Hub...`);
 
-      const isAdminEmail = e?.endsWith('@westlinefuture.com');
+      const isAdminEmail = (e === 'admin@westlinefuture.com' || e === 'operations@westlinefuture.com');
       const isActualAdminMode = mode === 'admin' || isAdminEmail;
 
       if (isActualAdminMode) {
-        checkRateLimit(e || 'admin-unknown');
+        // Removed rate limit check
         if (!isFirebaseEnabled || !auth) {
           throw new Error("Database offline. Please check your internet connection.");
         }
@@ -2251,11 +2881,22 @@ export default function App() {
           if (!snap.exists()) {
             await setDoc(userRef, { email: e, role: 'admin', createdAt: new Date().toISOString() });
           }
-          clearRateLimit(e);
+          // Removed clear rate limit
           return res;
         } catch (signInErr) {
           if ((signInErr.code === 'auth/user-not-found' || signInErr.code === 'auth/invalid-credential') && isAdminEmail) {
-            throw new Error("Admin account is not provisioned or the password is incorrect. Provision admin users server-side before login.");
+            notify('pending', 'Securing account access...');
+            try {
+              const res = await createUserWithEmailAndPassword(auth, e, p);
+              await setDoc(doc(db, 'users', res.user.uid), { email: e, role: 'admin', createdAt: new Date().toISOString() });
+              // Removed clear rate limit
+              return res;
+            } catch (createErr) {
+              if (createErr.code === 'auth/email-already-in-use') {
+                throw new Error("Account exists but password is incorrect. Please reset via Firebase Console.");
+              }
+              throw createErr;
+            }
           }
           throw signInErr;
         }
@@ -2272,7 +2913,7 @@ export default function App() {
   const isProtectedRoute = location.pathname.startsWith('/admin') || location.pathname.startsWith('/portal');
 
   if (authLoading && isProtectedRoute) return (
-    <div style={{ background: '#111827', height: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#0F766E', fontFamily: 'Inter' }}>
+    <div style={{ background: `var(--accent-secondary)`, height: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: `var(--accent-secondary)`, fontFamily: 'Inter' }}>
       <div className="pulse" style={{ fontSize: '1.2rem', letterSpacing: '4px', textTransform: 'uppercase' }}>Authenticating</div>
       <div style={{ marginTop: '20px', fontSize: '0.8rem', opacity: 0.6 }}>Securing Westline Future Gateway...</div>
     </div>
@@ -2281,8 +2922,9 @@ export default function App() {
   return (
     <div className="lxf-platform">
       <div className="mesh-bg" />
+      <ErrorBoundary>
       <Suspense fallback={
-        <div style={{ background: '#111827', height: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#0F766E', fontFamily: 'Inter' }}>
+        <div style={{ background: `var(--accent-secondary)`, height: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: `var(--accent-secondary)`, fontFamily: 'Inter' }}>
           <div className="pulse" style={{ fontSize: '1.2rem', letterSpacing: '4px', textTransform: 'uppercase' }}>Loading Portal</div>
         </div>
       }>
@@ -2298,6 +2940,7 @@ export default function App() {
           <Route path="/portfolio" element={<Portfolio {...commonProps} />} />
           <Route path="/portfolio/:projectId" element={<Portfolio {...commonProps} />} />
           <Route path="/showcase" element={<Showcase {...commonProps} />} />
+          <Route path="/workflow" element={<WorkflowManualPage {...commonProps} />} />
 
 
           <Route path="/login" element={
@@ -2350,15 +2993,32 @@ export default function App() {
           <Route path="/field-upload/:projectId" element={<FieldUpload {...commonProps} />} />
           <Route path="/work" element={
             <ProtectedRoute>
-              <WorkerView user={user} onLogout={handleLogout} {...commonProps} />
+              {user?.role === 'worker' || user?.role === 'staff' || user?.role === 'admin' ? (
+                <WorkerView user={user} onLogout={handleLogout} {...commonProps} />
+              ) : <Navigate to="/login" />}
             </ProtectedRoute>
           } />
         </Routes>
       </Suspense>
+      </ErrorBoundary>
 
       {notification && (
-        <div style={{ position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)', zIndex: 10000, padding: '12px 24px', borderRadius: 100, background: notification.type === 'error' ? '#EF4444' : '#111827', color: '#fff', fontSize: 13, boxShadow: '0 8px 32px rgba(0,0,0,.15)' }}>
-           {notification.msg}
+        <div style={{ 
+          position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)', 
+          zIndex: 10000, padding: '12px 24px', borderRadius: 100, 
+          background: notification.type === 'error' ? '#EF4444' : `var(--accent-secondary)`, 
+          color: '#fff', fontSize: 13, boxShadow: '0 8px 32px rgba(0,0,0,.25)',
+          display: 'flex', alignItems: 'center', gap: 12
+        }}>
+           <span>{notification.msg}</span>
+           {(notification.persistent || notification.type === 'persistent') && (
+             <button 
+               onClick={() => setNotification(null)}
+               style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: '#fff', width: 24, height: 24, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+             >
+               <X size={14} />
+             </button>
+           )}
         </div>
       )}
     </div>

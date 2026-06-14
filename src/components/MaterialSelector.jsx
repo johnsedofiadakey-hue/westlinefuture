@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import { PSBadge } from './Shared';
 
-export default function MaterialSelector({ materials = [], onApprove, onReject, isAdmin = false, ac = '#0F766E' }) {
+export default function MaterialSelector({ materials = [], onApprove, onReject, isAdmin = false, ac = `var(--accent-secondary)` }) {
   const [filter, setFilter] = useState('All');
   
   const filtered = (materials || []).filter(m => filter === 'All' || m.status === filter);
@@ -16,10 +16,10 @@ export default function MaterialSelector({ materials = [], onApprove, onReject, 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
           <h3 className="lxfh" style={{ fontSize: 24 }}>Material Selection Gateway</h3>
-          <p className="lxf" style={{ color: '#6B7280', fontSize: 13 }}>Review and approve technical specifications and finishes for your project.</p>
+          <p className="lxf" style={{ color: `var(--text-secondary)`, fontSize: 13 }}>Review and approve technical specifications and finishes for your project.</p>
         </div>
         {!isAdmin && (
-           <div className="p-card pulse-inner" style={{ padding: '10px 20px', display: 'flex', alignItems: 'center', gap: 10, background: '#111827', color: '#fff' }}>
+           <div className="p-card pulse-inner" style={{ padding: '10px 20px', display: 'flex', alignItems: 'center', gap: 10, background: `var(--accent-secondary)`, color: '#fff' }}>
               <Info size={16} color={ac} />
               <span className="lxf" style={{ fontSize: 12, fontWeight: 700 }}>{materials.filter(m => m.status === 'pending').length} Actions Required</span>
            </div>
@@ -33,8 +33,8 @@ export default function MaterialSelector({ materials = [], onApprove, onReject, 
              key={status} onClick={() => setFilter(status)}
              className={`lxf ${filter === status ? 'active' : ''}`}
              style={{ 
-               background: filter === status ? '#111827' : '#F9FAFB', 
-               color: filter === status ? '#fff' : '#111827',
+               background: filter === status ? `var(--accent-secondary)` : `var(--bg-secondary)`, 
+               color: filter === status ? '#fff' : `var(--accent-secondary)`,
                border: 'none', padding: '8px 16px', borderRadius: 100, fontSize: 12, fontWeight: 600, cursor: 'pointer' 
              }}
            >{status.charAt(0).toUpperCase() + status.slice(1)}</button>
@@ -58,10 +58,10 @@ export default function MaterialSelector({ materials = [], onApprove, onReject, 
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
                    <div>
                       <h4 className="lxfh" style={{ fontSize: 18 }}>{m.name}</h4>
-                      <div className="lxf" style={{ fontSize: 12, color: '#6B7280' }}>Unit Ref: {m.ref || 'GTX-001'}</div>
+                      <div className="lxf" style={{ fontSize: 12, color: `var(--text-secondary)` }}>Unit Ref: {m.ref || 'GTX-001'}</div>
                    </div>
                 </div>
-                <p className="lxf" style={{ fontSize: 13, color: '#4B5563', lineHeight: 1.6, marginBottom: 20 }}>{m.desc}</p>
+                <p className="lxf" style={{ fontSize: 13, color: `var(--text-secondary)`, lineHeight: 1.6, marginBottom: 20 }}>{m.desc}</p>
                 
                 {m.status === 'pending' && !isAdmin && (
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
@@ -91,13 +91,13 @@ export default function MaterialSelector({ materials = [], onApprove, onReject, 
              </div>
           </div>
         ))}
-        {filtered.length === 0 && <div className="lxf" style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '60px 0', border: '2px dashed #DFD9D1', borderRadius: 20, color: '#6B7280' }}>No materials match this filter.</div>}
+        {filtered.length === 0 && <div className="lxf" style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '60px 0', border: '2px dashed #DFD9D1', borderRadius: 20, color: `var(--text-secondary)` }}>No materials match this filter.</div>}
       </div>
 
-      <div className="p-card" style={{ padding: 24, textAlign: 'center', background: '#F9FAFB' }}>
+      <div className="p-card" style={{ padding: 24, textAlign: 'center', background: `var(--bg-secondary)` }}>
          <Sparkles size={24} color={ac} style={{ marginBottom: 12 }} />
          <h4 className="lxfh" style={{ fontSize: 18 }}>Can't find what you're looking for?</h4>
-         <p className="lxf" style={{ color: '#4B5563', fontSize: 13, maxWidth: 600, margin: '0 auto 20px' }}>Our technical team can source custom glass tints, high-performance facade systems, and architectural profiles from our international logistics partners.</p>
+         <p className="lxf" style={{ color: `var(--text-secondary)`, fontSize: 13, maxWidth: 600, margin: '0 auto 20px' }}>Our technical team can source custom glass tints, high-performance facade systems, and architectural profiles from our international logistics partners.</p>
          <button className="p-btn-dark lxf" style={{ padding: '12px 24px' }}>Request Custom Sourcing</button>
       </div>
     </div>

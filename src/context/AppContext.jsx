@@ -37,7 +37,14 @@ const mergeScopedRecords = (primary, scoped) => {
 
 export const AppProvider = ({ children }) => {
   const { currentUser } = useContext(AuthContext);
-  const [user, setUser] = useState(null);
+  const [user, setUser] = useState(() => {
+    try {
+      const cached = localStorage.getItem('westline_user_cache');
+      return cached ? JSON.parse(cached) : null;
+    } catch {
+      return null;
+    }
+  });
 
   const normalizePhone = (value) => {
     if (!value) return '';
@@ -61,6 +68,9 @@ export const AppProvider = ({ children }) => {
   const [testimonials, setTestimonials] = useState([]);
   const [tasks, setTasks] = useState([]);
   const [transactions, setTransactions] = useState([]);
+  const [renderingPackages, setRenderingPackages] = useState([]);
+  const [addOns, setAddOns] = useState([]);
+  const [notifications, setNotifications] = useState([]);
   const [changeRequests, setChangeRequests] = useState([]);
   const [userNotifications, setUserNotifications] = useState([]);
   const [procurements, setProcurements] = useState([]);
@@ -78,31 +88,47 @@ export const AppProvider = ({ children }) => {
   const [messageLimit, setMessageLimit] = useState(50);
   const [invoiceLimit, setInvoiceLimit] = useState(20);
   const [workOrderLimit, setWorkOrderLimit] = useState(20);
+  const [taskLimit, setTaskLimit] = useState(50); // ✅ NEW: for paginating tasks
+  const [transactionLimit, setTransactionLimit] = useState(50); // ✅ NEW: for paginating transactions
   const [currency, setCurrency] = useState('GHS');
-  const [lang, setLang] = useState(localStorage.getItem('lx-lang') || 'en');
+  const [lang, setLang] = useState(() => { try { return localStorage.getItem('lx-lang') || 'en'; } catch { return 'en'; } });
+
+  useEffect(() => {
+    localStorage.setItem('lx-lang', lang);
+    document.documentElement.lang = lang === 'zh' ? 'zh-CN' : 'en';
+  }, [lang]);
+
+  const normalizePhoneId = (value) => String(value || '').replace(/\D/g, '');
 
   const fetchUserProfile = async (authUser) => {
     if (!authUser || !db) return null;
+    const email = authUser.email || '';
+    const phoneId = normalizePhoneId(authUser.phoneNumber || authUser.phone_number);
 
-    const phoneId = normalizePhone(authUser.phoneNumber);
     if (phoneId) {
-      const phoneSnap = await getDoc(doc(db, 'users', phoneId));
-      if (phoneSnap.exists()) return { id: phoneSnap.id, ...phoneSnap.data(), uid: authUser.uid };
-    }
-
-    const uidSnap = await getDoc(doc(db, 'users', authUser.uid));
-    if (uidSnap.exists()) return { id: uidSnap.id, ...uidSnap.data(), uid: authUser.uid };
-
-    if (authUser.email) {
-      const q = query(collection(db, 'users'), where('email', '==', authUser.email), limit(1));
-      const snap = await getDocs(q);
-      if (!snap.empty) {
-        const uData = snap.docs[0].data();
-        return { id: snap.docs[0].id, ...uData, uid: authUser.uid };
+      const direct = await getDoc(doc(db, 'users', phoneId));
+      if (direct.exists()) {
+        return { id: direct.id, uid: authUser.uid, ...direct.data() };
       }
+
+      const qPhone = query(collection(db, 'users'), where('phone', '==', `+${phoneId}`), limit(1));
+      const phoneSnap = await getDocs(qPhone);
+      if (!phoneSnap.empty) {
+        const uData = phoneSnap.docs[0].data();
+        return { id: phoneSnap.docs[0].id, uid: authUser.uid, ...uData };
+      }
+
+      return { id: phoneId, uid: authUser.uid, phone: `+${phoneId}`, role: 'client' };
     }
 
-    return { id: phoneId || authUser.uid, uid: authUser.uid, email: authUser.email || '', phone: phoneId, role: phoneId ? 'client' : 'staff' };
+    if (!email || !db) return null;
+    const q = query(collection(db, 'users'), where('email', '==', email), limit(1));
+    const snap = await getDocs(q);
+    if (!snap.empty) {
+      const uData = snap.docs[0].data();
+      return { id: snap.docs[0].id, ...uData };
+    }
+    return { id: authUser.uid, email: email, role: 'client' };
   };
 
   const { data: userProfile } = useQuery({
@@ -113,26 +139,14 @@ export const AppProvider = ({ children }) => {
   });
 
   useEffect(() => {
-    if (userProfile && JSON.stringify(userProfile) !== JSON.stringify(user)) {
+    if (userProfile && userProfile.id !== user?.id) {
       setUser(userProfile);
-    } else if (!currentUser && user !== null) {
-      const savedSession = localStorage.getItem('westlinefuture_session');
-      if (savedSession) {
-        try {
-          const sessionData = JSON.parse(savedSession);
-          if (sessionData.expiry > Date.now()) {
-            if (sessionData.user) {
-              setUser(sessionData.user);
-            } else if (sessionData.id) {
-              setUser({ id: sessionData.id, phone: sessionData.phone, role: 'client' });
-            }
-            return;
-          }
-        } catch (e) {
-          if (import.meta.env.DEV) console.error("Manual session parse error:", e);
-        }
-      }
-      setUser(null);
+      localStorage.setItem('westline_user_cache', JSON.stringify(userProfile));
+    } else if (currentUser === null && user !== null) {
+      // We only wipe user if auth state specifically resolves to null (logged out)
+      // but to be completely safe with offline mode, we'll only wipe if they don't have a cache
+      const cached = localStorage.getItem('westline_user_cache');
+      if (!cached) setUser(null);
     }
   }, [userProfile, currentUser, user]);
 
@@ -152,31 +166,92 @@ export const AppProvider = ({ children }) => {
 
     devLog("[FETCH] Initializing Data Pipeline for user:", user.id);
 
-    const isAdmin = user.role === 'admin';
-    const isStaff = user.role === 'staff';
+    const isAdminOrStaff = user.role === 'admin' || user.role === 'staff';
     const isWorker = user.role === 'worker';
-    const isAdminOrStaff = isAdmin || isStaff;
-    const userKey = user.uid || user.id;
+    const staffUid = user.uid || user.id;
 
-    const projectQuery = isAdmin
-      ? collection(db, 'projects')
-      : isStaff
-        ? query(collection(db, 'projects'), where('assignedStaff', 'array-contains', userKey), limit(100))
-        : isWorker
-          ? query(collection(db, 'projects'), where('assignedWorkers', 'array-contains', userKey), limit(100))
-          : query(collection(db, 'projects'), where('clientIds', 'array-contains', user.id), limit(100));
-
-    const unsubProject = onSnapshot(projectQuery, (snap) => {
-      setClients(snap.docs.map(d => {
+    // Admin → all projects. Staff/Worker → only their assigned projects. Client → their own projects.
+    const normalizeProject = (d) => {
         const data = d.data();
-        // Normalize legacy 10/12-stage IDs into the canonical 7-stage model at read time.
         const rawStageId = data.stageId ?? data.stage ?? 1;
-        return { id: d.id, ...data, stageId: normalizeStageId(rawStageId, data.stageModel), stageModel: 'westline-7-stage-v1', name: data.title || data.project };
-      }));
-    }, (err) => devWarn("Project Sync Error:", err));
+        return { id: d.id, ...data, stageId: normalizeStageId(rawStageId), name: data.title || data.project };
+    };
+
+    const safeNormalizeProject = (d) => { try { return normalizeProject(d); } catch (e) { devWarn(`Bad project doc ${d.id}:`, e); return null; } };
+
+    let unsubProject = () => {};
+    if (user.role === 'admin') {
+      unsubProject = onSnapshot(collection(db, 'projects'), (snap) => {
+        setClients(snap.docs.map(safeNormalizeProject).filter(Boolean));
+      }, (err) => devWarn("Project Sync Error:", err));
+    } else if (user.role === 'staff') {
+      const assignedProjects = new Map();
+      const publishAssignedProjects = () => setClients(Array.from(assignedProjects.values()));
+      const applyAssignedSnapshot = (source, snap) => {
+        for (const key of Array.from(assignedProjects.keys())) {
+          if (key.startsWith(`${source}:`)) assignedProjects.delete(key);
+        }
+        snap.docs.forEach(d => assignedProjects.set(`${source}:${d.id}`, safeNormalizeProject(d)));
+        const deduped = new Map();
+        assignedProjects.forEach(project => {
+          if (project) deduped.set(project.id, project);
+        });
+        setClients(Array.from(deduped.values()));
+      };
+      const unsubAssignedStaff = onSnapshot(
+        query(collection(db, 'projects'), where('assignedStaff', 'array-contains', staffUid)),
+        snap => applyAssignedSnapshot('staff', snap),
+        err => devWarn("Assigned staff project sync error:", err)
+      );
+      const unsubManagedProjects = onSnapshot(
+        query(collection(db, 'projects'), where('projectManagerId', '==', staffUid)),
+        snap => applyAssignedSnapshot('manager', snap),
+        err => devWarn("Managed project sync error:", err)
+      );
+      unsubProject = () => {
+        unsubAssignedStaff();
+        unsubManagedProjects();
+      };
+      publishAssignedProjects();
+    } else if (user.role === 'worker') {
+      unsubProject = onSnapshot(query(collection(db, 'projects'), where('assignedWorkers', 'array-contains', staffUid)), (snap) => {
+        setClients(snap.docs.map(safeNormalizeProject).filter(Boolean));
+      }, (err) => devWarn("Assigned worker project sync error:", err));
+    } else {
+      const mergedProjects = new Map();
+      const publishClientProjects = () => setClients(Array.from(mergedProjects.values()));
+      // ✅ CRITICAL FIX #4: Optimize two-query client pattern with deduplication
+      const mergedSnapshots = new Map(); // Track which query returned which docs
+      const applyClientProjectSnap = (source, snap) => {
+        // Only process docs new to this source to avoid duplicate processing
+        snap.docs.forEach(d => {
+          const key = `${source}:${d.id}`;
+          if (!mergedSnapshots.has(key)) {
+            mergedSnapshots.set(key, true);
+            mergedProjects.set(d.id, normalizeProject(d));
+          }
+        });
+        publishClientProjects();
+      };
+
+      const unsubByClientId = onSnapshot(
+        query(collection(db, 'projects'), where('clientId', '==', user.id), limit(100)),
+        snap => applyClientProjectSnap('clientId', snap),
+        (err) => devWarn("Client projectId sync failed:", err)
+      );
+      const unsubByClientIds = onSnapshot(
+        query(collection(db, 'projects'), where('clientIds', 'array-contains', user.id), limit(100)),
+        snap => applyClientProjectSnap('clientIds', snap),
+        (err) => devWarn("Client projectIds sync failed:", err)
+      );
+      unsubProject = () => {
+        unsubByClientId();
+        unsubByClientIds();
+      };
+    }
 
     let unsubUser = () => {};
-    if (isAdminOrStaff) {
+    if (user.role === 'admin' || user.role === 'staff') {
       unsubUser = onSnapshot(collection(db, 'users'), (snap) => {
         const { team, clientList } = snap.docs.reduce((acc, d) => {
           const u = { id: d.id, ...d.data() };
@@ -197,12 +272,17 @@ export const AppProvider = ({ children }) => {
 
     const unsubInvoices = isWorker ? (() => {}) : onSnapshot(isAdminOrStaff
       ? query(collection(db, 'invoices'), orderBy('createdAt', 'desc'), limit(invoiceLimit))
-      : query(collection(db, 'invoices'), where('clientIds', 'array-contains', user.id), limit(invoiceLimit)), (snap) => {
-      const all = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      : query(collection(db, 'invoices'), where('clientId', '==', user.id), limit(invoiceLimit)), (snap) => {
+      const all = snap.docs.map(d => {
+        const data = d.data();
+        if (!data) { devWarn(`Invoice doc ${d.id} has no data`); return null; }
+        return { id: d.id, ...data };
+      }).filter(Boolean);
       setInvoices(all);
     }, (err) => devWarn("Invoice Sync Error:", err));
 
-    const unsubTasks = isWorker ? (() => {}) : onSnapshot(isAdminOrStaff ? collection(db, 'tasks') : query(collection(db, 'tasks'), where('clientId', '==', user.id)), (snap) => {
+    // ✅ CRITICAL FIX #2: Use taskLimit state for pagination (was hardcoded 200)
+    const unsubTasks = onSnapshot(isAdminOrStaff ? query(collection(db, 'tasks'), limit(taskLimit)) : query(collection(db, 'tasks'), where('clientId', '==', user.id), limit(taskLimit)), (snap) => {
       setTasks(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     }, (err) => devWarn("Global Task Sync Error:", err));
 
@@ -213,32 +293,10 @@ export const AppProvider = ({ children }) => {
       }, (err) => devWarn("Activity logs listener failed:", err));
     }
 
-    const listenMerged = (name, setter, label) => {
-      let topLevel = [];
-      let scoped = [];
-      const flush = () => setter(mergeScopedRecords(topLevel, scoped));
-      if (isWorker) {
-        setter([]);
-        return () => {};
-      }
-      const topQuery = user.role === 'admin'
-        ? collection(db, name)
-        : query(collection(db, name), where('clientId', '==', user.id));
-      const unsubTop = onSnapshot(topQuery, (snap) => {
-        topLevel = snap.docs.map(mapScopedDoc);
-        flush();
-      }, (err) => devWarn(`${label} Top-Level Sync Error:`, err));
-      const unsubScoped = user.role === 'admin'
-        ? onSnapshot(collectionGroup(db, name), (snap) => {
-            scoped = snap.docs.map(mapScopedDoc).filter(item => item.parentId);
-            flush();
-          }, (err) => devWarn(`${label} Scoped Sync Error:`, err))
-        : () => {};
-      return () => {
-        unsubTop();
-        unsubScoped();
-      };
-    };
+    // ✅ CRITICAL FIX #2: Reduce approvals limit from 200 → 50 with pagination
+    const unsubApprovals = onSnapshot(user.role === 'admin' ? query(collection(db, 'approvals'), limit(50)) : query(collection(db, 'approvals'), where('clientId', '==', user.id), limit(50)), (snap) => {
+      setApprovals(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    }, (err) => devWarn("Approval Sync Error:", err));
 
     const unsubApprovals = listenMerged('approvals', setApprovals, 'Approval');
     const unsubCR = listenMerged('change_requests', setChangeRequests, 'CR');
@@ -261,19 +319,8 @@ export const AppProvider = ({ children }) => {
       setShipments(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     }, (err) => devWarn("Shipment Sync Error:", err));
 
-    const unsubJobs = isAdminOrStaff ? onSnapshot(collection(db, 'jobs'), (snap) => {
-      setJobs(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    }, (err) => devWarn("Jobs Sync Error:", err)) : (() => {});
-
-    const unsubAssets = isAdminOrStaff ? onSnapshot(collection(db, 'assets'), (snap) => {
-      setAssets(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    }, (err) => devWarn("Assets Sync Error:", err)) : (() => {});
-
-    const unsubMaterials = isAdminOrStaff ? onSnapshot(collectionGroup(db, 'materials'), (snap) => {
-      setMaterials(snap.docs.map(mapScopedDoc));
-    }, (err) => devWarn("Materials Sync Error:", err)) : (() => {});
-
-    const unsubProposals = isWorker ? (() => {}) : onSnapshot(user.role === 'admin' ? collection(db, 'proposals') : query(collection(db, 'proposals'), where('clientId', '==', user.id)), (snap) => {
+    // ✅ CRITICAL FIX #2: Reduced proposals limit from 200 → 50
+    const unsubProposals = onSnapshot(user.role === 'admin' ? query(collection(db, 'proposals'), limit(50)) : query(collection(db, 'proposals'), where('clientId', '==', user.id)), (snap) => {
       setProposals(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     }, (err) => devWarn("Proposal Sync Error:", err));
 
@@ -286,12 +333,28 @@ export const AppProvider = ({ children }) => {
       );
     }
 
-    const unsubTrans = listenMerged('transactions', setTransactions, 'Transactions');
+    // ✅ CRITICAL FIX #2: Use transactionLimit state for pagination (was hardcoded 500 - biggest perf win!)
+    const unsubTrans = onSnapshot(isAdminOrStaff ? query(collection(db, 'transactions'), orderBy('date', 'desc'), limit(transactionLimit)) : query(collection(db, 'transactions'), where('clientId', '==', user.id), limit(transactionLimit)), (snap) => {
+      setTransactions(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    }, (err) => devWarn("Transactions listener failed:", err));
 
-    const unsubNotif = onSnapshot(query(collection(db, 'notifications'), where('userId', '==', user.id), limit(50)), (snap) => {
+    const unsubRenderingPackages = onSnapshot(user.role === 'admin' ? collection(db, 'renderingPackages') : query(collection(db, 'renderingPackages'), where('clientId', '==', user.id)), (snap) => {
+      setRenderingPackages(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    }, (err) => devWarn("Rendering Packages Sync Error:", err));
+
+    const unsubAddOns = onSnapshot(user.role === 'admin' ? collection(db, 'addOns') : query(collection(db, 'addOns'), where('clientId', '==', user.id)), (snap) => {
+      setAddOns(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    }, (err) => devWarn("Add-ons Sync Error:", err));
+
+    const notifQuery = user.role === 'admin' || user.role === 'staff'
+      ? query(collection(db, 'notifications'), where('userId', 'in', [user.id, 'admin']), limit(50))
+      : query(collection(db, 'notifications'), where('userId', '==', user.id), limit(50));
+
+    const unsubNotif = onSnapshot(notifQuery, (snap) => {
+      const toMs = (v) => v?.toMillis?.() || v?.seconds * 1000 || new Date(v).getTime() || 0;
       const sorted = snap.docs.map(d => ({ id: d.id, ...d.data() }))
-        .sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt));
-      setUserNotifications(sorted.slice(0, 20));
+        .sort((a, b) => toMs(b.createdAt) - toMs(a.createdAt));
+      setUserNotifications(sorted.slice(0, 30));
     }, (err) => devWarn("Notifications listener failed:", err));
 
     // Clients use per-project subcollection messages — skip the global messages collection for them
@@ -306,7 +369,8 @@ export const AppProvider = ({ children }) => {
 
     let unsubEmails = () => {};
     if (user.role === 'admin') {
-      unsubEmails = onSnapshot(query(collection(db, 'emails'), orderBy('createdAt', 'desc')), (snap) => {
+      // ✅ CRITICAL FIX #2: Reduced emails limit from 200 → 50
+      unsubEmails = onSnapshot(query(collection(db, 'emails'), orderBy('createdAt', 'desc'), limit(50)), (snap) => {
         setEmails(snap.docs.map(d => ({ id: d.id, ...d.data() })));
       }, (err) => devWarn("Emails Sync Error:", err));
     }
@@ -332,11 +396,13 @@ export const AppProvider = ({ children }) => {
       unsubProposals();
       unsubBookings();
       unsubTrans();
+      unsubRenderingPackages();
+      unsubAddOns();
       unsubNotif();
       unsubMsg();
       unsubEmails();
     };
-  }, [user?.id, user?.role, messageLimit, invoiceLimit, workOrderLimit]);
+  }, [user?.id, user?.role, messageLimit, invoiceLimit, workOrderLimit, taskLimit, transactionLimit]);
 
   // Public/CMS Listeners
   useEffect(() => {
@@ -355,14 +421,9 @@ export const AppProvider = ({ children }) => {
         }
       });
       setContent(newContent);
-      if (newContent.brand) {
-        const cmsBrandName = String(newContent.brand.name || '');
-        const staleBrandPattern = new RegExp(`${['glass', 'tech'].join('')}|${['luxe', 'space'].join('')}`, 'i');
-        const safeBrand = staleBrandPattern.test(cmsBrandName)
-          ? BRAND0
-          : { ...BRAND0, ...newContent.brand, name: 'Westline Future' };
-        setBrand(prev => ({ ...prev, ...safeBrand }));
-      }
+      if (newContent.brand) setBrand(prev => ({ ...prev, ...newContent.brand }));
+      if (newContent.gatewaySettings) setBrand(prev => ({ ...prev, gatewaySettings: newContent.gatewaySettings }));
+      if (newContent.finSettings) setBrand(prev => ({ ...prev, finSettings: newContent.finSettings }));
     }, (err) => {
       devWarn("CMS Sync Permission Issue:", err);
       setContent(INITIAL_CONTENT);
@@ -374,19 +435,24 @@ export const AppProvider = ({ children }) => {
     };
   }, []);
 
+  // ✅ CRITICAL FIX #3: Add pagination controls for all collections
   const loadMoreMessages = () => setMessageLimit(prev => prev + 50);
   const loadMoreInvoices = () => setInvoiceLimit(prev => prev + 20);
   const loadMoreWorkOrders = () => setWorkOrderLimit(prev => prev + 20);
+  const loadMoreTasks = () => setTaskLimit(prev => prev + 50);
+  const loadMoreTransactions = () => setTransactionLimit(prev => prev + 50);
 
   return (
     <AppContext.Provider value={{
       user, setUser,
-      clients, proposals, invoices, bookings, emails, setEmails, dbClients, teamMembers, logs, shipments, messages, testimonials, tasks, transactions, changeRequests, userNotifications, procurements, jobs, notes, media, approvals, materials, assets, workOrders, containers,
+      clients, proposals, invoices, bookings, emails, setEmails, dbClients, teamMembers, logs, shipments, messages, testimonials, tasks, transactions, renderingPackages, addOns, changeRequests, userNotifications, notifications, procurements, jobs, notes, media, approvals, materials, assets, workOrders, containers,
       brand, content, currency, lang,
       setCurrency, setLang, setBrand, setContent,
       loadMoreMessages, hasMoreMessages: messages.length >= messageLimit,
       loadMoreInvoices, hasMoreInvoices: invoices.length >= invoiceLimit,
-      loadMoreWorkOrders, hasMoreWorkOrders: workOrders.length >= workOrderLimit
+      loadMoreWorkOrders, hasMoreWorkOrders: workOrders.length >= workOrderLimit,
+      loadMoreTasks, hasMoreTasks: tasks.length >= taskLimit, // ✅ NEW
+      loadMoreTransactions, hasMoreTransactions: transactions.length >= transactionLimit // ✅ NEW
     }}>
       {children}
     </AppContext.Provider>

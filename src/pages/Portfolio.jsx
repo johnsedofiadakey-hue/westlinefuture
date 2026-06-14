@@ -6,12 +6,12 @@ import {
   Maximize2, X, Info, Calendar, MapPin, Layers, 
   SplitSquareHorizontal, CheckCircle, ArrowUpRight
 } from 'lucide-react';
-import { PubNav, Footer } from './PublicSite';
+import { PubNav, Footer, usePublicTranslation } from '../components/PubLayout';
 import { PORTFOLIO_DATA } from '../data.jsx';
 
-const LIGHT_BG = '#FDFCFB';
-const DARK_TEXT = '#111827';
-const AC = '#0F766E';
+const LIGHT_BG = `var(--bg-primary)`;
+const DARK_TEXT = `var(--accent-secondary)`;
+const AC = `var(--accent-secondary)`;
 
 // --- COMPONENTS ---
 
@@ -44,7 +44,7 @@ const MasonryCard = ({ project, onClick, ac, mob }) => (
   >
     <div style={{ position: 'relative', overflow: 'hidden' }}>
       <motion.img 
-        src={project.after} 
+        src={project.after} loading="lazy" 
         alt={project.title} 
         whileHover={{ scale: 1.05 }}
         transition={{ duration: 0.8 }}
@@ -87,7 +87,7 @@ const ProjectDetail = ({ project, onClose, ac, navigate, mob }) => {
           <ArrowLeft size={18} /> BACK TO MASTERPIECES
         </button>
         <div style={{ display: 'flex', gap: 12 }}>
-           <button onClick={() => navigate('/?page=contact')} style={{ padding: '8px 20px', background: ac, color: '#fff', border: 'none', borderRadius: 100, fontSize: 11, fontWeight: 800, cursor: 'pointer' }}>REQUEST ESTIMATE</button>
+           <button onClick={() => navigate('/?page=contact&subject=Case Study Consultation')} style={{ padding: '8px 20px', background: ac, color: '#fff', border: 'none', borderRadius: 100, fontSize: 11, fontWeight: 800, cursor: 'pointer' }}>PLAN SIMILAR PROJECT</button>
            <button onClick={onClose} style={{ padding: 8, background: '#F5F5F5', borderRadius: '50%', border: 'none', cursor: 'pointer' }}><X size={18} /></button>
         </div>
       </nav>
@@ -97,7 +97,7 @@ const ProjectDetail = ({ project, onClose, ac, navigate, mob }) => {
         
         {/* Left: Media & Interaction */}
         <div style={{ gridColumn: mob ? 'auto' : 'span 8' }}>
-           <div style={{ position: 'relative', height: mob ? 400 : 650, width: '100%', overflow: 'hidden', borderRadius: mob ? 0 : 32, background: '#F9FAFB', boxShadow: '0 30px 60px rgba(0,0,0,0.1)' }}>
+           <div style={{ position: 'relative', height: mob ? 400 : 650, width: '100%', overflow: 'hidden', borderRadius: mob ? 0 : 32, background: `var(--bg-secondary)`, boxShadow: '0 30px 60px rgba(0,0,0,0.1)' }}>
               {project.before && compare ? (
                 <div style={{ position: 'absolute', inset: 0 }}>
                    <div style={{ position: 'absolute', inset: 0, backgroundImage: `url(${project.after})`, backgroundSize: 'cover', backgroundPosition: 'center' }} />
@@ -119,7 +119,7 @@ const ProjectDetail = ({ project, onClose, ac, navigate, mob }) => {
                 <motion.img 
                  key={activeImg}
                  initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-                 src={activeImg} 
+                 src={activeImg} loading="lazy" 
                  style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
                 />
               )}
@@ -149,7 +149,7 @@ const ProjectDetail = ({ project, onClose, ac, navigate, mob }) => {
            <div style={{ position: 'sticky', top: 120 }}>
               <span style={{ color: ac, fontSize: 10, fontWeight: 900, letterSpacing: '0.2em', textTransform: 'uppercase' }}>Case Study: {project.cat}</span>
               <h2 style={{ fontSize: mob ? 32 : 48, fontWeight: 800, margin: '12px 0 24px', letterSpacing: '-0.03em', color: DARK_TEXT, lineHeight: 1.1 }}>{project.title}</h2>
-              <p style={{ fontSize: 16, color: 'rgba(17,24,39,0.6)', lineHeight: 1.6, marginBottom: 40 }}>{project.desc || 'A premium structural execution showcasing Westline Future’s precision in high-fidelity interior finishing and industrial-grade glass engineering.'}</p>
+              <p style={{ fontSize: 16, color: 'rgba(92, 58, 33,0.6)', lineHeight: 1.6, marginBottom: 40 }}>{project.desc || 'A premium structural execution showcasing Westline Future’s precision in high-fidelity interior finishing and industrial-grade glass engineering.'}</p>
               
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 32, marginBottom: 40, padding: '32px 0', borderTop: '1px solid #f0f0f0', borderBottom: '1px solid #f0f0f0' }}>
                  <div>
@@ -162,7 +162,7 @@ const ProjectDetail = ({ project, onClose, ac, navigate, mob }) => {
                  </div>
               </div>
 
-              <div style={{ padding: 32, background: '#F9FAFB', borderRadius: 32, border: '1px solid rgba(0,0,0,0.05)' }}>
+              <div style={{ padding: 32, background: `var(--bg-secondary)`, borderRadius: 32, border: '1px solid rgba(0,0,0,0.05)' }}>
                  <h4 style={{ margin: '0 0 20px', fontSize: 11, fontWeight: 900, textTransform: 'uppercase', color: ac, letterSpacing: '0.1em' }}>Engineering Scope</h4>
                  <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
                     {[
@@ -177,12 +177,12 @@ const ProjectDetail = ({ project, onClose, ac, navigate, mob }) => {
                     ))}
                  </div>
                  <button 
-                   onClick={() => navigate('/?page=contact')}
+                   onClick={() => navigate(`/?page=contact&subject=Similar Project: ${project.title}`)}
                    style={{ width: '100%', marginTop: 32, padding: '20px', background: DARK_TEXT, color: '#fff', border: 'none', borderRadius: 16, fontWeight: 800, cursor: 'pointer', fontSize: 13, transition: 'transform 0.2s' }}
                    onMouseEnter={e => e.target.style.transform = 'scale(1.02)'}
                    onMouseLeave={e => e.target.style.transform = 'scale(1)'}
                  >
-                    PROCURE SIMILAR SYSTEM
+                    PLAN SIMILAR PROJECT
                  </button>
               </div>
            </div>
@@ -193,6 +193,7 @@ const ProjectDetail = ({ project, onClose, ac, navigate, mob }) => {
 };
 
 export default function Portfolio({ brand, user, onPortal, setPage, content }) {
+  usePublicTranslation();
   const navigate = useNavigate();
   const [selected, setSelected] = useState(null);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -232,8 +233,8 @@ export default function Portfolio({ brand, user, onPortal, setPage, content }) {
         
         {/* Intro */}
         <div style={{ marginBottom: mob ? 40 : 80 }}>
-           <h1 style={{ fontSize: mob ? 40 : 96, fontWeight: 800, letterSpacing: '-0.05em', margin: '0 0 24px', lineHeight: 1 }}>Selected <br/><span style={{ color: ac }}>Masterpieces.</span></h1>
-           <p style={{ fontSize: mob ? 16 : 20, color: 'rgba(17,24,39,0.5)', maxWidth: 600 }}>A collection of our most ambitious structural glass and interior finishing projects worldwide.</p>
+           <h1 style={{ fontSize: mob ? 40 : 96, fontWeight: 800, letterSpacing: '-0.05em', margin: '0 0 24px', lineHeight: 1 }}>Selected <br/><span style={{ color: ac }}>Case Studies.</span></h1>
+           <p style={{ fontSize: mob ? 16 : 20, color: 'rgba(92, 58, 33,0.5)', maxWidth: 660 }}>Review completed work, then start a structured brief so Westline can price the design, sourcing, logistics, and installation path properly.</p>
         </div>
 
         {/* Filter */}

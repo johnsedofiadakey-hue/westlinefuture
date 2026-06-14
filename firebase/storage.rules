@@ -12,9 +12,8 @@ service firebase.storage {
 
     function isAdmin() {
       return isAuthenticated() && (
-        request.auth.token.role == "admin" ||
-        authEmail().matches(".*@westlinefuture\\.com") ||
-        authEmail() == "admin@westlinefuture.com"
+        request.auth.token.email.matches(".*@westlinefuture\\.com") ||
+        request.auth.token.email == "admin@westlinefuture.com"
       );
     }
 

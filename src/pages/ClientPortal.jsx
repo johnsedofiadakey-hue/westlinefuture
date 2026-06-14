@@ -1,4 +1,6 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import DOMPurify from 'dompurify';
+import { translateClientDom } from '../lib/clientI18n';
 import {
   LogOut, ChevronRight, Send, MessageSquare, FileText,
   DollarSign, CheckCircle2, Circle, Clock, Loader2,
@@ -7,17 +9,25 @@ import {
   Truck, Wrench, ShoppingCart, ArrowRight, Lock,
   Download, File, Image, Archive, Package, Camera,
   X, Copy, Check, RefreshCw, Gift, Edit3, ChevronDown,
-  ZoomIn, ScanSearch, Languages, Mic, Square, Save
+  ZoomIn, ScanSearch, PenTool, Printer, FileCheck, PenLine, ShieldCheck, Award, Map, HelpCircle
 } from 'lucide-react';
 import { CLIENT_PROJECT_STAGES, PROJECT_TYPES } from '../data';
-import { db, functions, uploadFile } from '../lib/firebase';
+import { calculateTimeline } from './sharedHelpers';
+import { db, functions } from '../lib/firebase';
 import { httpsCallable } from 'firebase/functions';
 import {
-  collection, onSnapshot, query, where, orderBy, limit, addDoc, serverTimestamp, doc, updateDoc, arrayUnion
+  collection, onSnapshot, query, where, orderBy, limit, addDoc, serverTimestamp,
+  updateDoc, doc
 } from 'firebase/firestore';
-import { createPaystackPayment } from '../lib/paystack';
+import { usePaystackPayment } from 'react-paystack';
+import ClientRenderingVault from '../components/ClientRenderingVault';
+import UnifiedPaymentGateway from '../components/UnifiedPaymentGateway';
+import WorldClassChat from '../components/WorldClassChat';
+import InvoiceDocument from '../components/InvoiceDocument';
+import ClientUploadsTab from '../components/ClientUploadsTab';
+import SecureVault from '../components/SecureVault';
 
-const AC = '#0F766E';
+const AC = `var(--accent-secondary)`;
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 function fmtShort(val) {
@@ -37,7 +47,16 @@ function daysSince(val) {
 // ─── Payment Receipt PDF ─────────────────────────────────────────────────────
 // ─── Shared Branded PDF Renderer ─────────────────────────────────────────────
 function printBrandedDoc(opts, brand) {
-  const ac = brand?.color || '#0F766E';
+  // Rich Beige / Cream / Brown Palette for PDFs
+  const theme = {
+    primary: '#4A3B32',     // Dark espresso brown
+    secondary: '#8C6C52',   // Mid-tone warm brown
+    accent: '#C5A880',      // Rich beige gold
+    bg: '#FDFBF7',          // Pristine cream base
+    surface: '#F4EFE6',     // Light beige for table headers / blocks
+    textMuted: '#716259'    // Muted brown for subtext
+  };
+
   const co = brand?.name || 'Westline Future Ltd.';
   const addr = brand?.address || 'International';
   const phone = brand?.phone || '';
@@ -45,8 +64,11 @@ function printBrandedDoc(opts, brand) {
   const web = brand?.website || 'www.westlinefuture.com';
   const logoUrl = brand?.logo || '';
   const logoHtml = logoUrl
-    ? `<img src="${logoUrl}" style="height:52px;object-fit:contain;display:block;" alt="${co}" />`
-    : `<div style="font-size:26px;font-weight:900;color:${ac};letter-spacing:-1px;">${co.split(' ').map(w => w[0]).join('').slice(0, 3)}</div>`;
+    ? `<img src="${logoUrl}" style="height:60px;object-fit:contain;display:block;" alt="${co}" />`
+    : `<div style="display:flex;flex-direction:column;line-height:1;gap:2px;">
+         <div style="font-size:28px;font-weight:900;color:${theme.primary};letter-spacing:0.05em;">WESTLINE</div>
+         <div style="font-size:12px;font-weight:600;color:${theme.secondary};letter-spacing:0.45em;">FUTURE</div>
+       </div>`;
 
   const {
     docType = 'INVOICE',           // INVOICE | QUOTATION | PAYMENT RECEIPT | PURCHASE ORDER
@@ -61,9 +83,11 @@ function printBrandedDoc(opts, brand) {
     rows = [],                      // [{ label, value }] for receipts
     lineItems = [],                 // [{ desc, qty, unit, rate, total }] for invoices
     totalAmount = '',
+    amountPaidStr = '',
+    balanceDueStr = '',
     totalLabel = 'TOTAL DUE',
     statusBadge = '',               // e.g. 'PAID', 'PENDING'
-    statusColor = '#16A34A',
+    statusColor = theme.secondary,
     notes = '',
     bankDetails = '',
     terms = '',
@@ -71,27 +95,27 @@ function printBrandedDoc(opts, brand) {
   } = opts;
 
   const isReceipt = docType === 'PAYMENT RECEIPT';
-  const accentBar = `<div style="height:6px;background:linear-gradient(90deg,${ac},${ac}aa);margin:-72px -72px 0 -72px;"></div>`;
+  const accentBar = `<div style="height:12px;background:${theme.primary};margin:-72px -72px 0 -72px;"></div>`;
 
   const lineItemsHtml = lineItems.length > 0 ? `
     <table style="width:100%;border-collapse:collapse;margin-bottom:32px;font-size:13px;">
       <thead>
-        <tr style="background:#111827;color:#fff;">
-          <th style="padding:12px 16px;text-align:left;font-size:10px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;">Description</th>
-          <th style="padding:12px 16px;text-align:center;font-size:10px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;">Qty</th>
-          <th style="padding:12px 16px;text-align:center;font-size:10px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;">Unit</th>
-          <th style="padding:12px 16px;text-align:right;font-size:10px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;">Rate</th>
-          <th style="padding:12px 16px;text-align:right;font-size:10px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;">Amount</th>
+        <tr style="background:${theme.primary};color:${theme.bg};">
+          <th style="padding:14px 18px;text-align:left;font-size:11px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;">Description</th>
+          <th style="padding:14px 18px;text-align:center;font-size:11px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;">Qty</th>
+          <th style="padding:14px 18px;text-align:center;font-size:11px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;">Unit</th>
+          <th style="padding:14px 18px;text-align:right;font-size:11px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;">Rate</th>
+          <th style="padding:14px 18px;text-align:right;font-size:11px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;">Amount</th>
         </tr>
       </thead>
       <tbody>
         ${lineItems.map((item, i) => `
-          <tr style="background:${i % 2 === 0 ? '#FAFAF9' : '#fff'};">
-            <td style="padding:14px 16px;font-weight:600;color:#111827;">${item.desc || item.description || '—'}</td>
-            <td style="padding:14px 16px;text-align:center;color:#4B5563;">${item.qty ?? 1}</td>
-            <td style="padding:14px 16px;text-align:center;color:#4B5563;">${item.unit || 'job'}</td>
-            <td style="padding:14px 16px;text-align:right;color:#4B5563;">${item.rate ? `GH₵ ${Number(item.rate).toLocaleString(undefined, { minimumFractionDigits: 2 })}` : '—'}</td>
-            <td style="padding:14px 16px;text-align:right;font-weight:700;color:#111827;">${item.total || item.amount ? `GH₵ ${Number(item.total || item.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}` : '—'}</td>
+          <tr style="border-bottom:1px solid ${theme.accent}60;">
+            <td style="padding:18px 18px;font-weight:700;color:${theme.primary};">${item.desc || item.description || '—'}</td>
+            <td style="padding:18px 18px;text-align:center;color:${theme.textMuted};font-weight:600;">${item.qty ?? 1}</td>
+            <td style="padding:18px 18px;text-align:center;color:${theme.textMuted};">${item.unit || 'job'}</td>
+            <td style="padding:18px 18px;text-align:right;color:${theme.textMuted};">${item.rate ? `GH₵ ${Number(item.rate).toLocaleString(undefined, { minimumFractionDigits: 2 })}` : '—'}</td>
+            <td style="padding:18px 18px;text-align:right;font-weight:800;color:${theme.primary};">${item.total || item.amount ? `GH₵ ${Number(item.total || item.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}` : '—'}</td>
           </tr>`).join('')}
       </tbody>
     </table>` : '';
@@ -99,9 +123,9 @@ function printBrandedDoc(opts, brand) {
   const rowsHtml = rows.length > 0 ? `
     <div style="margin-bottom:32px;">
       ${rows.map(r => `
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;padding:13px 0;border-bottom:1px solid #E5E7EB;gap:20px;">
-          <span style="font-size:12px;color:#6B7280;font-weight:600;white-space:nowrap;">${r.label}</span>
-          <span style="font-size:13px;font-weight:700;color:#111827;text-align:right;">${r.value}</span>
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;padding:16px 0;border-bottom:1px solid ${theme.accent}60;gap:20px;">
+          <span style="font-size:13px;color:${theme.textMuted};font-weight:600;white-space:nowrap;">${r.label}</span>
+          <span style="font-size:14px;font-weight:800;color:${theme.primary};text-align:right;">${r.value}</span>
         </div>`).join('')}
     </div>` : '';
 
@@ -114,14 +138,14 @@ function printBrandedDoc(opts, brand) {
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
   <style>
     *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
-    html, body { background: #fff; font-family: 'Inter', -apple-system, sans-serif; color: #111827; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    html, body { background: ${theme.bg}; font-family: 'Inter', -apple-system, sans-serif; color: ${theme.primary}; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     body { padding: 0; }
-    .page { width: 210mm; min-height: 297mm; margin: 0 auto; padding: 72px; position: relative; overflow: hidden; background: #fff; }
-    .watermark { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(-40deg); font-size: 100px; font-weight: 900; opacity: 0.025; white-space: nowrap; pointer-events: none; color: #111827; z-index: 0; }
+    .page { width: 210mm; min-height: 297mm; margin: 0 auto; padding: 72px; position: relative; overflow: hidden; background: ${theme.bg}; border: 12px solid ${theme.accent}; }
+    .watermark { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(-40deg); font-size: 100px; font-weight: 900; opacity: 0.03; white-space: nowrap; pointer-events: none; color: ${theme.primary}; z-index: 0; }
     .content { position: relative; z-index: 1; }
     @page { size: A4; margin: 0; }
-    @media print { html, body { width: 210mm; } .page { box-shadow: none !important; } button { display: none !important; } }
-    @media screen { .page { box-shadow: 0 0 60px rgba(0,0,0,0.12); margin: 40px auto; border-radius: 4px; } body { background: #E5E7EB; } }
+    @media print { html, body { width: 210mm; } .page { box-shadow: none !important; border: none; } button { display: none !important; } }
+    @media screen { .page { box-shadow: 0 0 60px rgba(0,0,0,0.12); margin: 40px auto; border-radius: 4px; } body { background: #e5e5e5; } }
   </style>
 </head>
 <body>
@@ -131,98 +155,117 @@ function printBrandedDoc(opts, brand) {
   <div class="content">
 
     <!-- HEADER -->
-    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-top:40px;margin-bottom:48px;padding-bottom:32px;border-bottom:1.5px solid #E5E7EB;">
-      <div style="display:flex;align-items:center;gap:18px;">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-top:40px;margin-bottom:48px;padding-bottom:32px;border-bottom:2px solid ${theme.accent};">
+      <div style="display:flex;align-items:center;gap:24px;">
         ${logoHtml}
         <div>
-          <div style="font-size:15px;font-weight:800;color:#111827;letter-spacing:-.3px;">${co}</div>
-          <div style="font-size:11px;color:#6B7280;margin-top:2px;">${addr}</div>
-          ${phone ? `<div style="font-size:11px;color:#6B7280;">${phone}${email ? ' · ' + email : ''}</div>` : ''}
-          ${web ? `<div style="font-size:11px;color:${ac};">${web}</div>` : ''}
+          <div style="font-size:20px;font-weight:800;color:${theme.primary};letter-spacing:1px;text-transform:uppercase;">${co}</div>
+          <div style="font-size:11px;color:${theme.secondary};margin-top:4px;letter-spacing:1px;text-transform:uppercase;">${addr}</div>
         </div>
       </div>
       <div style="text-align:right;">
-        <div style="font-size:9px;font-weight:800;letter-spacing:.2em;text-transform:uppercase;color:${ac};margin-bottom:6px;">${docType}</div>
-        <div style="font-size:28px;font-weight:900;letter-spacing:-1px;color:#111827;">#${docNumber || 'DRAFT'}</div>
-        ${statusBadge ? `<div style="display:inline-block;margin-top:10px;padding:5px 14px;border-radius:20px;font-size:11px;font-weight:800;background:${statusColor}18;color:${statusColor};border:1px solid ${statusColor}40;">${statusBadge}</div>` : ''}
+        <div style="font-size:32px;font-weight:400;letter-spacing:1px;text-transform:uppercase;color:${theme.primary};margin-bottom:12px;">${docType}</div>
+        <div style="display:inline-block;background:${theme.primary};color:${theme.bg};padding:4px 12px;border-radius:4px;font-size:13px;font-weight:600;letter-spacing:1px;">Ref: #${docNumber || 'DRAFT'}</div>
       </div>
     </div>
 
     <!-- META ROW -->
     <div style="display:grid;grid-template-columns:repeat(${dueStr ? 3 : 2},1fr);gap:20px;margin-bottom:36px;">
-      <div style="padding:16px 20px;background:#F9FAFB;border-radius:12px;">
-        <div style="font-size:9px;text-transform:uppercase;letter-spacing:.14em;color:${ac};font-weight:800;margin-bottom:6px;">Date Issued</div>
-        <div style="font-size:14px;font-weight:700;">${dateStr}</div>
+      <div style="padding:16px 20px;background:${theme.surface};border-radius:8px;">
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:${theme.secondary};font-weight:800;margin-bottom:6px;">Date Issued</div>
+        <div style="font-size:15px;font-weight:700;color:${theme.primary};">${dateStr}</div>
       </div>
-      ${dueStr ? `<div style="padding:16px 20px;background:#F9FAFB;border-radius:12px;"><div style="font-size:9px;text-transform:uppercase;letter-spacing:.14em;color:${ac};font-weight:800;margin-bottom:6px;">Due Date</div><div style="font-size:14px;font-weight:700;">${dueStr}</div></div>` : ''}
-      <div style="padding:16px 20px;background:#111827;border-radius:12px;">
-        <div style="font-size:9px;text-transform:uppercase;letter-spacing:.14em;color:${ac};font-weight:800;margin-bottom:6px;">Reference</div>
-        <div style="font-size:13px;font-weight:700;color:#fff;font-family:monospace;">${docNumber || 'GT-DRAFT'}</div>
-      </div>
+      ${dueStr ? `<div style="padding:16px 20px;background:${theme.surface};border-radius:8px;"><div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:${theme.secondary};font-weight:800;margin-bottom:6px;">Due Date</div><div style="font-size:15px;font-weight:700;color:${theme.primary};">${dueStr}</div></div>` : ''}
+      ${statusBadge ? `<div style="padding:16px 20px;background:${statusColor}10;border-radius:8px;"><div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:${statusColor};font-weight:800;margin-bottom:6px;">Status</div><div style="font-size:15px;font-weight:800;color:${statusColor};">${statusBadge}</div></div>` : ''}
     </div>
 
     <!-- BILL TO / FROM -->
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:36px;">
-      <div style="padding:20px 24px;border:1.5px solid #E5E7EB;border-radius:14px;">
-        <div style="font-size:9px;text-transform:uppercase;letter-spacing:.14em;color:${ac};font-weight:800;margin-bottom:10px;">${isReceipt ? 'Received From' : 'Bill To'}</div>
-        <div style="font-size:15px;font-weight:800;color:#111827;margin-bottom:4px;">${clientName}</div>
-        ${clientPhone ? `<div style="font-size:12px;color:#4B5563;margin-bottom:2px;">${clientPhone}</div>` : ''}
-        ${clientEmail ? `<div style="font-size:12px;color:#4B5563;margin-bottom:2px;">${clientEmail}</div>` : ''}
-        ${clientAddress ? `<div style="font-size:12px;color:#4B5563;">${clientAddress}</div>` : ''}
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:40px;margin-bottom:40px;">
+      <div style="padding:24px;border:1px solid ${theme.accent}60;border-radius:8px;background:${theme.surface};">
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:1.5px;color:${theme.accent};font-weight:900;margin-bottom:12px;">${isReceipt ? 'Received From' : 'Prepared For'}</div>
+        <div style="font-size:18px;font-weight:800;color:${theme.primary};margin-bottom:8px;">${clientName}</div>
+        ${clientPhone ? `<div style="font-size:13px;color:${theme.textMuted};margin-bottom:2px;">${clientPhone}</div>` : ''}
+        ${clientEmail ? `<div style="font-size:13px;color:${theme.textMuted};margin-bottom:2px;">${clientEmail}</div>` : ''}
+        ${clientAddress ? `<div style="font-size:13px;color:${theme.textMuted};">${clientAddress}</div>` : ''}
       </div>
-      <div style="padding:20px 24px;border:1.5px solid #E5E7EB;border-radius:14px;">
-        <div style="font-size:9px;text-transform:uppercase;letter-spacing:.14em;color:${ac};font-weight:800;margin-bottom:10px;">From</div>
-        <div style="font-size:15px;font-weight:800;color:#111827;margin-bottom:4px;">${co}</div>
-        <div style="font-size:12px;color:#4B5563;margin-bottom:2px;">${addr}</div>
-        ${phone ? `<div style="font-size:12px;color:#4B5563;margin-bottom:2px;">${phone}</div>` : ''}
-        ${email ? `<div style="font-size:12px;color:#4B5563;">${email}</div>` : ''}
+      <div style="padding:24px;border:1px solid ${theme.accent}60;border-radius:8px;text-align:right;">
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:1.5px;color:${theme.accent};font-weight:900;margin-bottom:12px;">Issued By</div>
+        <div style="font-size:15px;font-weight:800;color:${theme.primary};margin-bottom:6px;">${co}</div>
+        <div style="font-size:12px;color:${theme.textMuted};margin-bottom:2px;">${addr}</div>
+        ${phone ? `<div style="font-size:12px;color:${theme.textMuted};margin-bottom:2px;">Tel: ${phone}</div>` : ''}
+        ${email ? `<div style="font-size:12px;color:${theme.textMuted};">Email: ${email}</div>` : ''}
       </div>
     </div>
 
-    ${projectTitle ? `<div style="margin-bottom:24px;padding:14px 20px;background:${ac}0f;border-left:4px solid ${ac};border-radius:0 10px 10px 0;"><span style="font-size:10px;text-transform:uppercase;letter-spacing:.12em;color:${ac};font-weight:800;">Project / Subject: </span><span style="font-size:14px;font-weight:700;">${projectTitle}</span></div>` : ''}
+    ${projectTitle ? `<div style="margin-bottom:32px;padding:20px 24px;border:1px solid ${theme.accent};border-radius:8px;background:${theme.surface};display:flex;justify-content:space-between;align-items:center;"><div><div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:${theme.secondary};font-weight:800;margin-bottom:6px;">Subject / Project</div><div style="font-size:16px;font-weight:800;color:${theme.primary};text-transform:uppercase;">${projectTitle}</div></div></div>` : ''}
 
     ${lineItemsHtml}
     ${rowsHtml}
 
     <!-- TOTAL BOX -->
-    <div style="display:flex;justify-content:flex-end;margin-bottom:32px;">
-      <div style="min-width:280px;background:#111827;border-radius:16px;overflow:hidden;">
-        <div style="padding:20px 24px;display:flex;justify-content:space-between;align-items:center;">
-          <span style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.1em;color:rgba(255,255,255,0.5);">${totalLabel}</span>
-          <span style="font-size:24px;font-weight:900;color:${ac};letter-spacing:-0.5px;">${totalAmount}</span>
+    <div style="display:flex;justify-content:flex-end;margin-bottom:40px;">
+      <div style="min-width:320px;background:${theme.surface};border:1px solid ${theme.accent};border-radius:8px;padding:24px;">
+        ${amountPaidStr ? `
+        <div style="display:flex;justify-content:space-between;align-items:center;padding-bottom:16px;margin-bottom:16px;border-bottom:1px solid ${theme.accent}60;">
+          <span style="font-size:16px;font-weight:700;color:${theme.primary};">GRAND TOTAL</span>
+          <span style="font-size:18px;font-weight:800;color:${theme.primary};">${totalAmount}</span>
         </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;padding-bottom:16px;margin-bottom:16px;border-bottom:1px solid ${theme.accent}60;">
+          <span style="font-size:15px;font-weight:600;color:${theme.textMuted};">AMOUNT PAID</span>
+          <span style="font-size:16px;font-weight:700;color:#16A34A;">${amountPaidStr}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <span style="font-size:18px;font-weight:900;text-transform:uppercase;color:${theme.primary};">BALANCE DUE</span>
+          <span style="font-size:24px;font-weight:900;color:#DC2626;">${balanceDueStr}</span>
+        </div>
+        ` : `
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <span style="font-size:18px;font-weight:900;text-transform:uppercase;color:${theme.primary};">${totalLabel}</span>
+          <span style="font-size:24px;font-weight:900;color:${theme.secondary};">${totalAmount}</span>
+        </div>
+        `}
       </div>
     </div>
 
-    ${bankDetails ? `<div style="margin-bottom:24px;padding:16px 20px;background:#F9FAFB;border-radius:12px;border:1px solid #E5E7EB;"><div style="font-size:9px;text-transform:uppercase;letter-spacing:.14em;color:${ac};font-weight:800;margin-bottom:8px;">Payment Details</div><div style="font-size:12px;color:#4B5563;line-height:1.7;">${bankDetails.replace(/\n/g, '<br/>')}</div></div>` : ''}
-    ${notes ? `<div style="margin-bottom:24px;padding:16px 20px;background:#F9FAFB;border-radius:12px;border:1px solid #E5E7EB;"><div style="font-size:9px;text-transform:uppercase;letter-spacing:.14em;color:${ac};font-weight:800;margin-bottom:8px;">Notes</div><div style="font-size:12px;color:#4B5563;line-height:1.7;">${notes}</div></div>` : ''}
-    ${terms ? `<div style="margin-bottom:24px;padding:16px 20px;background:#F9FAFB;border-radius:12px;"><div style="font-size:9px;text-transform:uppercase;letter-spacing:.14em;color:#6B7280;font-weight:800;margin-bottom:8px;">Terms & Conditions</div><div style="font-size:11px;color:#6B7280;line-height:1.7;">${terms.replace(/\n/g, '<br/>')}</div></div>` : ''}
+    ${bankDetails ? `<div style="margin-bottom:24px;padding:24px;background:${theme.surface};border-radius:8px;border:1px solid ${theme.accent}60;"><div style="font-size:11px;text-transform:uppercase;letter-spacing:1.5px;color:${theme.secondary};font-weight:900;margin-bottom:12px;">Electronic Fund Transfer</div><div style="font-size:13px;color:${theme.primary};line-height:1.8;font-weight:700;">${bankDetails.replace(/\n/g, '<br/>')}</div></div>` : ''}
+    ${notes ? `<div style="margin-bottom:24px;padding:20px;background:${theme.surface};border-radius:8px;border:1px solid ${theme.accent}40;"><div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:${theme.secondary};font-weight:900;margin-bottom:8px;">Notes</div><div style="font-size:13px;color:${theme.textMuted};line-height:1.7;">${notes}</div></div>` : ''}
+    ${terms ? `<div style="margin-bottom:40px;"><div style="font-size:11px;text-transform:uppercase;letter-spacing:1px;color:${theme.secondary};font-weight:900;margin-bottom:8px;">Contractual Conditions</div><div style="font-size:12px;color:${theme.textMuted};line-height:1.7;">${terms.replace(/\n/g, '<br/>')}</div></div>` : ''}
 
-    <!-- FOOTER -->
-    <div style="margin-top:40px;padding-top:20px;border-top:1.5px solid #E5E7EB;display:flex;justify-content:space-between;align-items:center;">
-      <div style="font-size:11px;color:#6B7280;line-height:1.7;">${footerNote || `This is an official document from ${co}.<br/>For queries contact ${email} or ${phone}`}</div>
+    <div style="padding-top:32px;border-top:2px solid ${theme.accent};display:flex;justify-content:space-between;align-items:center;">
+      <div style="font-size:12px;color:${theme.textMuted};line-height:1.7;font-weight:500;">${footerNote || `This is an official document from ${co}.<br/>For queries contact ${email} or ${phone}`}</div>
       <div style="text-align:right;">
-        <div style="font-size:9px;text-transform:uppercase;letter-spacing:.14em;color:#6B7280;font-weight:700;margin-bottom:4px;">Authorised by</div>
-        <div style="width:120px;height:1px;background:#6B7280;margin-left:auto;margin-top:28px;"></div>
-        <div style="font-size:10px;color:#6B7280;margin-top:4px;">${co}</div>
+        <div style="font-size:13px;font-weight:800;color:${theme.primary};">Finance Director</div>
+        <div style="font-size:11px;color:${theme.textMuted};margin-top:4px;">${co}</div>
       </div>
     </div>
   </div>
 </div>
+<script>
+  window.onload = () => { setTimeout(() => { window.print(); }, 500); };
+</script>
 </body>
 </html>`;
-  const blob = new Blob([html], { type: 'text/html' });
-  const blobUrl = URL.createObjectURL(blob);
-  const win = window.open(blobUrl, '_blank');
-  if (!win) {
-    const a = document.createElement('a');
-    a.href = blobUrl;
-    a.target = '_blank';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-  }
-  setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+
+  const iframe = document.createElement('iframe');
+  iframe.style.position = 'fixed';
+  iframe.style.right = '0';
+  iframe.style.bottom = '0';
+  iframe.style.width = '0';
+  iframe.style.height = '0';
+  iframe.style.border = '0';
+  document.body.appendChild(iframe);
+  
+  iframe.contentWindow.document.open();
+  iframe.contentWindow.document.write(html);
+  iframe.contentWindow.document.close();
+  
+  iframe.onload = () => {
+    setTimeout(() => {
+      iframe.contentWindow.focus();
+      iframe.contentWindow.print();
+      setTimeout(() => document.body.removeChild(iframe), 1000);
+    }, 500);
+  };
 }
 
 function downloadPaymentReceipt(txn, project, client, brand) {
@@ -258,21 +301,30 @@ function downloadPaymentReceipt(txn, project, client, brand) {
 // ─── Stage Icon Map ───────────────────────────────────────────────────────────
 const STAGE_ICONS = {
   1: <Search size={16} />,
-  2: <Lock size={16} />,
-  3: <ScanSearch size={16} />,
-  4: <FileText size={16} />,
-  5: <CreditCard size={16} />,
-  6: <ScanSearch size={16} />,
-  7: <Star size={16} />,
+  2: <PenTool size={16} />,
+  3: <CreditCard size={16} />,
+  4: <Factory size={16} />,
+  5: <Truck size={16} />,
+  6: <Wrench size={16} />,
+  7: <ScanSearch size={16} />,
+  8: <Star size={16} />,
 };
 
 // ─── Payment Schedule Configs ─────────────────────────────────────────────────
 const SCHEDULE_CONFIGS = {
   standard: {
-    label: 'Standard (50/50)',
+    label: 'Standard (60/30/10)',
     milestones: [
-      { key: 'deposit', label: '50% Project Deposit', pct: 0.50, cumPct: 0.50, stageId: 2 },
-      { key: 'final', label: '50% Final Settlement', pct: 0.50, cumPct: 1.00, stageId: 7 },
+      { key: 'post-rendering',  label: '60% After Rendering Approval',  pct: 0.60, cumPct: 0.60 },
+      { key: 'post-production', label: '30% After Production Complete', pct: 0.30, cumPct: 0.90 },
+      { key: 'post-shipping',   label: '10% After Delivery',            pct: 0.10, cumPct: 1.00 },
+    ],
+  },
+  '50-50': {
+    label: '50/50 (Deposit / Delivery)',
+    milestones: [
+      { key: 'deposit',     label: '50% Deposit',        pct: 0.50, cumPct: 0.50 },
+      { key: 'completion',  label: '50% After Delivery', pct: 0.50, cumPct: 1.00 },
     ],
   },
   '70-30': {
@@ -289,6 +341,16 @@ const SCHEDULE_CONFIGS = {
 };
 const MILESTONES = SCHEDULE_CONFIGS.standard.milestones;
 
+// Canonical paid-status check — handles "Paid", "paid", "Paid in Full", "paid in full"
+const isPaidStatus = (status) => ['paid', 'paid in full'].includes(String(status || '').toLowerCase().trim());
+const isInitialProjectDepositInvoice = (invoice) => {
+  const descriptor = `${invoice?.title || ''} ${invoice?.type || ''} ${invoice?.documentKind || ''}`.toLowerCase();
+  return invoice?.milestoneKey === 'post-rendering'
+    || descriptor.includes('deposit')
+    || descriptor.includes('first instalment')
+    || descriptor.includes('first installment');
+};
+
 // ─── Invoice PDF Download ─────────────────────────────────────────────────────
 function downloadInvoicePDF(invoice, project, client, brand) {
   const issuedDate = invoice.createdAt
@@ -301,7 +363,7 @@ function downloadInvoicePDF(invoice, project, client, brand) {
   const docNum = invoice.invoiceNumber || (invoice.id || '').slice(-8).toUpperCase();
   const rawTotal = parseFloat(String(invoice.amount || 0).replace(/[^0-9.]/g, '')) || 0;
   const totalStr = `GH₵ ${rawTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
-  const isPaid = invoice.status === 'Paid';
+  const isPaid = isPaidStatus(invoice.status);
   const isQuote = invoice.type === 'Quotation' || invoice.type === 'quotation';
 
   const items = invoice.items?.length
@@ -314,6 +376,11 @@ function downloadInvoicePDF(invoice, project, client, brand) {
       }))
     : [{ desc: invoice.description || project?.title || 'Glass Fabrication Services', qty: 1, unit: 'job', rate: rawTotal, total: rawTotal }];
 
+  const isPartiallyPaid = invoice.status === 'Partially Paid' || (invoice.amountPaid > 0 && invoice.amountPaid < rawTotal);
+  
+  const amountPaidStr = invoice.amountPaid ? `GH₵ ${Number(invoice.amountPaid).toLocaleString(undefined, { minimumFractionDigits: 2 })}` : null;
+  const balanceDueStr = invoice.amountPaid ? `GH₵ ${Math.max(0, rawTotal - Number(invoice.amountPaid)).toLocaleString(undefined, { minimumFractionDigits: 2 })}` : null;
+
   printBrandedDoc({
     docType: isQuote ? 'QUOTATION' : 'INVOICE',
     docNumber: docNum,
@@ -325,9 +392,11 @@ function downloadInvoicePDF(invoice, project, client, brand) {
     projectTitle: project?.title || project?.project || invoice.title || '',
     lineItems: items,
     totalAmount: totalStr,
-    totalLabel: isPaid ? 'TOTAL PAID' : isQuote ? 'QUOTED AMOUNT' : 'TOTAL DUE',
-    statusBadge: isPaid ? 'PAID' : isQuote ? 'PENDING APPROVAL' : 'PAYMENT DUE',
-    statusColor: isPaid ? '#16A34A' : isQuote ? '#D97706' : '#0F766E',
+    amountPaidStr,
+    balanceDueStr,
+    totalLabel: isPaid ? 'TOTAL PAID' : isPartiallyPaid ? 'GRAND TOTAL' : isQuote ? 'QUOTED AMOUNT' : 'TOTAL DUE',
+    statusBadge: isPaid ? 'PAID' : isPartiallyPaid ? 'PARTIALLY PAID' : isQuote ? 'PENDING APPROVAL' : 'PAYMENT DUE',
+    statusColor: isPaid ? '#16A34A' : isPartiallyPaid ? '#059669' : isQuote ? '#D97706' : `var(--accent-primary)`,
     notes: invoice.notes || '',
     bankDetails: brand?.bankDetails || 'Bank Name | Account Number | Branch',
     terms: '1. Payments are due within 14 days of invoice date.\n2. Late payments attract 2% monthly interest.\n3. All glass fabrication works are subject to our standard warranty policy.',
@@ -335,11 +404,837 @@ function downloadInvoicePDF(invoice, project, client, brand) {
   }, brand);
 }
 
+function printSignedContractDoc(project, user, brand) {
+  const theme = {
+    primary: '#4A3B32',     // Dark espresso brown
+    secondary: '#8C6C52',   // Mid-tone warm brown
+    accent: '#C5A880',      // Rich beige gold
+    bg: '#FDFBF7',          // Pristine cream base
+    surface: '#F4EFE6',     // Light beige for table headers / blocks
+    textMuted: '#716259'    // Muted brown for subtext
+  };
+
+  const co = brand?.name || 'Westline Future Ltd.';
+  const addr = brand?.address || 'International';
+  const phone = brand?.phone || '';
+  const email = brand?.email || 'info@westlinefuture.com';
+  const logoUrl = brand?.logo || '';
+  const logoHtml = logoUrl
+    ? `<img src="${logoUrl}" style="height:60px;object-fit:contain;display:block;" alt="${co}" />`
+    : `<div style="display:flex;flex-direction:column;line-height:1;gap:2px;">
+         <div style="font-size:28px;font-weight:900;color:${theme.primary};letter-spacing:0.05em;">WESTLINE</div>
+         <div style="font-size:12px;font-weight:600;color:${theme.secondary};letter-spacing:0.45em;">FUTURE</div>
+       </div>`;
+
+  const clientName = user?.name || project?.clientName || project?.client || 'Valued Client';
+  const clientPhone = project?.quoteSignedByPhone || user?.phone || '';
+  const clientEmail = user?.email || user?.proxyEmail || '';
+  
+  const budget = Number(project.budget || 0);
+  const budgetStr = budget ? `GH₵ ${budget.toLocaleString(undefined, { minimumFractionDigits: 2 })}` : '—';
+  
+  const signedDate = project.quoteSignedAt
+    ? (project.quoteSignedAt.toDate ? project.quoteSignedAt.toDate() : new Date(project.quoteSignedAt)).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+    : new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+
+  const estCompletion = project.estimatedCompletion
+    ? (project.estimatedCompletion.toDate ? project.estimatedCompletion.toDate() : new Date(project.estimatedCompletion)).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
+    : 'Pending Scheduling';
+
+  const signatureHtml = project.quoteSignature
+    ? `<img src="${project.quoteSignature}" style="max-height:80px; max-width:250px; object-fit:contain; display:block; border-bottom:1px solid ${theme.accent}; padding-bottom:8px; margin-bottom:8px;" alt="Client Signature" />`
+    : `<div style="height:80px; border-bottom:1px solid ${theme.accent}; margin-bottom:8px; display:flex; align-items:center; color:${theme.textMuted}; font-style:italic;">No signature on file</div>`;
+
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>CONTRACT AGREEMENT — ${project.title || 'Project'}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { background: ${theme.bg}; font-family: 'Inter', -apple-system, sans-serif; color: ${theme.primary}; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    body { padding: 0; }
+    .page { width: 210mm; min-height: 297mm; margin: 0 auto; padding: 60px 72px; position: relative; overflow: hidden; background: ${theme.bg}; border: 12px solid ${theme.accent}; }
+    .watermark { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(-40deg); font-size: 80px; font-weight: 900; opacity: 0.02; white-space: nowrap; pointer-events: none; color: ${theme.primary}; z-index: 0; text-transform: uppercase; }
+    .content { position: relative; z-index: 1; }
+    h2 { font-size: 16px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; color: ${theme.primary}; margin-bottom: 12px; margin-top: 24px; border-bottom: 1px solid ${theme.accent}60; padding-bottom: 6px; }
+    p, li { font-size: 12px; color: ${theme.textMuted}; line-height: 1.6; margin-bottom: 10px; }
+    ol { margin-left: 20px; }
+    @page { size: A4; margin: 0; }
+    @media print { html, body { width: 210mm; } .page { box-shadow: none !important; border: none; } button { display: none !important; } }
+    @media screen { .page { box-shadow: 0 0 60px rgba(0,0,0,0.12); margin: 40px auto; border-radius: 4px; } body { background: #e5e5e5; } }
+  </style>
+</head>
+<body>
+<div class="page">
+  <div style="height:12px;background:${theme.primary};margin:-60px -72px 0 -72px;"></div>
+  <div class="watermark">CONTRACT SIGNED</div>
+  <div class="content">
+
+    <!-- HEADER -->
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-top:20px;margin-bottom:32px;padding:24px;border-radius:12px;background:${theme.primary};color:${theme.bg};">
+      <div style="display:flex;align-items:center;gap:20px;">
+        <div style="background:rgba(255,255,255,0.1);padding:12px;border-radius:8px;">
+          ${logoHtml.replace(`color:${theme.primary}`, `color:${theme.bg}`).replace(`color:${theme.secondary}`, `color:${theme.accent}`)}
+        </div>
+        <div>
+          <div style="font-size:18px;font-weight:800;color:${theme.bg};letter-spacing:1px;text-transform:uppercase;">${co}</div>
+          <div style="font-size:10px;color:${theme.accent};margin-top:2px;letter-spacing:1px;text-transform:uppercase;">${addr}</div>
+        </div>
+      </div>
+      <div style="text-align:right;">
+        <div style="font-size:24px;font-weight:400;letter-spacing:1px;text-transform:uppercase;color:${theme.bg};margin-bottom:6px;">CONTRACT AGREEMENT</div>
+        <div style="display:inline-block;background:#16A34A;color:#fff;padding:3px 10px;border-radius:4px;font-size:11px;font-weight:700;letter-spacing:1px;">STATUS: SIGNED & SECURED</div>
+      </div>
+    </div>
+
+    <!-- CONTRACT METADATA -->
+    <div style="display:grid;grid-template-columns:repeat(3, 1fr);gap:16px;margin-bottom:24px;">
+      <div style="padding:12px 16px;background:${theme.surface};border-radius:6px;">
+        <div style="font-size:9px;text-transform:uppercase;letter-spacing:1px;color:${theme.secondary};font-weight:800;margin-bottom:4px;">Contract Reference</div>
+        <div style="font-size:13px;font-weight:800;color:${theme.primary};">WF-${(project.id || '').slice(-8).toUpperCase()}</div>
+      </div>
+      <div style="padding:12px 16px;background:${theme.surface};border-radius:6px;">
+        <div style="font-size:9px;text-transform:uppercase;letter-spacing:1px;color:${theme.secondary};font-weight:800;margin-bottom:4px;">Date Executed</div>
+        <div style="font-size:13px;font-weight:800;color:${theme.primary};">${signedDate}</div>
+      </div>
+      <div style="padding:12px 16px;background:${theme.surface};border-radius:6px;">
+        <div style="font-size:9px;text-transform:uppercase;letter-spacing:1px;color:${theme.secondary};font-weight:800;margin-bottom:4px;">Contract Value</div>
+        <div style="font-size:13px;font-weight:800;color:${theme.primary};">${budgetStr}</div>
+      </div>
+    </div>
+
+    <!-- PARTIES -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:24px;padding:16px 20px;border:1px solid ${theme.accent}60;border-radius:6px;background:${theme.surface}50;">
+      <div>
+        <div style="font-size:9px;text-transform:uppercase;letter-spacing:1px;color:${theme.accent};font-weight:900;margin-bottom:4px;">Contractor (First Party)</div>
+        <div style="font-size:14px;font-weight:800;color:${theme.primary};">${co}</div>
+        <div style="font-size:11px;color:${theme.textMuted};">${addr}</div>
+        <div style="font-size:11px;color:${theme.textMuted};">${phone} | ${email}</div>
+      </div>
+      <div>
+        <div style="font-size:9px;text-transform:uppercase;letter-spacing:1px;color:${theme.accent};font-weight:900;margin-bottom:4px;">Client (Second Party)</div>
+        <div style="font-size:14px;font-weight:800;color:${theme.primary};">${clientName}</div>
+        <div style="font-size:11px;color:${theme.textMuted};">${clientPhone}</div>
+        <div style="font-size:11px;color:${theme.textMuted};">${clientEmail}</div>
+      </div>
+    </div>
+
+    <div style="padding:14px 18px;border:1px solid ${theme.accent};border-radius:6px;background:${theme.surface};margin-bottom:24px;">
+      <div style="font-size:9px;text-transform:uppercase;letter-spacing:1px;color:${theme.secondary};font-weight:800;margin-bottom:4px;">Scope of Project</div>
+      <div style="font-size:14px;font-weight:800;color:${theme.primary};text-transform:uppercase;">${project.title || 'Premium Architectural Project'}</div>
+      <div style="font-size:12px;color:${theme.textMuted};margin-top:4px;"><strong>Details:</strong> ${project.description || 'Project execution and delivery as outlined in the accepted quotation.'}</div>
+      <div style="font-size:12px;color:${theme.textMuted};margin-top:4px;">Target Completion Date: <strong>${estCompletion}</strong></div>
+    </div>
+
+    <h2>Contractual Conditions</h2>
+    ${project.contractTerms ? 
+      `<div style="font-size:12px;color:${theme.textMuted};line-height:1.6;margin-bottom:10px;">${project.contractTerms.replace(/\\n/g, '<br/>')}</div>` 
+      : 
+      `<ol>
+        <li><strong>Scope of Work:</strong> Contractor agrees to manufacture, fabricate, supply, and install custom high-end premium products in accordance with final approved technical designs in the design vault and the details specified above.</li>
+        <li><strong>Payment Terms:</strong> Works shall commence upon execution of this contract and clearance of the mobilisation deposit as stated in the payment plan. ${(() => {
+              const schedKey = project.paymentSchedule || 'standard';
+              const sched = SCHEDULE_CONFIGS[schedKey] || SCHEDULE_CONFIGS.standard;
+              if (sched.milestones && sched.milestones.length > 0) {
+                const lines = sched.milestones.map(m => {
+                  const amt = budget > 0 ? ` (GHS ${(budget * m.pct).toLocaleString(undefined, { minimumFractionDigits: 2 })})` : ` (${Math.round(m.pct * 100)}% of contract value)`;
+                  return `${m.label}${amt}`;
+                });
+                return `Payment schedule: ${lines.join('; ')}.`;
+              }
+              return 'All milestone payments are due as per the agreed schedule.';
+            })()} No installation works shall commence if any preceding milestone payment remains outstanding.</li>
+        <li><strong>Installation and Access:</strong> The Client shall provide adequate, safe, and clean working space for the Contractor's installers on the site. All field inspections are geo-fenced and locked to site coordinates for absolute quality assurance.</li>
+        <li><strong>Warranty Policy:</strong> Contractor provides a 12-month limited warranty on the structural alignment and architectural grade silicone sealant components. Glass breakage due to external physical impact, force majeure, or site modifications after handover is excluded.</li>
+        <li><strong>Governing Law:</strong> This agreement and all subsequent performance evaluations are governed by the laws of the Republic of Ghana.</li>
+      </ol>`
+    }
+
+    <h2>Electronic Execution & Verification Log</h2>
+    <div style="display:grid;grid-template-columns:1.5fr 1fr;gap:32px;margin-top:16px;">
+      <div style="padding:16px;border:1.5px dashed ${theme.accent};border-radius:8px;background:${theme.surface}30;">
+        <div style="font-size:9px;text-transform:uppercase;letter-spacing:1px;color:${theme.secondary};font-weight:800;margin-bottom:12px;">Electronic Signature Verification</div>
+        ${signatureHtml}
+        <div style="font-size:13px;font-weight:800;color:${theme.primary};">${clientName}</div>
+        <div style="font-size:11px;color:${theme.textMuted};margin-top:2px;">Phone Authenticated: <strong>${clientPhone}</strong></div>
+        <div style="font-size:11px;color:${theme.textMuted};margin-top:2px;">Authentication Protocol: <strong>Dual-Factor Carrier SMS OTP</strong></div>
+        <div style="font-size:11px;color:${theme.textMuted};margin-top:2px;">IP Reference Log: <strong>${project.quoteVerificationStamp?.ipAddress || 'client-portal-secure'}</strong></div>
+      </div>
+      <div style="display:flex;flex-direction:column;justify-content:space-between;padding:16px;border:1px solid ${theme.accent}60;border-radius:8px;background:${theme.surface}30;">
+        <div>
+          <div style="font-size:9px;text-transform:uppercase;letter-spacing:1px;color:${theme.secondary};font-weight:800;margin-bottom:12px;">Contractor Sign-off</div>
+          <div style="height:60px;margin-top:8px;margin-bottom:8px;display:flex;align-items:center;justify-content:center;">
+            <div style="font-family:'Georgia',serif;font-size:24px;font-style:italic;color:${theme.secondary};letter-spacing:2px;font-weight:bold;text-decoration:none;">${brand?.adminSignatureName || brand?.name || 'Westline Future'}</div>
+          </div>
+        </div>
+        <div>
+          <div style="font-size:13px;font-weight:800;color:${theme.primary};">Authorized Representative</div>
+          <div style="font-size:11px;color:${theme.textMuted};margin-top:2px;">${brand?.name || 'Westline Future Ltd.'}</div>
+          <div style="font-size:10px;color:${theme.textMuted};margin-top:2px;">Date: ${signedDate}</div>
+        </div>
+      </div>
+    </div>
+
+    <div style="padding-top:20px;margin-top:32px;border-top:1.5px solid ${theme.accent};display:flex;justify-content:space-between;align-items:center;">
+      <div style="font-size:10px;color:${theme.textMuted};line-height:1.5;font-weight:500;">This document serves as the legally binding contract between the parties.<br/>Verified securely via Westline Future Premium SaaS CRM Suite.</div>
+      <div style="text-align:right;font-size:10px;color:${theme.textMuted};">Ref: WF-CONTRACT-${(project.id || '').slice(-8).toUpperCase()}</div>
+    </div>
+
+  </div>
+</div>
+<script>
+  window.onload = () => { setTimeout(() => { window.print(); }, 500); };
+</script>
+</body>
+</html>`;
+
+  const iframe = document.createElement('iframe');
+  iframe.style.position = 'fixed';
+  iframe.style.right = '0';
+  iframe.style.bottom = '0';
+  iframe.style.width = '0';
+  iframe.style.height = '0';
+  iframe.style.border = '0';
+  document.body.appendChild(iframe);
+  
+  iframe.contentWindow.document.open();
+  iframe.contentWindow.document.write(html);
+  iframe.contentWindow.document.close();
+  
+  iframe.onload = () => {
+    setTimeout(() => {
+      iframe.contentWindow.focus();
+      iframe.contentWindow.print();
+      setTimeout(() => document.body.removeChild(iframe), 1000);
+    }, 500);
+  };
+}
+
+// ─── Contract Variable Substitution ──────────────────────────────────────────
+function applyContractVariables(template, project, user, brand) {
+  const budget = Number(project?.budget || 0);
+  const budgetStr = budget ? `GH₵ ${budget.toLocaleString(undefined, { minimumFractionDigits: 2 })}` : 'As quoted';
+  const completionDate = project?.targetCompletionDate
+    ? (project.targetCompletionDate.seconds
+        ? new Date(project.targetCompletionDate.seconds * 1000).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
+        : new Date(project.targetCompletionDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }))
+    : 'Pending Scheduling';
+  return (template || '')
+    .replace(/\{\{clientName\}\}/g,     user?.name || project?.clientName || 'Valued Client')
+    .replace(/\{\{projectTitle\}\}/g,   project?.title || 'Your Project')
+    .replace(/\{\{budget\}\}/g,         budgetStr)
+    .replace(/\{\{company\}\}/g,        brand?.name || 'Westline Future')
+    .replace(/\{\{date\}\}/g,           new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }))
+    .replace(/\{\{completionDate\}\}/g, completionDate);
+}
+
+// ─── Typed Name → Signature Image ────────────────────────────────────────────
+function nameToSignatureDataUrl(name, ac) {
+  try {
+    const canvas = document.createElement('canvas');
+    canvas.width = 480; canvas.height = 110;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, 480, 110);
+    ctx.font = 'italic 52px Georgia, "Times New Roman", serif';
+    ctx.fillStyle = ac && !ac.startsWith('var') ? ac : '#1A1410';
+    ctx.fillText(name, 16, 78);
+    return canvas.toDataURL('image/png');
+  } catch (e) {
+    return null;
+  }
+}
+
+// ─── SpecApprovalCard ─────────────────────────────────────────────────────────
+function SpecApprovalCard({ project, user, brand, isMobile, invoices = [] }) {
+  const ac = brand?.color || AC;
+  const spec = project?.specDoc;
+  const [busy, setBusy] = useState(false);
+  const [showRejectBox, setShowRejectBox] = useState(false);
+  const [rejectNote, setRejectNote] = useState('');
+  const [done, setDone] = useState(false);
+  const [typedName, setTypedName] = useState(user?.name || '');
+  const [documentAccepted, setDocumentAccepted] = useState(false);
+  const [legalConsent, setLegalConsent] = useState(false);
+  const [error, setError] = useState('');
+
+  if (!spec?.url) return null;
+
+  const projectInvoices = invoices.filter(invoice =>
+    invoice.projectId === project.id || invoice.parentId === project.id
+  );
+  const paidInitialDeposit = projectInvoices.find(invoice =>
+    isInitialProjectDepositInvoice(invoice) && isPaidStatus(invoice.status)
+  );
+  const depositVerified = !!project.depositPaid || !!paidInitialDeposit;
+
+  const handleReject = async () => {
+    if (busy) return;
+    setBusy(true);
+    setError('');
+    try {
+      await updateDoc(doc(db, 'projects', project.id), {
+        'specDoc.status': 'rejected',
+        'specDoc.reviewedAt': new Date().toISOString(),
+        'specDoc.reviewNote': rejectNote.trim(),
+        'specDoc.reviewedBy': user?.name || user?.phone || 'Client',
+      });
+      await addDoc(collection(db, 'projects', project.id, 'activityLogs'), {
+        actor: 'client',
+        actorName: user?.name || user?.phone || 'Client',
+        actionType: 'spec_review',
+        actionDescription: `requested changes to the project specification. Note: ${rejectNote.trim()}`,
+        timestamp: serverTimestamp(),
+      });
+      setDone(true);
+      setShowRejectBox(false);
+    } catch (e) {
+      console.error('[SpecApproval]', e);
+      setError(e.message || 'Could not submit the change request.');
+    }
+    setBusy(false);
+  };
+
+  const handleSign = async () => {
+    if (busy || !depositVerified || !documentAccepted || !legalConsent || typedName.trim().length < 3) return;
+    setBusy(true);
+    setError('');
+    try {
+      const signSpecification = httpsCallable(functions, 'signProjectSpecification');
+      await signSpecification({
+        projectId: project.id,
+        typedName: typedName.trim(),
+        documentVersion: Number(spec.version || 1),
+        documentAccepted: true,
+        legalConsent: true,
+      });
+      setDone(true);
+    } catch (e) {
+      console.error('[SpecSignature]', e);
+      setError(e?.message || 'Could not sign the project specification.');
+    }
+    setBusy(false);
+  };
+
+  if (done || spec.status === 'signed') {
+    return (
+      <div style={{ padding: '20px 24px', borderRadius: 20, background: '#F0FDF4', border: '1.5px solid #BBF7D0', display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+        <CheckCircle2 size={24} color="#16A34A" style={{ flexShrink: 0 }} />
+        <div style={{ flex: 1, minWidth: 220 }}>
+          <div style={{ fontSize: 14, fontWeight: 800, color: '#15803D' }}>Project Specification Signed</div>
+          <div style={{ fontSize: 12, color: '#166534', marginTop: 2 }}>
+            Signed by {spec.signedBy || typedName || 'Client'} · Version {Number(spec.version || 1)}. This approval cannot be revoked from the portal and remains available for comparison with the completed work.
+          </div>
+        </div>
+        <a href={spec.url} target="_blank" rel="noreferrer" style={{ padding: '9px 15px', borderRadius: 10, background: '#15803D', color: '#fff', textDecoration: 'none', fontSize: 12, fontWeight: 800 }}>
+          View Signed Agreement
+        </a>
+      </div>
+    );
+  }
+
+  if (spec.status === 'rejected') {
+    return (
+      <div style={{ padding: '20px 24px', borderRadius: 20, background: '#FEF2F2', border: '1.5px solid #FECACA', display: 'flex', alignItems: 'center', gap: 14 }}>
+        <AlertCircle size={24} color="#DC2626" style={{ flexShrink: 0 }} />
+        <div>
+          <div style={{ fontSize: 14, fontWeight: 800, color: '#DC2626' }}>Specification Under Review</div>
+          <div style={{ fontSize: 12, color: '#7F1D1D', marginTop: 2 }}>You've raised concerns. Our team will review and update the document shortly.</div>
+          {spec.reviewNote && <div style={{ fontSize: 11, color: '#991B1B', marginTop: 6, fontStyle: 'italic' }}>Your note: "{spec.reviewNote}"</div>}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{
+      padding: isMobile ? '20px 18px' : '24px 28px', borderRadius: 20,
+      background: 'linear-gradient(135deg, #EFF6FF, #DBEAFE)',
+      border: '1.5px solid #BFDBFE',
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+        <PenLine size={18} color="#1D4ED8" />
+        <span style={{ fontSize: 12, fontWeight: 800, color: '#1D4ED8', textTransform: 'uppercase', letterSpacing: '.06em' }}>
+          Signature Required
+        </span>
+      </div>
+      <div style={{ fontSize: 18, fontWeight: 900, color: 'var(--accent-secondary)', marginBottom: 6 }}>
+        Review & Sign Project Specification
+      </div>
+      <div style={{ fontSize: 13, color: '#374151', lineHeight: 1.6, marginBottom: 20 }}>
+        This legally binding pre-production agreement includes the final drawings, bill of materials, quantities, specifications, scope, exclusions, deliverables, and production requirements. Review every section before signing.
+      </div>
+
+      <div style={{ padding: '13px 15px', borderRadius: 13, background: '#FEF2F2', border: '1.5px solid #FCA5A5', color: '#7F1D1D', marginBottom: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 900, marginBottom: 5 }}>
+          <AlertCircle size={17} /> Legally binding approval
+        </div>
+        <div style={{ fontSize: 12, lineHeight: 1.6 }}>
+          Signing document version {Number(spec.version || 1)} authorises Westline Future to procure materials and begin production. Do not sign until the drawings, materials, quantities, specifications, deliverables, and exclusions are correct.
+        </div>
+      </div>
+
+      {/* Document link */}
+      <a
+        href={spec.url}
+        target="_blank"
+        rel="noreferrer"
+        style={{
+          display: 'inline-flex', alignItems: 'center', gap: 8,
+          padding: '10px 18px', borderRadius: 12,
+          background: '#1D4ED8', color: '#fff', textDecoration: 'none',
+          fontSize: 13, fontWeight: 700, marginBottom: 20,
+        }}
+      >
+        <FileText size={15} /> Review Full Document · Version {Number(spec.version || 1)}
+      </a>
+
+      {!depositVerified && (
+        <div style={{ padding: '12px 14px', borderRadius: 12, background: '#FFF7ED', border: '1px solid #FED7AA', color: '#9A3412', fontSize: 12, lineHeight: 1.55, marginBottom: 16 }}>
+          <strong>Initial deposit required.</strong> The specification can be reviewed now, but signing unlocks only after the initial project instalment is verified.
+        </div>
+      )}
+
+      {!showRejectBox ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {spec.status === 'approved' && (
+            <div style={{ padding: '10px 12px', borderRadius: 10, background: '#FFFBEB', border: '1px solid #FDE68A', color: '#92400E', fontSize: 12 }}>
+              Your previous approval is recorded. A formal signature is still required before Production.
+            </div>
+          )}
+          <div>
+            <label style={{ fontSize: 11, fontWeight: 800, color: '#374151', display: 'block', marginBottom: 6 }}>
+              Full legal name
+            </label>
+            <input
+              value={typedName}
+              onChange={e => setTypedName(e.target.value)}
+              placeholder="Enter your full legal name"
+              disabled={!depositVerified || busy}
+              style={{ width: '100%', height: 44, borderRadius: 11, border: '1.5px solid #BFDBFE', padding: '0 13px', fontSize: 14, boxSizing: 'border-box', background: depositVerified ? '#fff' : '#F3F4F6' }}
+            />
+          </div>
+          <label style={{ display: 'flex', alignItems: 'flex-start', gap: 9, cursor: depositVerified ? 'pointer' : 'default' }}>
+            <input
+              type="checkbox"
+              checked={documentAccepted}
+              onChange={e => setDocumentAccepted(e.target.checked)}
+              disabled={!depositVerified || busy}
+              style={{ marginTop: 3 }}
+            />
+            <span style={{ fontSize: 12, color: '#374151', lineHeight: 1.55 }}>
+              I have opened and reviewed the complete document, including its final drawings, bill of materials, quantities, specifications, scope, exclusions, and deliverables.
+            </span>
+          </label>
+          <label style={{ display: 'flex', alignItems: 'flex-start', gap: 9, cursor: depositVerified ? 'pointer' : 'default' }}>
+            <input
+              type="checkbox"
+              checked={legalConsent}
+              onChange={e => setLegalConsent(e.target.checked)}
+              disabled={!depositVerified || busy}
+              style={{ marginTop: 3 }}
+            />
+            <span style={{ fontSize: 12, color: '#374151', lineHeight: 1.55 }}>
+              I understand that entering my legal name creates my electronic signature, is intended to be legally binding, and authorises procurement and production under version {Number(spec.version || 1)}.
+            </span>
+          </label>
+          {error && (
+            <div style={{ padding: '9px 12px', borderRadius: 10, background: '#FEF2F2', color: '#B91C1C', fontSize: 12 }}>
+              {error}
+            </div>
+          )}
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          <button
+              onClick={handleSign}
+              disabled={busy || !depositVerified || !documentAccepted || !legalConsent || typedName.trim().length < 3}
+              style={{ flex: 2, minWidth: 220, padding: '13px 20px', borderRadius: 12, border: 'none', background: '#16A34A', color: '#fff', fontSize: 14, fontWeight: 800, cursor: busy ? 'default' : 'pointer', opacity: busy || !depositVerified || !documentAccepted || !legalConsent || typedName.trim().length < 3 ? 0.55 : 1 }}
+          >
+              {busy ? 'Signing…' : 'Sign & Authorise Production'}
+          </button>
+          <button
+            onClick={() => setShowRejectBox(true)}
+            disabled={busy}
+            style={{ flex: 1, minWidth: 140, padding: '13px 20px', borderRadius: 12, border: '1.5px solid #FECACA', background: '#FEF2F2', color: '#DC2626', fontSize: 14, fontWeight: 800, cursor: 'pointer' }}
+          >
+            Request Changes
+          </button>
+          </div>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <textarea
+            value={rejectNote}
+            onChange={e => setRejectNote(e.target.value)}
+            placeholder="Describe what needs to change…"
+            rows={3}
+            style={{ width: '100%', padding: '12px 14px', borderRadius: 12, border: '1.5px solid #FECACA', fontSize: 13, resize: 'vertical', boxSizing: 'border-box' }}
+          />
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button onClick={() => { setShowRejectBox(false); setRejectNote(''); }} style={{ flex: 1, padding: '12px', borderRadius: 12, border: '1px solid var(--border-color)', background: 'transparent', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Cancel</button>
+            <button
+              onClick={handleReject}
+              disabled={busy || !rejectNote.trim()}
+              style={{ flex: 2, padding: '12px', borderRadius: 12, border: 'none', background: '#DC2626', color: '#fff', fontSize: 13, fontWeight: 800, cursor: busy || !rejectNote.trim() ? 'default' : 'pointer', opacity: busy || !rejectNote.trim() ? 0.6 : 1 }}
+            >
+              {busy ? 'Sending…' : 'Submit Change Request'}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── ContractAgreementModal ───────────────────────────────────────────────────
+function ContractAgreementModal({ project, user, brand, onClose, onSigned, isMobile }) {
+  const ac = brand?.color || AC;
+  const [step, setStep] = useState(1); // 1=read, 2=sign
+  const [scrolled, setScrolled] = useState(false);
+  const [accepted, setAccepted] = useState(false);
+  const [typedName, setTypedName] = useState('');
+  const [drawMode, setDrawMode] = useState(false);
+  const [drawnSig, setDrawnSig] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const scrollRef = useRef(null);
+
+  // Build contract body text
+  const rawTemplate = project?.contractTerms || brand?.finSettings?.contractTemplate || '';
+  const budget = Number(project?.budget || 0);
+
+  const contractBody = rawTemplate
+    ? applyContractVariables(rawTemplate, project, user, brand)
+    : null; // null = use default clauses
+
+  const defaultClauses = [
+    {
+      title: 'Scope of Work',
+      text: `Westline Future Ltd. ("Contractor") agrees to supply, source, and install premium interior decoration products and finishes for the project <strong>${project?.title || '[Project Name]'}</strong>, in accordance with the approved 3D interior design and specifications confirmed at the time of quotation. This includes all agreed items covering kitchen, bathroom, flooring, wardrobes, doors, ceilings, and any other elements detailed in the accepted quote.`,
+    },
+    {
+      title: 'Payment Terms',
+      text: `The total agreed contract value is <strong>${budget ? `GH₵ ${budget.toLocaleString(undefined, { minimumFractionDigits: 2 })}` : 'as per the accepted quotation'}</strong>. Works shall commence upon execution of this contract and clearance of the mobilisation deposit as stated in the payment plan. All milestone payments are due as per the agreed schedule. No installation works shall commence if any preceding milestone payment remains outstanding.`,
+    },
+    {
+      title: '3D Design Approval',
+      text: 'The Client confirms that the approved 3D interior design rendered by Westline Future forms the binding design specification for this contract. Any alterations requested after design approval are subject to a formal change order and may incur additional costs and revised timelines.',
+    },
+    {
+      title: 'Site Readiness & Access',
+      text: 'The Client is responsible for ensuring the property is structurally complete and ready for interior works by the agreed commencement date. The Client shall provide unrestricted, safe site access to the Contractor\'s installation team on all agreed working days. Any delays caused by the Client\'s failure to provide site access will extend the project timeline accordingly.',
+    },
+    {
+      title: 'Pre-Interior Works',
+      text: 'Where electrical rewiring, plumbing modifications, or other pre-fitout civil works are required, the Client acknowledges that such works must be completed and signed off before interior installation commences. Westline Future coordinates trusted local partners for these works where requested, at separately agreed costs.',
+    },
+    {
+      title: 'Material Sourcing & Delivery',
+      text: 'Westline Future sources materials globally, primarily from China and the wider international market. Lead times for shipped items are estimated and subject to logistics factors outside the Contractor\'s control. The Contractor will keep the Client informed of any material delays and adjust timelines accordingly.',
+    },
+    {
+      title: 'Warranty',
+      text: 'Westline Future provides a 12-month limited workmanship warranty on all installed items, commencing from the date of project handover. The warranty covers defects in installation quality. It does not cover damage arising from misuse, unauthorised modifications, natural wear, or events outside the Contractor\'s control.',
+    },
+    {
+      title: 'Change Requests',
+      text: 'Any changes to the approved scope of work, materials, or design specifications must be submitted in writing by the Client. All change requests are subject to a formal change order, written approval, and may revise the contract value and/or timeline.',
+    },
+    {
+      title: 'Confidentiality',
+      text: 'Both parties agree to keep all project details, pricing, design drawings, and proprietary information confidential. Westline Future reserves the right to use project photos and details for portfolio and marketing purposes unless the Client requests otherwise in writing.',
+    },
+    {
+      title: 'Governing Law',
+      text: 'This agreement is governed exclusively by the laws of the Republic of Ghana. Any disputes arising from this contract shall first be resolved through good-faith negotiation. If unresolved within 30 days, disputes shall be referred to mediation before any legal proceedings are commenced.',
+    },
+  ];
+
+  const handleScroll = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    if (el.scrollTop + el.clientHeight >= el.scrollHeight - 40) setScrolled(true);
+  };
+
+  const handleSign = async () => {
+    if (busy) return;
+    const name = typedName.trim();
+    if (!name && !drawnSig) { setError('Please type your full name or draw your signature.'); return; }
+    if (!accepted) { setError('Please tick the acceptance checkbox.'); return; }
+    setBusy(true);
+    setError(null);
+    try {
+      const ip = await fetch('https://api.ipify.org?format=json')
+        .then(r => r.json()).then(d => d.ip).catch(() => 'unavailable');
+      const now = new Date().toISOString();
+      const sigDataUrl = drawnSig || nameToSignatureDataUrl(name, ac);
+
+      // Only write fields allowed by Firestore client rules.
+      // stageId/timeline must NOT be included here — server rejects them and reverts
+      // the whole write, causing the gate to loop. Stage advance is handled by admin/CF.
+      await updateDoc(doc(db, 'projects', project.id), {
+        contractAccepted:       true,
+        contractSignedName:     name || 'Drawn Signature',
+        quoteSignature:         sigDataUrl,
+        quoteSignedAt:          serverTimestamp(),
+        quoteSignedByPhone:     user?.phone || '',
+        quoteVerificationStamp: { ipAddress: ip, userAgent: navigator.userAgent, timestamp: now },
+        kickoffGateCleared:     true,
+      });
+
+      // Notify admin that contract has been signed
+      try {
+        await addDoc(collection(db, 'notifications'), {
+          userId: 'admin',
+          message: `✍️ ${name || user?.name || 'Client'} has signed the contract for "${project.title || 'a project'}". The portal is now fully unlocked.`,
+          type: 'contract_signed',
+          link: '/admin',
+          read: false,
+          createdAt: serverTimestamp(),
+        });
+        // Also post to client chat thread so there's an audit trail
+        await addDoc(collection(db, 'clients', project.clientId, 'messages'), {
+          text: `✍️ Contract signed by ${name || 'Client'} — portal access granted. The project is now active.`,
+          senderRole: 'system',
+          isInternal: false,
+          readByAdmin: false,
+          readByClient: true,
+          createdAt: serverTimestamp(),
+        });
+      } catch (_) { /* non-fatal — signing itself succeeded */ }
+
+      onSigned?.();
+    } catch (e) {
+      setError('Failed to save signature. Please try again.');
+      if (import.meta.env.DEV) console.error('[ContractSign]', e);
+    }
+    setBusy(false);
+  };
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 9900, background: 'rgba(0,0,0,.65)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
+      <div style={{ background: '#fff', borderRadius: isMobile ? '24px 24px 0 0' : 24, width: '100%', maxWidth: isMobile ? '100%' : 680, maxHeight: '96dvh', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 -8px 64px rgba(0,0,0,.25)' }}>
+
+        {/* Header */}
+        <div style={{ padding: '20px 24px 16px', borderBottom: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 900, color: 'var(--accent-secondary)', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <FileCheck size={16} color={ac} /> Contract Agreement
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 2 }}>{project?.title}</div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+            {/* Step indicator */}
+            <div style={{ display: 'flex', gap: 6 }}>
+              {[1, 2].map(s => (
+                <div key={s} style={{ width: s === step ? 24 : 8, height: 8, borderRadius: 4, background: s === step ? ac : s < step ? '#16A34A' : 'var(--border-color)', transition: 'all .3s' }} />
+              ))}
+            </div>
+            <button onClick={onClose} style={{ width: 32, height: 32, borderRadius: 8, border: '1px solid var(--border-color)', background: 'var(--bg-secondary)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><X size={14} /></button>
+          </div>
+        </div>
+
+        {/* Step 1 — Read */}
+        {step === 1 && (
+          <>
+            <div ref={scrollRef} onScroll={handleScroll} style={{ flex: 1, overflowY: 'auto', padding: '24px 24px 8px' }}>
+              <div style={{ marginBottom: 20 }}>
+                <div style={{ fontSize: 18, fontWeight: 900, color: 'var(--accent-secondary)', marginBottom: 4 }}>Review Your Contract</div>
+                <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+                  Please read this agreement carefully. You must scroll to the bottom before you can accept and sign.
+                </div>
+              </div>
+
+              {/* Project summary block */}
+              <div style={{ padding: '14px 16px', borderRadius: 14, background: `${ac}10`, border: `1.5px solid ${ac}30`, marginBottom: 20 }}>
+                <div style={{ fontSize: 10, fontWeight: 900, color: ac, textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 6 }}>Project Details</div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                  <div><div style={{ fontSize: 10, color: 'var(--text-secondary)' }}>Project</div><div style={{ fontSize: 13, fontWeight: 700 }}>{project?.title || '—'}</div></div>
+                  <div><div style={{ fontSize: 10, color: 'var(--text-secondary)' }}>Contract Value</div><div style={{ fontSize: 13, fontWeight: 700 }}>{budget ? `GH₵ ${budget.toLocaleString()}` : 'As quoted'}</div></div>
+                  <div><div style={{ fontSize: 10, color: 'var(--text-secondary)' }}>Client</div><div style={{ fontSize: 13, fontWeight: 700 }}>{user?.name || '—'}</div></div>
+                  <div><div style={{ fontSize: 10, color: 'var(--text-secondary)' }}>Contractor</div><div style={{ fontSize: 13, fontWeight: 700 }}>{brand?.name || 'Westline Future'}</div></div>
+                </div>
+              </div>
+
+              {/* Contract body */}
+              {contractBody ? (
+                <div style={{ fontSize: 13, color: 'var(--text-primary)', lineHeight: 1.8, whiteSpace: 'pre-line' }}>{contractBody}</div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                  {defaultClauses.map((c, i) => (
+                    <div key={i}>
+                      <div style={{ fontSize: 12, fontWeight: 800, color: 'var(--accent-secondary)', marginBottom: 4 }}>{i + 1}. {c.title}</div>
+                      <div style={{ fontSize: 13, color: 'var(--text-primary)', lineHeight: 1.7 }} dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(c.text || '') }} />
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Spacer so user must scroll */}
+              <div style={{ height: 60 }} />
+            </div>
+
+            {/* Scroll hint */}
+            {!scrolled && (
+              <div style={{ padding: '8px 24px', background: '#FFF7ED', borderTop: '1px solid #FED7AA', display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                <ChevronDown size={14} color="#D97706" />
+                <span style={{ fontSize: 11, color: '#92400E', fontWeight: 700 }}>Scroll to the bottom to continue</span>
+              </div>
+            )}
+
+            <div style={{ padding: '16px 24px', borderTop: '1px solid var(--border-color)', flexShrink: 0 }}>
+              <button
+                onClick={() => { if (scrolled) setStep(2); }}
+                disabled={!scrolled}
+                style={{ width: '100%', height: 50, borderRadius: 14, border: 'none', background: scrolled ? ac : 'var(--border-color)', color: '#fff', fontSize: 14, fontWeight: 800, cursor: scrolled ? 'pointer' : 'not-allowed', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, transition: 'background .2s' }}
+              >
+                <PenLine size={16} /> I've Read the Contract — Proceed to Sign
+              </button>
+            </div>
+          </>
+        )}
+
+        {/* Step 2 — Sign */}
+        {step === 2 && (
+          <>
+            <div style={{ flex: 1, overflowY: 'auto', padding: '24px' }}>
+              <div style={{ marginBottom: 20 }}>
+                <div style={{ fontSize: 18, fontWeight: 900, color: 'var(--accent-secondary)', marginBottom: 4 }}>Sign the Agreement</div>
+                <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+                  By signing below you confirm you have read and agree to all terms in this contract.
+                </div>
+              </div>
+
+              {/* Acceptance checkbox */}
+              <label style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '14px 16px', borderRadius: 14, background: accepted ? '#F0FDF4' : 'var(--bg-secondary)', border: `1.5px solid ${accepted ? '#BBF7D0' : 'var(--border-color)'}`, cursor: 'pointer', marginBottom: 20, transition: 'all .2s' }}>
+                <input type="checkbox" checked={accepted} onChange={e => setAccepted(e.target.checked)} style={{ width: 18, height: 18, marginTop: 1, cursor: 'pointer', accentColor: ac, flexShrink: 0 }} />
+                <span style={{ fontSize: 13, lineHeight: 1.6, color: accepted ? '#15803D' : 'var(--text-primary)', fontWeight: accepted ? 700 : 400 }}>
+                  I, <strong>{user?.name || 'the undersigned'}</strong>, confirm that I have read, understood, and agree to all terms and conditions of this contract with <strong>{brand?.name || 'Westline Future'}</strong> for the project <strong>{project?.title}</strong>.
+                </span>
+              </label>
+
+              {/* Signature mode toggle */}
+              <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+                <button onClick={() => setDrawMode(false)} style={{ flex: 1, height: 36, borderRadius: 10, border: `1.5px solid ${!drawMode ? ac : 'var(--border-color)'}`, background: !drawMode ? `${ac}12` : 'transparent', color: !drawMode ? ac : 'var(--text-secondary)', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+                  Type Name
+                </button>
+                <button onClick={() => setDrawMode(true)} style={{ flex: 1, height: 36, borderRadius: 10, border: `1.5px solid ${drawMode ? ac : 'var(--border-color)'}`, background: drawMode ? `${ac}12` : 'transparent', color: drawMode ? ac : 'var(--text-secondary)', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+                  Draw Signature
+                </button>
+              </div>
+
+              {!drawMode ? (
+                <div>
+                  <label style={{ fontSize: 11, fontWeight: 800, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '.08em', display: 'block', marginBottom: 8 }}>Type your full legal name</label>
+                  <input
+                    type="text"
+                    value={typedName}
+                    onChange={e => setTypedName(e.target.value)}
+                    placeholder="e.g. John Kwame Mensah"
+                    autoComplete="name"
+                    style={{ width: '100%', height: 48, borderRadius: 12, border: '1.5px solid var(--border-color)', padding: '0 16px', fontSize: 15, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' }}
+                  />
+                  {typedName.trim() && (
+                    <div style={{ marginTop: 12, padding: '14px 20px', borderRadius: 12, background: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}>
+                      <div style={{ fontSize: 10, color: 'var(--text-secondary)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '.08em' }}>Signature Preview</div>
+                      <div style={{ fontFamily: 'Georgia, "Times New Roman", serif', fontStyle: 'italic', fontSize: 34, color: ac && !ac.startsWith('var') ? ac : 'var(--accent-secondary)', letterSpacing: 1 }}>{typedName}</div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div>
+                  <label style={{ fontSize: 11, fontWeight: 800, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '.08em', display: 'block', marginBottom: 8 }}>Draw your signature</label>
+                  <SignaturePadInline onSave={setDrawnSig} onClear={() => setDrawnSig(null)} ac={ac} />
+                </div>
+              )}
+
+              {error && (
+                <div style={{ marginTop: 12, padding: '10px 14px', borderRadius: 10, background: '#FEF2F2', border: '1px solid #FECACA', color: '#DC2626', fontSize: 12, fontWeight: 700 }}>
+                  {error}
+                </div>
+              )}
+
+              <div style={{ marginTop: 16, padding: '10px 14px', borderRadius: 10, background: '#F0F9FF', fontSize: 11, color: '#0369A1', lineHeight: 1.6 }}>
+                <ShieldCheck size={12} style={{ display: 'inline', marginRight: 5, verticalAlign: 'middle' }} />
+                Your IP address, device info and timestamp are logged for legal verification purposes.
+              </div>
+            </div>
+
+            <div style={{ padding: '16px 24px', borderTop: '1px solid var(--border-color)', flexShrink: 0, display: 'flex', gap: 10 }}>
+              <button onClick={() => setStep(1)} style={{ height: 50, padding: '0 20px', borderRadius: 14, border: '1.5px solid var(--border-color)', background: 'transparent', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Back</button>
+              <button
+                onClick={handleSign}
+                disabled={busy || !accepted || (!typedName.trim() && !drawnSig)}
+                style={{ flex: 1, height: 50, borderRadius: 14, border: 'none', background: (busy || !accepted || (!typedName.trim() && !drawnSig)) ? 'var(--border-color)' : '#16A34A', color: '#fff', fontSize: 14, fontWeight: 800, cursor: (busy || !accepted || (!typedName.trim() && !drawnSig)) ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, transition: 'background .2s' }}
+              >
+                {busy ? <><Loader2 size={15} style={{ animation: 'spin 1s linear infinite' }} /> Signing…</> : <><CheckCircle2 size={16} /> Sign & Accept Contract</>}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Inline Signature Pad (canvas) ───────────────────────────────────────────
+function SignaturePadInline({ onSave, onClear, ac }) {
+  const canvasRef = useRef(null);
+  const [isDrawing, setIsDrawing] = useState(false);
+  const [hasDrawn, setHasDrawn] = useState(false);
+  const ctxRef = useRef(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const ratio = window.devicePixelRatio || 1;
+    canvas.width = canvas.offsetWidth * ratio;
+    canvas.height = canvas.offsetHeight * ratio;
+    const ctx = canvas.getContext('2d');
+    ctx.scale(ratio, ratio);
+    ctx.strokeStyle = ac && !ac.startsWith('var') ? ac : '#1A1410';
+    ctx.lineWidth = 2.5;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctxRef.current = ctx;
+  }, [ac]);
+
+  const getPos = e => {
+    const rect = canvasRef.current.getBoundingClientRect();
+    const src = e.touches ? e.touches[0] : e;
+    return { x: src.clientX - rect.left, y: src.clientY - rect.top };
+  };
+
+  const start = e => { const { x, y } = getPos(e); ctxRef.current.beginPath(); ctxRef.current.moveTo(x, y); setIsDrawing(true); e.preventDefault(); };
+  const move  = e => { if (!isDrawing) return; const { x, y } = getPos(e); ctxRef.current.lineTo(x, y); ctxRef.current.stroke(); setHasDrawn(true); e.preventDefault(); };
+  const stop  = () => { setIsDrawing(false); if (hasDrawn) { onSave?.(canvasRef.current.toDataURL('image/png')); } };
+
+  const clear = () => {
+    const canvas = canvasRef.current;
+    ctxRef.current.clearRect(0, 0, canvas.offsetWidth, canvas.offsetHeight);
+    setHasDrawn(false);
+    onClear?.();
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div style={{ border: '1.5px dashed var(--border-color)', borderRadius: 14, background: '#fff', height: 160, position: 'relative', overflow: 'hidden', touchAction: 'none' }}>
+        <canvas ref={canvasRef} style={{ width: '100%', height: '100%' }}
+          onMouseDown={start} onMouseMove={move} onMouseUp={stop} onMouseLeave={stop}
+          onTouchStart={start} onTouchMove={move} onTouchEnd={stop}
+        />
+        {!hasDrawn && <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}><span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Sign here with your finger or mouse</span></div>}
+      </div>
+      <button onClick={clear} style={{ alignSelf: 'flex-start', height: 30, padding: '0 12px', borderRadius: 8, border: '1px solid var(--border-color)', background: 'transparent', fontSize: 11, cursor: 'pointer', color: 'var(--text-secondary)' }}>Clear</button>
+    </div>
+  );
+}
+
 // ─── FileType Icon Helper ─────────────────────────────────────────────────────
 function FileTypeIcon({ fileType }) {
   const ft = (fileType || '').toLowerCase();
   if (ft.includes('image') || ft.includes('jpg') || ft.includes('jpeg') || ft.includes('png') || ft.includes('webp')) {
-    return <Image size={18} color="#0F766E" />;
+    return <Image size={18} color="var(--accent-secondary)" />;
   }
   if (ft.includes('pdf')) return <FileText size={18} color="#DC2626" />;
   if (ft.includes('zip') || ft.includes('rar')) return <Archive size={18} color="#B45309" />;
@@ -409,8 +1304,8 @@ function PaymentButton({ label, amountGHS, email, projectId, invoiceId, paymentT
         style={{
           display: 'inline-flex', alignItems: 'center', gap: 10,
           padding: '14px 28px', borderRadius: 14, border: 'none',
-          background: disabled ? '#E5E7EB' : 'linear-gradient(135deg, #16A34A, #15803D)',
-          color: disabled ? '#6B7280' : '#fff',
+          background: disabled ? `var(--border-color)` : 'linear-gradient(135deg, #16A34A, #15803D)',
+          color: disabled ? `var(--text-secondary)` : '#fff',
           fontSize: 15, fontWeight: 800, cursor: disabled ? 'default' : 'pointer',
           boxShadow: disabled ? 'none' : '0 4px 16px rgba(22,163,74,.35)',
           transition: 'all .2s',
@@ -432,149 +1327,166 @@ function PaymentButton({ label, amountGHS, email, projectId, invoiceId, paymentT
 }
 
 // ─── Stage Action Card ────────────────────────────────────────────────────────
-function StageActionCard({ project, user, approveQuote, payInvoice, updateProjectStage, approveRenderingPackage }) {
+function StageActionCard({ project, user, approveQuote, approveSignoff, payInvoice, updateProjectStage }) {
   const applicableStages = CLIENT_PROJECT_STAGES.filter(s => {
     const typeStages = PROJECT_TYPES[project.projectType]?.stages || CLIENT_PROJECT_STAGES.map(x => x.id);
     return typeStages.includes(s.id);
   });
   const currentStage = applicableStages.find(s => s.id === project.stageId);
   const [acting, setActing] = useState(false);
-  const [done, setDone] = useState(false);
 
-  if (!currentStage || !['client', 'both'].includes(currentStage.whoActs)) return null;
+  // Live invoice query so we show real amounts, not hardcoded 50%
+  const [dueInvoice, setDueInvoice] = useState(null);
+  useEffect(() => {
+    if (!db || !project?.id || !currentStage?.requiresPayment) return;
+    const q = query(
+      collection(db, 'invoices'),
+      where('projectId', '==', project.id),
+    );
+    const q2 = query(
+      collection(db, 'invoices'),
+      where('parentId', '==', project.id),
+    );
+    let fromProject = [], fromParent = [];
+    const merge = () => {
+      const all = [...fromProject, ...fromParent];
+      const unpaid = all.filter(i => !['paid', 'paid in full'].includes(String(i.status || '').toLowerCase().trim()));
+      setDueInvoice(unpaid[0] || null);
+    };
+    const u1 = onSnapshot(q, s => { fromProject = s.docs.map(d => ({ id: d.id, ...d.data() })); merge(); }, () => merge());
+    const u2 = onSnapshot(q2, s => { fromParent = s.docs.map(d => ({ id: d.id, ...d.data() })); merge(); }, () => merge());
+    return () => { u1(); u2(); };
+  }, [project?.id, currentStage?.requiresPayment]);
+
+  if (!currentStage || (currentStage.whoActs !== 'client' && currentStage.whoActs !== 'both')) return null;
 
   const email = user?.proxyEmail || (user?.phone ? user.phone + '@clients.westlinefuture.com' : 'client@clients.westlinefuture.com');
-  const budget = Number(String(project.projectTotal || project.budget || 0).replace(/[^0-9.]/g, '')) || 0;
-  const halfBudget = budget * 0.5;
+  const budget = parseFloat(String(project.budget || '0').replace(/[^0-9.]/g, '')) || 0;
+  const parseAmt = v => parseFloat(String(v || '0').replace(/[^0-9.]/g, '')) || 0;
+  // Use actual invoice amount if available, otherwise derive from stage milestone percentage
+  const stagePct = currentStage?.pct ? (currentStage.pct / 100) : 0.4; // default 40% if unknown
+  const dueAmount = dueInvoice ? parseAmt(dueInvoice.amount || dueInvoice.total) : budget * stagePct;
 
-  if (currentStage.id === 2) {
-    if (project.depositPaid) {
-      return (
-        <div style={{ padding: '24px 28px', borderRadius: 20, background: 'linear-gradient(135deg, #F0FDF4, #DCFCE7)', border: '1.5px solid #16A34A40', marginBottom: 4 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-            <CheckCircle2 size={24} color="#16A34A" />
-            <div>
-              <div style={{ fontSize: 13, fontWeight: 800, color: '#16A34A', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 4 }}>Quote Approved & Deposit Verified</div>
-              <div style={{ fontSize: 14, color: '#4B7A62', lineHeight: 1.5 }}>
-                Your project deposit has been verified. Procurement and production can proceed.
-              </div>
-            </div>
-          </div>
-        </div>
-      );
-    }
-    return (
-      <div style={{ padding: '24px 28px', borderRadius: 20, background: 'linear-gradient(135deg, #ECFDF5, #D1FAE5)', border: '1.5px solid #0F766E30', marginBottom: 4 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-          <AlertCircle size={18} color="#0F766E" />
-          <span style={{ fontSize: 12, fontWeight: 800, color: '#0F766E', textTransform: 'uppercase', letterSpacing: '.06em' }}>Quote Approval & Deposit</span>
-        </div>
-        <div style={{ fontSize: 20, fontWeight: 900, color: '#111827', marginBottom: 6 }}>Your final project quote is ready</div>
-        <div style={{ fontSize: 14, color: '#374151', lineHeight: 1.6, marginBottom: 20 }}>
-          Review the final quote with your account manager, then pay the project deposit so procurement can begin.
-        </div>
-        <PaymentButton
-          label={`Pay Deposit - GHS ${Number(halfBudget).toLocaleString(undefined, { minimumFractionDigits: 2 })}`}
-          amountGHS={halfBudget}
-          email={email}
-          projectId={project.id}
-          invoiceId={project.depositInvoiceId}
-          paymentType="deposit"
-          onSuccess={async (ref) => {
-            await approveQuote?.(project.id);
-            await payInvoice(project.depositInvoiceId || ref?.reference || ref?.trans || 'deposit', project.id, 'Paystack');
-            await updateProjectStage(project.id, 3, 'Quote approved and deposit paid by client via Paystack');
-          }}
-        />
-      </div>
-    );
-  }
+  if (currentStage.needsClientApproval) {
+    if (currentStage.id === 3 && project.quoteApproved) return null;
+    if (currentStage.id === 7 && project.signOffApproved) return null;
+    const contractRequired = currentStage.id === 3 && !project.contractAccepted;
 
-  if (currentStage.id === 6) {
-    if (done) {
-      return (
-        <div style={{
-          padding: '20px 24px', borderRadius: 20,
-          background: 'linear-gradient(135deg, #F5F3FF, #EDE9FE)',
-          border: '1.5px solid #0F766E40', display: 'flex', alignItems: 'center', gap: 16, marginBottom: 4,
-        }}>
-          <CheckCircle2 size={24} color="#0F766E" />
-        <div style={{ fontSize: 14, fontWeight: 700, color: '#4C1D95' }}>Inspection sign-off submitted. Our team will prepare handover.</div>
-        </div>
-      );
-    }
     return (
       <div style={{
         padding: '24px 28px', borderRadius: 20,
-        background: 'linear-gradient(135deg, #F5F3FF, #EDE9FE)',
-        border: '1.5px solid #0F766E30', marginBottom: 4,
+        background: 'linear-gradient(135deg, #FDFAF6, #F4EFE6)',
+        border: '1.5px solid rgba(200,169,110,0.35)', marginBottom: 4,
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-          <AlertCircle size={18} color="#0F766E" />
-            <span style={{ fontSize: 12, fontWeight: 800, color: '#0F766E', textTransform: 'uppercase', letterSpacing: '.06em' }}>Inspection Sign-Off</span>
+          <AlertCircle size={18} color="var(--accent-primary)" />
+          <span style={{ fontSize: 12, fontWeight: 800, color: `var(--accent-primary)`, textTransform: 'uppercase', letterSpacing: '.06em' }}>Action Required</span>
         </div>
-        <div style={{ fontSize: 20, fontWeight: 900, color: '#111827', marginBottom: 6 }}>Please review and sign off the inspection</div>
-        <div style={{ fontSize: 14, color: '#374151', lineHeight: 1.6, marginBottom: 20 }}>
-          Our team has completed quality checks and any open snag items. Review the latest documents and photos, then confirm your sign-off below.
+        <div style={{ fontSize: 20, fontWeight: 900, color: `var(--accent-secondary)`, marginBottom: 6 }}>Approval Required</div>
+        <div style={{ fontSize: 14, color: `var(--text-secondary)`, lineHeight: 1.6, marginBottom: contractRequired ? 16 : 20 }}>
+          {currentStage.id === 3 ? "We've prepared your final quotation. Please review the document, then approve it below." : "Please review the work and confirm your approval."}
         </div>
+        {contractRequired && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', borderRadius: 12, background: '#FEF3C7', border: '1px solid #FDE68A', marginBottom: 20 }}>
+            <AlertCircle size={15} color="#D97706" style={{ flexShrink: 0 }} />
+            <span style={{ fontSize: 13, fontWeight: 700, color: '#92400E' }}>
+              You must sign the project contract before approving the quote. Please complete that step first.
+            </span>
+          </div>
+        )}
         <button
           onClick={async () => {
-            if (acting) return;
+            if (acting || contractRequired) return;
             setActing(true);
-            await updateProjectStage(project.id, 7, 'Inspection signed off by client');
-            setActing(false);
-            setDone(true);
+            try {
+              if (currentStage.id === 3) {
+                await approveQuote(project.id);
+              } else if (currentStage.id === 7) {
+                if (approveSignoff) await approveSignoff(project.id);
+                else await updateProjectStage(project.id, 8);
+              }
+            } finally {
+              setActing(false);
+            }
           }}
-          disabled={acting}
+          disabled={acting || contractRequired}
           style={{
             display: 'inline-flex', alignItems: 'center', gap: 10,
             padding: '14px 32px', borderRadius: 14, border: 'none',
-            background: acting ? '#E5E7EB' : '#0F766E',
-            color: acting ? '#6B7280' : '#fff',
-            fontSize: 15, fontWeight: 800, cursor: acting ? 'default' : 'pointer',
-            boxShadow: acting ? 'none' : '0 4px 16px rgba(124,58,237,.35)',
+            background: (acting || contractRequired) ? `var(--border-color)` : `var(--accent-secondary)`,
+            color: (acting || contractRequired) ? `var(--text-secondary)` : '#fff',
+            fontSize: 15, fontWeight: 800, cursor: (acting || contractRequired) ? 'default' : 'pointer',
+            boxShadow: (acting || contractRequired) ? 'none' : '0 4px 16px rgba(26,20,16,.25)',
             transition: 'all .2s',
           }}
         >
           {acting
-            ? <><Loader2 size={18} style={{ animation: 'spin 1s linear infinite' }} /> Submitting...</>
-            : <>Confirm Inspection Sign-Off <ArrowRight size={18} /></>
+            ? <><Loader2 size={18} style={{ animation: 'spin 1s linear infinite' }} /> Approving...</>
+            : <>Confirm Approval <ArrowRight size={18} /></>
           }
         </button>
       </div>
     );
   }
 
-  if (currentStage.id === 7) {
+  if (currentStage.requiresPayment) {
+    const isDeposit = currentStage.id === 3;
+    const invoiceTitle = dueInvoice?.title || (isDeposit ? 'Project Deposit' : 'Balance Payment');
+    const fmt = n => `GH₵ ${Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
+
+    // justPaid: local flag set immediately on onSuccess so the pay button never re-flashes
+    // while Firestore propagates the invoice status update (can take 1-3s)
+    const [justPaid, setJustPaid] = useState(false);
+
+    if (justPaid || (dueInvoice && ['paid', 'paid in full'].includes(String(dueInvoice.status || '').toLowerCase().trim()))) {
+      return (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '18px 24px', borderRadius: 20, background: '#F0FDF4', border: '1.5px solid #BBF7D0', marginBottom: 4 }}>
+          <CheckCircle2 size={20} color="#16A34A" />
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 800, color: '#15803D' }}>Payment received — verifying</div>
+            <div style={{ fontSize: 12, color: '#166534' }}>Your payment has been received and is being confirmed. This page will update automatically.</div>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div style={{
         padding: '24px 28px', borderRadius: 20,
-        background: 'linear-gradient(135deg, #F0F9FF, #E0F2FE)',
-        border: '1.5px solid #0EA5E930', marginBottom: 4,
+        background: 'linear-gradient(135deg, #F0FDF4, #DCFCE7)',
+        border: '1.5px solid #16A34A30', marginBottom: 4,
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-          <AlertCircle size={18} color="#0EA5E9" />
-          <span style={{ fontSize: 12, fontWeight: 800, color: '#0EA5E9', textTransform: 'uppercase', letterSpacing: '.06em' }}>Final Payment</span>
+          <CreditCard size={18} color="#16A34A" />
+          <span style={{ fontSize: 12, fontWeight: 800, color: '#16A34A', textTransform: 'uppercase', letterSpacing: '.06em' }}>Payment Required</span>
         </div>
-        <div style={{ fontSize: 20, fontWeight: 900, color: '#111827', marginBottom: 4 }}>Your final balance payment is due</div>
-        {budget > 0 && (
-          <div style={{ fontSize: 15, fontWeight: 700, color: '#0EA5E9', marginBottom: 6 }}>
-            Amount: GHS {Number(halfBudget).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+        <div style={{ fontSize: 20, fontWeight: 900, color: `var(--accent-secondary)`, marginBottom: 4 }}>
+          {invoiceTitle}
+        </div>
+        {dueAmount > 0 && (
+          <div style={{ fontSize: 22, fontWeight: 900, color: '#15803D', marginBottom: 6 }}>
+            {fmt(dueAmount)}
           </div>
         )}
-        <div style={{ fontSize: 14, color: '#374151', lineHeight: 1.6, marginBottom: 20 }}>
-          Your project is nearly complete. Please settle the remaining 50% balance to proceed to handover.
+        {dueInvoice?.due && (
+          <div style={{ fontSize: 12, fontWeight: 700, color: '#B45309', marginBottom: 8 }}>
+            ⏰ Due by {new Date(dueInvoice.due + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}
+          </div>
+        )}
+        <div style={{ fontSize: 13, color: '#374151', lineHeight: 1.6, marginBottom: 20 }}>
+          {isDeposit
+            ? 'This payment is required to initiate production and material procurement.'
+            : 'Please settle this balance to continue to the next project stage.'}
         </div>
-        <PaymentButton
-          label={`Pay Final Balance — GHS ${Number(halfBudget).toLocaleString(undefined, { minimumFractionDigits: 2 })}`}
-          amountGHS={halfBudget}
+        <UnifiedPaymentGateway
+          label={`Pay ${fmt(dueAmount)}`}
+          amountGHS={dueAmount}
           email={email}
           projectId={project.id}
-          paymentType="final_balance"
-          onSuccess={async (ref) => {
-            await payInvoice(ref?.reference || ref?.trans || 'final', project.id);
-            await updateProjectStage(project.id, 7, 'Final payment received via Paystack');
-          }}
+          invoiceId={dueInvoice?.id}
+          paymentType={isDeposit ? 'deposit' : 'milestone'}
+          onSuccess={() => { setJustPaid(true); setTimeout(() => window.location.reload(), 3000); }}
+          onError={(err) => alert("Verification Error: " + err)}
         />
       </div>
     );
@@ -599,6 +1511,503 @@ function StageActionCard({ project, user, approveQuote, payInvoice, updateProjec
   );
 }
 
+// ─── Client Up Next / Approval Surfaces ──────────────────────────────────
+function ClientNextActionCard({ project, invoices = [], renderingPackages = [], addOns = [], setActiveTab, isMobile }) {
+  if (!project) return null;
+  const parseAmount = value => parseFloat(String(value || '0').replace(/[^0-9.]/g, '')) || 0;
+  const projectInvoices = invoices.filter(i => i.projectId === project.id || i.parentId === project.id);
+  const projectPackages = renderingPackages.filter(pkg => pkg.projectId === project.id);
+  const projectAddOns = addOns.filter(a => a.projectId === project.id);
+  const lockedRendering = projectPackages.find(pkg => {
+    const linkedInv = projectInvoices.find(i => i.id === pkg.linkedInvoiceId || i.renderingPackageId === pkg.id);
+    return linkedInv && !isPaidStatus(linkedInv.status) && !pkg.unlocked;
+  });
+  const reviewRendering = projectPackages.find(pkg => {
+    const linkedInv = projectInvoices.find(i => i.id === pkg.linkedInvoiceId || i.renderingPackageId === pkg.id);
+    const unlocked = pkg.unlocked || pkg.status === 'Paid / Unlocked' || isPaidStatus(linkedInv?.status);
+    return unlocked && pkg.status !== 'Approved';
+  });
+  const pendingAddOn = projectAddOns.find(a =>
+    ['Pending', 'Pending Approval', 'Priced'].includes(a.status || a.approvalStatus)
+  );
+  const unpaidAddOn = projectAddOns.find(a => {
+    const linkedInvoice = projectInvoices.find(i => i.id === a.linkedInvoiceId);
+    return linkedInvoice && !isPaidStatus(linkedInvoice.status);
+  });
+  // Only surface invoices that have been explicitly activated by admin (have a due date, are Sent, or Overdue).
+  // Auto-generated milestone invoices with due: null are future obligations — don't prompt yet.
+  const unpaidInvoice = projectInvoices.find(i =>
+    !isPaidStatus(i.status) &&
+    i.type !== 'Quotation' && i.documentKind !== 'quotation' &&
+    (i.status === 'Overdue' || i.status === 'Sent' || (i.due != null && i.due !== ''))
+  );
+  const pendingQuote = projectInvoices.find(i => ['Quotation', 'quote', 'quotation'].includes(i.type || i.documentKind) && !['approved'].includes(String(i.status || '').toLowerCase()) && !isPaidStatus(i.status));
+
+  const noRendering = project.kickoffMode === 'direct-kickoff';
+
+  const specPending = project.specDoc?.url && project.specDoc?.status !== 'signed' && project.specDoc?.status !== 'rejected';
+
+  let action;
+  if (specPending) {
+    action = { tone: '#1D4ED8', bg: '#EFF6FF', icon: <FileCheck size={18} />, title: 'Project brief needs your review', body: 'Your account manager has uploaded the project specification and deliverables. Please review and approve before production begins.', button: 'Review Spec', tab: 'overview' };
+  } else if (!noRendering && lockedRendering) {
+    action = { tone: '#D97706', bg: '#FFF7ED', icon: <Lock size={18} />, title: 'Design fee payment needed', body: 'Pay the design fee to unlock your 3D renders.', button: 'View Designs', tab: 'designs' };
+  } else if (!noRendering && reviewRendering) {
+    action = { tone: 'var(--accent-primary)', bg: '#F4EFE6', icon: <PenTool size={18} />, title: 'Review your rendering', body: 'Your design package is unlocked. Review it, leave pins, request changes, or approve the final version.', button: 'Review Design', tab: 'designs' };
+  } else if (pendingQuote) {
+    action = { tone: 'var(--accent-primary)', bg: '#FDFAF6', icon: <FileText size={18} />, title: 'Quote ready for review', body: 'Check the quote and let us know if you are happy with it.', button: 'View Quotes', tab: 'documents' };
+  } else if (pendingAddOn) {
+    action = { tone: '#B45309', bg: '#FFFBEB', icon: <Gift size={18} />, title: 'Add-on needs decision', body: `${pendingAddOn.title || pendingAddOn.description || 'A project variation'} is waiting for your approval.`, button: 'Review Add-ons', tab: 'financials' };
+  } else if (unpaidAddOn) {
+    const linkedInvoice = projectInvoices.find(i => i.id === unpaidAddOn.linkedInvoiceId);
+    const amount = parseAmount(linkedInvoice?.amount || linkedInvoice?.total || unpaidAddOn.amount);
+    action = {
+      tone: '#D97706',
+      bg: '#FFF7ED',
+      icon: <CreditCard size={18} />,
+      title: 'New add-on invoice ready',
+      body: `${unpaidAddOn.title || 'Project add-on'} requires payment${amount ? `: GH₵ ${amount.toLocaleString()}` : ''}. Open Financials to review the invoice and pay securely.`,
+      button: 'View & Pay Invoice',
+      tab: 'financials',
+    };
+  } else if (unpaidInvoice) {
+    const amount = parseAmount(unpaidInvoice.amount || unpaidInvoice.total);
+    action = { tone: '#16A34A', bg: '#F0FDF4', icon: <CreditCard size={18} />, title: 'Payment pending', body: `${unpaidInvoice.title || 'An invoice'} is outstanding${amount ? `: GH₵ ${amount.toLocaleString()}` : ''}.`, button: 'Open Payments', tab: 'financials' };
+  } else {
+    const currentStage = CLIENT_PROJECT_STAGES.find(s => s.id === project.stageId);
+    const stageTitle = Number(project.stageId || 1) >= 4
+      ? `${currentStage?.name || 'Project work'} is in progress`
+      : 'Everything is on track';
+    action = { tone: '#16A34A', bg: '#F0FDF4', icon: <CheckCircle2 size={18} />, title: stageTitle, body: currentStage?.clientMsg || 'Your project is moving. We will notify you when your next action is required.', button: 'View Timeline', tab: 'overview' };
+  }
+
+  return (
+    <div style={{ padding: isMobile ? '18px 18px' : '22px 26px', borderRadius: isMobile ? 24 : 20, border: `1.5px solid ${action.tone}30`, background: action.bg, display: 'flex', flexDirection: isMobile ? 'column' : 'row', alignItems: isMobile ? 'stretch' : 'center', justifyContent: 'space-between', gap: 16, boxShadow: isMobile ? '0 2px 16px rgba(0,0,0,.06)' : '0 4px 18px rgba(0,0,0,.04)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+        <div style={{ width: 44, height: 44, borderRadius: 14, background: '#fff', color: action.tone, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{action.icon}</div>
+        <div>
+          <div style={{ fontSize: 11, fontWeight: 900, color: action.tone, textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 4 }}>Up Next</div>
+          <div style={{ fontSize: 17, fontWeight: 900, color: `var(--accent-secondary)`, marginBottom: 3 }}>{action.title}</div>
+          <div style={{ fontSize: 13, color: `var(--text-secondary)`, lineHeight: 1.5 }}>{action.body}</div>
+        </div>
+      </div>
+      <button onClick={() => setActiveTab(action.tab)} style={{ padding: '11px 18px', borderRadius: 12, border: 'none', background: action.tone, color: '#fff', fontSize: 12, fontWeight: 900, cursor: 'pointer', alignSelf: isMobile ? 'stretch' : 'auto', whiteSpace: 'nowrap' }}>
+        {action.button}
+      </button>
+    </div>
+  );
+}
+
+function ClientApprovalsTab({ project, invoices = [], approvals = [], approveQuote, approveSignoff, brand, user, isMobile, setActiveTab, updateProjectStage, updateApproval }) {
+  const [signOffBusy, setSignOffBusy] = useState(false);
+  const [signOffDone, setSignOffDone] = useState(false);
+  const [showContract, setShowContract] = useState(false);
+  const [contractJustSigned, setContractJustSigned] = useState(false);
+  const [approvalNotes, setApprovalNotes] = useState({});
+  const [approvalBusy, setApprovalBusy] = useState({});
+  const [reconsiderTarget, setReconsiderTarget] = useState(null);
+  const [reconsiderText, setReconsiderText] = useState('');
+  const [reconsiderBusy, setReconsiderBusy] = useState(false);
+
+  const quoteDocs = invoices.filter(i => (i.projectId === project.id || i.parentId === project.id) && ['Quotation', 'quote', 'quotation'].includes(i.type || i.documentKind));
+  const pendingApprovals = (approvals || []).filter(a => a.projectId === project.id && a.status === 'pending');
+  const pastApprovals = (approvals || []).filter(a => a.projectId === project.id && a.status !== 'pending');
+
+  const handleApprovalResponse = async (id, status) => {
+    if (!updateApproval || approvalBusy[id]) return;
+    setApprovalBusy(b => ({ ...b, [id]: true }));
+    try {
+      await updateApproval(id, { status, clientNote: approvalNotes[id] || '' }, project.id);
+    } finally {
+      setApprovalBusy(b => ({ ...b, [id]: false }));
+    }
+  };
+  const cardStyle = { padding: isMobile ? '20px 18px' : '24px 28px', background: '#fff', borderRadius: isMobile ? 24 : 20, border: isMobile ? 'none' : '1px solid var(--border-color)', boxShadow: isMobile ? '0 2px 16px rgba(0,0,0,.08)' : '0 4px 20px rgba(0,0,0,.05)' };
+
+  const sectionStyle = { display: 'flex', flexDirection: 'column', gap: 10, padding: '20px 0', borderBottom: '1px solid var(--border-color)' };
+  const sectionTitleStyle = { fontSize: 12, fontWeight: 900, color: `var(--text-secondary)`, textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 6 };
+
+  // ── Rendering Package status
+  const renderPkg = (project.renderingPackages || []).find(p => p.status !== 'Superseded') || null;
+  const renderStatus = renderPkg?.status || (project.stageId >= 2 ? 'Awaiting Upload' : null);
+
+  const handleInspectionSignOff = async () => {
+    if (signOffBusy || signOffDone) return;
+    setSignOffBusy(true);
+    try {
+      if (approveSignoff) {
+        await approveSignoff(project.id);
+      } else if (updateProjectStage) {
+        await updateProjectStage(project.id, 8, 'Client signed off on site inspection.');
+      }
+      setSignOffDone(true);
+    } finally {
+      setSignOffBusy(false);
+    }
+  };
+
+  return (
+    <div style={{ ...cardStyle, display: 'flex', flexDirection: 'column', gap: 0 }}>
+      <div style={{ marginBottom: 18 }}>
+        <div style={{ fontSize: 15, fontWeight: 900, color: `var(--accent-secondary)` }}>Approvals</div>
+        <div style={{ fontSize: 12, color: `var(--text-secondary)`, marginTop: 4 }}>Review and approve designs, quotes, and your final sign-off.</div>
+      </div>
+
+      {/* ── SECTION 0: Admin-Requested Approvals ──────────────────────── */}
+      {(pendingApprovals.length > 0 || pastApprovals.length > 0) && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: '20px 0', borderBottom: '1px solid var(--border-color)' }}>
+          <div style={{ fontSize: 12, fontWeight: 900, color: `var(--text-secondary)`, textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 6 }}>Action Needed — Requests from Your Team</div>
+          {pendingApprovals.map(a => (
+            <div key={a.id} style={{ padding: 16, borderRadius: 16, background: 'linear-gradient(135deg, #FFF7ED, #FFFBF5)', border: '1.5px solid #F59E0B40', display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 900, color: '#92400E' }}>{a.title || a.type}</div>
+                {a.description && <div style={{ fontSize: 12, color: '#78350F', marginTop: 4, lineHeight: 1.5 }}>{a.description}</div>}
+                <div style={{ fontSize: 11, color: '#B45309', marginTop: 4 }}>{a.type} · Requested {new Date(a.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</div>
+              </div>
+              <textarea
+                value={approvalNotes[a.id] || ''}
+                onChange={e => setApprovalNotes(n => ({ ...n, [a.id]: e.target.value }))}
+                placeholder="Add a note (optional)…"
+                rows={2}
+                style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #F59E0B60', fontSize: 12, resize: 'none', boxSizing: 'border-box', background: '#fff' }}
+              />
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  onClick={() => handleApprovalResponse(a.id, 'approved')}
+                  disabled={approvalBusy[a.id]}
+                  style={{ flex: 1, padding: '10px 0', borderRadius: 10, border: 'none', background: '#16A34A', color: '#fff', fontSize: 12, fontWeight: 900, cursor: 'pointer', opacity: approvalBusy[a.id] ? 0.6 : 1 }}
+                >
+                  {approvalBusy[a.id] ? 'Saving…' : '✓ Approve'}
+                </button>
+                <button
+                  onClick={() => handleApprovalResponse(a.id, 'rejected')}
+                  disabled={approvalBusy[a.id]}
+                  style={{ flex: 1, padding: '10px 0', borderRadius: 10, border: '1.5px solid #DC2626', background: '#fff', color: '#DC2626', fontSize: 12, fontWeight: 900, cursor: 'pointer', opacity: approvalBusy[a.id] ? 0.6 : 1 }}
+                >
+                  ✗ Request Changes
+                </button>
+              </div>
+            </div>
+          ))}
+          {pastApprovals.map(a => {
+            // Allow revocation only if project hasn't advanced past where this approval matters
+            // (i.e., not yet in production stage)
+            const canRevoke = a.status === 'approved' && project.stageId < 4 && !project.contractAccepted === false;
+            return (
+              <div key={a.id} style={{ padding: '12px 16px', borderRadius: 14, background: a.status === 'approved' ? '#F0FDF4' : '#FEF2F2', border: `1px solid ${a.status === 'approved' ? '#BBF7D0' : '#FECACA'}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 12, fontWeight: 800, color: a.status === 'approved' ? '#15803D' : '#DC2626' }}>
+                    {a.status === 'approved' ? '✓' : '✗'} {a.title || a.type}
+                  </div>
+                  {a.clientNote && <div style={{ fontSize: 11, color: '#666', marginTop: 2, fontStyle: 'italic' }}>"{a.clientNote}"</div>}
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div style={{ fontSize: 11, color: '#999' }}>{a.status === 'approved' ? 'Approved' : 'Changes Requested'}</div>
+                  {canRevoke && updateApproval && (
+                    <button
+                      onClick={() => { setReconsiderTarget(a.id); setReconsiderText(''); }}
+                      style={{ padding: '5px 10px', borderRadius: 8, border: '1px solid var(--border-color)', background: '#fff', color: 'var(--text-secondary)', fontSize: 10, fontWeight: 700, cursor: 'pointer' }}
+                    >
+                      Reconsider
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* ── SECTION 1: Rendering / Design Approval ──────────────────────── */}
+      {project.stageId >= 2 && project.kickoffMode !== 'direct-kickoff' && (
+        <div style={sectionStyle}>
+          {/* Collapsed "done" state — show only a green tick row when design is approved */}
+          {renderStatus === 'Approved' ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', borderRadius: 12, background: '#F0FDF4', border: '1px solid #BBF7D0' }}>
+              <CheckCircle2 size={14} color="#16A34A" />
+              <span style={{ fontSize: 13, fontWeight: 700, color: '#15803D' }}>Design approved</span>
+              <button onClick={() => setActiveTab?.('designs')} style={{ marginLeft: 'auto', padding: '4px 10px', borderRadius: 8, border: '1px solid #BBF7D0', background: '#fff', color: '#15803D', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>View</button>
+            </div>
+          ) : (
+          <>
+          <div style={sectionTitleStyle}>① Design Approval</div>
+          {!renderPkg ? (
+            <div style={{ padding: '14px 16px', borderRadius: 14, background: `var(--bg-secondary)`, border: '1px solid var(--border-color)', fontSize: 12, color: `var(--text-secondary)` }}>
+              Awaiting upload from our design team. You'll be notified when the rendering is ready.
+            </div>
+          ) : (
+            <div style={{ padding: 16, borderRadius: 16, background: `var(--bg-secondary)`, border: '1px solid var(--border-color)', display: 'flex', gap: 14, alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 900, color: `var(--accent-secondary)` }}>{renderPkg.title || 'Rendering Package'}</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
+                  {renderStatus === 'Approved' && <><CheckCircle2 size={13} color="#16A34A" /><span style={{ fontSize: 11, fontWeight: 800, color: '#16A34A' }}>Approved</span></>}
+                  {renderStatus === 'Changes Requested' && <><AlertCircle size={13} color="#D97706" /><span style={{ fontSize: 11, fontWeight: 800, color: '#D97706' }}>Changes Requested — Revision Pending</span></>}
+                  {renderStatus === 'Pending' && <><Clock size={13} color="#6B7280" /><span style={{ fontSize: 11, fontWeight: 800, color: '#6B7280' }}>Awaiting Your Review</span></>}
+                  {renderStatus === 'Awaiting Upload' && <><Clock size={13} color="#6B7280" /><span style={{ fontSize: 11, fontWeight: 800, color: '#6B7280' }}>Awaiting Upload</span></>}
+                </div>
+              </div>
+              {setActiveTab && (
+                <button onClick={() => setActiveTab('designs')} style={{ padding: '9px 14px', borderRadius: 10, border: `1px solid var(--accent-secondary)`, background: 'transparent', color: `var(--accent-secondary)`, fontSize: 11, fontWeight: 900, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                  View Designs
+                </button>
+              )}
+            </div>
+          )}
+          </>
+          )}
+        </div>
+      )}
+
+      {/* ── SECTION 2: Contract & Quotation Approval ─────────────────────── */}
+      {/* Collapse this section once both contract signed and quote approved */}
+      {(project.contractAccepted || contractJustSigned) && (quoteDocs.length === 0 || quoteDocs.every(q => ['approved', 'Approved'].includes(String(q.status || '').toLowerCase()))) ? (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', borderRadius: 12, background: '#F0FDF4', border: '1px solid #BBF7D0', margin: '0 0 8px 0' }}>
+          <CheckCircle2 size={14} color="#16A34A" />
+          <span style={{ fontSize: 13, fontWeight: 700, color: '#15803D' }}>Contract signed &amp; quote approved</span>
+        </div>
+      ) : (
+      <div style={{ ...sectionStyle, borderBottom: project.stageId === 7 ? '1px solid var(--border-color)' : 'none' }}>
+        <div style={sectionTitleStyle}>② Contract &amp; Quotation Approval</div>
+
+        {/* Contract signing gate */}
+        {(project.contractAccepted || contractJustSigned) ? (
+          <div style={{ padding: '12px 16px', borderRadius: 14, background: '#F0FDF4', border: '1px solid #BBF7D0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, marginBottom: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <FileCheck size={15} color="#16A34A" />
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 800, color: '#15803D' }}>Contract Signed</div>
+                <div style={{ fontSize: 11, color: '#16A34A' }}>
+                  {project.contractSignedName || user?.name || 'You'} ·{' '}
+                  {project.quoteSignedAt?.seconds ? new Date(project.quoteSignedAt.seconds * 1000).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Just now'}
+                </div>
+              </div>
+            </div>
+            <button
+              onClick={() => printSignedContractDoc(project, user, brand)}
+              style={{ padding: '8px 14px', borderRadius: 10, border: '1px solid #BBF7D0', background: '#fff', color: '#15803D', fontSize: 11, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
+            >
+              <Printer size={12} /> Download Signed Contract
+            </button>
+          </div>
+        ) : (
+          <div style={{ padding: 16, borderRadius: 16, background: 'linear-gradient(135deg, #FFF7ED, #FFFBF5)', border: '1.5px solid #F59E0B40', marginBottom: 12 }}>
+            <div style={{ fontSize: 13, fontWeight: 900, color: '#92400E', marginBottom: 4 }}>Sign the Project Contract</div>
+            <div style={{ fontSize: 12, color: '#78350F', lineHeight: 1.6, marginBottom: 12 }}>
+              Before approving your quote, please read and sign the project contract. This is a legally binding agreement for the work to be carried out.
+            </div>
+            <button
+              onClick={() => setShowContract(true)}
+              style={{ padding: '10px 18px', borderRadius: 12, border: 'none', background: `var(--accent-secondary)`, color: '#fff', fontSize: 12, fontWeight: 900, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 7 }}
+            >
+              <FileCheck size={14} /> Review & Sign Contract →
+            </button>
+          </div>
+        )}
+
+        {/* Quote documents */}
+        {quoteDocs.length === 0 ? (
+          <div style={{ padding: '14px 16px', borderRadius: 14, background: `var(--bg-secondary)`, border: '1px solid var(--border-color)', fontSize: 12, color: `var(--text-secondary)` }}>
+            No quote has been issued for this project yet.
+          </div>
+        ) : quoteDocs.map(inv => (
+          <div key={inv.id} style={{ padding: 16, borderRadius: 16, background: `var(--bg-secondary)`, border: '1px solid var(--border-color)', display: 'flex', gap: 14, alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 900, color: `var(--accent-secondary)` }}>{inv.title || `Quote v${inv.version || 1}`}</div>
+              <div style={{ fontSize: 11, color: `var(--text-secondary)`, marginTop: 3 }}>{inv.amount ? `GHS ${Number(String(inv.amount).replace(/[^0-9.]/g, '')).toLocaleString()}` : `GHS ${Number(inv.total || 0).toLocaleString()}`} · {inv.status || 'Pending'}</div>
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={() => downloadInvoicePDF(inv, project, user, brand)} style={{ padding: '9px 13px', borderRadius: 10, border: '1px solid var(--border-color)', background: '#fff', fontSize: 11, fontWeight: 800, cursor: 'pointer' }}>Download</button>
+              {approveQuote && !project.quoteApproved && (project.contractAccepted || contractJustSigned) && (
+                <button onClick={() => approveQuote(project.id)} style={{ padding: '9px 13px', borderRadius: 10, border: 'none', background: `var(--accent-primary)`, color: '#fff', fontSize: 11, fontWeight: 900, cursor: 'pointer' }}>Approve Quote</button>
+              )}
+              {approveQuote && !project.quoteApproved && !(project.contractAccepted || contractJustSigned) && (
+                <button disabled style={{ padding: '9px 13px', borderRadius: 10, border: '1px solid var(--border-color)', background: 'var(--bg-secondary)', color: 'var(--text-secondary)', fontSize: 11, fontWeight: 800, cursor: 'not-allowed' }} title="Sign contract first">Sign contract first</button>
+              )}
+            </div>
+          </div>
+        ))}
+        {project.quoteApproved && (
+          <div style={{ padding: 14, borderRadius: 14, background: '#F0FDF4', color: '#16A34A', fontSize: 12, fontWeight: 800, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <CheckCircle2 size={15} /> Quote approved — project is moving forward.
+          </div>
+        )}
+      </div>
+      )} {/* end Section 2 conditional */}
+
+      {/* Contract Modal */}
+      {showContract && (
+        <ContractAgreementModal
+          project={project}
+          user={user}
+          brand={brand}
+          isMobile={isMobile}
+          onClose={() => setShowContract(false)}
+          onSigned={() => {
+            setContractJustSigned(true);
+            setShowContract(false);
+          }}
+        />
+      )}
+
+      {/* ── SECTION 3: Final Sign-off (Stage 7 only) ───────────── */}
+      {project.stageId === 7 && (
+        <div style={{ ...sectionStyle, borderBottom: 'none' }}>
+          <div style={sectionTitleStyle}>③ Final Sign-off</div>
+          {signOffDone || project.stageId > 7 ? (
+            <div style={{ padding: 14, borderRadius: 14, background: '#F0FDF4', color: '#16A34A', fontSize: 12, fontWeight: 800, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <CheckCircle2 size={15} /> You have signed off on the site inspection. Project is moving to completion.
+            </div>
+          ) : (
+            <div style={{ padding: 16, borderRadius: 16, background: 'linear-gradient(135deg, #FFF7ED, #FFFBF5)', border: '1.5px solid #F59E0B40', display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 900, color: '#92400E' }}>Final Site Inspection</div>
+                <div style={{ fontSize: 12, color: '#78350F', marginTop: 4, lineHeight: 1.6 }}>
+                  Our team has completed installation and the site is ready for your inspection. By clicking below, you confirm that you have inspected the work and accept it as complete.
+                </div>
+              </div>
+              <button
+                onClick={handleInspectionSignOff}
+                disabled={signOffBusy}
+                style={{ padding: '12px 18px', borderRadius: 12, border: 'none', background: signOffBusy ? '#9CA3AF' : '#16A34A', color: '#fff', fontSize: 13, fontWeight: 900, cursor: signOffBusy ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+              >
+                {signOffBusy ? <><Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> Submitting…</> : <><CheckCircle2 size={14} /> Confirm Site Inspection — I Accept the Work</>}
+              </button>
+              <div style={{ fontSize: 10, color: '#9CA3AF', textAlign: 'center' }}>This action is permanent and triggers the final payment milestone.</div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Reconsideration inline modal */}
+      {reconsiderTarget && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+          <div style={{ background: '#fff', borderRadius: 18, padding: 28, maxWidth: 420, width: '100%', boxShadow: '0 24px 60px rgba(0,0,0,.18)' }}>
+            <div style={{ fontSize: 16, fontWeight: 900, color: 'var(--accent-secondary)', marginBottom: 6 }}>Request a change?</div>
+            <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 16, lineHeight: 1.5 }}>Tell your account manager why you'd like to reconsider. They'll get back to you.</div>
+            <textarea
+              value={reconsiderText}
+              onChange={e => setReconsiderText(e.target.value)}
+              placeholder="e.g. I'd like to change the material colour before we proceed…"
+              rows={3}
+              style={{ width: '100%', padding: '12px 14px', borderRadius: 12, border: '1.5px solid var(--border-color)', fontSize: 13, outline: 'none', resize: 'none', boxSizing: 'border-box', fontFamily: 'inherit', lineHeight: 1.6 }}
+            />
+            <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
+              <button onClick={() => { setReconsiderTarget(null); setReconsiderText(''); }} style={{ flex: 1, height: 42, borderRadius: 10, border: '1.5px solid var(--border-color)', background: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Cancel</button>
+              <button
+                disabled={!reconsiderText.trim() || reconsiderBusy}
+                onClick={async () => {
+                  if (!reconsiderText.trim() || reconsiderBusy) return;
+                  setReconsiderBusy(true);
+                  try {
+                    await updateApproval(reconsiderTarget, { status: 'pending', clientNote: `Reconsideration requested: ${reconsiderText.trim()}`, reconsiderationRequestedAt: new Date().toISOString() });
+                    setReconsiderTarget(null);
+                    setReconsiderText('');
+                  } catch {
+                    // silent fail — modal stays open
+                  }
+                  setReconsiderBusy(false);
+                }}
+                style={{ flex: 2, height: 42, borderRadius: 10, border: 'none', background: !reconsiderText.trim() ? 'var(--border-color)' : 'var(--accent-secondary)', color: '#fff', fontSize: 13, fontWeight: 800, cursor: !reconsiderText.trim() ? 'default' : 'pointer' }}
+              >
+                {reconsiderBusy ? 'Sending…' : 'Send to team'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ClientAddOnsTab({ project, addOns: propAddOns = [], invoices: propInvoices = [], user, isMobile }) {
+  // Own live queries — bypasses the clientId/UID mismatch in AppContext for phone-auth users
+  const [liveAddOns, setLiveAddOns] = useState(null);
+  const [liveInvoices, setLiveInvoices] = useState(null);
+
+  useEffect(() => {
+    if (!db || !project?.id) return;
+    const q = query(collection(db, 'addOns'), where('projectId', '==', project.id));
+    return onSnapshot(q, snap => setLiveAddOns(snap.docs.map(d => ({ id: d.id, ...d.data() }))), () => setLiveAddOns([]));
+  }, [project?.id]);
+
+  useEffect(() => {
+    if (!db || !project?.id) return;
+    const q = query(collection(db, 'invoices'), where('projectId', '==', project.id));
+    return onSnapshot(q, snap => setLiveInvoices(snap.docs.map(d => ({ id: d.id, ...d.data() }))), () => setLiveInvoices([]));
+  }, [project?.id]);
+
+  const projectAddOns = liveAddOns ?? propAddOns.filter(a => a.projectId === project.id);
+  const allInvoices = liveInvoices ?? propInvoices.filter(i => i.projectId === project.id || i.parentId === project.id);
+  const email = user?.proxyEmail || (user?.phone ? user.phone + '@clients.westlinefuture.com' : 'client@clients.westlinefuture.com');
+  const parseAmount = value => parseFloat(String(value || '0').replace(/[^0-9.]/g, '')) || 0;
+  const cardStyle = { padding: isMobile ? '20px 18px' : '24px 28px', background: '#fff', borderRadius: isMobile ? 24 : 20, border: isMobile ? 'none' : '1px solid var(--border-color)', boxShadow: isMobile ? '0 2px 16px rgba(0,0,0,.08)' : '0 4px 20px rgba(0,0,0,.05)' };
+
+  if (liveAddOns === null) {
+    return <div style={{ ...cardStyle, padding: '32px', textAlign: 'center', color: 'var(--text-secondary)', fontSize: 13 }}>Loading add-ons…</div>;
+  }
+
+  return (
+    <div style={{ ...cardStyle, display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <div>
+        <div style={{ fontSize: 15, fontWeight: 900, color: `var(--accent-secondary)` }}>Add-ons & Variations</div>
+        <div style={{ fontSize: 12, color: `var(--text-secondary)`, marginTop: 4 }}>Every approved scope change stays visible with cost, status, and linked payment.</div>
+      </div>
+      {projectAddOns.length === 0 ? (
+        <div style={{ padding: '32px 0', textAlign: 'center', color: `var(--text-secondary)`, fontSize: 13 }}>No add-ons or variations have been added to this project.</div>
+      ) : projectAddOns.map(addOn => {
+        // Admin saves field as `linkedInvoiceId` — check all possible field names
+        const linkedInv = allInvoices.find(i =>
+          i.id === addOn.linkedInvoiceId ||
+          i.id === addOn.invoiceId ||
+          i.addOnId === addOn.id
+        );
+        const amount = parseAmount(addOn.price || addOn.amount || linkedInv?.amount || linkedInv?.total);
+        const isPaid = isPaidStatus(linkedInv?.status);
+        const unpaid = linkedInv && !isPaid;
+        const statusLabel = isPaid ? 'Paid' : addOn.status || 'Pending Payment';
+        const statusColor = isPaid ? '#16A34A' : '#D97706';
+        const statusBg = isPaid ? '#F0FDF4' : '#FFF7ED';
+        return (
+          <div key={addOn.id} style={{ padding: 16, borderRadius: 16, border: `1.5px solid ${isPaid ? '#BBF7D040' : 'var(--border-color)'}`, background: isPaid ? '#FAFFFE' : 'var(--bg-secondary)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, marginBottom: 8 }}>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 900, color: `var(--accent-secondary)` }}>{addOn.title || addOn.description || 'Project Add-on'}</div>
+                {addOn.description && addOn.title && (
+                  <div style={{ fontSize: 11, color: `var(--text-secondary)`, marginTop: 3 }}>{addOn.description}</div>
+                )}
+              </div>
+              <span style={{ fontSize: 11, fontWeight: 900, color: statusColor, background: statusBg, padding: '4px 9px', borderRadius: 999, height: 24, whiteSpace: 'nowrap', flexShrink: 0 }}>{statusLabel}</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+              <div style={{ fontSize: 14, fontWeight: 900, color: isPaid ? '#16A34A' : `var(--accent-secondary)` }}>
+                {amount ? `GH₵ ${amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}` : 'Pricing pending'}
+                {isPaid && <span style={{ fontSize: 11, fontWeight: 700, marginLeft: 6 }}>✓ Settled</span>}
+              </div>
+              {unpaid && amount > 0 && (
+                <div style={{ width: isMobile ? '100%' : 260, maxWidth: '100%' }}>
+                  <UnifiedPaymentGateway
+                    label={`Pay Add-on — GH₵ ${amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}`}
+                    amountGHS={amount}
+                    email={email}
+                    projectId={project.id}
+                    invoiceId={linkedInv.id}
+                    paymentType="addon"
+                    onSuccess={() => window.location.reload()}
+                    onError={(err) => alert("Verification Error: " + err)}
+                  />
+                </div>
+              )}
+              {!linkedInv && amount === 0 && (
+                <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Invoice being prepared by your account manager.</div>
+              )}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // ─── Shipping Tracker Card ────────────────────────────────────────────────────
 // ─── Installation Status Card ─────────────────────────────────────────────────
 function InstallationStatusCard({ project }) {
@@ -606,7 +2015,7 @@ function InstallationStatusCard({ project }) {
   const [zoom, setZoom] = useState(null);
 
   useEffect(() => {
-    if (!db || project.stageId !== 5) return;
+    if (!db || project.stageId !== 6) return;
     const q = query(
       collection(db, 'projects', project.id, 'documents'),
       where('docType', '==', 'progress_photo'),
@@ -616,9 +2025,9 @@ function InstallationStatusCard({ project }) {
     return onSnapshot(q, snap => setRecentPhotos(snap.docs.map(d => ({ id: d.id, ...d.data() }))), () => setRecentPhotos([]));
   }, [project.id, project.stageId]);
 
-  if (project.stageId !== 5) return null;
+  if (project.stageId !== 6) return null;
 
-  const installEntry = (project.stageHistory || []).find(h => h.stageId === 5);
+  const installEntry = (project.stageHistory || []).find(h => h.stageId === 6);
   const startDate = installEntry?.timestamp
     ? (() => {
         const d = installEntry.timestamp?.toDate ? installEntry.timestamp.toDate() : new Date(installEntry.timestamp);
@@ -635,8 +2044,8 @@ function InstallationStatusCard({ project }) {
         </div>
         <div>
           <div style={{ fontSize: 12, fontWeight: 800, color: '#16A34A', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 2 }}>Installation · In Progress</div>
-          <div style={{ fontSize: 18, fontWeight: 900, color: '#111827' }}>Our crew is on-site</div>
-          {startDate && <div style={{ fontSize: 12, color: '#4B5563', marginTop: 2 }}>Started {startDate}</div>}
+          <div style={{ fontSize: 18, fontWeight: 900, color: `var(--accent-secondary)` }}>Our crew is on-site</div>
+          {startDate && <div style={{ fontSize: 12, color: `var(--text-secondary)`, marginTop: 2 }}>Started {startDate}</div>}
         </div>
         <div style={{ marginLeft: 'auto', padding: '6px 14px', borderRadius: 20, background: '#16A34A', color: '#fff', fontSize: 11, fontWeight: 800, display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }}>
           <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#4ADE80', animation: 'pulse 1.5s infinite' }} />
@@ -658,13 +2067,13 @@ function InstallationStatusCard({ project }) {
               <div
                 key={photo.id}
                 onClick={() => setZoom(photo)}
-                style={{ aspectRatio: '1', borderRadius: 12, overflow: 'hidden', background: '#E5E7EB', cursor: 'pointer', position: 'relative' }}
+                style={{ aspectRatio: '1', borderRadius: 12, overflow: 'hidden', background: `var(--border-color)`, cursor: 'pointer', position: 'relative' }}
               >
                 {photo.url ? (
                   <img src={photo.url} alt={photo.name || 'Site photo'} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                 ) : (
                   <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <Camera size={18} color="#6B7280" />
+                    <Camera size={18} color="var(--text-secondary)" />
                   </div>
                 )}
               </div>
@@ -678,8 +2087,8 @@ function InstallationStatusCard({ project }) {
 
       {recentPhotos.length === 0 && (
         <div style={{ marginTop: 12, padding: '14px 16px', background: 'rgba(255,255,255,.6)', borderRadius: 12, display: 'flex', alignItems: 'center', gap: 10 }}>
-          <Camera size={16} color="#6B7280" />
-          <span style={{ fontSize: 12, color: '#4B5563' }}>Progress photos will appear here as our crew completes each section.</span>
+          <Camera size={16} color="var(--text-secondary)" />
+          <span style={{ fontSize: 12, color: `var(--text-secondary)` }}>Progress photos will appear here as our crew completes each section.</span>
         </div>
       )}
 
@@ -696,9 +2105,47 @@ function InstallationStatusCard({ project }) {
   );
 }
 
-function ShippingTrackerCard({ project }) {
+function ShippingTrackerCard({ project, invoices = [] }) {
   const sd = project.shippingDetails;
-  if (!sd?.vesselName || (project.stageId || 0) < 7) return null;
+  if ((project.stageId || 0) < 5) return null;
+
+  // ── Payment gate: post-production (30%) milestone must be paid to see shipping details ──
+  const postProdInv = invoices.find(i =>
+    (i.projectId === project.id || i.parentId === project.id) &&
+    (i.milestoneKey === 'post-production' || (i.title || i.name || '').toLowerCase().includes('production'))
+  );
+  const postProdPaid = postProdInv
+    ? ['paid', 'paid in full', 'partially paid'].includes((postProdInv.status || '').toLowerCase())
+    : false;
+
+  // If invoice exists but unpaid, block access and prompt payment
+  if (postProdInv && !postProdPaid) {
+    return (
+      <div style={{
+        padding: '24px 20px', borderRadius: 20,
+        background: 'linear-gradient(135deg, #1C1917, #292524)',
+        color: '#fff', marginBottom: 4,
+        boxShadow: '0 8px 32px rgba(0,0,0,.3)',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+          <span style={{ fontSize: 24 }}>🔒</span>
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 800, color: 'rgba(255,255,255,.5)', textTransform: 'uppercase', letterSpacing: '.08em' }}>Shipping Details Locked</div>
+            <div style={{ fontSize: 17, fontWeight: 900, color: '#fff' }}>Payment Required</div>
+          </div>
+        </div>
+        <div style={{ fontSize: 13, color: 'rgba(255,255,255,.65)', lineHeight: 1.6, marginBottom: 16 }}>
+          Your goods are in production and will be ready for dispatch soon. To unlock live shipping details — vessel name, BL number, container, and ETA — please clear your <strong style={{ color: '#FCD34D' }}>30% Production Milestone</strong> payment.
+        </div>
+        <div style={{ padding: '12px 16px', background: 'rgba(255,255,255,.06)', borderRadius: 12, fontSize: 13, color: 'rgba(255,255,255,.5)' }}>
+          Invoice: <strong style={{ color: '#fff' }}>{postProdInv.invoiceNo || postProdInv.title || 'Production Milestone'}</strong> · GH₵ {Number(postProdInv.amount || postProdInv.total || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })} due
+        </div>
+        <div style={{ marginTop: 12, fontSize: 11, color: 'rgba(255,255,255,.35)' }}>Open the <strong style={{ color: 'rgba(255,255,255,.55)' }}>Payments</strong> tab to settle this invoice.</div>
+      </div>
+    );
+  }
+
+  if (!sd?.vesselName) return null;
 
   const eta = sd.eta
     ? (() => {
@@ -767,28 +2214,28 @@ function DocViewer({ doc, onClose }) {
         display: 'flex', flexDirection: 'column', boxShadow: '0 40px 80px rgba(0,0,0,0.6)',
       }}>
         {/* Header */}
-        <div style={{ padding: '14px 20px', background: '#111827', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
+        <div style={{ padding: '14px 20px', background: `var(--accent-secondary)`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            {isImage ? <Image size={16} color="#0F766E" /> : <FileText size={16} color="#0F766E" />}
+            {isImage ? <Image size={16} color="var(--accent-secondary)" /> : <FileText size={16} color="var(--accent-secondary)" />}
             <span className="lxf" style={{ fontSize: 13, fontWeight: 700, color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 400 }}>{doc.name}</span>
           </div>
           <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
             <a href={doc.url} download={doc.name} target="_blank" rel="noopener noreferrer"
-              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 10, background: '#0F766E', color: '#111827', fontSize: 12, fontWeight: 800, textDecoration: 'none' }}>
+              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 10, background: `var(--accent-secondary)`, color: `var(--accent-secondary)`, fontSize: 12, fontWeight: 800, textDecoration: 'none' }}>
               <Download size={13} /> Download
             </a>
             <button onClick={onClose} style={{ width: 36, height: 36, borderRadius: 10, background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>✕</button>
           </div>
         </div>
         {/* Content */}
-        <div style={{ flex: 1, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#F9FAFB' }}>
+        <div style={{ flex: 1, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', background: `var(--bg-secondary)` }}>
           {isImage && <img src={doc.url} alt={doc.name} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', padding: 16 }} />}
           {isPDF && <iframe src={doc.url} title={doc.name} style={{ width: '100%', height: '100%', border: 'none' }} />}
           {!isImage && !isPDF && (
-            <div style={{ textAlign: 'center', color: '#4B5563' }}>
-              <FileText size={48} color="#6B7280" style={{ marginBottom: 16 }} />
+            <div style={{ textAlign: 'center', color: `var(--text-secondary)` }}>
+              <FileText size={48} color="var(--text-secondary)" style={{ marginBottom: 16 }} />
               <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 8 }}>Preview not available</div>
-              <a href={doc.url} download={doc.name} style={{ color: '#0F766E', fontWeight: 700 }}>Download the file instead</a>
+              <a href={doc.url} download={doc.name} style={{ color: `var(--accent-secondary)`, fontWeight: 700 }}>Download the file instead</a>
             </div>
           )}
         </div>
@@ -798,7 +2245,7 @@ function DocViewer({ doc, onClose }) {
 }
 
 // ─── Documents Tab ────────────────────────────────────────────────────────────
-function DocumentsTab({ projectId, project }) {
+function DocumentsTab({ projectId, project, user, brand, isMobile, invoices = [] }) {
   const [docs, setDocs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [viewingDoc, setViewingDoc] = useState(null);
@@ -823,23 +2270,39 @@ function DocumentsTab({ projectId, project }) {
     return unsub;
   }, [projectId]);
 
+  const specification = (
+    <SpecApprovalCard
+      project={project}
+      user={user}
+      brand={brand}
+      isMobile={isMobile}
+      invoices={invoices}
+    />
+  );
+
   if (loading) {
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        {[1, 2, 3].map(i => (
-          <div key={i} style={{ height: 72, borderRadius: 14, background: '#E5E7EB', animation: 'pulse 1.5s infinite' }} />
-        ))}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+        {specification}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {[1, 2, 3].map(i => (
+            <div key={i} style={{ height: 72, borderRadius: 14, background: `var(--border-color)`, animation: 'pulse 1.5s infinite' }} />
+          ))}
+        </div>
       </div>
     );
   }
 
   if (docs.length === 0) {
     return (
-      <div style={{ padding: '60px 24px', textAlign: 'center' }}>
-        <div style={{ fontSize: 44, marginBottom: 14 }}>📂</div>
-        <div style={{ fontSize: 16, fontWeight: 800, color: '#111827', marginBottom: 8 }}>No documents yet</div>
-        <div style={{ fontSize: 13, color: '#6B7280', lineHeight: 1.6, maxWidth: 380, margin: '0 auto' }}>
-          No documents uploaded yet. Your account manager will upload quotes, BOLs, and certificates here.
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+        {specification}
+        <div style={{ padding: '48px 24px', textAlign: 'center', background: '#fff', borderRadius: 20, border: '1px solid var(--border-color)' }}>
+          <div style={{ fontSize: 44, marginBottom: 14 }}>📂</div>
+          <div style={{ fontSize: 16, fontWeight: 800, color: `var(--accent-secondary)`, marginBottom: 8 }}>No other documents yet</div>
+          <div style={{ fontSize: 13, color: `var(--text-secondary)`, lineHeight: 1.6, maxWidth: 380, margin: '0 auto' }}>
+            Quotations, bills of lading, completion certificates, and other official project files will appear here as they are issued.
+          </div>
         </div>
       </div>
     );
@@ -848,11 +2311,12 @@ function DocumentsTab({ projectId, project }) {
   return (
     <>
       {viewingDoc && <DocViewer doc={viewingDoc} onClose={() => setViewingDoc(null)} />}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {docs.map(doc => {
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+        {specification}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {docs.map(doc => {
           const stageInfo = doc.stageId ? CLIENT_PROJECT_STAGES.find(s => s.id === doc.stageId) : null;
-          const isRenderingDoc = doc.documentType === 'rendering' || doc.category === 'rendering' || doc.stageId === 3 || /render|cad|3d|drawing/i.test(doc.name || '');
-          const isLockedRendering = isRenderingDoc && !project?.renderingFeePaid && !project?.renderingUnlocked;
+          const isSignedSpecification = doc.type === 'signed_project_specification' || doc.documentKind === 'project_specification';
           const uploadedDate = doc.createdAt?.seconds
             ? new Date(doc.createdAt.seconds * 1000).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
             : null;
@@ -862,13 +2326,13 @@ function DocumentsTab({ projectId, project }) {
             <div key={doc.id} style={{
               display: 'flex', alignItems: 'center', gap: 14,
               padding: '14px 18px', background: '#FAFAF9', borderRadius: 16,
-              border: '1.5px solid #E5E7EB', transition: 'border-color .2s',
+              border: '1.5px solid var(--border-color)', transition: 'border-color .2s',
             }}>
-              <div style={{ width: 44, height: 44, borderRadius: 12, background: '#E5E7EB', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <div style={{ width: 44, height: 44, borderRadius: 12, background: `var(--border-color)`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                 <FileTypeIcon fileType={doc.fileType} />
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 14, fontWeight: 700, color: '#111827', marginBottom: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: `var(--accent-secondary)`, marginBottom: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {doc.name}
                 </div>
                 <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -877,23 +2341,79 @@ function DocumentsTab({ projectId, project }) {
                       {stageInfo.short}
                     </span>
                   )}
-                  {uploadedDate && <span style={{ fontSize: 11, color: '#6B7280' }}>{uploadedDate}</span>}
-                  {sizeMB && <span style={{ fontSize: 11, color: '#6B7280' }}>{sizeMB} MB</span>}
-                  {doc.uploadedBy && <span style={{ fontSize: 11, color: '#6B7280' }}>by {doc.uploadedBy}</span>}
+                  {isSignedSpecification && (
+                    <span style={{ fontSize: 10, fontWeight: 800, color: '#166534', background: '#DCFCE7', padding: '2px 8px', borderRadius: 10 }}>
+                      Signed · Version {Number(doc.version || 1)}
+                    </span>
+                  )}
+                  {uploadedDate && <span style={{ fontSize: 11, color: `var(--text-secondary)` }}>{uploadedDate}</span>}
+                  {sizeMB && <span style={{ fontSize: 11, color: `var(--text-secondary)` }}>{sizeMB} MB</span>}
+                  {doc.uploadedBy && <span style={{ fontSize: 11, color: `var(--text-secondary)` }}>by {doc.uploadedBy}</span>}
+                  {isSignedSpecification && doc.signedBy && <span style={{ fontSize: 11, color: '#166534' }}>signed by {doc.signedBy}</span>}
                 </div>
               </div>
-              {isLockedRendering ? (
-                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 12px', borderRadius: 10, background: '#F9FAFB', color: '#6B7280', fontSize: 12, fontWeight: 800, border: '1px solid #E5E7EB' }}>
-                  <Lock size={13} /> Locked
+              {doc.type === 'handover' ? (
+                <div style={{ flexShrink: 0 }}>
+                  <button
+                    onClick={() => {
+                      const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Project Handover Certificate</title>
+<style>
+  body { font-family: 'Georgia', serif; background: #f9f6f2; margin: 0; padding: 40px 24px; color: #1a1a1a; }
+  .cert { max-width: 760px; margin: 0 auto; background: #fff; border: 2px solid #c9a96e; border-radius: 4px; padding: 64px 72px; text-align: center; box-shadow: 0 8px 40px rgba(0,0,0,.1); }
+  .logo { font-size: 13px; font-weight: 700; letter-spacing: .3em; text-transform: uppercase; color: #6b4f1f; margin-bottom: 8px; }
+  .divider { height: 1px; background: linear-gradient(90deg, transparent, #c9a96e, transparent); margin: 24px auto; width: 80%; }
+  .title { font-size: 32px; font-weight: 400; letter-spacing: .12em; text-transform: uppercase; color: #1a1a1a; margin: 0 0 8px; }
+  .subtitle { font-size: 12px; letter-spacing: .25em; text-transform: uppercase; color: #8b6d3a; margin-bottom: 40px; }
+  .body { font-size: 15px; line-height: 1.9; color: #333; max-width: 560px; margin: 0 auto 40px; }
+  .project { font-size: 22px; font-weight: 700; color: #1a1a1a; border-bottom: 1.5px solid #c9a96e; display: inline-block; padding-bottom: 4px; margin: 8px 0 24px; }
+  .meta { display: flex; justify-content: center; gap: 48px; margin: 40px 0; }
+  .meta-item { text-align: center; }
+  .meta-label { font-size: 10px; letter-spacing: .2em; text-transform: uppercase; color: #8b6d3a; margin-bottom: 6px; }
+  .meta-value { font-size: 14px; font-weight: 700; color: #1a1a1a; }
+  .seal { width: 90px; height: 90px; border-radius: 50%; border: 2px solid #c9a96e; display: flex; align-items: center; justify-content: center; margin: 32px auto 0; font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #6b4f1f; line-height: 1.5; }
+  @media print { body { background: #fff; padding: 0; } .cert { box-shadow: none; border: 1.5px solid #c9a96e; } }
+</style></head><body>
+<div class="cert">
+  <div class="logo">Westline Future</div>
+  <div class="divider"></div>
+  <div class="title">Certificate of Completion</div>
+  <div class="subtitle">Project Handover &amp; Acceptance</div>
+  <div class="body">
+    This is to certify that the interior design and installation project described below has been completed to the agreed scope and specification,
+    and has been accepted by the client on the date shown. All contractual obligations have been fulfilled.
+  </div>
+  <div class="project">${doc.projectTitle || 'Interior Design Project'}</div>
+  <div class="meta">
+    <div class="meta-item"><div class="meta-label">Client</div><div class="meta-value">${doc.clientName || '—'}</div></div>
+    <div class="meta-item"><div class="meta-label">Project Type</div><div class="meta-value">${doc.projectType || 'Interior Design'}</div></div>
+    <div class="meta-item"><div class="meta-label">Handover Date</div><div class="meta-value">${doc.handoverDate || '—'}</div></div>
+  </div>
+  <div class="divider"></div>
+  <div class="seal">Official<br>Handover<br>Issued</div>
+</div>
+<div style="text-align:center;margin-top:24px;font-size:11px;color:#999;">Westline Future · Ghana · westlinefuture.com · Print this page or save as PDF</div>
+</body></html>`;
+                      const w = window.open('', '_blank');
+                      if (w) { w.document.write(html); w.document.close(); }
+                    }}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 6,
+                      padding: '8px 16px', borderRadius: 10,
+                      background: '#78350F', color: '#fff',
+                      fontSize: 12, fontWeight: 700, border: 'none', cursor: 'pointer',
+                    }}
+                  >
+                    <Award size={13} /> View Certificate
+                  </button>
                 </div>
-              ) : doc.url && (
+              ) : doc.url ? (
                 <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
                   <button
                     onClick={() => setViewingDoc(doc)}
                     style={{
                       display: 'flex', alignItems: 'center', gap: 6,
                       padding: '8px 14px', borderRadius: 10,
-                      background: '#E5E7EB', color: '#111827',
+                      background: `var(--border-color)`, color: `var(--accent-secondary)`,
                       fontSize: 12, fontWeight: 700, border: 'none', cursor: 'pointer',
                     }}
                   >
@@ -907,17 +2427,18 @@ function DocumentsTab({ projectId, project }) {
                     style={{
                       display: 'flex', alignItems: 'center', gap: 6,
                       padding: '8px 14px', borderRadius: 10,
-                      background: '#111827', color: '#fff',
+                      background: `var(--accent-secondary)`, color: '#fff',
                       fontSize: 12, fontWeight: 700, textDecoration: 'none',
                     }}
                   >
                     <Download size={13} /> Download
                   </a>
                 </div>
-              )}
+              ) : null}
             </div>
           );
-        })}
+          })}
+        </div>
       </div>
     </>
   );
@@ -953,7 +2474,7 @@ function PhotoFeed({ projectId }) {
     return (
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
         {[1, 2, 3, 4, 5, 6].map(i => (
-          <div key={i} style={{ aspectRatio: '1', borderRadius: 14, background: '#E5E7EB', animation: 'pulse 1.5s infinite' }} />
+          <div key={i} style={{ aspectRatio: '1', borderRadius: 14, background: `var(--border-color)`, animation: 'pulse 1.5s infinite' }} />
         ))}
       </div>
     );
@@ -963,8 +2484,8 @@ function PhotoFeed({ projectId }) {
     return (
       <div style={{ padding: '60px 24px', textAlign: 'center' }}>
         <div style={{ fontSize: 44, marginBottom: 14 }}>📸</div>
-        <div style={{ fontSize: 16, fontWeight: 800, color: '#111827', marginBottom: 8 }}>No site photos yet</div>
-        <div style={{ fontSize: 13, color: '#6B7280', lineHeight: 1.6, maxWidth: 380, margin: '0 auto' }}>
+        <div style={{ fontSize: 16, fontWeight: 800, color: `var(--accent-secondary)`, marginBottom: 8 }}>No site photos yet</div>
+        <div style={{ fontSize: 13, color: `var(--text-secondary)`, lineHeight: 1.6, maxWidth: 380, margin: '0 auto' }}>
           Your team will share progress photos here.
         </div>
       </div>
@@ -1000,7 +2521,7 @@ function PhotoFeed({ projectId }) {
               style={{
                 position: 'relative', aspectRatio: '1', borderRadius: 14,
                 overflow: 'hidden', cursor: 'pointer',
-                background: '#E5E7EB',
+                background: `var(--border-color)`,
                 boxShadow: '0 2px 12px rgba(0,0,0,.08)',
                 transition: 'transform .2s, box-shadow .2s',
               }}
@@ -1015,7 +2536,7 @@ function PhotoFeed({ projectId }) {
               />
               <div style={{
                 position: 'absolute', bottom: 0, left: 0, right: 0,
-                background: 'linear-gradient(to top, rgba(17,24,39,.85) 0%, transparent 100%)',
+                background: 'linear-gradient(to top, rgba(92, 58, 33,.85) 0%, transparent 100%)',
                 padding: '20px 10px 8px',
               }}>
                 {stage && (
@@ -1030,7 +2551,7 @@ function PhotoFeed({ projectId }) {
               <div style={{
                 position: 'absolute', top: 8, right: 8,
                 width: 28, height: 28, borderRadius: 8,
-                background: 'rgba(17,24,39,.5)', backdropFilter: 'blur(4px)',
+                background: 'rgba(92, 58, 33,.5)', backdropFilter: 'blur(4px)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
               }}>
                 <ZoomIn size={13} color="#fff" />
@@ -1099,8 +2620,8 @@ function CostBreakdownCard({ project, fmt, card, pad, isMobile }) {
   if (!hasBd && surcharges.length === 0) return null;
 
   const BD_ROWS = [
-    { key: 'product',      label: 'Product / Materials',  color: '#0F766E' },
-    { key: 'shipping',     label: 'Shipping & Freight',   color: '#0284C7' },
+    { key: 'product',      label: 'Product / Materials',  color: `var(--accent-secondary)` },
+    { key: 'shipping',     label: 'Shipping & Freight',   color: `var(--text-secondary)` },
     { key: 'installation', label: 'Installation Labour',  color: '#D97706' },
   ].filter(r => breakdown[r.key]?.enabled && breakdown[r.key]?.amount > 0);
 
@@ -1112,33 +2633,33 @@ function CostBreakdownCard({ project, fmt, card, pad, isMobile }) {
 
   return (
     <div style={{ ...card, padding: pad }}>
-      <div style={{ fontSize: 13, fontWeight: 800, color: '#111827', marginBottom: 4 }}>Project Cost Breakdown</div>
-      <div style={{ fontSize: 11, color: '#6B7280', marginBottom: 18 }}>Itemised summary of your project cost</div>
+      <div style={{ fontSize: 13, fontWeight: 800, color: `var(--accent-secondary)`, marginBottom: 4 }}>Project Cost Breakdown</div>
+      <div style={{ fontSize: 11, color: `var(--text-secondary)`, marginBottom: 18 }}>Itemised summary of your project cost</div>
 
       {/* Line items */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
         {BD_ROWS.map((r, i) => (
-          <div key={r.key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '11px 0', borderBottom: `1px solid #E5E7EB` }}>
+          <div key={r.key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '11px 0', borderBottom: `1px solid var(--border-color)` }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <div style={{ width: 8, height: 8, borderRadius: '50%', background: r.color, flexShrink: 0 }} />
               <span style={{ fontSize: 13, color: '#3D3530', fontWeight: 600 }}>{r.label}</span>
             </div>
-            <span style={{ fontSize: 13, fontWeight: 800, color: '#111827' }}>{fmt(breakdown[r.key].amount)}</span>
+            <span style={{ fontSize: 13, fontWeight: 800, color: `var(--accent-secondary)` }}>{fmt(breakdown[r.key].amount)}</span>
           </div>
         ))}
         {extraRows.map(e => (
-          <div key={e.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '11px 0', borderBottom: '1px solid #E5E7EB' }}>
+          <div key={e.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '11px 0', borderBottom: '1px solid var(--border-color)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#6B7280', flexShrink: 0 }} />
               <span style={{ fontSize: 13, color: '#3D3530', fontWeight: 600 }}>{e.label}</span>
             </div>
-            <span style={{ fontSize: 13, fontWeight: 800, color: '#111827' }}>{fmt(e.amount)}</span>
+            <span style={{ fontSize: 13, fontWeight: 800, color: `var(--accent-secondary)` }}>{fmt(e.amount)}</span>
           </div>
         ))}
 
         {/* Surcharges */}
         {surcharges.map(sc => (
-          <div key={sc.id} style={{ padding: '12px 0', borderBottom: '1px solid #E5E7EB' }}>
+          <div key={sc.id} style={{ padding: '12px 0', borderBottom: '1px solid var(--border-color)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#DC2626', flexShrink: 0, marginTop: 2 }} />
@@ -1148,16 +2669,16 @@ function CostBreakdownCard({ project, fmt, card, pad, isMobile }) {
             </div>
             <div style={{ marginLeft: 18, padding: '10px 14px', background: '#FEF2F2', borderRadius: 10, border: '1px solid #FECACA30' }}>
               <div style={{ fontSize: 11, fontWeight: 800, color: '#DC2626', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 4 }}>Reason for adjustment</div>
-              <div style={{ fontSize: 12, color: '#4B5563', lineHeight: 1.6 }}>{sc.reason}</div>
-              <div style={{ fontSize: 10, color: '#6B7280', marginTop: 6, fontWeight: 600 }}>Effective {sc.date}</div>
+              <div style={{ fontSize: 12, color: `var(--text-secondary)`, lineHeight: 1.6 }}>{sc.reason}</div>
+              <div style={{ fontSize: 10, color: `var(--text-secondary)`, marginTop: 6, fontWeight: 600 }}>Effective {sc.date}</div>
             </div>
           </div>
         ))}
 
         {/* Total */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 14, marginTop: 4 }}>
-          <span style={{ fontSize: 14, fontWeight: 900, color: '#111827' }}>Total Project Value</span>
-          <span style={{ fontSize: 16, fontWeight: 900, color: '#111827' }}>{fmt(grandTotal)}</span>
+          <span style={{ fontSize: 14, fontWeight: 900, color: `var(--accent-secondary)` }}>Total Project Value</span>
+          <span style={{ fontSize: 16, fontWeight: 900, color: `var(--accent-secondary)` }}>{fmt(grandTotal)}</span>
         </div>
       </div>
     </div>
@@ -1165,14 +2686,19 @@ function CostBreakdownCard({ project, fmt, card, pad, isMobile }) {
 }
 
 // ─── Payments Tab ─────────────────────────────────────────────────────────────
-function PaymentsTab({ project, user, transactions: propTxns, invoices: propInvs, brand, isMobile }) {
+function PaymentsTab({ project, user, transactions: propTxns, invoices: propInvs, brand, isMobile, finSettings = {} }) {
   const budget = Number(project.budget) || 0;
-  const USD_RATE = Number(brand?.exchangeRate) || 15.5;
+  const USD_RATE = Number(brand?.finSettings?.exchangeRate || brand?.exchangeRate) || 15.5;
   const [showUSD, setShowUSD] = useState(
     user?.currency === 'USD' || project?.currency === 'USD'
   );
   const [livePayments, setLivePayments] = useState(null);
   const [liveInvoices, setLiveInvoices] = useState(null);
+  const [viewInvoice, setViewInvoice] = useState(null);
+  const [offlineMethod, setOfflineMethod] = useState(null); // 'bank' | 'cash' | null
+  const [offlineSubmitting, setOfflineSubmitting] = useState(false);
+  const [offlineSubmitted, setOfflineSubmitted] = useState(false);
+  const [paySuccess, setPaySuccess] = useState(false);
 
   useEffect(() => {
     if (!db || !project?.id) return;
@@ -1188,23 +2714,30 @@ function PaymentsTab({ project, user, transactions: propTxns, invoices: propInvs
 
   useEffect(() => {
     if (!db || !project?.id) return;
-    const q = query(
-      collection(db, 'projects', project.id, 'payments'),
-      orderBy('createdAt', 'desc')
-    );
-    return onSnapshot(q,
-      snap => setLiveInvoices(snap.docs.map(d => ({ id: d.id, ...d.data() }))),
-      () => setLiveInvoices([])
-    );
+    // Run two queries: some invoices use parentId, others use projectId
+    // Merge and deduplicate by document id
+    let byParent = [];
+    let byProject = [];
+    const merge = () => {
+      const seen = {};
+      [...byParent, ...byProject].forEach(inv => { seen[inv.id] = inv; });
+      setLiveInvoices(Object.values(seen));
+    };
+    const q1 = query(collection(db, 'invoices'), where('parentId', '==', project.id));
+    const q2 = query(collection(db, 'invoices'), where('projectId', '==', project.id));
+    const unsub1 = onSnapshot(q1, snap => { byParent = snap.docs.map(d => ({ id: d.id, ...d.data() })); merge(); }, () => { byParent = []; merge(); });
+    const unsub2 = onSnapshot(q2, snap => { byProject = snap.docs.map(d => ({ id: d.id, ...d.data() })); merge(); }, () => { byProject = []; merge(); });
+    return () => { unsub1(); unsub2(); };
   }, [project?.id]);
 
   const uid = user?.id || user?.uid || user?.phone;
   const allPayments = livePayments
-    ?? (propTxns || []).filter(t => t.projectId === project.id || t.clientId === uid);
+    ?? (propTxns || []).filter(t => t.projectId === project.id);
   const allInvoices = liveInvoices
-    ?? (propInvs || []).filter(i => i.projectId === project.id || i.clientId === uid);
+    ?? (propInvs || []).filter(i => i.projectId === project.id || i.parentId === project.id);
 
-  const totalPaid = allPayments.reduce((s, t) => s + (Number(t.amount) || 0), 0);
+  const parseAmount = value => parseFloat(String(value || '0').replace(/[^0-9.]/g, '')) || 0;
+  const totalPaid = allPayments.reduce((s, t) => s + parseAmount(t.amount), 0);
   const paidPct = budget > 0 ? Math.min(100, (totalPaid / budget) * 100) : 0;
 
   const fmt = (ghsAmount) => {
@@ -1227,40 +2760,61 @@ function PaymentsTab({ project, user, transactions: propTxns, invoices: propInvs
   const activeMilestones = scheduleConfig.milestones;
   const isCustom = scheduleType === 'custom';
 
+  // Which project stage triggers each standard milestone key
+  const MILESTONE_TRIGGERS = {
+    'post-rendering':  { stage: 3, label: 'After rendering approval',  stageLabel: 'Stage 3 — Quote' },
+    'post-production': { stage: 5, label: 'After production complete', stageLabel: 'Stage 5 — Delivery' },
+    'post-shipping':   { stage: 7, label: 'After delivery',            stageLabel: 'Stage 7 — Inspection' },
+  };
+
   const getMilestoneStatus = (m) => {
     if (budget <= 0) return 'upcoming';
-    if (totalPaid >= budget * m.cumPct) return 'paid';
-    if (totalPaid >= budget * (m.cumPct - m.pct)) return 'due';
+    // Check if the linked Firestore invoice is paid
+    const linkedInv = allInvoices.find(i => i.milestoneKey === m.key);
+    if (linkedInv && ['paid', 'paid in full'].includes(String(linkedInv.status || '').toLowerCase().trim())) return 'paid';
+    // Check if cumulative payment total covers this milestone
+    if (totalPaid >= budget * m.cumPct - 0.01) return 'paid';
+    // Determine if this milestone has been triggered (stage reached OR invoice activated by admin)
+    const trigger = MILESTONE_TRIGGERS[m.key];
+    const stageReached = !trigger || (project.stageId || 1) >= trigger.stage;
+    const invoiceActivated = linkedInv && (linkedInv.due || ['Sent', 'Overdue'].includes(linkedInv.status));
+    if (stageReached || invoiceActivated) {
+      // Only show as "due" if previous milestones are settled
+      if (totalPaid >= budget * (m.cumPct - m.pct) - 0.01) return 'due';
+    }
     return 'upcoming';
   };
   const currentDueMilestone = activeMilestones.find(m => getMilestoneStatus(m) === 'due');
+  const currentDueMilestoneInv = currentDueMilestone
+    ? allInvoices.find(i => i.milestoneKey === currentDueMilestone.key)
+    : null;
   const email = user?.proxyEmail || (user?.phone ? user.phone + '@clients.westlinefuture.com' : 'client@clients.westlinefuture.com');
 
   const card = {
     background: '#fff',
     borderRadius: isMobile ? 24 : 20,
-    border: isMobile ? 'none' : '1px solid #E5E7EB',
+    border: isMobile ? 'none' : '1px solid var(--border-color)',
     boxShadow: isMobile ? '0 2px 16px rgba(0,0,0,.08)' : '0 4px 20px rgba(0,0,0,.05)',
   };
   const pad = isMobile ? '20px 18px' : '24px 28px';
-  const sectionTitle = { fontSize: 13, fontWeight: 800, color: '#111827', marginBottom: 16 };
+  const sectionTitle = { fontSize: 13, fontWeight: 800, color: `var(--accent-secondary)`, marginBottom: 16 };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: isMobile ? 14 : 20 }}>
 
       {/* Currency toggle */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: isMobile ? '0 2px' : 0 }}>
-        <div style={{ fontSize: 12, color: '#6B7280', fontWeight: 600 }}>
-          Base currency: <strong style={{ color: '#111827' }}>GHS</strong>
+        <div style={{ fontSize: 12, color: `var(--text-secondary)`, fontWeight: 600 }}>
+          Base currency: <strong style={{ color: `var(--accent-secondary)` }}>GHS</strong>
         </div>
         <button
           onClick={() => setShowUSD(p => !p)}
           style={{
             display: 'flex', alignItems: 'center', gap: 7,
             padding: '8px 16px', borderRadius: 22,
-            background: showUSD ? '#111827' : '#F9FAFB',
-            border: `2px solid ${showUSD ? '#111827' : '#E5E7EB'}`,
-            color: showUSD ? '#0F766E' : '#4B5563',
+            background: showUSD ? `var(--accent-secondary)` : `var(--bg-secondary)`,
+            border: `2px solid ${showUSD ? `var(--accent-secondary)` : `var(--border-color)`}`,
+            color: showUSD ? `var(--accent-secondary)` : `var(--text-secondary)`,
             fontSize: 12, fontWeight: 800, cursor: 'pointer',
             minHeight: 40, touchAction: 'manipulation', transition: 'all .2s',
           }}
@@ -1278,14 +2832,14 @@ function PaymentsTab({ project, user, transactions: propTxns, invoices: propInvs
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
           <div>
             <div style={sectionTitle}>Payment Schedule</div>
-            <div style={{ fontSize: 10, fontWeight: 700, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '.06em', marginTop: -10 }}>
+            <div style={{ fontSize: 10, fontWeight: 700, color: `var(--text-secondary)`, textTransform: 'uppercase', letterSpacing: '.06em', marginTop: -10 }}>
               {scheduleConfig.label}
             </div>
           </div>
           {budget > 0 && (
             <div style={{ textAlign: 'right', flexShrink: 0 }}>
               <div style={{ fontSize: 13, fontWeight: 900, color: '#16A34A' }}>{fmt(totalPaid)}</div>
-              <div style={{ fontSize: 10, color: '#6B7280', fontWeight: 600 }}>paid so far</div>
+              <div style={{ fontSize: 10, color: `var(--text-secondary)`, fontWeight: 600 }}>paid so far</div>
             </div>
           )}
         </div>
@@ -1293,11 +2847,11 @@ function PaymentsTab({ project, user, transactions: propTxns, invoices: propInvs
         {/* Progress bar */}
         {budget > 0 && (
           <div style={{ marginBottom: isCustom ? 16 : 20 }}>
-            <div style={{ height: 10, background: '#E5E7EB', borderRadius: 5, overflow: 'hidden', marginBottom: 6 }}>
+            <div style={{ height: 10, background: `var(--border-color)`, borderRadius: 5, overflow: 'hidden', marginBottom: 6 }}>
               <div style={{ height: '100%', width: `${paidPct}%`, background: 'linear-gradient(90deg, #16A34A80, #16A34A)', borderRadius: 5, transition: 'width 1.2s ease' }} />
             </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#6B7280' }}>
-              <span style={{ fontWeight: 700, color: paidPct >= 100 ? '#16A34A' : '#111827' }}>{paidPct.toFixed(1)}% paid</span>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: `var(--text-secondary)` }}>
+              <span style={{ fontWeight: 700, color: paidPct >= 100 ? '#16A34A' : `var(--accent-secondary)` }}>{paidPct.toFixed(1)}% paid</span>
               <span>{fmt(budget - totalPaid)} remaining · Total {fmt(budget)}</span>
             </div>
           </div>
@@ -1307,22 +2861,22 @@ function PaymentsTab({ project, user, transactions: propTxns, invoices: propInvs
         {isCustom ? (
           <div>
             {budget <= 0 ? (
-              <div style={{ fontSize: 13, color: '#6B7280', textAlign: 'center', padding: '12px 0' }}>
+              <div style={{ fontSize: 13, color: `var(--text-secondary)`, textAlign: 'center', padding: '12px 0' }}>
                 No project budget set yet.
               </div>
             ) : (
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                 <div style={{ padding: '14px 16px', background: '#F0FDF4', borderRadius: 14, border: '1.5px solid #16A34A20' }}>
-                  <div style={{ fontSize: 10, fontWeight: 800, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 4 }}>Amount Paid</div>
+                  <div style={{ fontSize: 10, fontWeight: 800, color: `var(--text-secondary)`, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 4 }}>Amount Paid</div>
                   <div style={{ fontSize: 18, fontWeight: 900, color: '#16A34A' }}>{fmt(totalPaid)}</div>
-                  <div style={{ fontSize: 10, color: '#6B7280', marginTop: 2 }}>{allPayments.length} payment{allPayments.length !== 1 ? 's' : ''}</div>
+                  <div style={{ fontSize: 10, color: `var(--text-secondary)`, marginTop: 2 }}>{allPayments.length} payment{allPayments.length !== 1 ? 's' : ''}</div>
                 </div>
                 <div style={{ padding: '14px 16px', background: '#FFFBEB', borderRadius: 14, border: '1.5px solid #D9770620' }}>
-                  <div style={{ fontSize: 10, fontWeight: 800, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 4 }}>Balance Due</div>
+                  <div style={{ fontSize: 10, fontWeight: 800, color: `var(--text-secondary)`, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 4 }}>Balance Due</div>
                   <div style={{ fontSize: 18, fontWeight: 900, color: totalPaid >= budget ? '#16A34A' : '#D97706' }}>
                     {totalPaid >= budget ? 'Cleared ✓' : fmt(budget - totalPaid)}
                   </div>
-                  <div style={{ fontSize: 10, color: '#6B7280', marginTop: 2 }}>{paidPct.toFixed(0)}% of {fmt(budget)}</div>
+                  <div style={{ fontSize: 10, color: `var(--text-secondary)`, marginTop: 2 }}>{paidPct.toFixed(0)}% of {fmt(budget)}</div>
                 </div>
               </div>
             )}
@@ -1334,56 +2888,167 @@ function PaymentsTab({ project, user, transactions: propTxns, invoices: propInvs
               const status = getMilestoneStatus(m);
               const isPaid = status === 'paid';
               const isDue = status === 'due';
+              const trigger = MILESTONE_TRIGGERS[m.key];
+              const linkedInv = allInvoices.find(i => i.milestoneKey === m.key);
+              const dueDateStr = linkedInv?.due
+                ? new Date(linkedInv.due + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+                : null;
               return (
                 <div key={m.key} style={{
-                  display: 'flex', alignItems: 'center', gap: isMobile ? 12 : 14,
-                  padding: isMobile ? '13px 14px' : '15px 18px', borderRadius: 14,
-                  background: isDue ? '#F0FDF4' : '#FAFAF9',
-                  border: `1.5px solid ${isDue ? '#16A34A40' : isPaid ? '#16A34A20' : '#E5E7EB'}`,
+                  borderRadius: 16,
+                  background: isDue ? 'linear-gradient(135deg,#F0FDF4,#FAFFF8)' : isPaid ? '#FAFAF9' : '#FAFAF9',
+                  border: `1.5px solid ${isDue ? '#16A34A50' : isPaid ? '#16A34A20' : `var(--border-color)`}`,
+                  overflow: 'hidden',
                 }}>
-                  <div style={{
-                    width: 32, height: 32, borderRadius: 9, flexShrink: 0,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    background: isPaid ? '#16A34A' : isDue ? '#F0FDF4' : '#E5E7EB',
-                    border: isDue ? '2px solid #16A34A' : 'none',
-                  }}>
-                    {isPaid
-                      ? <Check size={14} color="#fff" />
-                      : <span style={{ fontSize: 11, fontWeight: 900, color: isDue ? '#16A34A' : '#6B7280' }}>{idx + 1}</span>
-                    }
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: '#111827' }}>{m.label}</div>
-                    {budget > 0 && (
-                      <div style={{ fontSize: 13, fontWeight: 800, color: isPaid ? '#16A34A' : isDue ? '#16A34A' : '#6B7280', marginTop: 2 }}>
-                        {fmt(budget * m.pct)}
-                      </div>
-                    )}
-                  </div>
-                  <div style={{ flexShrink: 0 }}>
-                    {isPaid && <span style={{ fontSize: 10, fontWeight: 800, color: '#065F46', background: '#D1FAE5', padding: '4px 10px', borderRadius: 20 }}>Paid ✓</span>}
-                    {isDue && <span style={{ fontSize: 10, fontWeight: 800, color: '#92400E', background: '#FEF3C7', padding: '4px 10px', borderRadius: 20 }}>Due Now</span>}
-                    {status === 'upcoming' && <span style={{ fontSize: 10, fontWeight: 700, color: '#6B7280', background: '#E5E7EB', padding: '4px 10px', borderRadius: 20 }}>Upcoming</span>}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 12 : 14, padding: isMobile ? '13px 14px' : '15px 18px' }}>
+                    <div style={{
+                      width: 36, height: 36, borderRadius: 10, flexShrink: 0,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      background: isPaid ? '#16A34A' : isDue ? '#D1FAE5' : `var(--border-color)`,
+                      border: isDue ? '2px solid #16A34A60' : 'none',
+                    }}>
+                      {isPaid
+                        ? <Check size={14} color="#fff" />
+                        : <span style={{ fontSize: 12, fontWeight: 900, color: isDue ? '#15803D' : `var(--text-secondary)` }}>{idx + 1}</span>
+                      }
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 13, fontWeight: 800, color: `var(--accent-secondary)` }}>{m.label}</div>
+                      {budget > 0 && (
+                        <div style={{ fontSize: 14, fontWeight: 900, color: isPaid ? '#16A34A' : isDue ? '#15803D' : `var(--text-secondary)`, marginTop: 1 }}>
+                          {fmt(budget * m.pct)}
+                        </div>
+                      )}
+                      {trigger && (
+                        <div style={{ fontSize: 10, color: `var(--text-secondary)`, fontWeight: 600, marginTop: 2 }}>
+                          {trigger.label} · {trigger.stageLabel}
+                        </div>
+                      )}
+                      {isDue && dueDateStr && (
+                        <div style={{ fontSize: 10, fontWeight: 800, color: '#B45309', marginTop: 3 }}>⏰ Due by {dueDateStr}</div>
+                      )}
+                    </div>
+                    <div style={{ flexShrink: 0 }}>
+                      {isPaid && <span style={{ fontSize: 10, fontWeight: 800, color: '#065F46', background: '#D1FAE5', padding: '4px 10px', borderRadius: 20 }}>Paid ✓</span>}
+                      {isDue && <span style={{ fontSize: 10, fontWeight: 800, color: '#14532D', background: '#BBFAD5', padding: '4px 10px', borderRadius: 20 }}>Due Now</span>}
+                      {status === 'upcoming' && <span style={{ fontSize: 10, fontWeight: 700, color: `var(--text-secondary)`, background: `var(--border-color)`, padding: '4px 10px', borderRadius: 20 }}>Upcoming</span>}
+                    </div>
                   </div>
                 </div>
               );
             })}
 
             {currentDueMilestone && budget > 0 && (
-              <div style={{ marginTop: 10, paddingTop: 16, borderTop: '1px solid #E5E7EB' }}>
-                <div style={{ fontSize: 13, color: '#4B5563', marginBottom: 12 }}>
-                  Ready to pay your <strong>{currentDueMilestone.label}</strong>?
-                </div>
-                <PaymentButton
-                  label={`Pay ${fmt(budget * currentDueMilestone.pct)} Now`}
-                  amountGHS={budget * currentDueMilestone.pct}
-                  email={email}
-                  projectId={project?.id}
-                  paymentType={currentDueMilestone.label?.toLowerCase().replace(/\s+/g, '_')}
-                  onSuccess={async (ref) => {
-                    if (import.meta.env.DEV) console.log('[PaymentsTab] Payment success', ref);
-                  }}
-                />
+              <div style={{ marginTop: 10, padding: '18px 20px', borderRadius: 16, background: 'linear-gradient(135deg,#F0FDF4,#FAFFF8)', border: '1.5px solid #16A34A30' }}>
+                {paySuccess ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, padding: '16px 0', textAlign: 'center' }}>
+                    <div style={{ width: 56, height: 56, borderRadius: '50%', background: '#D1FAE5', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <CheckCircle2 size={28} color="#16A34A" />
+                    </div>
+                    <div style={{ fontSize: 16, fontWeight: 900, color: '#14532D' }}>Payment Confirmed!</div>
+                    <div style={{ fontSize: 13, color: '#15803D' }}>Your payment has been received. The team has been notified and your project will advance shortly.</div>
+                  </div>
+                ) : offlineSubmitted ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, padding: '12px 0', textAlign: 'center' }}>
+                    <div style={{ width: 48, height: 48, borderRadius: '50%', background: '#EFF6FF', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <Clock size={24} color="#3B82F6" />
+                    </div>
+                    <div style={{ fontSize: 14, fontWeight: 800, color: '#1D4ED8' }}>Payment Notified</div>
+                    <div style={{ fontSize: 12, color: '#3B82F6', lineHeight: 1.5 }}>The team will verify your {offlineMethod === 'bank' ? 'bank transfer' : 'cash payment'} and confirm within 1 business day.</div>
+                  </div>
+                ) : (
+                  <>
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 14 }}>
+                      <div style={{ width: 40, height: 40, borderRadius: 12, background: '#D1FAE5', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                        <CreditCard size={18} color="#15803D" />
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 14, fontWeight: 900, color: '#14532D' }}>Payment Due</div>
+                        <div style={{ fontSize: 13, color: '#15803D', fontWeight: 700, marginTop: 2 }}>{currentDueMilestone.label}</div>
+                        <div style={{ fontSize: 15, fontWeight: 900, color: '#14532D', marginTop: 4 }}>{fmt(budget * currentDueMilestone.pct)}</div>
+                        {currentDueMilestoneInv?.due && (
+                          <div style={{ fontSize: 11, color: '#B45309', fontWeight: 700, marginTop: 3 }}>
+                            ⏰ Due by {new Date(currentDueMilestoneInv.due + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {!offlineMethod ? (
+                      <>
+                        <UnifiedPaymentGateway
+                          label={`Pay ${fmt(budget * currentDueMilestone.pct)} Now`}
+                          amountGHS={budget * currentDueMilestone.pct}
+                          email={email}
+                          projectId={project?.id}
+                          invoiceId={currentDueMilestoneInv?.id}
+                          paymentType={isInitialProjectDepositInvoice(currentDueMilestoneInv) ? 'deposit' : 'milestone'}
+                          onSuccess={async () => { setPaySuccess(true); }}
+                        />
+                        <div style={{ marginTop: 10, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                          <button onClick={() => setOfflineMethod('bank')} style={{ flex: 1, padding: '11px 14px', borderRadius: 12, border: '1.5px solid var(--border-color)', background: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', color: 'var(--accent-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                            🏦 Bank Transfer
+                          </button>
+                          <button onClick={() => setOfflineMethod('cash')} style={{ flex: 1, padding: '11px 14px', borderRadius: 12, border: '1.5px solid var(--border-color)', background: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', color: 'var(--accent-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                            💵 Cash / In-Person
+                          </button>
+                        </div>
+                      </>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                        <button onClick={() => setOfflineMethod(null)} style={{ alignSelf: 'flex-start', background: 'none', border: 'none', fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', cursor: 'pointer', padding: 0 }}>← Back to payment options</button>
+                        {offlineMethod === 'bank' ? (
+                          <div style={{ padding: '16px 18px', background: '#F0FDF4', border: '1.5px solid #BBF7D0', borderRadius: 12 }}>
+                            <div style={{ fontSize: 12, fontWeight: 800, color: '#15803D', marginBottom: 8 }}>🏦 Bank Account Details</div>
+                            {finSettings.bankDetails ? (
+                              <div style={{ fontSize: 13, color: '#166534', lineHeight: 2, whiteSpace: 'pre-wrap', fontFamily: 'monospace' }}>{finSettings.bankDetails}</div>
+                            ) : (
+                              <div style={{ fontSize: 13, color: '#166534' }}>Contact the team for bank account details.</div>
+                            )}
+                            <div style={{ marginTop: 10, padding: '8px 12px', background: '#DCFCE7', borderRadius: 8, fontSize: 11, color: '#166534', fontWeight: 700 }}>
+                              Reference: {currentDueMilestoneInv?.invoiceNumber || currentDueMilestone.label} / {project.title}
+                            </div>
+                          </div>
+                        ) : (
+                          <div style={{ padding: '16px 18px', background: '#FAF5FF', border: '1.5px solid #E9D5FF', borderRadius: 12 }}>
+                            <div style={{ fontSize: 12, fontWeight: 800, color: '#6D28D9', marginBottom: 8 }}>💵 In-Person Payment</div>
+                            <div style={{ fontSize: 13, color: '#5B21B6', lineHeight: 1.6 }}>Visit our office or arrange a courier. Reference your invoice when paying.</div>
+                            {finSettings.officeAddress && <div style={{ marginTop: 8, fontSize: 12, color: '#7C3AED', fontWeight: 700 }}>📍 {finSettings.officeAddress}</div>}
+                          </div>
+                        )}
+                        <button
+                          onClick={async () => {
+                            if (!currentDueMilestoneInv?.id || offlineSubmitting) return;
+                            setOfflineSubmitting(true);
+                            try {
+                              await updateDoc(doc(db, 'invoices', currentDueMilestoneInv.id), {
+                                awaitingConfirmation: true,
+                                paymentMethodSubmitted: offlineMethod,
+                                paymentSubmittedAt: serverTimestamp(),
+                              });
+                              const paymentMessage = `${user?.name || project.clientName || 'Client'} submitted an offline payment for ${currentDueMilestoneInv.currency || 'GHS'} ${parseAmount(currentDueMilestoneInv.amount || currentDueMilestoneInv.total).toLocaleString()}. Please confirm receipt.`;
+                              const recipients = [...new Set(['admin', project.projectManagerId, ...(project.assignedStaff || [])].filter(Boolean))];
+                              await Promise.all(recipients.map(userId => addDoc(collection(db, 'notifications'), {
+                                userId,
+                                message: paymentMessage,
+                                msg: paymentMessage,
+                                type: 'payment_submitted',
+                                link: '/admin/client-hub',
+                                read: false,
+                                createdAt: serverTimestamp(),
+                              }).catch(() => null)));
+                              setOfflineSubmitted(true);
+                            } catch (e) { console.error(e); } finally { setOfflineSubmitting(false); }
+                          }}
+                          disabled={offlineSubmitting}
+                          style={{ width: '100%', padding: '13px 18px', borderRadius: 12, border: 'none', background: offlineMethod === 'bank' ? '#16A34A' : '#7C3AED', color: '#fff', fontSize: 13, fontWeight: 800, cursor: offlineSubmitting ? 'default' : 'pointer', opacity: offlineSubmitting ? 0.7 : 1 }}
+                        >
+                          {offlineSubmitting ? 'Submitting…' : offlineMethod === 'bank' ? "I've Made the Transfer" : "Notify Team — Paying In Person"}
+                        </button>
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
             )}
           </div>
@@ -1396,46 +3061,46 @@ function PaymentsTab({ project, user, transactions: propTxns, invoices: propInvs
         {allPayments.length === 0 ? (
           <div style={{ padding: '32px 0', textAlign: 'center' }}>
             <div style={{ fontSize: 36, marginBottom: 10 }}>💸</div>
-            <div style={{ fontSize: 14, fontWeight: 700, color: '#111827', marginBottom: 4 }}>No payments yet</div>
-            <div style={{ fontSize: 12, color: '#6B7280' }}>Your payment records will appear here.</div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: `var(--accent-secondary)`, marginBottom: 4 }}>No payments yet</div>
+            <div style={{ fontSize: 12, color: `var(--text-secondary)` }}>Your payment records will appear here.</div>
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {allPayments.map(t => (
-              <div key={t.id} style={{ background: '#FAFAF9', borderRadius: 16, border: '1px solid #E5E7EB', overflow: 'hidden' }}>
+              <div key={t.id} style={{ background: '#FAFAF9', borderRadius: 16, border: '1px solid var(--border-color)', overflow: 'hidden' }}>
                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: isMobile ? '14px 14px 10px' : '16px 18px 10px' }}>
                   <div style={{ width: 38, height: 38, borderRadius: 11, background: '#D1FAE5', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 2 }}>
                     <Check size={16} color="#16A34A" />
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: '#111827', marginBottom: 4 }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: `var(--accent-secondary)`, marginBottom: 4 }}>
                       {t.description || t.title || 'Payment received'}
                     </div>
-                    <div style={{ fontSize: 11, color: '#6B7280', marginBottom: 4 }}>
+                    <div style={{ fontSize: 11, color: `var(--text-secondary)`, marginBottom: 4 }}>
                       {fmtDate(t.date || t.createdAt, true)}
                     </div>
                     {t.reference && (
-                      <div style={{ display: 'inline-block', fontSize: 10, color: '#4B5563', fontFamily: 'monospace', background: '#E5E7EB', padding: '2px 8px', borderRadius: 6 }}>
+                      <div style={{ display: 'inline-block', fontSize: 10, color: `var(--text-secondary)`, fontFamily: 'monospace', background: `var(--border-color)`, padding: '2px 8px', borderRadius: 6 }}>
                         {t.reference}
                       </div>
                     )}
                     {t.method && (
-                      <div style={{ fontSize: 11, color: '#6B7280', marginTop: 4 }}>via {t.method}</div>
+                      <div style={{ fontSize: 11, color: `var(--text-secondary)`, marginTop: 4 }}>via {t.method}</div>
                     )}
                   </div>
                   <div style={{ textAlign: 'right', flexShrink: 0 }}>
                     <div style={{ fontSize: 16, fontWeight: 900, color: '#16A34A' }}>{fmt(t.amount)}</div>
                     {showUSD && (
-                      <div style={{ fontSize: 10, color: '#6B7280', marginTop: 2 }}>
+                      <div style={{ fontSize: 10, color: `var(--text-secondary)`, marginTop: 2 }}>
                         ≈ GHS {Number(t.amount || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}
                       </div>
                     )}
                   </div>
                 </div>
-                <div style={{ borderTop: '1px solid #E5E7EB', padding: isMobile ? '9px 14px' : '9px 18px', display: 'flex', justifyContent: 'flex-end' }}>
+                <div style={{ borderTop: '1px solid var(--border-color)', padding: isMobile ? '9px 14px' : '9px 18px', display: 'flex', justifyContent: 'flex-end' }}>
                   <button
                     onClick={() => downloadPaymentReceipt(t, project, user, brand)}
-                    style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 10, background: '#E5E7EB', border: 'none', fontSize: 11, fontWeight: 700, color: '#111827', cursor: 'pointer', touchAction: 'manipulation', minHeight: 34 }}
+                    style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 10, background: `var(--border-color)`, border: 'none', fontSize: 11, fontWeight: 700, color: `var(--accent-secondary)`, cursor: 'pointer', touchAction: 'manipulation', minHeight: 34 }}
                   >
                     <Download size={12} /> Download Receipt
                   </button>
@@ -1452,29 +3117,26 @@ function PaymentsTab({ project, user, transactions: propTxns, invoices: propInvs
         {allInvoices.length === 0 ? (
           <div style={{ padding: '28px 0', textAlign: 'center' }}>
             <div style={{ fontSize: 36, marginBottom: 10 }}>📄</div>
-            <div style={{ fontSize: 13, fontWeight: 700, color: '#111827', marginBottom: 4 }}>No invoices yet</div>
-            <div style={{ fontSize: 12, color: '#6B7280' }}>Invoices will appear here as they are issued.</div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: `var(--accent-secondary)`, marginBottom: 4 }}>No invoices yet</div>
+            <div style={{ fontSize: 12, color: `var(--text-secondary)` }}>Invoices will appear here as they are issued.</div>
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {allInvoices.map(inv => (
-              <div key={inv.id} style={{ background: '#FAFAF9', borderRadius: 16, border: '1px solid #E5E7EB', overflow: 'hidden' }}>
+              <div key={inv.id} style={{ background: '#FAFAF9', borderRadius: 16, border: '1px solid var(--border-color)', overflow: 'hidden' }}>
                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: isMobile ? '14px 14px 10px' : '16px 18px 10px' }}>
                   <div style={{ width: 38, height: 38, borderRadius: 11, background: '#FEF3C7', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 2 }}>
                     <FileText size={16} color="#D97706" />
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: '#111827', marginBottom: 3 }}>
-                      Invoice #{inv.invoiceNumber || (inv.id || '').slice(0, 8).toUpperCase()}
+                    <div style={{ fontSize: 13, fontWeight: 700, color: `var(--accent-secondary)`, marginBottom: 3 }}>
+                      {inv.title || `Invoice #${inv.invoiceNumber || (inv.id || '').slice(0, 8).toUpperCase()}`}
                     </div>
-                    <div style={{ fontSize: 11, color: '#6B7280', marginBottom: 6 }}>
-                      {fmtDate(inv.createdAt || inv.date)}
+                    <div style={{ fontSize: 11, color: `var(--text-secondary)`, marginBottom: 6 }}>
+                      {inv.invoiceNumber ? `#${inv.invoiceNumber} · ` : ''}{fmtDate(inv.createdAt || inv.date)}
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                      <span style={{ fontSize: 15, fontWeight: 800, color: '#111827' }}>{fmt(inv.amount || 0)}</span>
-                      {showUSD && inv.amount && (
-                        <span style={{ fontSize: 10, color: '#6B7280' }}>≈ GHS {Number(inv.amount).toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
-                      )}
+                      <span style={{ fontSize: 15, fontWeight: 800, color: `var(--accent-secondary)` }}>{fmt(parseAmount(inv.amount || inv.total))}</span>
                       <span style={{
                         fontSize: 10, fontWeight: 800, padding: '3px 10px', borderRadius: 20,
                         background: inv.status === 'Paid' ? '#D1FAE5' : inv.status === 'Overdue' ? '#FEE2E2' : '#FEF3C7',
@@ -1483,15 +3145,30 @@ function PaymentsTab({ project, user, transactions: propTxns, invoices: propInvs
                         {inv.status || 'Pending'}
                       </span>
                     </div>
-                    {inv.title && <div style={{ fontSize: 12, color: '#4B5563', marginTop: 4 }}>{inv.title}</div>}
                   </div>
                 </div>
-                <div style={{ borderTop: '1px solid #E5E7EB', padding: isMobile ? '9px 14px' : '9px 18px', display: 'flex', justifyContent: 'flex-end' }}>
+                <div style={{ borderTop: '1px solid var(--border-color)', padding: isMobile ? '9px 14px' : '9px 18px', display: 'flex', justifyContent: 'flex-end', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                  {!isPaidStatus(inv.status) && parseAmount(inv.amount || inv.total) > 0 && (
+                    <div style={{ width: 160 }}>
+                      <UnifiedPaymentGateway
+                        label="Pay Now"
+                        amountGHS={parseAmount(inv.amount || inv.total)}
+                        email={email}
+                        projectId={project.id}
+                        invoiceId={inv.id}
+                        paymentType={inv.documentKind === 'receipt' ? 'receipt' : (
+                          isInitialProjectDepositInvoice(inv) ? 'deposit' : 'invoice'
+                        )}
+                        onSuccess={() => window.location.reload()}
+                        onError={(err) => alert("Verification Error: " + err)}
+                      />
+                    </div>
+                  )}
                   <button
-                    onClick={() => downloadInvoicePDF(inv, project, user, brand)}
-                    style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 10, background: '#111827', border: 'none', fontSize: 11, fontWeight: 700, color: '#fff', cursor: 'pointer', touchAction: 'manipulation', minHeight: 34 }}
+                    onClick={() => setViewInvoice(inv)}
+                    style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 16px', borderRadius: 10, background: `var(--accent-secondary)`, border: 'none', fontSize: 11, fontWeight: 700, color: '#fff', cursor: 'pointer', touchAction: 'manipulation', minHeight: 34 }}
                   >
-                    <Download size={12} /> Download Invoice
+                    <FileText size={12} /> View Invoice
                   </button>
                 </div>
               </div>
@@ -1500,232 +3177,95 @@ function PaymentsTab({ project, user, transactions: propTxns, invoices: propInvs
         )}
       </div>
 
-    </div>
-  );
-}
-
-// ─── Project Chat ─────────────────────────────────────────────────────────────
-function ProjectChat({ project, user, addProjectMessage }) {
-  const [messages, setMessages] = useState([]);
-  const [text, setText] = useState('');
-  const [sending, setSending] = useState(false);
-  const [translatingId, setTranslatingId] = useState(null);
-  const [editingId, setEditingId] = useState(null);
-  const [editText, setEditText] = useState('');
-  const [recording, setRecording] = useState(false);
-  const [recordingStartedAt, setRecordingStartedAt] = useState(null);
-  const [voiceSaving, setVoiceSaving] = useState(false);
-  const mediaRecorderRef = useRef(null);
-  const chunksRef = useRef([]);
-  const recordingStartedAtRef = useRef(null);
-  const bottomRef = useRef(null);
-
-  useEffect(() => {
-    if (!db || !project?.id) { setMessages([]); return; }
-    const q = query(
-      collection(db, 'projects', project.id, 'messages'),
-      orderBy('createdAt', 'asc')
-    );
-    const unsub = onSnapshot(q, snap => {
-      const visible = snap.docs
-        .map(d => ({ id: d.id, ...d.data() }))
-        .filter(m => !m.isInternal);
-      setMessages(visible);
-      setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 80);
-    });
-    return unsub;
-  }, [project?.id]);
-
-  const send = async () => {
-    if (!text.trim() || sending) return;
-    setSending(true);
-    await addProjectMessage(project.id, text.trim(), 'client', false);
-    setText('');
-    setSending(false);
-  };
-
-  const translate = async (messageId) => {
-    if (!functions || translatingId) return;
-    setTranslatingId(messageId);
-    try {
-      const fn = httpsCallable(functions, 'translateProjectMessage');
-      await fn({ projectId: project.id, messageId, targetLanguage: 'en' });
-    } catch (err) {
-      alert(err.message || 'Translation failed');
-    } finally {
-      setTranslatingId(null);
-    }
-  };
-
-  const startEdit = (message) => {
-    setEditingId(message.id);
-    setEditText(message.text || '');
-  };
-
-  const saveEdit = async (message) => {
-    if (!db || !editText.trim()) return;
-    await updateDoc(doc(db, 'projects', project.id, 'messages', message.id), {
-      text: editText.trim(),
-      editedAt: serverTimestamp(),
-      editedBy: user?.uid || user?.id || 'client',
-      updatedAt: serverTimestamp(),
-      editHistory: arrayUnion({
-        text: message.text || '',
-        editedAt: new Date().toISOString(),
-        editedBy: user?.uid || user?.id || 'client',
-      }),
-    });
-    setEditingId(null);
-    setEditText('');
-  };
-
-  const startRecording = async () => {
-    if (!navigator.mediaDevices?.getUserMedia || recording) return;
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    const recorder = new MediaRecorder(stream);
-    chunksRef.current = [];
-    recorder.ondataavailable = event => {
-      if (event.data?.size) chunksRef.current.push(event.data);
-    };
-    recorder.onstop = async () => {
-      setVoiceSaving(true);
-      try {
-        const blob = new Blob(chunksRef.current, { type: recorder.mimeType || 'audio/webm' });
-        const duration = recordingStartedAtRef.current ? Math.round((Date.now() - recordingStartedAtRef.current) / 1000) : null;
-        const file = new File([blob], `voice-${Date.now()}.webm`, { type: blob.type });
-        const audioUrl = await uploadFile('project-voice-notes', `${project.id}/${Date.now()}-client.webm`, file);
-        await addProjectMessage(project.id, 'Voice note', 'client', false, {
-          type: 'voice',
-          audioUrl,
-          duration,
-        });
-      } finally {
-        stream.getTracks().forEach(track => track.stop());
-        setRecording(false);
-        recordingStartedAtRef.current = null;
-        setRecordingStartedAt(null);
-        setVoiceSaving(false);
-      }
-    };
-    mediaRecorderRef.current = recorder;
-    recordingStartedAtRef.current = Date.now();
-    setRecordingStartedAt(Date.now());
-    setRecording(true);
-    recorder.start();
-  };
-
-  const stopRecording = () => {
-    if (mediaRecorderRef.current?.state === 'recording') {
-      mediaRecorderRef.current.stop();
-    }
-  };
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 12, paddingRight: 2, marginBottom: 16 }}>
-        {messages.length === 0 && (
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '60px 20px', textAlign: 'center' }}>
-            <div style={{ fontSize: 36, marginBottom: 12 }}>💬</div>
-            <div style={{ fontSize: 15, fontWeight: 700, color: '#111827', marginBottom: 6 }}>Start a conversation</div>
-            <div style={{ fontSize: 13, color: '#6B7280', lineHeight: 1.5 }}>Have a question about your project? Send us a message and our team will respond shortly.</div>
-          </div>
-        )}
-        {messages.map(m => {
-          const isMe = m.senderRole === 'client';
-          const isSystem = m.senderRole === 'system';
-          const translated = m.translations?.en?.text;
-          const canEdit = isMe && !isSystem && m.type !== 'voice';
-          return (
-            <div key={m.id} style={{ display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start' }}>
-              {!isSystem && (
-                <div style={{ fontSize: 10, fontWeight: 700, color: isMe ? AC : '#0F766E', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '.04em' }}>
-                  {isMe ? 'You' : 'Westline Future Team'}
+      {/* ── Invoice Viewer Modal (same design as admin) ── */}
+      {viewInvoice && (
+        <div
+          style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(12px)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: isMobile ? '16px 0 0' : '32px 20px', overflowY: 'auto' }}
+          onClick={e => { if (e.target === e.currentTarget) setViewInvoice(null); }}
+        >
+          <div style={{ background: '#fff', borderRadius: isMobile ? '24px 24px 0 0' : 20, width: '100%', maxWidth: 860, boxShadow: '0 40px 100px rgba(0,0,0,0.3)', overflow: 'hidden', marginBottom: isMobile ? 0 : 32 }}>
+            {/* Modal header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '18px 24px', borderBottom: '1px solid var(--border-color)', background: '#fff', position: 'sticky', top: 0, zIndex: 1 }}>
+              <div>
+                <div style={{ fontSize: 15, fontWeight: 800, color: `var(--accent-secondary)` }}>
+                  {viewInvoice.title || `Invoice #${viewInvoice.invoiceNumber || (viewInvoice.id || '').slice(0, 8).toUpperCase()}`}
                 </div>
-              )}
-              <div style={{
-                maxWidth: '80%', padding: isSystem ? '10px 16px' : '13px 18px',
-                borderRadius: isMe ? '18px 18px 4px 18px' : isSystem ? 12 : '18px 18px 18px 4px',
-                background: isMe ? '#111827' : isSystem ? '#F9FAFB' : '#fff',
-                color: isMe ? '#fff' : isSystem ? '#6B7280' : '#111827',
-                fontSize: isSystem ? 12 : 14, fontStyle: isSystem ? 'italic' : 'normal',
-                border: isSystem ? '1px dashed #E5E7EB' : isMe ? 'none' : '1px solid #E5E7EB',
-                lineHeight: 1.5,
-              }}>
-                {editingId === m.id ? (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    <textarea value={editText} onChange={e => setEditText(e.target.value)} rows={3} style={{ width: 260, border: '1px solid #E5E7EB', borderRadius: 10, padding: 10, fontFamily: 'inherit', fontSize: 13 }} />
-                    <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-                      <button onClick={() => setEditingId(null)} style={{ border: 'none', background: '#F9FAFB', borderRadius: 8, padding: '6px 10px', fontSize: 11, fontWeight: 800, cursor: 'pointer' }}>Cancel</button>
-                      <button onClick={() => saveEdit(m)} style={{ border: 'none', background: '#16A34A', color: '#fff', borderRadius: 8, padding: '6px 10px', fontSize: 11, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}><Save size={12} /> Save</button>
-                    </div>
-                  </div>
-                ) : m.type === 'voice' && m.audioUrl ? (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    <div style={{ fontWeight: 800 }}>{m.text || 'Voice note'}{m.duration ? ` · ${m.duration}s` : ''}</div>
-                    <audio controls src={m.audioUrl} style={{ width: 260, maxWidth: '100%' }} />
-                    {m.transcript && <div style={{ fontSize: 12, opacity: .8 }}>{m.transcript}</div>}
-                  </div>
-                ) : (
-                  m.text
-                )}
-                {m.editedAt && <span style={{ display: 'block', fontSize: 10, opacity: .55, marginTop: 6 }}>Edited</span>}
-                {translated && (
-                  <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px solid ${isMe ? 'rgba(255,255,255,.18)' : '#E5E7EB'}`, fontSize: 12, opacity: .9 }}>
-                    <strong>English:</strong> {translated}
-                  </div>
-                )}
+                <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 2 }}>
+                  {fmtDate(viewInvoice.createdAt || viewInvoice.date)} · {viewInvoice.status || 'Pending'}
+                </div>
               </div>
-              {!isSystem && (
-                <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
-                  <button onClick={() => translate(m.id)} disabled={translatingId === m.id} style={{ border: 'none', background: 'transparent', color: '#6B7280', fontSize: 10, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
-                    <Languages size={11} /> {translatingId === m.id ? 'Translating...' : 'Translate English'}
-                  </button>
-                  {canEdit && (
-                    <button onClick={() => startEdit(m)} style={{ border: 'none', background: 'transparent', color: '#6B7280', fontSize: 10, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
-                      <Edit3 size={11} /> Edit
-                    </button>
-                  )}
-                </div>
-              )}
-              <div style={{ fontSize: 10, color: '#DFD9D1', marginTop: 4 }}>
-                {m.createdAt?.seconds ? new Date(m.createdAt.seconds * 1000).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : ''}
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <button
+                  onClick={() => {
+                    const el = document.getElementById('client-invoice-doc');
+                    if (!el) return;
+                    const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${viewInvoice.title || 'Invoice'}</title><style>@page{size:A4;margin:0}body{margin:0;background:#fff;font-family:sans-serif}#client-invoice-doc{width:210mm;min-height:297mm;margin:0 auto}@media print{button{display:none!important}}</style></head><body><div id="client-invoice-doc">${el.innerHTML}</div><script>window.onload=()=>{setTimeout(()=>{window.print();},500);};<\/script></body></html>`;
+                    const win = window.open('', '_blank');
+                    if (!win) return;
+                    win.document.open();
+                    win.document.write(html);
+                    win.document.close();
+                  }}
+                  style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 10, background: `var(--accent-secondary)`, border: 'none', fontSize: 12, fontWeight: 700, color: '#fff', cursor: 'pointer' }}
+                >
+                  <Printer size={13} /> Print / Download PDF
+                </button>
+                <button
+                  onClick={() => setViewInvoice(null)}
+                  style={{ width: 36, height: 36, borderRadius: 10, border: '1px solid var(--border-color)', background: 'var(--bg-secondary)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                >
+                  <X size={16} />
+                </button>
               </div>
             </div>
-          );
-        })}
-        <div ref={bottomRef} />
-      </div>
-      <div style={{ flexShrink: 0, display: 'flex', gap: 10, borderTop: '1px solid #E5E7EB', paddingTop: 14 }}>
-        <textarea
-          value={text}
-          onChange={e => setText(e.target.value)}
-          onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }}
-          placeholder="Send a message to our team..."
-          rows={2}
-          style={{ flex: 1, padding: '12px 16px', borderRadius: 14, border: '1.5px solid #E5E7EB', fontSize: 16, outline: 'none', resize: 'none', boxSizing: 'border-box', fontFamily: 'inherit', lineHeight: 1.5 }}
-        />
-        <button
-          onClick={recording ? stopRecording : startRecording}
-          disabled={voiceSaving}
-          style={{ width: 48, height: 48, borderRadius: 14, background: recording ? '#EF4444' : '#F9FAFB', color: recording ? '#fff' : '#4B5563', border: '1px solid #E5E7EB', cursor: voiceSaving ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', alignSelf: 'flex-end', flexShrink: 0 }}
-          title={recording ? 'Stop recording' : 'Record voice note'}
-        >
-          {voiceSaving ? <Loader2 size={18} style={{ animation: 'spin 1s linear infinite' }} /> : recording ? <Square size={15} /> : <Mic size={18} />}
-        </button>
-        <button
-          onClick={send}
-          disabled={!text.trim() || sending}
-          style={{ width: 48, height: 48, borderRadius: 14, background: text.trim() ? '#111827' : '#E5E7EB', color: '#fff', border: 'none', cursor: text.trim() ? 'pointer' : 'default', display: 'flex', alignItems: 'center', justifyContent: 'center', alignSelf: 'flex-end', flexShrink: 0, transition: 'background .2s' }}
-        >
-          {sending ? <Loader2 size={18} style={{ animation: 'spin 1s linear infinite' }} /> : <Send size={18} />}
-        </button>
-      </div>
+
+            {/* Invoice document — same InvoiceDocument component as admin portal */}
+            <div style={{ overflowY: 'auto', maxHeight: isMobile ? '75vh' : '72vh', padding: isMobile ? '16px' : '24px', background: '#e8e4de' }}>
+              <div id="client-invoice-doc" style={{ background: '#fff', boxShadow: '0 4px 32px rgba(0,0,0,0.12)', borderRadius: 4 }}>
+                <InvoiceDocument
+                  inv={{
+                    ...viewInvoice,
+                    projectBudget: Number(project.budget || project.projectTotal || 0),
+                    projectPaidAmount: Number(project.paidAmount || 0),
+                    paymentSchedule: project.paymentSchedule || 'standard',
+                    projectTitle: project.title || project.name,
+                  }}
+                  isQuote={viewInvoice.type === 'Quotation' || viewInvoice.documentKind === 'quotation'}
+                  finSettings={brand?.finSettings || {}}
+                  brand={brand}
+                />
+              </div>
+            </div>
+
+            {/* Pay button at bottom if unpaid */}
+            {!isPaidStatus(viewInvoice.status) && parseAmount(viewInvoice.amount || viewInvoice.total) > 0 && (
+              <div style={{ padding: '16px 24px', borderTop: '1px solid var(--border-color)', background: '#fff' }}>
+                <UnifiedPaymentGateway
+                  label={`Pay ${fmt(parseAmount(viewInvoice.amount || viewInvoice.total))}`}
+                  amountGHS={parseAmount(viewInvoice.amount || viewInvoice.total)}
+                  email={email}
+                  projectId={project.id}
+                  invoiceId={viewInvoice.id}
+                  paymentType={viewInvoice.documentKind === 'receipt' ? 'receipt' : (
+                    ((viewInvoice.type || '').toLowerCase().includes('deposit') || (viewInvoice.title || '').toLowerCase().includes('deposit')) ? 'deposit' : 'invoice'
+                  )}
+                  onSuccess={() => window.location.reload()}
+                  onError={(err) => alert("Verification Error: " + err)}
+                />
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
 
+// ProjectChat is replaced by WorldClassChat — see import above
+
 // ─── Stage Timeline (enhanced) ────────────────────────────────────────────────
-function StageTimeline({ project, onRequestChange, isMobile }) {
+function StageTimeline({ project, onRequestChange, isMobile, onStageClick }) {
   const applicableStages = CLIENT_PROJECT_STAGES.filter(s => {
     const typeStages = PROJECT_TYPES[project.projectType]?.stages || CLIENT_PROJECT_STAGES.map(s => s.id);
     return typeStages.includes(s.id);
@@ -1761,6 +3301,10 @@ function StageTimeline({ project, onRequestChange, isMobile }) {
     return null;
   })();
 
+  // Use calculateTimeline to respect admin-set duration overrides
+  const computedTimeline = calculateTimeline(project.createdAt, project.timeline || {}, applicableStages);
+  const totalDays = Object.values(computedTimeline).reduce((sum, s) => sum + (s.durationDays || 0), 0);
+
   const scrollRef = useRef(null);
   useEffect(() => {
     if (scrollRef.current) {
@@ -1774,20 +3318,24 @@ function StageTimeline({ project, onRequestChange, isMobile }) {
   return (
     <div>
       {/* Enhanced progress bar with est. completion */}
-      <div style={{ marginBottom: 24, padding: '16px 20px', background: '#F9FAFB', borderRadius: 16 }}>
+      <div style={{ marginBottom: 24, padding: '16px 20px', background: `var(--bg-secondary)`, borderRadius: 16 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 10 }}>
           <div>
-            <div style={{ fontSize: 11, fontWeight: 800, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '.1em', marginBottom: 2 }}>Overall Progress</div>
-            <div style={{ fontSize: 22, fontWeight: 900, color: '#111827' }}>{progressPct}%</div>
+            <div style={{ fontSize: 11, fontWeight: 800, color: `var(--text-secondary)`, textTransform: 'uppercase', letterSpacing: '.1em', marginBottom: 2 }}>Overall Progress</div>
+            <div style={{ fontSize: 22, fontWeight: 900, color: `var(--accent-secondary)` }}>{progressPct}%</div>
           </div>
-          {estCompletion && (
-            <div style={{ textAlign: 'right' }}>
-              <div style={{ fontSize: 10, fontWeight: 700, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 2 }}>Est. Completion</div>
-              <div style={{ fontSize: 12, fontWeight: 800, color: ac }}>{estCompletion}</div>
-            </div>
-          )}
+          <div style={{ textAlign: 'right' }}>
+            {estCompletion && (
+              <div style={{ marginBottom: 4 }}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: `var(--text-secondary)`, textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 2 }}>Est. Completion</div>
+                <div style={{ fontSize: 12, fontWeight: 800, color: ac }}>{estCompletion}</div>
+              </div>
+            )}
+            <div style={{ fontSize: 10, fontWeight: 700, color: `var(--text-secondary)`, textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 2 }}>Total Duration</div>
+            <div style={{ fontSize: 12, fontWeight: 800, color: ac }}>~{totalDays} days</div>
+          </div>
         </div>
-        <div style={{ height: 10, background: '#E5E7EB', borderRadius: 5, overflow: 'hidden' }}>
+        <div style={{ height: 10, background: `var(--border-color)`, borderRadius: 5, overflow: 'hidden' }}>
           <div style={{
             height: '100%',
             width: `${progressPct}%`,
@@ -1800,9 +3348,25 @@ function StageTimeline({ project, onRequestChange, isMobile }) {
 
       {/* Stage pills — horizontal on desktop, vertical trail on mobile */}
       {isMobile ? (
-        /* ── Mobile: vertical stage trail ── */
+        /* ── Mobile: vertical stage trail — past stages collapsed ── */
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+          {/* Past stages: compact row of checkmarks */}
+          {applicableStages.filter(s => (project.stageId || 1) > s.id).length > 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 0 12px 0', marginBottom: 4, borderBottom: '1px solid var(--border-color)' }}>
+              {applicableStages.filter(s => (project.stageId || 1) > s.id).map(s => (
+                <div key={s.id} title={s.name} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <div style={{ width: 20, height: 20, borderRadius: '50%', background: s.color, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <CheckCircle2 size={11} color="#fff" />
+                  </div>
+                </div>
+              ))}
+              <span style={{ fontSize: 10, color: 'var(--text-secondary)', fontWeight: 700 }}>
+                {applicableStages.filter(s => (project.stageId || 1) > s.id).length} stage{applicableStages.filter(s => (project.stageId || 1) > s.id).length !== 1 ? 's' : ''} completed ✓
+              </span>
+            </div>
+          )}
         <div style={{ display: 'flex', flexDirection: 'column' }}>
-          {applicableStages.map((s, idx) => {
+          {applicableStages.filter(s => s.id >= (project.stageId || 1)).map((s, idx) => {
             const isCurrent = s.id === project.stageId;
             const isPast = (project.stageId || 1) > s.id;
             const histEntry = (project.stageHistory || []).find(h => h.stageId === s.id);
@@ -1810,9 +3374,9 @@ function StageTimeline({ project, onRequestChange, isMobile }) {
             const isLast = idx === applicableStages.length - 1;
             const dotColor = isPast ? s.color : isCurrent ? s.color : '#DFD9D1';
             const dotBg = isPast ? s.color : isCurrent ? '#fff' : '#F5F3F0';
-            const dotBorder = isPast ? s.color : isCurrent ? s.color : '#E5E7EB';
+            const dotBorder = isPast ? s.color : isCurrent ? s.color : `var(--border-color)`;
             return (
-              <div key={s.id} data-current={isCurrent ? 'true' : 'false'} style={{ display: 'flex', gap: 14, alignItems: 'stretch', minHeight: isCurrent ? 64 : 44 }}>
+              <div key={s.id} data-current={isCurrent ? 'true' : 'false'} onClick={() => onStageClick && onStageClick(s)} style={{ cursor: onStageClick ? 'pointer' : 'default', display: 'flex', gap: 14, alignItems: 'stretch', minHeight: isCurrent ? 64 : 48 }}>
                 {/* Left rail */}
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: 28, flexShrink: 0 }}>
                   <div style={{
@@ -1840,10 +3404,10 @@ function StageTimeline({ project, onRequestChange, isMobile }) {
                     <div style={{
                       fontSize: isCurrent ? 14 : 12,
                       fontWeight: isCurrent ? 900 : isPast ? 700 : 500,
-                      color: isCurrent ? s.color : isPast ? '#111827' : '#6B7280',
+                      color: isCurrent ? s.color : isPast ? `var(--accent-secondary)` : `var(--text-secondary)`,
                       lineHeight: 1.3,
                     }}>
-                      {s.short || s.name}
+                      {s.name}
                     </div>
                     {isCurrent && (
                       <div style={{ fontSize: 10, fontWeight: 800, color: s.color, background: `${s.color}12`, padding: '2px 8px', borderRadius: 20, flexShrink: 0 }}>
@@ -1851,11 +3415,23 @@ function StageTimeline({ project, onRequestChange, isMobile }) {
                       </div>
                     )}
                   </div>
+                  {computedTimeline[s.id] && (
+                    <div style={{ fontSize: 10, color: isCurrent ? s.color : `var(--text-secondary)`, fontWeight: isCurrent ? 800 : 600, marginTop: 1 }}>
+                      ~{computedTimeline[s.id].durationDays} day{computedTimeline[s.id].durationDays !== 1 ? 's' : ''}
+                    </div>
+                  )}
+                  {computedTimeline[s.id] && !isPast && (
+                    <div style={{ fontSize: 10, color: `var(--text-secondary)`, marginTop: 1, lineHeight: 1.4 }}>
+                      {new Date(computedTimeline[s.id].startDate + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+                      {' → '}
+                      {new Date(computedTimeline[s.id].endDate + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+                    </div>
+                  )}
                   {enteredDate && (isPast || isCurrent) && (
-                    <div style={{ fontSize: 11, color: '#6B7280', marginTop: 1 }}>{enteredDate}</div>
+                    <div style={{ fontSize: 11, color: `var(--text-secondary)`, marginTop: 1 }}>{enteredDate}</div>
                   )}
                   {isCurrent && s.clientMsg && (
-                    <div style={{ fontSize: 11, color: '#4B5563', marginTop: 4, lineHeight: 1.5, fontStyle: 'italic' }}>
+                    <div style={{ fontSize: 11, color: `var(--text-secondary)`, marginTop: 4, lineHeight: 1.5, fontStyle: 'italic' }}>
                       {s.clientMsg}
                     </div>
                   )}
@@ -1863,6 +3439,7 @@ function StageTimeline({ project, onRequestChange, isMobile }) {
               </div>
             );
           })}
+        </div>
         </div>
       ) : (
         /* ── Desktop: horizontal scrolling pills ── */
@@ -1877,19 +3454,19 @@ function StageTimeline({ project, onRequestChange, isMobile }) {
               <div
                 key={s.id}
                 data-current={isCurrent ? 'true' : 'false'}
-                style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, minWidth: 68 }}
+                style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, minWidth: 96 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', width: '100%', justifyContent: 'center', position: 'relative' }}>
                   {/* connector before */}
                   {idx > 0 && (
-                    <div style={{ position: 'absolute', right: '50%', top: 20, marginRight: 14, height: 2, left: 0, background: isPast ? s.color : '#E5E7EB' }} />
+                    <div style={{ position: 'absolute', right: '50%', top: 20, marginRight: 14, height: 2, left: 0, background: isPast ? s.color : `var(--border-color)` }} />
                   )}
                   <div style={{
                     width: 36, height: 36, borderRadius: '50%', zIndex: 1, flexShrink: 0,
-                    background: isPast ? s.color : isCurrent ? '#fff' : '#E5E7EB',
-                    border: isPast ? `2px solid ${s.color}` : isCurrent ? `2.5px solid ${s.color}` : '2px solid #E5E7EB',
+                    background: isPast ? s.color : isCurrent ? '#fff' : `var(--border-color)`,
+                    border: isPast ? `2px solid ${s.color}` : isCurrent ? `2.5px solid ${s.color}` : '2px solid var(--border-color)',
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    color: isPast ? '#fff' : isCurrent ? s.color : '#6B7280',
+                    color: isPast ? '#fff' : isCurrent ? s.color : `var(--text-secondary)`,
                     boxShadow: isCurrent ? `0 0 0 4px ${s.color}20` : 'none',
                     transition: 'all .3s',
                   }}>
@@ -1897,14 +3474,26 @@ function StageTimeline({ project, onRequestChange, isMobile }) {
                   </div>
                   {/* connector after */}
                   {!isLast && (
-                    <div style={{ position: 'absolute', left: '50%', top: 20, marginLeft: 14, height: 2, right: 0, background: isPast ? s.color : '#E5E7EB' }} />
+                    <div style={{ position: 'absolute', left: '50%', top: 20, marginLeft: 14, height: 2, right: 0, background: isPast ? s.color : `var(--border-color)` }} />
                   )}
                 </div>
-                <div style={{ fontSize: 10, fontWeight: 700, color: isPast ? '#4B5563' : isCurrent ? s.color : '#DFD9D1', textAlign: 'center', lineHeight: 1.2, maxWidth: 68, marginTop: 2 }}>
-                  {s.short}
+                <div style={{ fontSize: 10, fontWeight: 700, color: isPast ? `var(--text-secondary)` : isCurrent ? s.color : '#DFD9D1', textAlign: 'center', lineHeight: 1.2, maxWidth: 90, marginTop: 2 }}>
+                  {s.name}
                 </div>
+                {computedTimeline[s.id] && (
+                  <div style={{ fontSize: 9, fontWeight: 700, color: isCurrent ? s.color : '#C4B9AE', textAlign: 'center', background: isCurrent ? `${s.color}10` : 'transparent', padding: isCurrent ? '1px 6px' : 0, borderRadius: 20 }}>
+                    ~{computedTimeline[s.id].durationDays}d
+                  </div>
+                )}
+                {computedTimeline[s.id] && !isPast && (
+                  <div style={{ fontSize: 8, color: `var(--text-secondary)`, textAlign: 'center', lineHeight: 1.3 }}>
+                    {new Date(computedTimeline[s.id].startDate + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+                    {' – '}
+                    {new Date(computedTimeline[s.id].endDate + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+                  </div>
+                )}
                 {enteredDate && (isPast || isCurrent) && (
-                  <div style={{ fontSize: 9, color: '#6B7280', textAlign: 'center', lineHeight: 1.2 }}>{enteredDate}</div>
+                  <div style={{ fontSize: 9, color: `var(--text-secondary)`, textAlign: 'center', lineHeight: 1.2 }}>{enteredDate}</div>
                 )}
               </div>
             );
@@ -1923,22 +3512,22 @@ function StageTimeline({ project, onRequestChange, isMobile }) {
               <div style={{ fontSize: 11, fontWeight: 800, color: currentStage.color, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 4 }}>
                 Stage {currentStage.id} of {applicableStages.length} — Active Now
               </div>
-              <div style={{ fontSize: 18, fontWeight: 900, color: '#111827', marginBottom: 6 }}>{currentStage.name}</div>
-              <div style={{ fontSize: 14, color: '#4B5563', lineHeight: 1.6, marginBottom: 10 }}>{currentStage.clientMsg}</div>
+              <div style={{ fontSize: 18, fontWeight: 900, color: `var(--accent-secondary)`, marginBottom: 6 }}>{currentStage.name}</div>
+              <div style={{ fontSize: 14, color: `var(--text-secondary)`, lineHeight: 1.6, marginBottom: 10 }}>{currentStage.clientMsg}</div>
               {(() => {
                 const entry = (project.stageHistory || []).find(h => h.stageId === currentStage.id);
                 const date = entry?.timestamp ? fmtShort(entry.timestamp) : null;
                 const days = entry?.timestamp ? daysSince(entry.timestamp) : null;
                 return date ? (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#6B7280', marginBottom: 8 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: `var(--text-secondary)`, marginBottom: 8 }}>
                     <Clock size={11} /> Entered {date}
-                    {days !== null && <span style={{ fontWeight: 700, color: '#4B5563' }}>· {days} day{days !== 1 ? 's' : ''} in this stage</span>}
+                    {days !== null && <span style={{ fontWeight: 700, color: `var(--text-secondary)` }}>· {days} day{days !== 1 ? 's' : ''} in this stage</span>}
                   </div>
                 ) : null;
               })()}
               <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 8 }}>
                 {currentStage.whoActs === 'client' && (
-                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700, color: '#0F766E', background: '#ECFDF5', padding: '6px 14px', borderRadius: 20, border: '1px solid #A7F3D0' }}>
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700, color: `var(--accent-primary)`, background: '#FDFAF6', padding: '6px 14px', borderRadius: 20, border: '1px solid rgba(200,169,110,0.25)' }}>
                     <AlertCircle size={13} /> Action required from you
                   </div>
                 )}
@@ -1947,9 +3536,9 @@ function StageTimeline({ project, onRequestChange, isMobile }) {
                     onClick={onRequestChange}
                     style={{
                       display: 'inline-flex', alignItems: 'center', gap: 6,
-                      fontSize: 12, fontWeight: 700, color: '#4B5563',
-                      background: '#F9FAFB', padding: '6px 14px', borderRadius: 20,
-                      border: '1px solid #E5E7EB', cursor: 'pointer',
+                      fontSize: 12, fontWeight: 700, color: `var(--text-secondary)`,
+                      background: `var(--bg-secondary)`, padding: '6px 14px', borderRadius: 20,
+                      border: '1px solid var(--border-color)', cursor: 'pointer',
                     }}
                   >
                     <Edit3 size={12} /> Request Change
@@ -1964,14 +3553,14 @@ function StageTimeline({ project, onRequestChange, isMobile }) {
       {/* Mobile: action strip below the trail */}
       {currentStage && isMobile && (
         <div style={{ marginTop: 16, padding: '16px', background: `${currentStage.color}08`, borderRadius: 16, border: `1.5px solid ${currentStage.color}25` }}>
-          <div style={{ fontSize: 13, fontWeight: 900, color: '#111827', marginBottom: 6 }}>
+          <div style={{ fontSize: 13, fontWeight: 900, color: `var(--accent-secondary)`, marginBottom: 6 }}>
             {currentStage.name}
           </div>
           {(() => {
             const entry = (project.stageHistory || []).find(h => h.stageId === currentStage.id);
             const days = entry?.timestamp ? daysSince(entry.timestamp) : null;
             return days !== null ? (
-              <div style={{ fontSize: 11, color: '#6B7280', marginBottom: 10 }}>
+              <div style={{ fontSize: 11, color: `var(--text-secondary)`, marginBottom: 10 }}>
                 <Clock size={10} style={{ display: 'inline', marginRight: 4 }} />
                 {days} day{days !== 1 ? 's' : ''} in this stage
               </div>
@@ -1979,7 +3568,7 @@ function StageTimeline({ project, onRequestChange, isMobile }) {
           })()}
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             {currentStage.whoActs === 'client' && (
-              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 700, color: '#0F766E', background: '#ECFDF5', padding: '7px 14px', borderRadius: 20, border: '1px solid #A7F3D0' }}>
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 700, color: `var(--accent-primary)`, background: '#FDFAF6', padding: '7px 14px', borderRadius: 20, border: '1px solid rgba(200,169,110,0.25)' }}>
                 <AlertCircle size={12} /> Action needed
               </div>
             )}
@@ -1988,9 +3577,9 @@ function StageTimeline({ project, onRequestChange, isMobile }) {
                 onClick={onRequestChange}
                 style={{
                   display: 'inline-flex', alignItems: 'center', gap: 6,
-                  fontSize: 12, fontWeight: 700, color: '#4B5563',
-                  background: '#F9FAFB', padding: '7px 14px', borderRadius: 20,
-                  border: '1px solid #E5E7EB', cursor: 'pointer',
+                  fontSize: 12, fontWeight: 700, color: `var(--text-secondary)`,
+                  background: `var(--bg-secondary)`, padding: '7px 14px', borderRadius: 20,
+                  border: '1px solid var(--border-color)', cursor: 'pointer',
                 }}
               >
                 <Edit3 size={12} /> Request Change
@@ -2051,7 +3640,7 @@ function ChangeRequestModal({ project, user, onClose }) {
       onClick={onClose}
       style={{
         position: 'fixed', inset: 0, zIndex: 500,
-        background: 'rgba(17,24,39,.6)', backdropFilter: 'blur(6px)',
+        background: 'rgba(92, 58, 33,.6)', backdropFilter: 'blur(6px)',
         display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24,
       }}
     >
@@ -2067,46 +3656,46 @@ function ChangeRequestModal({ project, user, onClose }) {
           <div style={{ textAlign: 'center', padding: '20px 0' }}>
             <div style={{ fontSize: 48, marginBottom: 16 }}>✅</div>
             <div style={{ fontSize: 18, fontWeight: 900, color: '#16A34A', marginBottom: 8 }}>Request Submitted</div>
-            <div style={{ fontSize: 13, color: '#6B7280' }}>Our team will review your change request and get back to you shortly.</div>
+            <div style={{ fontSize: 13, color: `var(--text-secondary)` }}>Our team will review your change request and get back to you shortly.</div>
           </div>
         ) : (
           <>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
               <div>
-                <div style={{ fontSize: 11, fontWeight: 800, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '.1em', marginBottom: 4 }}>Project Change</div>
-                <div style={{ fontSize: 20, fontWeight: 900, color: '#111827' }}>Request a Change</div>
+                <div style={{ fontSize: 11, fontWeight: 800, color: `var(--text-secondary)`, textTransform: 'uppercase', letterSpacing: '.1em', marginBottom: 4 }}>Project Change</div>
+                <div style={{ fontSize: 20, fontWeight: 900, color: `var(--accent-secondary)` }}>Request a Change</div>
               </div>
-              <button onClick={onClose} style={{ width: 36, height: 36, borderRadius: 10, background: '#E5E7EB', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <X size={16} color="#4B5563" />
+              <button onClick={onClose} style={{ width: 36, height: 36, borderRadius: 10, background: `var(--border-color)`, border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <X size={16} color="var(--text-secondary)" />
               </button>
             </div>
 
             <form onSubmit={handleSubmit}>
               <div style={{ marginBottom: 18 }}>
-                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#4B5563', marginBottom: 8 }}>Change Type</label>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: `var(--text-secondary)`, marginBottom: 8 }}>Change Type</label>
                 <select
                   value={type}
                   onChange={e => setType(e.target.value)}
-                  style={{ width: '100%', padding: '12px 16px', borderRadius: 12, border: '1.5px solid #E5E7EB', fontSize: 14, fontFamily: 'inherit', outline: 'none', background: '#fff', color: '#111827', appearance: 'none', boxSizing: 'border-box' }}
+                  style={{ width: '100%', padding: '12px 16px', borderRadius: 12, border: '1.5px solid var(--border-color)', fontSize: 14, fontFamily: 'inherit', outline: 'none', background: '#fff', color: `var(--accent-secondary)`, appearance: 'none', boxSizing: 'border-box' }}
                 >
                   {changeTypes.map(t => <option key={t} value={t}>{t}</option>)}
                 </select>
               </div>
 
               <div style={{ marginBottom: 18 }}>
-                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#4B5563', marginBottom: 8 }}>Description <span style={{ color: '#DC2626' }}>*</span></label>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: `var(--text-secondary)`, marginBottom: 8 }}>Description <span style={{ color: '#DC2626' }}>*</span></label>
                 <textarea
                   value={description}
                   onChange={e => setDescription(e.target.value)}
                   required
                   placeholder="Describe the change you'd like to request..."
                   rows={4}
-                  style={{ width: '100%', padding: '12px 16px', borderRadius: 12, border: '1.5px solid #E5E7EB', fontSize: 14, fontFamily: 'inherit', outline: 'none', resize: 'vertical', lineHeight: 1.5, boxSizing: 'border-box' }}
+                  style={{ width: '100%', padding: '12px 16px', borderRadius: 12, border: '1.5px solid var(--border-color)', fontSize: 14, fontFamily: 'inherit', outline: 'none', resize: 'vertical', lineHeight: 1.5, boxSizing: 'border-box' }}
                 />
               </div>
 
               <div style={{ marginBottom: 28 }}>
-                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#4B5563', marginBottom: 8 }}>Urgency</label>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: `var(--text-secondary)`, marginBottom: 8 }}>Urgency</label>
                 <div style={{ display: 'flex', gap: 10 }}>
                   {urgencies.map(u => (
                     <button
@@ -2116,8 +3705,8 @@ function ChangeRequestModal({ project, user, onClose }) {
                       style={{
                         flex: 1, padding: '10px 0', borderRadius: 12, border: 'none', cursor: 'pointer',
                         fontWeight: 700, fontSize: 13, transition: 'all .15s',
-                        background: urgency === u ? (u === 'Urgent' ? '#FEE2E2' : '#111827') : '#E5E7EB',
-                        color: urgency === u ? (u === 'Urgent' ? '#991B1B' : '#fff') : '#4B5563',
+                        background: urgency === u ? (u === 'Urgent' ? '#FEE2E2' : `var(--accent-secondary)`) : `var(--border-color)`,
+                        color: urgency === u ? (u === 'Urgent' ? '#991B1B' : '#fff') : `var(--text-secondary)`,
                       }}
                     >
                       {u === 'Urgent' ? '🔴 Urgent' : '⚪ Normal'}
@@ -2131,8 +3720,8 @@ function ChangeRequestModal({ project, user, onClose }) {
                 disabled={!description.trim() || submitting}
                 style={{
                   width: '100%', height: 48, borderRadius: 14, border: 'none',
-                  background: !description.trim() || submitting ? '#E5E7EB' : '#111827',
-                  color: !description.trim() || submitting ? '#6B7280' : '#fff',
+                  background: !description.trim() || submitting ? `var(--border-color)` : `var(--accent-secondary)`,
+                  color: !description.trim() || submitting ? `var(--text-secondary)` : '#fff',
                   fontSize: 15, fontWeight: 800, cursor: !description.trim() || submitting ? 'default' : 'pointer',
                   display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
                   transition: 'all .2s',
@@ -2173,7 +3762,7 @@ function ReviewModal({ project, user, onSubmit, onDismiss }) {
       onClick={onDismiss}
       style={{
         position: 'fixed', inset: 0, zIndex: 500,
-        background: 'rgba(17,24,39,.7)', backdropFilter: 'blur(8px)',
+        background: 'rgba(92, 58, 33,.7)', backdropFilter: 'blur(8px)',
         display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24,
       }}
     >
@@ -2190,13 +3779,13 @@ function ReviewModal({ project, user, onSubmit, onDismiss }) {
           <>
             <div style={{ fontSize: 48, marginBottom: 14 }}>🌟</div>
             <div style={{ fontSize: 20, fontWeight: 900, color: '#16A34A', marginBottom: 8 }}>Thank you!</div>
-            <div style={{ fontSize: 14, color: '#6B7280' }}>Your review helps us improve. We appreciate your trust.</div>
+            <div style={{ fontSize: 14, color: `var(--text-secondary)` }}>Your review helps us improve. We appreciate your trust.</div>
           </>
         ) : (
           <>
             <div style={{ fontSize: 44, marginBottom: 12 }}>🌟</div>
-            <div style={{ fontSize: 22, fontWeight: 900, color: '#111827', marginBottom: 8 }}>Your Project is Complete!</div>
-            <div style={{ fontSize: 14, color: '#4B5563', lineHeight: 1.6, marginBottom: 28 }}>
+            <div style={{ fontSize: 22, fontWeight: 900, color: `var(--accent-secondary)`, marginBottom: 8 }}>Your Project is Complete!</div>
+            <div style={{ fontSize: 14, color: `var(--text-secondary)`, lineHeight: 1.6, marginBottom: 28 }}>
               We'd love to hear about your experience. Your feedback helps us deliver even better projects.
             </div>
 
@@ -2211,13 +3800,13 @@ function ReviewModal({ project, user, onSubmit, onDismiss }) {
                   onMouseLeave={() => setHovered(0)}
                   style={{
                     width: 48, height: 48, borderRadius: 12, border: 'none',
-                    background: (hovered || rating) >= s ? '#FEF3C7' : '#E5E7EB',
+                    background: (hovered || rating) >= s ? '#FEF3C7' : `var(--border-color)`,
                     cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
                     transition: 'all .15s',
                     transform: (hovered || rating) >= s ? 'scale(1.1)' : 'scale(1)',
                   }}
                 >
-                  <Star size={24} fill={(hovered || rating) >= s ? '#F59E0B' : 'none'} color={(hovered || rating) >= s ? '#F59E0B' : '#6B7280'} />
+                  <Star size={24} fill={(hovered || rating) >= s ? '#F59E0B' : 'none'} color={(hovered || rating) >= s ? '#F59E0B' : `var(--text-secondary)`} />
                 </button>
               ))}
             </div>
@@ -2233,7 +3822,7 @@ function ReviewModal({ project, user, onSubmit, onDismiss }) {
               onChange={e => setText(e.target.value)}
               placeholder="Share your experience (optional)..."
               rows={3}
-              style={{ width: '100%', padding: '12px 16px', borderRadius: 14, border: '1.5px solid #E5E7EB', fontSize: 14, fontFamily: 'inherit', outline: 'none', resize: 'none', lineHeight: 1.5, boxSizing: 'border-box', marginBottom: 20 }}
+              style={{ width: '100%', padding: '12px 16px', borderRadius: 14, border: '1.5px solid var(--border-color)', fontSize: 14, fontFamily: 'inherit', outline: 'none', resize: 'none', lineHeight: 1.5, boxSizing: 'border-box', marginBottom: 20 }}
             />
 
             <button
@@ -2241,8 +3830,8 @@ function ReviewModal({ project, user, onSubmit, onDismiss }) {
               disabled={rating === 0 || submitting}
               style={{
                 width: '100%', height: 48, borderRadius: 14, border: 'none',
-                background: rating === 0 ? '#E5E7EB' : '#111827',
-                color: rating === 0 ? '#6B7280' : '#fff',
+                background: rating === 0 ? `var(--border-color)` : `var(--accent-secondary)`,
+                color: rating === 0 ? `var(--text-secondary)` : '#fff',
                 fontSize: 15, fontWeight: 800, cursor: rating === 0 ? 'default' : 'pointer',
                 display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
                 marginBottom: 14, transition: 'all .2s',
@@ -2256,7 +3845,7 @@ function ReviewModal({ project, user, onSubmit, onDismiss }) {
 
             <button
               onClick={onDismiss}
-              style={{ background: 'none', border: 'none', fontSize: 13, fontWeight: 600, color: '#6B7280', cursor: 'pointer', padding: '4px 0' }}
+              style={{ background: 'none', border: 'none', fontSize: 13, fontWeight: 600, color: `var(--text-secondary)`, cursor: 'pointer', padding: '4px 0' }}
             >
               I'll do this later
             </button>
@@ -2267,7 +3856,177 @@ function ReviewModal({ project, user, onSubmit, onDismiss }) {
   );
 }
 
+// ─── Project Roadmap ──────────────────────────────────────────────────────────
+// A full-journey vertical timeline that guides the client step-by-step through
+// the entire project lifecycle, highlighting what they need to do next.
+function ProjectRoadmap({ project, invoices = [], renderingPackages = [], setActiveTab, isMobile, onStageGuide }) {
+  const applicableStages = CLIENT_PROJECT_STAGES.filter(s => {
+    const typeStages = PROJECT_TYPES[project.projectType]?.stages || CLIENT_PROJECT_STAGES.map(s => s.id);
+    return typeStages.includes(s.id);
+  });
+  const currentStageId = project.stageId || 1;
+  const projectInvoices = invoices.filter(i => i.projectId === project.id || i.parentId === project.id);
+  const hasUnpaidInvoice = projectInvoices.some(i =>
+    !['paid','paid in full'].includes(String(i.status || '').toLowerCase()) &&
+    i.type !== 'Quotation' && i.documentKind !== 'quotation' &&
+    (i.status === 'Overdue' || i.status === 'Sent' || (i.due != null && i.due !== ''))
+  );
+  const hasUnpaidQuote = projectInvoices.some(i =>
+    ['Quotation','quote','quotation'].includes(i.type || i.documentKind) &&
+    !['approved'].includes(String(i.status || '').toLowerCase())
+  );
+  const contractSigned = !!project.contractAccepted || !!project.quoteApproved;
+  const renderingPkg = (renderingPackages || []).find(p => p.projectId === project.id);
+  const renderingUnlocked = renderingPkg?.unlocked || renderingPkg?.status === 'Paid / Unlocked' || !!project.renderingFeePaid;
+  const renderingApproved = !!project.renderingApproved;
+
+  // Per-stage client guidance
+  const stageGuidance = {
+    1: { who: 'westline', msg: 'Our team is visiting your site to take precise measurements. No action needed from you right now.' },
+    2: { who: renderingUnlocked ? (renderingApproved ? 'done' : 'client') : 'client',
+         msg: renderingUnlocked
+           ? (renderingApproved ? 'You have approved the design. Moving to the next step.' : 'Your 3D renders are ready! Please review the design and let us know if you want any changes before we proceed.')
+           : 'Your design package is being prepared. Once ready, you will need to pay the design fee to unlock and review your 3D renders.',
+         action: renderingUnlocked && !renderingApproved ? { label: 'Review Design →', tab: 'designs' } : null,
+    },
+    3: { who: contractSigned ? 'done' : 'client',
+         msg: contractSigned
+           ? 'Quote approved and contract signed. Your project is now confirmed.'
+           : hasUnpaidQuote
+             ? 'Your final quotation is ready. Please review it, approve it, and sign the contract to confirm your project.'
+             : 'We are preparing your final quotation. You will receive a notification as soon as it is ready for review.',
+         action: !contractSigned && hasUnpaidQuote ? { label: 'Review Quote & Sign →', tab: 'documents' } : null,
+    },
+    4: { who: 'westline', msg: 'We are procuring your materials and fabricating your custom furniture and fixtures at our production facility.' },
+    5: { who: 'westline', msg: 'Your order is packed and in transit. We will notify you with tracking updates as it ships to your location.' },
+    6: { who: 'westline', msg: 'Our installation crew is on-site setting up and finishing all your components. You can reach us if you have any questions.' },
+    7: { who: 'client', msg: 'Installation is complete! Please inspect the finished work carefully. If you are happy, please sign off so we can close the project.',
+         action: { label: 'Inspect & Sign Off →', tab: 'documents' },
+    },
+    8: { who: hasUnpaidInvoice ? 'client' : 'done',
+         msg: hasUnpaidInvoice
+           ? 'Almost there! Please clear the final balance to complete your project and receive your handover documents.'
+           : 'Your project is complete and all balances are settled. Congratulations! 🎉',
+         action: hasUnpaidInvoice ? { label: 'Make Final Payment →', tab: 'financials' } : null,
+    },
+  };
+
+  return (
+    <div style={{ background: '#fff', borderRadius: 20, border: '1px solid var(--border-color)', overflow: 'hidden' }}>
+      {/* Header */}
+      <div style={{ padding: isMobile ? '16px 20px 14px' : '18px 26px 14px', borderBottom: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div style={{ width: 32, height: 32, borderRadius: 10, background: 'var(--bg-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <Map size={16} color="var(--accent-primary)" />
+        </div>
+        <div>
+          <div style={{ fontSize: 14, fontWeight: 900, color: 'var(--accent-secondary)' }}>Your Project Journey</div>
+          <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 1 }}>Step-by-step guide from start to handover</div>
+        </div>
+      </div>
+
+      {/* Stage List */}
+      <div style={{ padding: isMobile ? '12px 16px' : '16px 26px', display: 'flex', flexDirection: 'column', gap: 0 }}>
+        {applicableStages.map((stage, idx) => {
+          const isPast = currentStageId > stage.id;
+          const isCurrent = currentStageId === stage.id;
+          const isFuture = currentStageId < stage.id;
+          const isLast = idx === applicableStages.length - 1;
+          const guidance = stageGuidance[stage.id] || { who: 'westline', msg: stage.clientMsg };
+          const needsAction = isCurrent && guidance.who === 'client';
+          const isDone = isPast || (isCurrent && guidance.who === 'done');
+
+          const dotColor = isDone ? '#16A34A' : isCurrent ? (needsAction ? '#D97706' : 'var(--accent-primary)') : 'var(--border-color)';
+          const dotBg = isDone ? '#F0FDF4' : isCurrent ? (needsAction ? '#FFF7ED' : '#FDFAF6') : 'var(--bg-secondary)';
+
+          return (
+            <div key={stage.id} onClick={() => onStageGuide?.(stage)} style={{ cursor: 'pointer', display: 'flex', gap: 14, position: 'relative', transition: 'all 0.2s', padding: '8px 0' }}>
+              {/* Connector line */}
+              {!isLast && (
+                <div style={{
+                  position: 'absolute', left: isMobile ? 19 : 21, top: 40, bottom: 0,
+                  width: 2, background: isDone ? '#16A34A40' : 'var(--border-color)',
+                  zIndex: 0,
+                }} />
+              )}
+              {/* Dot */}
+              <div style={{ flexShrink: 0, zIndex: 1 }}>
+                <div style={{
+                  width: isMobile ? 38 : 42, height: isMobile ? 38 : 42, borderRadius: '50%',
+                  background: dotBg, border: `2px solid ${dotColor}`,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: 16, transition: 'all .2s',
+                }}>
+                  {isDone ? <CheckCircle2 size={18} color="#16A34A" /> : <span>{stage.emoji}</span>}
+                </div>
+              </div>
+              {/* Content */}
+              <div style={{
+                flex: 1, paddingBottom: isLast ? 0 : 20,
+                paddingTop: 8,
+                opacity: isFuture ? 0.45 : 1,
+                transition: 'opacity .2s',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 3 }}>
+                  <div style={{ fontSize: 13, fontWeight: 900, color: isCurrent ? 'var(--accent-secondary)' : 'var(--text-primary, #1a1a1a)' }}>
+                    {stage.name}
+                  </div>
+                  {isCurrent && (
+                    <div style={{
+                      fontSize: 9, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '.06em',
+                      padding: '2px 8px', borderRadius: 20,
+                      background: needsAction ? '#D9770618' : '#16A34A18',
+                      color: needsAction ? '#D97706' : '#16A34A',
+                      border: `1px solid ${needsAction ? '#D9770630' : '#16A34A30'}`,
+                    }}>
+                      {needsAction ? '⚡ Action Required' : '● In Progress'}
+                    </div>
+                  )}
+                  {isPast && (
+                    <div style={{ fontSize: 9, fontWeight: 800, color: '#16A34A', textTransform: 'uppercase', letterSpacing: '.05em' }}>✓ Done</div>
+                  )}
+                </div>
+                {(isCurrent || isPast) && (
+                  <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.55, marginBottom: guidance.action ? 10 : 0 }}>
+                    {guidance.msg}
+                  </div>
+                )}
+                {isFuture && (
+                  <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.55 }}>
+                    {stage.clientMsg}
+                  </div>
+                )}
+                {guidance.action && isCurrent && (
+                  <button
+                    onClick={() => setActiveTab(guidance.action.tab)}
+                    style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 6,
+                      padding: '8px 16px', borderRadius: 10, border: 'none',
+                      background: '#D97706', color: '#fff',
+                      fontSize: 12, fontWeight: 800, cursor: 'pointer',
+                      transition: 'all .2s',
+                    }}
+                  >
+                    {guidance.action.label}
+                  </button>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Footer hint */}
+      <div style={{ padding: isMobile ? '12px 20px' : '12px 26px', borderTop: '1px solid var(--border-color)', background: 'var(--bg-secondary)' }}>
+        <div style={{ fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+          💬 Have questions? Tap <strong>Messages</strong> to reach your project manager directly.
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Referral Card ────────────────────────────────────────────────────────────
+
 function ReferralCard({ user, ac }) {
   const [copied, setCopied] = useState(false);
   const code = 'GT-' + (user?.id || user?.uid || '').slice(-6).toUpperCase();
@@ -2294,13 +4053,13 @@ function ReferralCard({ user, ac }) {
         <Gift size={22} color={ac} />
       </div>
       <div style={{ flex: 1, minWidth: 180 }}>
-        <div style={{ fontSize: 13, fontWeight: 800, color: '#111827', marginBottom: 2 }}>Refer a client, earn a discount</div>
-        <div style={{ fontSize: 12, color: '#4B5563', lineHeight: 1.5 }}>Share your code and get a discount on your next project when they sign on.</div>
+        <div style={{ fontSize: 13, fontWeight: 800, color: `var(--accent-secondary)`, marginBottom: 2 }}>Refer a client, earn a discount</div>
+        <div style={{ fontSize: 12, color: `var(--text-secondary)`, lineHeight: 1.5 }}>Share your code and get a discount on your next project when they sign on.</div>
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
         <div style={{
           padding: '8px 16px', borderRadius: 20,
-          background: '#111827', color: ac,
+          background: `var(--accent-secondary)`, color: ac,
           fontSize: 13, fontWeight: 900, fontFamily: 'monospace',
           letterSpacing: '.06em',
         }}>
@@ -2311,8 +4070,8 @@ function ReferralCard({ user, ac }) {
           style={{
             display: 'inline-flex', alignItems: 'center', gap: 6,
             padding: '8px 16px', borderRadius: 20, border: 'none',
-            background: copied ? '#D1FAE5' : '#E5E7EB',
-            color: copied ? '#065F46' : '#4B5563',
+            background: copied ? '#D1FAE5' : `var(--border-color)`,
+            color: copied ? '#065F46' : `var(--text-secondary)`,
             fontSize: 12, fontWeight: 700, cursor: 'pointer',
             transition: 'all .2s',
           }}
@@ -2327,11 +4086,24 @@ function ReferralCard({ user, ac }) {
 // ─── Client Notification Bell ─────────────────────────────────────────────────
 function ClientNotificationBell({ notifications = [], onMarkRead, ac }) {
   const [open, setOpen] = useState(false);
+  const bellRef = useRef(null);
   const unread = notifications.filter(n => !n.read);
+
+  // Close panel when clicking outside
+  useEffect(() => {
+    if (!open) return;
+    const handle = (e) => {
+      if (bellRef.current && !bellRef.current.contains(e.target)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handle);
+    document.addEventListener('touchstart', handle);
+    return () => { document.removeEventListener('mousedown', handle); document.removeEventListener('touchstart', handle); };
+  }, [open]);
+
   return (
-    <div style={{ position: 'relative' }}>
+    <div ref={bellRef} style={{ position: 'relative' }}>
       <button onClick={() => setOpen(o => !o)} style={{ width: 40, height: 40, borderRadius: 12, background: 'rgba(255,255,255,0.6)', border: '1px solid rgba(255,255,255,0.8)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
-        <Bell size={18} color={unread.length > 0 ? ac : '#4B5563'} fill={unread.length > 0 ? ac : 'none'} />
+        <Bell size={18} color={unread.length > 0 ? ac : `var(--text-secondary)`} fill={unread.length > 0 ? ac : 'none'} />
         {unread.length > 0 && (
           <div style={{ position: 'absolute', top: -4, right: -4, width: 18, height: 18, borderRadius: '50%', background: '#EF4444', color: '#fff', fontSize: 10, fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             {unread.length > 9 ? '9+' : unread.length}
@@ -2339,20 +4111,45 @@ function ClientNotificationBell({ notifications = [], onMarkRead, ac }) {
         )}
       </button>
       {open && (
-        <div onClick={e => e.stopPropagation()} style={{ position: 'absolute', right: 0, top: 48, width: 340, maxHeight: 400, overflowY: 'auto', background: '#fff', borderRadius: 18, border: '1.5px solid #E5E7EB', boxShadow: '0 20px 60px rgba(0,0,0,0.15)', zIndex: 1000 }}>
-          <div style={{ padding: '16px 20px', borderBottom: '1px solid #E5E7EB', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div style={{ fontSize: 13, fontWeight: 800, color: '#111827' }}>Notifications</div>
-            {unread.length > 0 && <button onClick={() => { notifications.forEach(n => !n.read && onMarkRead?.(n.id)); setOpen(false); }} style={{ background: 'none', border: 'none', fontSize: 11, fontWeight: 700, color: ac, cursor: 'pointer' }}>Mark all read</button>}
+        <div
+          onClick={e => e.stopPropagation()}
+          style={{
+            // Fixed positioning keeps the panel inside the viewport on all screen sizes.
+            // Using right: 12px ensures it never overflows the right edge.
+            // Width is capped at 340px but shrinks on narrow screens.
+            position: 'fixed',
+            top: 70,
+            right: 12,
+            width: 'min(340px, calc(100vw - 24px))',
+            maxHeight: '70vh',
+            overflowY: 'auto',
+            background: '#fff',
+            borderRadius: 18,
+            border: '1.5px solid var(--border-color)',
+            boxShadow: '0 20px 60px rgba(0,0,0,0.18)',
+            zIndex: 9900,
+          }}
+        >
+          <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'sticky', top: 0, background: '#fff', borderRadius: '18px 18px 0 0', zIndex: 1 }}>
+            <div style={{ fontSize: 13, fontWeight: 800, color: `var(--accent-secondary)` }}>Notifications</div>
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+              {unread.length > 0 && (
+                <button onClick={() => { notifications.forEach(n => !n.read && onMarkRead?.(n.id)); }} style={{ background: 'none', border: 'none', fontSize: 11, fontWeight: 700, color: ac, cursor: 'pointer' }}>
+                  Mark all read
+                </button>
+              )}
+              <button onClick={() => setOpen(false)} style={{ background: 'none', border: 'none', fontSize: 18, color: 'var(--text-secondary)', cursor: 'pointer', lineHeight: 1, padding: '0 2px' }}>×</button>
+            </div>
           </div>
           {notifications.length === 0 ? (
-            <div style={{ padding: '40px 20px', textAlign: 'center', color: '#6B7280', fontSize: 13 }}>No notifications yet</div>
+            <div style={{ padding: '40px 20px', textAlign: 'center', color: `var(--text-secondary)`, fontSize: 13 }}>No notifications yet</div>
           ) : (
             notifications.slice(0, 20).map(n => (
-              <div key={n.id} onClick={() => onMarkRead?.(n.id)} style={{ padding: '14px 20px', borderBottom: '1px solid #F9FAFB', display: 'flex', gap: 12, alignItems: 'flex-start', background: n.read ? '#fff' : '#FAFAF7', cursor: 'pointer', transition: 'background .15s' }}>
-                <div style={{ width: 8, height: 8, borderRadius: '50%', background: n.read ? '#E5E7EB' : ac, marginTop: 5, flexShrink: 0 }} />
-                <div>
-                  <div style={{ fontSize: 13, color: '#111827', lineHeight: 1.4, fontWeight: n.read ? 500 : 700 }}>{n.msg}</div>
-                  <div style={{ fontSize: 11, color: '#6B7280', marginTop: 4 }}>
+              <div key={n.id} onClick={() => { onMarkRead?.(n.id); }} style={{ padding: '14px 20px', borderBottom: '1px solid var(--bg-secondary)', display: 'flex', gap: 12, alignItems: 'flex-start', background: n.read ? '#fff' : '#FAFAF7', cursor: 'pointer', transition: 'background .15s' }}>
+                <div style={{ width: 8, height: 8, borderRadius: '50%', background: n.read ? `var(--border-color)` : ac, marginTop: 5, flexShrink: 0 }} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, color: `var(--accent-secondary)`, lineHeight: 1.45, fontWeight: n.read ? 500 : 700, wordBreak: 'break-word' }}>{n.msg || n.message}</div>
+                  <div style={{ fontSize: 11, color: `var(--text-secondary)`, marginTop: 4 }}>
                     {n.createdAt?.seconds ? new Date(n.createdAt.seconds * 1000).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : ''}
                   </div>
                 </div>
@@ -2420,7 +4217,7 @@ function PushNotificationBell({ ac }) {
       {tooltip && (
         <div style={{
           position: 'absolute', right: 0, top: '110%', marginTop: 4,
-          background: '#111827', color: '#fff', fontSize: 11, fontWeight: 600,
+          background: `var(--accent-secondary)`, color: '#fff', fontSize: 11, fontWeight: 600,
           padding: '6px 12px', borderRadius: 10, whiteSpace: 'nowrap',
           boxShadow: '0 4px 16px rgba(0,0,0,.3)', zIndex: 200,
           border: '1px solid rgba(255,255,255,.1)',
@@ -2442,7 +4239,7 @@ function ProjectCard({ project, isSelected, onClick }) {
       onClick={onClick}
       style={{
         width: '100%', textAlign: 'left', padding: '20px 24px',
-        borderRadius: 20, border: `2px solid ${isSelected ? AC : '#E5E7EB'}`,
+        borderRadius: 20, border: `2px solid ${isSelected ? AC : `var(--border-color)`}`,
         background: isSelected ? `${AC}08` : '#fff',
         cursor: 'pointer', transition: 'all .25s',
         boxShadow: isSelected ? `0 8px 24px ${AC}18` : '0 2px 8px rgba(0,0,0,.04)',
@@ -2450,17 +4247,17 @@ function ProjectCard({ project, isSelected, onClick }) {
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
         <div style={{ flex: 1, marginRight: 12 }}>
-          <div style={{ fontSize: 15, fontWeight: 800, color: '#111827', lineHeight: 1.3, marginBottom: 4 }}>{project.title}</div>
-          <div style={{ fontSize: 11, fontWeight: 600, color: '#6B7280' }}>{pt?.label || 'Full Service'}</div>
+          <div style={{ fontSize: 15, fontWeight: 800, color: `var(--accent-secondary)`, lineHeight: 1.3, marginBottom: 4 }}>{project.title}</div>
+          <div style={{ fontSize: 11, fontWeight: 600, color: `var(--text-secondary)` }}>{pt?.label || 'Full Service'}</div>
         </div>
         <div style={{ fontSize: 10, fontWeight: 800, color: stg?.color || AC, background: `${stg?.color || AC}15`, padding: '4px 12px', borderRadius: 20, whiteSpace: 'nowrap', flexShrink: 0 }}>
           {stg?.short || 'Stage 1'}
         </div>
       </div>
-      <div style={{ height: 4, background: '#E5E7EB', borderRadius: 2, overflow: 'hidden', marginBottom: 10 }}>
+      <div style={{ height: 4, background: `var(--border-color)`, borderRadius: 2, overflow: 'hidden', marginBottom: 10 }}>
         <div style={{ height: '100%', width: `${stg?.pct || 5}%`, background: stg?.color || AC, borderRadius: 2, transition: 'width 1s ease' }} />
       </div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#6B7280', fontWeight: 600 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: `var(--text-secondary)`, fontWeight: 600 }}>
         <span>{stg?.pct || 5}% complete</span>
         {project.budget && <span>Budget: GHS {Number(project.budget).toLocaleString()}</span>}
       </div>
@@ -2472,12 +4269,8 @@ function ProjectCard({ project, isSelected, onClick }) {
 function ProjectHeaderCard({ project, isMobile, ac, brand }) {
   const budget = Number(project.budget) || 0;
 
-  // Use paidAmount from project doc if set (logged by admin), else fall back to stage-based estimate
-  const paid = budget > 0 ? Math.min(budget, Number(project.paidAmount) || (() => {
-    if (project.stageId >= 7) return budget;
-    if (project.stageId >= 3) return budget * 0.50;
-    return 0;
-  })()) : 0;
+  // Use paidAmount from project doc if set (logged by admin), else 0
+  const paid = budget > 0 ? Math.min(budget, Number(project.paidAmount) || 0) : 0;
   const paidPct = budget > 0 ? Math.min(100, (paid / budget) * 100) : 0;
   const outstanding = budget > 0 ? budget - paid : 0;
 
@@ -2490,12 +4283,12 @@ function ProjectHeaderCard({ project, isMobile, ac, brand }) {
   const stageTotal = CLIENT_PROJECT_STAGES.length;
   const progressPct = Math.round(((project.stageId || 1) / stageTotal) * 100);
 
-  const waPhone = (brand?.phone || '').replace(/\D/g, '') || '233598455012';
+  const waPhone = (brand?.phone || '').replace(/\D/g, '') || '233247319778';
   const waMsg = encodeURIComponent(`Hi, I'm checking on my project: ${project.title}`);
   const waLink = `https://wa.me/${waPhone}?text=${waMsg}`;
 
   return (
-    <div style={{ background: '#fff', borderRadius: isMobile ? 24 : 20, border: isMobile ? 'none' : '1px solid #E5E7EB', boxShadow: isMobile ? '0 2px 16px rgba(0,0,0,.08)' : '0 4px 20px rgba(0,0,0,.05)', overflow: 'hidden' }}>
+    <div style={{ background: '#fff', borderRadius: isMobile ? 24 : 20, border: isMobile ? 'none' : '1px solid var(--border-color)', boxShadow: isMobile ? '0 2px 16px rgba(0,0,0,.08)' : '0 4px 20px rgba(0,0,0,.05)', overflow: 'hidden' }}>
 
       {/* Header row */}
       <div style={{ padding: isMobile ? '20px 18px 16px' : '24px 28px 18px' }}>
@@ -2504,14 +4297,14 @@ function ProjectHeaderCard({ project, isMobile, ac, brand }) {
             <div style={{ fontSize: 11, fontWeight: 800, color: ac, textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 5 }}>
               {PROJECT_TYPES[project.projectType]?.label || 'Full Service'} Project
             </div>
-            <div style={{ fontSize: isMobile ? 19 : 23, fontWeight: 900, color: '#111827', lineHeight: 1.25 }}>{project.title}</div>
+            <div style={{ fontSize: isMobile ? 19 : 23, fontWeight: 900, color: `var(--accent-secondary)`, lineHeight: 1.25 }}>{project.title}</div>
           </div>
           <div style={{
             fontSize: 10, fontWeight: 800, flexShrink: 0,
-            color: project.status === 'Completed' ? '#16A34A' : project.status === 'On Hold' ? '#D97706' : '#0F766E',
-            background: project.status === 'Completed' ? '#F0FDF4' : project.status === 'On Hold' ? '#FFFBEB' : '#ECFDF5',
+            color: project.status === 'Completed' ? '#16A34A' : project.status === 'On Hold' ? '#D97706' : `var(--accent-primary)`,
+            background: project.status === 'Completed' ? '#F0FDF4' : project.status === 'On Hold' ? '#FFFBEB' : '#FDFAF6',
             padding: '5px 12px', borderRadius: 20,
-            border: `1px solid ${project.status === 'Completed' ? '#DCFCE7' : project.status === 'On Hold' ? '#FDE68A' : '#D1FAE5'}`,
+            border: `1px solid ${project.status === 'Completed' ? '#DCFCE7' : project.status === 'On Hold' ? '#FDE68A' : 'rgba(200,169,110,0.2)'}`,
             letterSpacing: '.04em',
           }}>
             {project.status || 'Active'}
@@ -2519,42 +4312,50 @@ function ProjectHeaderCard({ project, isMobile, ac, brand }) {
         </div>
 
         {project.description && (
-          <div style={{ fontSize: 14, color: '#4B5563', lineHeight: 1.6, marginBottom: 14 }}>
+          <div style={{ fontSize: 14, color: `var(--text-secondary)`, lineHeight: 1.6, marginBottom: 14 }}>
             {project.description}
           </div>
         )}
 
         {/* Progress bar */}
         <div style={{ marginBottom: 16 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, fontWeight: 700, color: '#6B7280', marginBottom: 6 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, fontWeight: 700, color: `var(--text-secondary)`, marginBottom: 6 }}>
             <span>Stage {project.stageId || 1} of {stageTotal}</span>
             <span>{progressPct}% complete</span>
           </div>
-          <div style={{ height: 6, background: '#E5E7EB', borderRadius: 4, overflow: 'hidden' }}>
+          <div style={{ height: 6, background: `var(--border-color)`, borderRadius: 4, overflow: 'hidden', marginBottom: 8 }}>
             <div style={{ height: '100%', width: `${progressPct}%`, background: `linear-gradient(90deg, ${ac}, ${ac}CC)`, borderRadius: 4, transition: 'width 1s ease' }} />
           </div>
+          {(() => {
+            const stg = CLIENT_PROJECT_STAGES.find(s => s.id === (project.stageId || 1));
+            return stg?.clientMsg ? (
+              <div style={{ fontSize: 12, color: 'var(--text-secondary)', fontStyle: 'italic' }}>
+                {stg.clientMsg}
+              </div>
+            ) : null;
+          })()}
         </div>
 
         {/* Key stats row */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: isMobile ? 10 : 16 }}>
-          <div style={{ background: '#F9FAFB', borderRadius: 14, padding: isMobile ? '12px 14px' : '14px 16px' }}>
-            <div style={{ fontSize: 10, color: '#6B7280', fontWeight: 700, marginBottom: 4 }}>Started</div>
-            <div style={{ fontSize: isMobile ? 12 : 13, fontWeight: 800, color: '#111827' }}>{startDate}</div>
+          <div style={{ background: `var(--bg-secondary)`, borderRadius: 14, padding: isMobile ? '12px 14px' : '14px 16px' }}>
+            <div style={{ fontSize: 10, color: `var(--text-secondary)`, fontWeight: 700, marginBottom: 4 }}>Started</div>
+            <div style={{ fontSize: isMobile ? 12 : 13, fontWeight: 800, color: `var(--accent-secondary)` }}>{startDate}</div>
           </div>
           {budget > 0 ? (
-            <div style={{ background: '#F9FAFB', borderRadius: 14, padding: isMobile ? '12px 14px' : '14px 16px' }}>
-              <div style={{ fontSize: 10, color: '#6B7280', fontWeight: 700, marginBottom: 4 }}>Project Value</div>
-              <div style={{ fontSize: isMobile ? 12 : 13, fontWeight: 800, color: '#111827' }}>GHS {Number(budget).toLocaleString()}</div>
+            <div style={{ background: `var(--bg-secondary)`, borderRadius: 14, padding: isMobile ? '12px 14px' : '14px 16px' }}>
+              <div style={{ fontSize: 10, color: `var(--text-secondary)`, fontWeight: 700, marginBottom: 4 }}>Project Value</div>
+              <div style={{ fontSize: isMobile ? 12 : 13, fontWeight: 800, color: `var(--accent-secondary)` }}>GHS {Number(budget).toLocaleString()}</div>
             </div>
           ) : (
-            <div style={{ background: '#F9FAFB', borderRadius: 14, padding: isMobile ? '12px 14px' : '14px 16px' }}>
-              <div style={{ fontSize: 10, color: '#6B7280', fontWeight: 700, marginBottom: 4 }}>Type</div>
-              <div style={{ fontSize: isMobile ? 12 : 13, fontWeight: 800, color: '#111827' }}>{PROJECT_TYPES[project.projectType]?.label || 'Full Service'}</div>
+            <div style={{ background: `var(--bg-secondary)`, borderRadius: 14, padding: isMobile ? '12px 14px' : '14px 16px' }}>
+              <div style={{ fontSize: 10, color: `var(--text-secondary)`, fontWeight: 700, marginBottom: 4 }}>Type</div>
+              <div style={{ fontSize: isMobile ? 12 : 13, fontWeight: 800, color: `var(--accent-secondary)` }}>{PROJECT_TYPES[project.projectType]?.label || 'Full Service'}</div>
             </div>
           )}
-          <div style={{ background: '#F9FAFB', borderRadius: 14, padding: isMobile ? '12px 14px' : '14px 16px' }}>
-            <div style={{ fontSize: 10, color: '#6B7280', fontWeight: 700, marginBottom: 4 }}>Days In</div>
-            <div style={{ fontSize: isMobile ? 12 : 13, fontWeight: 800, color: '#111827' }}>
+          <div style={{ background: `var(--bg-secondary)`, borderRadius: 14, padding: isMobile ? '12px 14px' : '14px 16px' }}>
+            <div style={{ fontSize: 10, color: `var(--text-secondary)`, fontWeight: 700, marginBottom: 4 }}>Days In</div>
+            <div style={{ fontSize: isMobile ? 12 : 13, fontWeight: 800, color: `var(--accent-secondary)` }}>
               {project.createdAt
                 ? `${Math.max(1, daysSince(project.createdAt))} days`
                 : '—'}
@@ -2565,10 +4366,10 @@ function ProjectHeaderCard({ project, isMobile, ac, brand }) {
 
       {/* Payment summary strip — only when budget is known */}
       {budget > 0 && (
-        <div style={{ borderTop: '1px solid #E5E7EB', padding: isMobile ? '14px 18px' : '16px 28px', background: '#FAFAF9' }}>
+        <div style={{ borderTop: '1px solid var(--border-color)', padding: isMobile ? '14px 18px' : '16px 28px', background: '#FAFAF9' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-            <span style={{ fontSize: 12, fontWeight: 700, color: '#4B5563' }}>Payment progress</span>
-            <span style={{ fontSize: 12, fontWeight: 800, color: '#111827' }}>{paidPct}% paid</span>
+            <span style={{ fontSize: 12, fontWeight: 700, color: `var(--text-secondary)` }}>Payment progress</span>
+            <span style={{ fontSize: 12, fontWeight: 800, color: `var(--accent-secondary)` }}>{paidPct}% paid</span>
           </div>
           <div style={{ height: 8, background: '#EDE8E3', borderRadius: 4, overflow: 'hidden', marginBottom: 10 }}>
             <div style={{ height: '100%', width: `${paidPct}%`, background: paidPct === 100 ? '#16A34A' : ac, borderRadius: 4, transition: 'width 1s ease' }} />
@@ -2586,27 +4387,634 @@ function ProjectHeaderCard({ project, isMobile, ac, brand }) {
         </div>
       )}
 
-      {/* WhatsApp contact button */}
-      <div style={{ borderTop: '1px solid #E5E7EB', padding: isMobile ? '14px 18px' : '16px 28px' }}>
-        <a
-          href={waLink}
-          target="_blank"
-          rel="noopener noreferrer"
+    </div>
+  );
+}
+
+// ─── Stage Explainer Modal ─────────────────────────────────────────────────
+function StageExplainerModal({ stage, onDismiss, ac }) {
+  if (!stage) return null;
+  return (
+    <div
+      style={{
+        position: 'fixed', inset: 0, zIndex: 99999,
+        background: 'rgba(0,0,0,.6)', backdropFilter: 'blur(8px)',
+        display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
+        padding: '20px 0 0 0',
+        animation: 'fadeIn .3s ease'
+      }}
+      onClick={onDismiss}
+    >
+      <div
+        style={{
+          width: '100%', maxWidth: 500, background: '#fff',
+          borderRadius: '32px 32px 0 0', padding: '32px 24px 40px',
+          boxShadow: '0 -10px 40px rgba(0,0,0,0.15)',
+          animation: 'slideUp .4s cubic-bezier(0.16, 1, 0.3, 1)',
+          position: 'relative'
+        }}
+        onClick={e => e.stopPropagation()}
+      >
+        <button
+          onClick={onDismiss}
           style={{
-            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
-            padding: '13px 20px', borderRadius: 14,
-            background: '#25D366', color: '#fff',
-            fontSize: 14, fontWeight: 700, textDecoration: 'none',
-            boxShadow: '0 2px 12px rgba(37,211,102,.3)',
-            touchAction: 'manipulation',
+            position: 'absolute', top: 20, right: 24, background: 'var(--bg-secondary)',
+            border: 'none', width: 32, height: 32, borderRadius: 16,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            cursor: 'pointer', color: 'var(--text-secondary)'
           }}
         >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
-          </svg>
-          Chat with our team on WhatsApp
-        </a>
+          <X size={16} />
+        </button>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
+          <div style={{ width: 48, height: 48, borderRadius: 24, background: `${stage.color}15`, color: stage.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24 }}>
+            {stage.emoji || '📌'}
+          </div>
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 2 }}>Project Stage</div>
+            <div style={{ fontSize: 20, fontWeight: 900, color: 'var(--accent-secondary)' }}>{stage.name}</div>
+          </div>
+        </div>
+
+        <div style={{ padding: '16px', background: 'var(--bg-secondary)', borderRadius: 16, border: '1px solid var(--border-color)', marginBottom: 20 }}>
+          <div style={{ fontSize: 13, color: 'var(--accent-secondary)', lineHeight: 1.6, fontWeight: 500 }}>
+            {stage.clientMsg}
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', gap: 12, marginBottom: 24 }}>
+          <div style={{ flex: 1, padding: '12px 16px', background: '#fff', borderRadius: 14, border: '1.5px solid var(--border-color)' }}>
+            <div style={{ fontSize: 10, fontWeight: 800, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 4 }}>Est. Duration</div>
+            <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--accent-secondary)' }}>{stage.days} Days</div>
+          </div>
+          <div style={{ flex: 1, padding: '12px 16px', background: stage.whoActs === 'client' ? '#FFFBEB' : '#F0FDF4', borderRadius: 14, border: `1.5px solid ${stage.whoActs === 'client' ? '#FDE68A' : '#BBF7D0'}` }}>
+            <div style={{ fontSize: 10, fontWeight: 800, color: stage.whoActs === 'client' ? '#B45309' : '#16A34A', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 4 }}>Action Required By</div>
+            <div style={{ fontSize: 15, fontWeight: 800, color: stage.whoActs === 'client' ? '#92400E' : '#15803D' }}>{stage.whoActs === 'client' ? 'You (Client)' : 'Westline Team'}</div>
+          </div>
+        </div>
+
+        <div style={{ marginBottom: 12, fontSize: 12, fontWeight: 800, color: 'var(--accent-secondary)', textTransform: 'uppercase', letterSpacing: '.06em' }}>Key Tasks During This Stage</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {(stage.tasks || []).map((t, idx) => (
+            <div key={idx} style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+              <div style={{ marginTop: 2 }}><CheckCircle2 size={14} color={stage.color || ac} /></div>
+              <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.4, fontWeight: 500 }}>{t}</div>
+            </div>
+          ))}
+        </div>
+
+        <button
+          onClick={onDismiss}
+          style={{
+            width: '100%', height: 50, borderRadius: 16, background: stage.color || ac,
+            color: '#fff', fontSize: 15, fontWeight: 800, border: 'none',
+            marginTop: 32, cursor: 'pointer', boxShadow: `0 8px 24px ${stage.color || ac}40`
+          }}
+        >
+          Understood
+        </button>
       </div>
+    </div>
+  );
+}
+
+// ─── Portal Guide Modal ──────────────────────────────────────────────────
+function PortalGuideModal({ onDismiss, ac }) {
+  return (
+    <div
+      style={{
+        position: 'fixed', inset: 0, zIndex: 9999,
+        background: 'rgba(0,0,0,.6)', backdropFilter: 'blur(4px)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20
+      }}
+      onClick={onDismiss}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          background: '#fff', width: '100%', maxWidth: 500, borderRadius: 24,
+          maxHeight: '85vh', overflowY: 'auto', padding: '24px 32px',
+          boxShadow: '0 24px 64px rgba(0,0,0,.3)', position: 'relative'
+        }}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ width: 40, height: 40, borderRadius: 20, background: `${ac}15`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <HelpCircle size={20} color={ac} />
+            </div>
+            <div style={{ fontSize: 18, fontWeight: 900, color: 'var(--accent-secondary)' }}>Welcome to your Portal</div>
+          </div>
+          <button onClick={onDismiss} style={{ background: 'transparent', border: 'none', cursor: 'pointer', opacity: 0.5 }}>
+            <X size={24} />
+          </button>
+        </div>
+
+        <div style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.6, marginBottom: 24 }}>
+          This portal is your single source of truth for your Westline Future project. Here's a quick guide on how to navigate:
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div style={{ display: 'flex', gap: 12 }}>
+            <div style={{ flexShrink: 0, width: 32, height: 32, borderRadius: 16, background: '#EFF6FF', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#1D4ED8', fontWeight: 800 }}>1</div>
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--accent-secondary)' }}>Track Your Progress</div>
+              <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.5, marginTop: 4 }}>The <strong>Overview</strong> tab shows your project journey. Stages unlock automatically as tasks are completed.</div>
+            </div>
+          </div>
+          
+          <div style={{ display: 'flex', gap: 12 }}>
+            <div style={{ flexShrink: 0, width: 32, height: 32, borderRadius: 16, background: '#F0FDF4', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#15803D', fontWeight: 800 }}>2</div>
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--accent-secondary)' }}>Make Payments</div>
+              <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.5, marginTop: 4 }}>Go to the <strong>Financials</strong> tab to view and pay invoices securely. Payments automatically unlock next steps.</div>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', gap: 12 }}>
+            <div style={{ flexShrink: 0, width: 32, height: 32, borderRadius: 16, background: '#FEF2F2', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#DC2626', fontWeight: 800 }}>3</div>
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--accent-secondary)' }}>Approve Designs & Docs</div>
+              <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.5, marginTop: 4 }}>The <strong>Designs</strong> and <strong>Documents</strong> tabs let you review 3D renders, contracts, and scope specifications.</div>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', gap: 12 }}>
+            <div style={{ flexShrink: 0, width: 32, height: 32, borderRadius: 16, background: '#FFF7ED', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#C2410C', fontWeight: 800 }}>4</div>
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--accent-secondary)' }}>Message Your Team</div>
+              <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.5, marginTop: 4 }}>Need help? Use the <strong>Messages</strong> tab to chat directly with your dedicated project manager.</div>
+            </div>
+          </div>
+        </div>
+
+        <button onClick={onDismiss} style={{ width: '100%', marginTop: 32, padding: '14px 0', background: ac, color: '#fff', fontSize: 14, fontWeight: 800, borderRadius: 14, border: 'none', cursor: 'pointer' }}>
+          Got it, let's go!
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── App Install Guide Modal ──────────────────────────────────────────────────
+function AppInstallGuideModal({ onDismiss, ac }) {
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+  const isAndroid = /Android/.test(navigator.userAgent);
+  
+  return (
+    <div
+      onClick={onDismiss}
+      style={{
+        position: 'fixed', inset: 0, zIndex: 9999,
+        background: 'rgba(92, 58, 33,.7)', backdropFilter: 'blur(8px)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24,
+      }}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          width: '100%', maxWidth: 400,
+          background: '#fff', borderRadius: 24, padding: '32px 28px',
+          boxShadow: '0 24px 80px rgba(0,0,0,.25)',
+          textAlign: 'center', position: 'relative'
+        }}
+      >
+        <button onClick={onDismiss} style={{ position: 'absolute', top: 16, right: 16, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)' }}>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
+        <div style={{ width: 64, height: 64, borderRadius: 16, background: `${ac}15`, color: ac, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' }}>
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect><line x1="12" y1="18" x2="12.01" y2="18"></line></svg>
+        </div>
+        <div style={{ fontSize: 20, fontWeight: 900, color: 'var(--accent-secondary)', marginBottom: 12 }}>Install Our App</div>
+        <div style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.6, marginBottom: 24 }}>
+          Get instant access to your project updates by adding our portal to your home screen. It works just like a native app!
+        </div>
+        
+        <div style={{ background: 'var(--bg-secondary)', borderRadius: 16, padding: '16px', textAlign: 'left', marginBottom: 24 }}>
+          {isIOS ? (
+            <>
+              <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--accent-secondary)', marginBottom: 8 }}>For iPhone/iPad:</div>
+              <ol style={{ fontSize: 13, color: 'var(--text-secondary)', margin: 0, paddingLeft: 20, lineHeight: 1.6 }}>
+                <li>Tap the <strong>Share</strong> button at the bottom of Safari (looks like a square with an arrow pointing up).</li>
+                <li>Scroll down and tap <strong>Add to Home Screen</strong>.</li>
+                <li>Tap <strong>Add</strong> in the top right corner.</li>
+              </ol>
+            </>
+          ) : isAndroid ? (
+            <>
+              <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--accent-secondary)', marginBottom: 8 }}>For Android:</div>
+              <ol style={{ fontSize: 13, color: 'var(--text-secondary)', margin: 0, paddingLeft: 20, lineHeight: 1.6 }}>
+                <li>Tap the <strong>Menu</strong> icon (3 dots in upper right-hand corner).</li>
+                <li>Tap <strong>Add to Home Screen</strong>.</li>
+                <li>Follow the onscreen instructions to add it.</li>
+              </ol>
+            </>
+          ) : (
+            <>
+              <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--accent-secondary)', marginBottom: 8 }}>For Desktop/Other:</div>
+              <ul style={{ fontSize: 13, color: 'var(--text-secondary)', margin: 0, paddingLeft: 20, lineHeight: 1.6 }}>
+                <li>Look for an install icon in your browser's address bar.</li>
+                <li>Or, find the <strong>Install</strong> option in your browser's menu.</li>
+              </ul>
+            </>
+          )}
+        </div>
+        
+        <button
+          onClick={onDismiss}
+          style={{
+            width: '100%', padding: '14px', borderRadius: 14, border: 'none',
+            background: ac, color: '#fff', fontSize: 15, fontWeight: 800, cursor: 'pointer',
+            transition: 'background .2s'
+          }}
+        >
+          Got it!
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── KickoffGate ─────────────────────────────────────────────────────────────
+function KickoffGate({ project, user, brand, isMobile, invoices = [], hasUnlockedDesign, onGateCleared, onPaymentSuccess, updateProjectStage }) {
+  const ac = brand?.color || AC;
+  const [showContract, setShowContract] = useState(false);
+  // Optimistic local state — set immediately when Paystack confirms payment,
+  // before the server Cloud Function writes to Firestore.
+  const [paidLocally, setPaidLocally] = useState(false);
+  // Pending verification state — payment went through Paystack but CF hasn't confirmed yet
+  const [pendingRef, setPendingRef] = useState(null);
+  // Optimistic contract signed — set immediately on onSigned so the gate
+  // clears without waiting for the Firestore snapshot to propagate.
+  const [contractJustSigned, setContractJustSigned] = useState(false);
+
+  const requiresRendering = project.kickoffMode === 'rendering-first';
+  const contractSigned = !!project.contractAccepted || contractJustSigned;
+
+  // Check rendering paid: either the flag is set, the linked invoice is "Paid", OR Paystack just confirmed it locally
+  const renderingInvoiceObj = invoices.find(inv =>
+    inv.id === project.renderingFeeInvoiceId ||
+    (inv.projectId === project.id && ['rendering', 'design', 'rendering fee', 'renderingfee'].includes((inv.type || '').toLowerCase()))
+  );
+
+  // ── Check localStorage AND Firestore for a pending/already-paid payment ─────
+  // Prevents double payment if client refreshes after paying but before CF verified.
+  useEffect(() => {
+    if (!renderingInvoiceObj?.id || renderingPaid) return;
+    const invoiceId = renderingInvoiceObj.id;
+
+    // 1. Check localStorage first (same device, instant)
+    try {
+      const stored = localStorage.getItem(`wl_pending_ref_${invoiceId}`);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed?.ref && Date.now() - (parsed.ts || 0) < 86400000) {
+          setPendingRef(parsed.ref);
+          return; // Don't need Firestore check if localStorage has it
+        } else {
+          localStorage.removeItem(`wl_pending_ref_${invoiceId}`);
+        }
+      }
+    } catch (_) {}
+
+    // 2. Check Firestore pendingPayments (cross-device protection)
+    import('firebase/firestore').then(({ getDoc, doc: fsDoc }) => {
+      getDoc(fsDoc(db, 'pendingPayments', invoiceId)).then(snap => {
+        if (snap.exists()) {
+          const data = snap.data();
+          // If Paystack received it but CF hasn't fully verified yet
+          if (data.reference && !data.verified) {
+            setPendingRef(data.reference);
+          }
+          // If already verified but Firestore listener hasn't updated yet → show as paid
+          if (data.verified) {
+            setPaidLocally(true);
+          }
+        }
+      }).catch(() => {});
+    }).catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [renderingInvoiceObj?.id]);
+
+  const renderingPaid = !!project.renderingFeePaid || paidLocally || (renderingInvoiceObj && renderingInvoiceObj.status === 'Paid') || hasUnlockedDesign;
+
+  const needsRenderingPayment = requiresRendering && !renderingPaid;
+  const needsContract = !contractSigned;
+  const renderingInvoice = renderingInvoiceObj;
+
+  // Step 1 = rendering fee (rendering-first only), Step 2 = contract signing
+  const step = needsRenderingPayment ? 1 : needsContract ? 2 : null;
+
+  // Notify parent when gate clears — must be in an effect, not the render body,
+  // to avoid calling setState on parent during KickoffGate's own render.
+  useEffect(() => {
+    if (step === null) onGateCleared?.();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step]);
+
+  if (step === null) return null;
+
+  const stepLabel = step === 1 ? 'Step 1 of 2 — 3D Rendering Fee' : 'Step 2 of 2 — Project Agreement';
+  const totalSteps = requiresRendering ? 2 : 1;
+  const currentStep = requiresRendering ? step : (step === 2 ? 1 : null);
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      {/* Gate header */}
+      <div style={{
+        padding: isMobile ? '24px 20px' : '28px 32px',
+        background: 'linear-gradient(135deg, var(--accent-secondary), #4A3B32)',
+        borderRadius: 20, color: '#fff',
+      }}>
+        <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.1em', opacity: .6, marginBottom: 8 }}>
+          {project.title}
+        </div>
+        <div style={{ fontSize: isMobile ? 22 : 26, fontWeight: 900, marginBottom: 6 }}>
+          {step === 1 ? '3D Rendering Fee' : 'Sign Project Agreement'}
+        </div>
+        <div style={{ fontSize: 13, opacity: .75, lineHeight: 1.5 }}>
+          {step === 1
+            ? 'Pay the rendering fee to receive your photorealistic 3D design previews. Your portal unlocks after signing the contract in the next step.'
+            : requiresRendering
+              ? 'Your 3D rendering fee is confirmed. Now read and sign the project agreement to officially begin — your full portal unlocks immediately after.'
+              : 'Please read and sign the project agreement to unlock your portal and begin the project journey.'}
+        </div>
+        {/* Step progress dots */}
+        {totalSteps > 1 && (
+          <div style={{ display: 'flex', gap: 6, marginTop: 16 }}>
+            {Array.from({ length: totalSteps }, (_, i) => (
+              <div key={i} style={{ height: 4, borderRadius: 2, flex: 1, background: (i + 1) <= (currentStep || 1) ? '#fff' : 'rgba(255,255,255,0.3)' }} />
+            ))}
+          </div>
+        )}
+        <div style={{ fontSize: 11, opacity: .55, marginTop: 6 }}>{stepLabel}</div>
+      </div>
+
+      {/* Step content */}
+      {step === 1 && (
+        <div style={{
+          padding: isMobile ? '24px 20px' : '28px 32px',
+          background: '#fff', borderRadius: 20,
+          border: '1px solid var(--border-color)',
+          boxShadow: '0 4px 20px rgba(0,0,0,.05)',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 20 }}>
+            <div style={{ width: 48, height: 48, borderRadius: 14, background: `${ac}15`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <PenTool size={22} color={ac} />
+            </div>
+            <div>
+              <div style={{ fontSize: 16, fontWeight: 900, color: 'var(--accent-secondary)' }}>3D Interior Design Rendering</div>
+              <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>
+                Fee: {renderingInvoice
+                  ? `GH₵ ${Number(renderingInvoice.amount || project.renderingFee || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}`
+                  : project.renderingFee
+                    ? `GH₵ ${Number(project.renderingFee).toLocaleString(undefined, { minimumFractionDigits: 2 })}`
+                    : 'Contact team for amount'}
+              </div>
+            </div>
+          </div>
+
+          <div style={{ background: 'var(--bg-secondary)', borderRadius: 14, padding: '16px 20px', marginBottom: 20, fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+            <strong style={{ color: 'var(--accent-secondary)', display: 'block', marginBottom: 6 }}>What you'll receive:</strong>
+            Photorealistic 3D renders of your interior design, allowing you to visualise exactly how your space will look before any fabrication begins. Revisions are included based on your package.
+          </div>
+
+          {/* Completed step 1 badge — shown when rendering paid and now on step 2 */}
+          {requiresRendering && renderingPaid && step === 2 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', borderRadius: 10, background: '#F0FDF4', border: '1px solid #BBF7D0', marginBottom: 16 }}>
+              <CheckCircle2 size={15} color="#16A34A" />
+              <span style={{ fontSize: 12, fontWeight: 700, color: '#15803D' }}>3D Rendering fee paid ✓</span>
+            </div>
+          )}
+
+          {renderingInvoice ? (
+            <>
+              {/* Show "Already Paid" state if invoice is paid */}
+              {renderingInvoice.status === 'Paid' || renderingPaid ? (
+                <div style={{
+                  padding: isMobile ? '16px 18px' : '18px 24px',
+                  background: '#F0FDF4',
+                  borderRadius: 12,
+                  border: '1.5px solid #86EFAC',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 12,
+                  color: '#15803D',
+                  fontSize: 14,
+                  fontWeight: 700,
+                }}>
+                  <CheckCircle2 size={20} color="#22C55E" style={{ flexShrink: 0 }} />
+                  <div>
+                    <div>Payment Confirmed ✓</div>
+                    <div style={{ fontSize: 12, fontWeight: 500, marginTop: 2 }}>
+                      GH₵ {Number(renderingInvoice.amount || renderingInvoice.total || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })} was processed successfully
+                    </div>
+                  </div>
+                </div>
+              ) : pendingRef ? (
+                /* ── Payment sent to Paystack but CF verification is still pending ── */
+                <div style={{ padding: '16px 20px', borderRadius: 14, background: '#FFFBEB', border: '1.5px solid #FCD34D', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <Loader2 size={18} color="#D97706" style={{ animation: 'spin 1s linear infinite', flexShrink: 0 }} />
+                    <div>
+                      <div style={{ fontSize: 14, fontWeight: 800, color: '#92400E' }}>Payment received — verifying with our system</div>
+                      <div style={{ fontSize: 12, color: '#B45309', marginTop: 2 }}>Your payment went through. Please wait while we confirm it, or contact us if this message persists.</div>
+                    </div>
+                  </div>
+                  <div style={{ fontSize: 11, color: '#B45309', background: '#FEF3C7', borderRadius: 8, padding: '8px 12px' }}>
+                    Reference: <strong>{pendingRef}</strong> — keep this for your records
+                  </div>
+                  <button
+                    onClick={async () => {
+                      try {
+                        const { httpsCallable } = await import('firebase/functions');
+                        const { functions: fns } = await import('../lib/firebase');
+                        const verify = httpsCallable(fns, 'verifyPaystackPayment');
+                        await verify({ reference: pendingRef, projectId: project.id, invoiceId: renderingInvoice.id, type: 'rendering' });
+                        try { localStorage.removeItem(`wl_pending_ref_${renderingInvoice.id}`); } catch (_) {}
+                        setPendingRef(null);
+                        setPaidLocally(true);
+                        onPaymentSuccess?.();
+                      } catch (e) {
+                        alert('Still verifying — please try again in a moment or contact support with your reference number.');
+                      }
+                    }}
+                    style={{ alignSelf: 'flex-start', padding: '8px 16px', borderRadius: 10, background: '#D97706', color: '#fff', border: 'none', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}
+                  >
+                    Retry Verification
+                  </button>
+                </div>
+              ) : (
+                <UnifiedPaymentGateway
+                  label={`Pay Rendering Fee — GH₵ ${Number(renderingInvoice.amount || renderingInvoice.total || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}`}
+                  amountGHS={Number(renderingInvoice.amount || renderingInvoice.total || 0)}
+                  email={user?.proxyEmail || (user?.phone ? `${user.phone}@clients.westlinefuture.com` : 'client@clients.westlinefuture.com')}
+                  projectId={project.id}
+                  invoiceId={renderingInvoice.id}
+                  paymentType="rendering"
+                  allowPartial={false}
+                  onSuccess={() => {
+                    // Immediately advance the gate — Paystack has confirmed payment client-side.
+                    // Server verification runs in the background and will update Firestore.
+                    setPaidLocally(true);
+                    setPendingRef(null);
+                    onPaymentSuccess?.();
+                  }}
+                />
+              )}
+            </>
+          ) : (
+            <div style={{ padding: '16px 20px', background: '#FEF3C7', borderRadius: 12, border: '1px solid #FDE68A', fontSize: 13, color: '#92400E' }}>
+              <strong>No invoice created yet.</strong> Your account manager will create the rendering fee invoice shortly. You'll be notified when it's ready.
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Step 2: Contract Signing ── */}
+      {step === 2 && (
+        <div style={{
+          padding: isMobile ? '24px 20px' : '28px 32px',
+          background: '#fff', borderRadius: 20,
+          border: '1px solid var(--border-color)',
+          boxShadow: '0 4px 20px rgba(0,0,0,.05)',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 20 }}>
+            <div style={{ width: 48, height: 48, borderRadius: 14, background: `${ac}15`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <FileCheck size={22} color={ac} />
+            </div>
+            <div>
+              <div style={{ fontSize: 16, fontWeight: 900, color: 'var(--accent-secondary)' }}>Project Agreement</div>
+              <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>Read and sign electronically — takes about 2 minutes</div>
+            </div>
+          </div>
+
+          {/* What you're agreeing to */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 20 }}>
+            {[
+              { icon: '📐', text: 'Scope of work and design specifications' },
+              { icon: '💳', text: 'Payment schedule and milestone amounts' },
+              { icon: '📅', text: 'Project timeline and delivery expectations' },
+              { icon: '🔒', text: 'Confidentiality and intellectual property terms' },
+            ].map((item, i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderRadius: 10, background: 'var(--bg-secondary)' }}>
+                <span style={{ fontSize: 15 }}>{item.icon}</span>
+                <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{item.text}</span>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ padding: '12px 16px', borderRadius: 12, background: '#FFFBEB', border: '1px solid #FDE68A', fontSize: 12, color: '#92400E', marginBottom: 20 }}>
+            💡 <strong>After signing:</strong> Your full portal unlocks immediately. You'll be able to review your project brief, track progress, view designs, and manage payments — all in one place.
+          </div>
+
+          <button
+            onClick={() => setShowContract(true)}
+            style={{
+              width: '100%', padding: '16px', borderRadius: 14, border: 'none',
+              background: `var(--accent-secondary)`, color: '#fff',
+              fontSize: 15, fontWeight: 800, cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
+            }}
+          >
+            <PenLine size={18} /> Read & Sign Project Agreement
+          </button>
+        </div>
+      )}
+
+      {showContract && (
+        <ContractAgreementModal
+          project={project}
+          user={user}
+          brand={brand}
+          isMobile={isMobile}
+          onClose={() => setShowContract(false)}
+          onSigned={() => { setContractJustSigned(true); setShowContract(false); onGateCleared?.(); }}
+        />
+      )}
+    </div>
+  );
+}
+
+// ─── Contract Gate ────────────────────────────────────────────────────────
+function ContractGate({ project, user, brand, isMobile }) {
+  const [showContract, setShowContract] = useState(false);
+  const [signed, setSigned] = useState(false);
+  const ac = brand?.color || AC;
+
+  if (signed) return (
+    <div style={{ padding: '24px 32px', background: '#F0FDF4', border: '1.5px solid #86EFAC', borderRadius: 20, textAlign: 'center' }}>
+      <div style={{ fontSize: 28, marginBottom: 8 }}>✅</div>
+      <div style={{ fontSize: 16, fontWeight: 900, color: '#15803D' }}>Contract Signed!</div>
+      <div style={{ fontSize: 13, color: '#166534', marginTop: 4 }}>Your project agreement has been recorded. The team will be in touch shortly.</div>
+    </div>
+  );
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      {/* Gate header */}
+      <div style={{
+        padding: isMobile ? '24px 20px' : '28px 32px',
+        background: 'linear-gradient(135deg, var(--accent-secondary), #4A3B32)',
+        borderRadius: 20, color: '#fff',
+      }}>
+        <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.1em', opacity: .6, marginBottom: 8 }}>
+          {project.title}
+        </div>
+        <div style={{ fontSize: isMobile ? 22 : 26, fontWeight: 900, marginBottom: 6 }}>
+          Sign Your Contract
+        </div>
+        <div style={{ fontSize: 13, opacity: .75, lineHeight: 1.5 }}>
+          Your initial deposit has been received! Please read and sign the project agreement to officially begin production.
+        </div>
+      </div>
+
+      {/* Step content */}
+      <div style={{
+        padding: isMobile ? '24px 20px' : '28px 32px',
+        background: '#fff', borderRadius: 20,
+        border: '1px solid var(--border-color)',
+        boxShadow: '0 4px 20px rgba(0,0,0,.05)',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 20 }}>
+          <div style={{ width: 48, height: 48, borderRadius: 14, background: `${ac}15`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <FileCheck size={22} color={ac} />
+          </div>
+          <div>
+            <div style={{ fontSize: 16, fontWeight: 900, color: 'var(--accent-secondary)' }}>Project Agreement</div>
+            <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>
+              Sign electronically with your full name
+            </div>
+          </div>
+        </div>
+
+        <div style={{ background: 'var(--bg-secondary)', borderRadius: 14, padding: '16px 20px', marginBottom: 20, fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+          By signing this agreement you confirm the scope of work, payment schedule, and terms as discussed with your account manager. This is a binding contract.
+        </div>
+
+        <button
+          onClick={() => setShowContract(true)}
+          style={{
+            width: '100%', padding: '16px', borderRadius: 14, border: 'none',
+            background: `var(--accent-secondary)`, color: '#fff',
+            fontSize: 15, fontWeight: 800, cursor: 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
+          }}
+        >
+          <PenLine size={18} /> Read & Sign Contract
+        </button>
+      </div>
+
+      {showContract && (
+        <ContractAgreementModal
+          project={project}
+          user={user}
+          brand={brand}
+          isMobile={isMobile}
+          onClose={() => setShowContract(false)}
+          onSigned={() => { setSigned(true); setShowContract(false); }}
+        />
+      )}
     </div>
   );
 }
@@ -2618,8 +5026,16 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
 
   const [projects, setProjects] = useState([]);
   const [loadingProjects, setLoadingProjects] = useState(true);
-  const [selectedId, setSelectedId] = useState(null);
-  const [activeTab, setActiveTab] = useState('timeline');
+  const [selectedId, setSelectedId] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('projectId') || null;
+  });
+  const [activeTab, setActiveTab] = useState(() => {
+    const requestedTab = new URLSearchParams(window.location.search).get('tab');
+    return ['overview', 'designs', 'financials', 'documents', 'vault', 'uploads', 'messages'].includes(requestedTab)
+      ? requestedTab
+      : 'overview';
+  });
 
   // Mobile detection — use UA (catches "Request Desktop Site" on iOS) + viewport width
   const detectMobile = () => {
@@ -2636,6 +5052,59 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
 
   // Change request modal
   const [showChangeRequest, setShowChangeRequest] = useState(false);
+
+  // Kickoff gate: track which project IDs the client has cleared in this session
+  const [gateCleared, setGateCleared] = useState({});
+
+  // Welcome card dismissal (keyed per user+project, persisted in localStorage)
+  const [portalWelcomeDismissed, setPortalWelcomeDismissed] = useState(false);
+
+  // App Install Guide Modal logic
+  const [showInstallGuide, setShowInstallGuide] = useState(false);
+  const [showPortalGuide, setShowPortalGuide] = useState(false);
+  const [activeStageGuide, setActiveStageGuide] = useState(null);
+
+  // Automatically show portal guide to completely new users
+  useEffect(() => {
+    if (user && projects.length > 0) {
+      const hasSeenPortalGuide = localStorage.getItem('hasSeenPortalGuide');
+      if (!hasSeenPortalGuide) {
+        setShowPortalGuide(true);
+        localStorage.setItem('hasSeenPortalGuide', 'true');
+      }
+    }
+  }, [user, projects.length]);
+  useEffect(() => {
+    // Check if the user is running the app as a PWA already
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+    if (isStandalone) return;
+
+    // Check local storage to ensure we only show it once
+    const hasSeenGuide = localStorage.getItem('hasSeenInstallGuide');
+    if (!hasSeenGuide && user) {
+      // Delay showing it briefly so the UI loads first
+      const timer = setTimeout(() => {
+        setShowInstallGuide(true);
+      }, 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [user]);
+
+  const dismissInstallGuide = () => {
+    localStorage.setItem('hasSeenInstallGuide', 'true');
+    setShowInstallGuide(false);
+  };
+
+  // ── Language translation (DOM-walker, same pattern as admin portal) ──────────
+  useEffect(() => {
+    const lang = props.lang || 'en';
+    const apply = () => translateClientDom(lang);
+    apply();
+    const observer = new MutationObserver(() => requestAnimationFrame(apply));
+    const root = document.querySelector('.lx-portal');
+    if (root) observer.observe(root, { childList: true, subtree: true, characterData: true });
+    return () => observer.disconnect();
+  }, [props.lang, selectedId, activeTab]);
 
   // Review modal state
   const [reviewDismissed, setReviewDismissed] = useState(false);
@@ -2656,6 +5125,41 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
 
   const [projectsError, setProjectsError] = useState(null);
 
+  // Intercept Hubtel Payment Returns
+  const [verifyingPayment, setVerifyingPayment] = useState(false);
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const clientRef = params.get('verifyHubtel');
+    const checkoutId = params.get('checkoutId'); // From Hubtel
+    const pId = params.get('projectId');
+    const invId = params.get('invoiceId');
+    const pType = params.get('type');
+    const pAmt = params.get('amount');
+
+    if (clientRef && pId && !verifyingPayment) {
+      setVerifyingPayment(true);
+      setNotifToast('Verifying payment... Please wait.');
+      const verify = httpsCallable(functions, 'verifyHubtelPayment');
+      verify({
+        clientReference: clientRef,
+        checkoutId: checkoutId,
+        projectId: pId,
+        invoiceId: invId === 'undefined' ? null : invId,
+        type: pType || 'payment',
+        expectedAmountGHS: Number(pAmt)
+      }).then(() => {
+        setNotifToast('Payment verified successfully!');
+        window.history.replaceState({}, document.title, window.location.pathname);
+        setVerifyingPayment(false);
+      }).catch(err => {
+        console.error('Verify failed:', err);
+        setNotifToast('Payment received but verification failed. Ref: ' + clientRef);
+        window.history.replaceState({}, document.title, window.location.pathname);
+        setVerifyingPayment(false);
+      });
+    }
+  }, [verifyingPayment]);
+
   // Subscribe to projects for this client.
   // We skip orderBy to avoid needing a composite index (sort in JS instead).
   // Projects are assigned by clientIds. Portfolio-level inheritance should be materialized onto each project.
@@ -2667,7 +5171,7 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
 
     const q = query(
       collection(db, 'projects'),
-      where('clientIds', 'array-contains', clientAccessId),
+      where('clientIds', 'array-contains-any', candidates),
       limit(50)
     );
     const unsub = onSnapshot(q,
@@ -2681,7 +5185,11 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
           });
         setProjects(mine);
         setProjectsError(null);
-        if (mine.length > 0 && !selectedId) setSelectedId(mine[0].id);
+        setSelectedId(prev => {
+          if (!prev && mine.length > 0) return mine[0].id;
+          if (prev && mine.length > 0 && !mine.find(p => p.id === prev)) return mine[0].id;
+          return prev;
+        });
         setLoadingProjects(false);
       },
       err => {
@@ -2698,19 +5206,70 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
   const activeCount = projects.filter(p => p.status !== 'Completed').length;
   const completedCount = projects.filter(p => p.status === 'Completed').length;
 
+  // ── Live invoices for selected project (needed by KickoffGate) ──────────────
+  // The global props.invoices filters by clientId==user.id which may not match
+  // phone-auth clients. This queries by projectId so KickoffGate always finds
+  // the rendering invoice.
+  const [gateInvoices, setGateInvoices] = useState([]);
+  useEffect(() => {
+    if (!db || !selectedId) { setGateInvoices([]); return; }
+    const q = query(collection(db, 'invoices'), where('projectId', '==', selectedId));
+    const unsub = onSnapshot(q,
+      snap => setGateInvoices(snap.docs.map(d => ({ id: d.id, ...d.data() }))),
+      () => setGateInvoices([])
+    );
+    return unsub;
+  }, [selectedId]);
+
+  // Track unread messages for the client
+  const [totalUnread, setTotalUnread] = useState(0);
+  useEffect(() => {
+    if (!db || !user?.id) return;
+    const unsub = onSnapshot(collection(db, 'clients', user.id, 'messages'), snap => {
+      const unread = snap.docs.filter(d => {
+        const m = d.data();
+        return !m.isInternal && m.senderRole !== 'client' && !m.readByClient;
+      }).length;
+      setTotalUnread(unread);
+    });
+    return unsub;
+  }, [user?.id]);
+
+  const prevUnreadRef = useRef(0);
+  useEffect(() => {
+    if (totalUnread > prevUnreadRef.current) {
+      if (props.playNotificationSound) props.playNotificationSound();
+      if (props.notify) props.notify('info', 'You have a new message', 'persistent');
+    }
+    prevUnreadRef.current = totalUnread;
+  }, [totalUnread, props.playNotificationSound, props.notify]);
+
   // Auto-show review modal for completed projects
   const showReviewModal =
     selected &&
-    selected.stageId === 7 &&
+    selected.stageId === 8 &&
     !reviewDismissed &&
-    !reviewSubmitted;
+    !reviewSubmitted &&
+    !selected.reviewDismissed &&
+    !selected.reviewSubmitted;
+
+  // ── Tab availability rules — locked tabs show padlock + explanation ──────
+  const hasUnlockedDesign = (props.renderingPackages || []).some(pkg => pkg.projectId === selected?.id && (pkg.unlocked || pkg.status === 'Paid / Unlocked'));
+  const renderingPaidByFlag = !!selected?.renderingFeePaid;
+  const renderingPaidByInvoice = gateInvoices.some(inv => (inv.id === selected?.renderingFeeInvoiceId || ['rendering','design','rendering fee','renderingfee'].includes((inv.type||'').toLowerCase())) && inv.status === 'Paid');
+  const renderingPaid = renderingPaidByFlag || renderingPaidByInvoice || hasUnlockedDesign;
+  const kickoffComplete = selected?.kickoffGateCleared || (selected?.kickoffMode === 'rendering-first' && renderingPaid);
+  const stageId = selected?.stageId || 1;
+  const photosAvailable = stageId >= 6; // Installation stage onwards
 
   const tabs = [
-    { id: 'timeline',  label: 'Progress',  icon: <CheckCircle2 size={14} /> },
-    { id: 'photos',    label: 'Photos',    icon: <Camera size={14} /> },
-    { id: 'payments',  label: 'Payments',  icon: <CreditCard size={14} /> },
-    { id: 'documents', label: 'Documents', icon: <FileText size={14} /> },
-    { id: 'messages',  label: 'Messages',  icon: <MessageSquare size={14} /> },
+    { id: 'overview',  label: 'Overview',  icon: <Home size={14} /> },
+    ...(selected?.kickoffMode !== 'direct-kickoff' || photosAvailable
+      ? [{ id: 'designs', label: 'Designs', icon: <Palette size={14} />, locked: !kickoffComplete, lockReason: 'Sign your contract first' }]
+      : []),
+    { id: 'financials', label: 'Financials', icon: <CreditCard size={14} /> },
+    { id: 'vault', label: 'Vault', icon: <ShieldCheck size={14} /> },
+    { id: 'uploads', label: 'Uploads', icon: <Camera size={14} /> }
   ];
 
   const handleLogout = () => {
@@ -2718,13 +5277,13 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
   };
 
   return (
-    <div style={{ minHeight: '100dvh', background: isMobile ? '#EDEAE6' : '#F8F6F3', fontFamily: 'Inter, Satoshi, sans-serif', overscrollBehavior: 'contain' }}>
+    <div className="lx-portal" style={{ minHeight: '100dvh', background: isMobile ? '#EDEAE6' : '#F8F6F3', fontFamily: 'Inter, Satoshi, sans-serif', overscrollBehavior: 'contain' }}>
 
       {/* ── NOTIFICATION TOAST ── */}
       {notifToast && (
         <div onClick={() => setNotifToast(null)} style={{
           position: 'fixed', top: 24, right: 24, zIndex: 9998,
-          background: '#111827', color: '#fff', padding: '14px 20px',
+          background: `var(--accent-secondary)`, color: '#fff', padding: '14px 20px',
           borderRadius: 16, boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
           display: 'flex', gap: 12, alignItems: 'center', cursor: 'pointer',
           maxWidth: 360, animation: 'slideInRight .3s ease',
@@ -2739,17 +5298,50 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
         </div>
       )}
 
+      {/* ── APP INSTALL GUIDE MODAL ── */}
+      {showInstallGuide && <AppInstallGuideModal onDismiss={dismissInstallGuide} ac={ac} />}
+
+      {/* ── PORTAL GUIDE MODAL ── */}
+      {showPortalGuide && <PortalGuideModal onDismiss={() => setShowPortalGuide(false)} ac={ac} />}
+
+      {/* ── STAGE EXPLAINER MODAL ── */}
+      {activeStageGuide && <StageExplainerModal stage={activeStageGuide} onDismiss={() => setActiveStageGuide(null)} ac={ac} />}
+
+      {/* ── FLOATING HELP BUTTON ── */}
+      {!showPortalGuide && selected && (
+        <button
+          onClick={() => setShowPortalGuide(true)}
+          style={{
+            position: 'fixed', right: isMobile ? 20 : 32, bottom: isMobile ? 104 : 32, zIndex: 990,
+            width: 48, height: 48, borderRadius: 24, background: ac, color: '#fff',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            boxShadow: '0 8px 32px rgba(0,0,0,.3)', border: 'none', cursor: 'pointer',
+            transition: 'transform .2s'
+          }}
+        >
+          <HelpCircle size={24} />
+        </button>
+      )}
+
       {isMobile ? (
         /* ── MOBILE: HERO APP HEADER (dark banner + greeting, non-sticky so it scrolls away) ── */
-        <div style={{ background: '#111827', paddingTop: 'env(safe-area-inset-top, 0px)' }}>
+        <div style={{ background: `var(--accent-secondary)`, paddingTop: 'env(safe-area-inset-top, 0px)' }}>
           <div style={{ height: 52, padding: '0 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center' }}>
               {props.brand?.logo && (
-                <img src={props.brand.logo} style={{ height: 24, objectFit: 'contain' }} alt="" onError={e => { e.target.style.display = 'none'; }} />
+                <img src={props.brand.logo} style={{ height: 36, objectFit: 'contain', filter: 'brightness(0) invert(1)' }} alt="Logo" onError={e => { e.target.style.display = 'none'; }} />
               )}
-              <span style={{ fontSize: 16, fontWeight: 800, color: ac }}>{props.brand?.name || 'Westline Future'}</span>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+              {/* Language toggle — mobile */}
+              <button
+                data-no-portal-translate
+                onClick={() => props.setLang?.(props.lang === 'zh' ? 'en' : 'zh')}
+                title={props.lang === 'zh' ? 'Switch to English' : '切换为中文'}
+                style={{ width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(255,255,255,.1)', borderRadius: 12, border: 'none', cursor: 'pointer', fontSize: 20, touchAction: 'manipulation', flexShrink: 0 }}
+              >
+                {props.lang === 'zh' ? '🇬🇧' : '🇨🇳'}
+              </button>
               <ClientNotificationBell notifications={props.userNotifications || []} onMarkRead={props.markNotificationRead} ac={ac} />
               <PushNotificationBell ac={ac} />
               <button onClick={handleLogout} style={{ width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(255,255,255,.1)', borderRadius: 12, border: 'none', cursor: 'pointer', color: 'rgba(255,255,255,.65)', touchAction: 'manipulation', flexShrink: 0 }}>
@@ -2772,22 +5364,39 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
       ) : (
         /* ── DESKTOP: STICKY TOP NAV ── */
         <div style={{
-          background: '#111827', padding: '0 24px', height: 56,
+          background: `var(--accent-secondary)`, padding: '0 24px', height: 56,
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
           position: 'sticky', top: 0, zIndex: 100,
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             {props.brand?.logo && (
-              <img src={props.brand.logo} style={{ height: 26, objectFit: 'contain' }} alt="Logo" onError={e => { e.target.style.display = 'none'; }} />
+              <img src={props.brand.logo} style={{ height: 40, objectFit: 'contain', filter: 'brightness(0) invert(1)' }} alt="Logo" onError={e => { e.target.style.display = 'none'; }} />
             )}
-            <span style={{ fontSize: 13, fontWeight: 800, color: ac, letterSpacing: '.02em' }}>{props.brand?.name || 'Westline Future'}</span>
             <span style={{ fontSize: 13, color: 'rgba(255,255,255,.3)', fontWeight: 300 }}>|</span>
             <span style={{ fontSize: 13, color: 'rgba(255,255,255,.6)', fontWeight: 500 }}>Client Portal</span>
+            
+            <div style={{ marginLeft: 32, display: 'flex', gap: 24, alignItems: 'center' }}>
+              <button onClick={() => setActiveTab('dashboard')} style={{ background: 'none', border: 'none', color: activeTab !== 'messages' ? '#fff' : 'rgba(255,255,255,.6)', fontWeight: 700, fontSize: 13, cursor: 'pointer', padding: 0 }}>Dashboard</button>
+              <button onClick={() => setActiveTab('messages')} style={{ position: 'relative', background: 'none', border: 'none', color: activeTab === 'messages' ? '#fff' : 'rgba(255,255,255,.6)', fontWeight: 700, fontSize: 13, cursor: 'pointer', padding: 0 }}>
+                Messages
+                {totalUnread > 0 && <span style={{ position: 'absolute', top: -6, right: -16, background: '#EF4444', color: '#fff', fontSize: 9, fontWeight: 800, padding: '1px 5px', borderRadius: 10 }}>{totalUnread}</span>}
+              </button>
+            </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
             <ClientNotificationBell notifications={props.userNotifications || []} onMarkRead={props.markNotificationRead} ac={ac} />
             <PushNotificationBell ac={ac} />
             <div style={{ fontSize: 13, color: 'rgba(255,255,255,.7)', fontWeight: 600 }}>{user?.name || 'Client'}</div>
+            {/* Language toggle — desktop */}
+            <button
+              data-no-portal-translate
+              onClick={() => props.setLang?.(props.lang === 'zh' ? 'en' : 'zh')}
+              title={props.lang === 'zh' ? 'Switch to English' : '切换为中文'}
+              style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,.6)', background: 'rgba(255,255,255,.1)', border: 'none', cursor: 'pointer', padding: '5px 10px', borderRadius: 8 }}
+            >
+              <span style={{ fontSize: 16 }}>{props.lang === 'zh' ? '🇬🇧' : '🇨🇳'}</span>
+              <span>{props.lang === 'zh' ? 'EN' : '中文'}</span>
+            </button>
             <button onClick={handleLogout} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,.5)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
               <LogOut size={14} /> Sign out
             </button>
@@ -2800,26 +5409,46 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
         {/* ── DESKTOP WELCOME HEADER ── */}
         {!isMobile && (
           <div style={{ marginBottom: 28 }}>
-            <div style={{ fontSize: 28, fontWeight: 900, color: '#111827', marginBottom: 6 }}>
+            <div style={{ fontSize: 28, fontWeight: 900, color: `var(--accent-secondary)`, marginBottom: 6 }}>
               Welcome back, {(user?.name || 'there').split(' ')[0]} 👋
             </div>
-            <div style={{ fontSize: 15, color: '#4B5563', marginBottom: 20 }}>
+            <div style={{ fontSize: 15, color: `var(--text-secondary)`, marginBottom: 20 }}>
               {loadingProjects ? 'Loading your projects...' : projects.length === 0
                 ? 'You have no active projects yet. Speak to our team to get started.'
                 : `${activeCount} active project${activeCount !== 1 ? 's' : ''}${completedCount > 0 ? ` · ${completedCount} completed` : ''}`}
             </div>
-            {user && !loadingProjects && projects.length > 0 && <ReferralCard user={user} ac={ac} />}
+            {/* Referral Card moved to Financials tab */}
           </div>
         )}
 
         {/* ── MOBILE REFERRAL CARD ── */}
-        {isMobile && user && !loadingProjects && projects.length > 0 && (
-          <div style={{ marginBottom: 16, marginTop: 4 }}>
-            <ReferralCard user={user} ac={ac} />
-          </div>
-        )}
+        {/* Moved to Financials tab */}
 
-        {loadingProjects ? (
+        {activeTab === 'messages' ? (
+          <div style={{
+            padding: isMobile ? '20px 18px' : '24px 28px', background: '#fff',
+            borderRadius: isMobile ? 24 : 20,
+            border: isMobile ? 'none' : '1px solid var(--border-color)',
+            boxShadow: isMobile ? '0 2px 16px rgba(0,0,0,.08)' : '0 4px 20px rgba(0,0,0,.05)',
+            height: isMobile ? 'calc(100dvh - 220px)' : 'calc(100vh - 220px)',
+            minHeight: isMobile ? 320 : 500,
+            display: 'flex', flexDirection: 'column',
+          }}>
+            <div style={{ fontSize: 15, fontWeight: 800, color: `var(--accent-secondary)`, marginBottom: 16, flexShrink: 0 }}>Messages</div>
+            <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+              <WorldClassChat
+                clientId={user.id}
+                user={user}
+                accentColor={ac}
+                addClientMessage={props.addClientMessage}
+                isAdmin={false}
+                height="100%"
+                projects={projects.map(p => ({ id: p.id, title: p.title }))}
+                viewerLanguage={props.lang || 'en'}
+              />
+            </div>
+          </div>
+        ) : loadingProjects ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginTop: isMobile ? 16 : 0 }}>
             {[1, 2, 3].map(i => (
               <div key={i} style={{ height: i === 1 ? 140 : 80, borderRadius: isMobile ? 24 : 20, background: '#fff', animation: 'pulse 1.5s infinite', animationDelay: `${i * 0.15}s`, boxShadow: isMobile ? '0 2px 12px rgba(0,0,0,.06)' : 'none' }} />
@@ -2828,23 +5457,23 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
         ) : projectsError ? (
           <div style={{ padding: isMobile ? '48px 24px' : '80px 40px', textAlign: 'center', background: '#fff', borderRadius: 24, boxShadow: isMobile ? '0 2px 16px rgba(0,0,0,.08)' : 'none', marginTop: isMobile ? 8 : 0 }}>
             <div style={{ fontSize: 40, marginBottom: 16 }}>⚠️</div>
-            <div style={{ fontSize: 17, fontWeight: 800, color: '#111827', marginBottom: 8 }}>Couldn't load your projects</div>
-            <div style={{ fontSize: 13, color: '#6B7280', marginBottom: 24, lineHeight: 1.6 }}>
+            <div style={{ fontSize: 17, fontWeight: 800, color: `var(--accent-secondary)`, marginBottom: 8 }}>Couldn't load your projects</div>
+            <div style={{ fontSize: 13, color: `var(--text-secondary)`, marginBottom: 24, lineHeight: 1.6 }}>
               There was a connection issue. Please refresh the page or contact our team.
             </div>
-            <button onClick={() => window.location.reload()} style={{ padding: '12px 24px', background: '#111827', color: '#fff', border: 'none', borderRadius: 14, fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
+            <button onClick={() => window.location.reload()} style={{ padding: '12px 24px', background: `var(--accent-secondary)`, color: '#fff', border: 'none', borderRadius: 14, fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
               Retry
             </button>
           </div>
         ) : projects.length === 0 ? (
-          <div style={{ padding: isMobile ? '60px 28px' : '80px 40px', textAlign: 'center', background: '#fff', borderRadius: isMobile ? 24 : 24, border: isMobile ? 'none' : '1.5px dashed #E5E7EB', boxShadow: isMobile ? '0 2px 16px rgba(0,0,0,.08)' : 'none', marginTop: isMobile ? 8 : 0 }}>
+          <div style={{ padding: isMobile ? '60px 28px' : '80px 40px', textAlign: 'center', background: '#fff', borderRadius: isMobile ? 24 : 24, border: isMobile ? 'none' : '1.5px dashed var(--border-color)', boxShadow: isMobile ? '0 2px 16px rgba(0,0,0,.08)' : 'none', marginTop: isMobile ? 8 : 0 }}>
             <div style={{ fontSize: 48, marginBottom: 16 }}>🏗️</div>
-            <div style={{ fontSize: 20, fontWeight: 800, color: '#111827', marginBottom: 8 }}>No projects yet</div>
-            <div style={{ fontSize: 14, color: '#6B7280', marginBottom: 24, lineHeight: 1.6, maxWidth: 400, margin: '0 auto 24px' }}>
+            <div style={{ fontSize: 20, fontWeight: 800, color: `var(--accent-secondary)`, marginBottom: 8 }}>No projects yet</div>
+            <div style={{ fontSize: 14, color: `var(--text-secondary)`, marginBottom: 24, lineHeight: 1.6, maxWidth: 400, margin: '0 auto 24px' }}>
               Once your account manager creates a project for you, it will appear here with real-time updates.
             </div>
             <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 14, fontWeight: 700, color: ac, background: `${ac}10`, padding: '12px 24px', borderRadius: 14, border: `1.5px solid ${ac}30` }}>
-              Contact us: {props.brand?.phone || '+233 59 845 5012'}
+              Contact us: {props.brand?.phone || '+233 24 731 9778'}
             </div>
           </div>
         ) : (
@@ -2857,12 +5486,12 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
                   {projects.map(p => (
                     <button
                       key={p.id}
-                      onClick={() => { setSelectedId(p.id); setActiveTab('timeline'); }}
+                      onClick={() => { setSelectedId(p.id); setActiveTab('overview'); }}
                       style={{
                         flexShrink: 0, padding: '8px 16px', borderRadius: 20,
-                        border: `2px solid ${p.id === selectedId ? ac : '#E5E7EB'}`,
+                        border: `2px solid ${p.id === selectedId ? ac : `var(--border-color)`}`,
                         background: p.id === selectedId ? `${ac}15` : '#fff',
-                        color: p.id === selectedId ? '#111827' : '#4B5563',
+                        color: p.id === selectedId ? `var(--accent-secondary)` : `var(--text-secondary)`,
                         fontSize: 13, fontWeight: 700, cursor: 'pointer',
                         whiteSpace: 'nowrap', minHeight: 44, touchAction: 'manipulation',
                       }}
@@ -2873,13 +5502,13 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
                 </div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                  <div style={{ fontSize: 11, fontWeight: 800, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 4 }}>Your Projects</div>
+                  <div style={{ fontSize: 11, fontWeight: 800, color: `var(--text-secondary)`, textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 4 }}>Your Projects</div>
                   {projects.map(p => (
                     <ProjectCard
                       key={p.id}
                       project={p}
                       isSelected={p.id === selectedId}
-                      onClick={() => { setSelectedId(p.id); setActiveTab('timeline'); }}
+                      onClick={() => { setSelectedId(p.id); setActiveTab('overview'); }}
                     />
                   ))}
                 </div>
@@ -2890,136 +5519,560 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
             {selected && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
 
-                {/* Project header card */}
-                <ProjectHeaderCard project={selected} isMobile={isMobile} ac={ac} brand={props.brand} />
+                {/* Minimal Global Header */}
+                <div style={{ padding: isMobile ? '10px 0 0 0' : '0' }}>
+                  <div style={{ fontSize: 13, fontWeight: 800, color: ac, textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 4 }}>
+                    {PROJECT_TYPES[selected.projectType]?.label || 'Full Service'} Project
+                  </div>
+                  <div style={{ fontSize: isMobile ? 24 : 28, fontWeight: 900, color: 'var(--accent-secondary)' }}>
+                    {selected.title}
+                  </div>
+                </div>
+
+                {/* ── KICKOFF GATE ── */}
+                {(() => {
+                  const isCleared = selected.kickoffGateCleared || gateCleared[selected.id];
+                  const requiresRendering = selected.kickoffMode === 'rendering-first';
+                  const renderingPaidByFlag = !!selected.renderingFeePaid;
+                  const renderingPaidByInvoice = gateInvoices.some(inv => (inv.id === selected.renderingFeeInvoiceId || ['rendering','design','rendering fee','renderingfee'].includes((inv.type||'').toLowerCase())) && inv.status === 'Paid');
+                  const hasUnlockedDesignLocal = (props.renderingPackages || []).some(pkg => pkg.projectId === selected.id && (pkg.unlocked || pkg.status === 'Paid / Unlocked'));
+                  const renderingPaid = renderingPaidByFlag || renderingPaidByInvoice || hasUnlockedDesignLocal;
+                  const contractSigned = !!selected.contractAccepted || isCleared;
+                  // Gate is active until BOTH rendering fee (if required) AND contract are done
+                  const gateActive = !isCleared && (!contractSigned || (requiresRendering && !renderingPaid));
+                  if (!gateActive) return null;
+                  return (
+                    <KickoffGate
+                      project={selected}
+                      user={user}
+                      brand={props.brand}
+                      isMobile={isMobile}
+                      hasUnlockedDesign={hasUnlockedDesignLocal}
+                      invoices={gateInvoices.length > 0 ? gateInvoices : (props.invoices || [])}
+                      updateProjectStage={props.updateProjectStage}
+                      onGateCleared={() => setGateCleared(prev => ({ ...prev, [selected.id]: true }))}
+                      onPaymentSuccess={() => {
+                        if (selected.stageId < 3) {
+                          props.updateProjectStage?.(selected.id, 3, 'Rendering fee paid, advancing to quote', { silent: true });
+                        }
+                        // Force refresh of project data after payment
+                        // The onSnapshot listener should pick up renderingFeePaid, but as a safety net
+                        // we force a manual read after a short delay and update state directly.
+                        const projectId = selected.id;
+                        const tryRefresh = (attempt = 1) => {
+                          import('firebase/firestore').then(({ getDoc, doc: docRef }) => {
+                            import('../lib/firebase').then(({ db: fbDb }) => {
+                              getDoc(docRef(fbDb, 'projects', projectId)).then(snapshot => {
+                                if (snapshot.exists()) {
+                                  const freshData = { id: snapshot.id, ...snapshot.data() };
+                                  if (freshData.renderingFeePaid) {
+                                    console.log('[ClientPortal] Payment confirmed — updating project state');
+                                    setProjects(prev => prev.map(p => p.id === projectId ? freshData : p));
+                                  } else if (attempt < 5) {
+                                    // Cloud Function may not have written yet — retry
+                                    setTimeout(() => tryRefresh(attempt + 1), 2000);
+                                  }
+                                }
+                              });
+                            });
+                          });
+                        };
+                        setTimeout(() => tryRefresh(), 1500);
+                      }}
+                    />
+                  );
+                })()}
+
+                {/* Hide tabs and content while kickoff gate is active */}
+                {(selected.kickoffGateCleared || gateCleared[selected.id] || !!selected.contractAccepted) && (
+                <>
+
+
 
                 {/* Tabs — desktop only; mobile uses bottom dock */}
                 {!isMobile && (
-                  <div style={{ display: 'flex', gap: 4, background: '#fff', padding: 5, borderRadius: 16, border: '1px solid #E5E7EB', overflowX: 'auto', scrollbarWidth: 'none' }}>
+                  <div style={{ display: 'flex', gap: 4, background: '#fff', padding: 5, borderRadius: 16, border: '1px solid var(--border-color)', overflowX: 'auto', scrollbarWidth: 'none' }}>
                     {tabs.map(t => (
                       <button
                         key={t.id}
-                        onClick={() => setActiveTab(t.id)}
+                        onClick={() => { if (!t.locked) setActiveTab(t.id); }}
+                        title={t.locked ? t.lockReason : ''}
                         style={{
                           height: 38, padding: '0 16px', borderRadius: 12, border: 'none',
-                          background: activeTab === t.id ? '#111827' : 'transparent',
-                          color: activeTab === t.id ? '#fff' : '#4B5563',
-                          fontSize: 13, fontWeight: 700, cursor: 'pointer',
+                          background: activeTab === t.id ? `var(--accent-secondary)` : 'transparent',
+                          color: activeTab === t.id ? '#fff' : t.locked ? 'var(--border-color)' : `var(--text-secondary)`,
+                          fontSize: 13, fontWeight: 700, cursor: t.locked ? 'not-allowed' : 'pointer',
+                          opacity: t.locked ? 0.55 : 1,
                           display: 'flex', alignItems: 'center', gap: 7,
                           transition: 'all .2s', flexShrink: 0,
                           whiteSpace: 'nowrap',
                         }}
                       >
-                        {t.icon}{t.label}
+                        {t.locked ? <Lock size={12} /> : t.icon}{t.label}
+                        {t.id === 'messages' && totalUnread > 0 && (
+                          <div style={{
+                            background: '#EF4444', color: '#fff', fontSize: 10, fontWeight: 800,
+                            height: 18, minWidth: 18, borderRadius: 9, padding: '0 4px',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center'
+                          }}>
+                            {totalUnread}
+                          </div>
+                        )}
                       </button>
                     ))}
                   </div>
                 )}
 
-                {/* ── TIMELINE TAB ── */}
-                {activeTab === 'timeline' && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                    <StageActionCard
-                      project={selected}
-                      user={user}
-                      approveQuote={props.approveQuote}
-                      payInvoice={props.payInvoice}
-                      updateProjectStage={props.updateProjectStage}
-                      approveRenderingPackage={props.approveRenderingPackage}
-                    />
-                    <InstallationStatusCard project={selected} />
-                    <ShippingTrackerCard project={selected} />
-                    <div style={{ padding: isMobile ? '20px 18px' : '24px 28px', background: '#fff', borderRadius: isMobile ? 24 : 20, border: isMobile ? 'none' : '1px solid #E5E7EB', boxShadow: isMobile ? '0 2px 16px rgba(0,0,0,.08)' : '0 4px 20px rgba(0,0,0,.05)' }}>
-                      <div style={{ fontSize: 15, fontWeight: 800, color: '#111827', marginBottom: 20 }}>Project Timeline</div>
-                      <StageTimeline
-                        project={selected}
-                        onRequestChange={() => setShowChangeRequest(true)}
-                        isMobile={isMobile}
-                      />
+                {/* ── OVERVIEW TAB ── */}
+                {activeTab === 'overview' && (() => {
+                  const pendingInvoices = (props.invoices || []).filter(i => i.projectId === selected?.id && ['Sent', 'Partially Paid'].includes(i.status) && i.type !== 'Quotation');
+                  const unsignedQuote = (props.approvals || []).find(a => a.projectId === selected?.id && ['Quotation', 'quotation'].includes(a.type) && a.status === 'Sent');
+                  const specNeedsReview = selected?.specDoc?.url && selected?.specDoc?.status === 'sent';
+                  const actionReq = unsignedQuote ? { title: 'Contract Signature Required', desc: 'Your project quotation and contract are ready for your secure electronic signature.', tab: 'documents', btn: 'Sign Contract', icon: <PenTool size={18} color="#DC2626" /> }
+                    : specNeedsReview ? { title: 'Project Specification Review', desc: 'Your detailed project specification is ready. Please review and approve it so production can begin.', tab: 'documents', btn: 'Review Spec', icon: <FileCheck size={18} color="#D97706" /> }
+                    : pendingInvoices.length > 0 ? { title: 'Pending Invoice', desc: `You have ${pendingInvoices.length} unpaid invoice(s) on your account.`, tab: 'financials', btn: 'View Invoices', icon: <CreditCard size={18} color="#D97706" /> }
+                    : null;
 
-                      {/* Activity log */}
-                      {(selected.stageHistory || []).length > 1 && (
-                        <div style={{ marginTop: 28, paddingTop: 24, borderTop: '1px solid #E5E7EB' }}>
-                          <div style={{ fontSize: 13, fontWeight: 800, color: '#111827', marginBottom: 16 }}>Activity Log</div>
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                            {[...(selected.stageHistory || [])].reverse().map((h, idx) => {
-                              const s = CLIENT_PROJECT_STAGES.find(st => st.id === h.stageId);
-                              return (
-                                <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', background: '#F9FAFB', borderRadius: 12 }}>
-                                  <div style={{ width: 32, height: 32, borderRadius: 10, background: `${s?.color || AC}15`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: s?.color || AC, flexShrink: 0 }}>
-                                    {STAGE_ICONS[h.stageId] || <CheckCircle2 size={14} />}
-                                  </div>
-                                  <div style={{ flex: 1 }}>
-                                    <div style={{ fontSize: 13, fontWeight: 700, color: '#111827' }}>{s?.name || `Stage ${h.stageId}`}</div>
-                                    <div style={{ fontSize: 11, color: '#6B7280' }}>
-                                      {h.timestamp
-                                        ? (() => {
-                                            const d = h.timestamp?.toDate ? h.timestamp.toDate() : new Date(h.timestamp);
-                                            return isNaN(d) ? '' : d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-                                          })()
-                                        : ''}
-                                    </div>
-                                    {h.note && <div style={{ fontSize: 11, color: '#4B5563', marginTop: 2, fontStyle: 'italic' }}>{h.note}</div>}
-                                  </div>
-                                </div>
-                              );
-                            })}
+                  return (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                      {actionReq ? (
+                        <div style={{ padding: '16px 20px', borderRadius: 16, background: '#FEF2F2', border: '1.5px solid #FECACA', display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
+                          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
+                            <div style={{ marginTop: 2 }}>{actionReq.icon}</div>
+                            <div>
+                              <div style={{ fontSize: 15, fontWeight: 900, color: '#991B1B', marginBottom: 4 }}>Action Required: {actionReq.title}</div>
+                              <div style={{ fontSize: 13, color: '#7F1D1D', maxWidth: 400 }}>{actionReq.desc}</div>
+                            </div>
+                          </div>
+                          <button onClick={() => setActiveTab(actionReq.tab)} style={{ padding: '10px 20px', borderRadius: 10, background: '#DC2626', color: '#fff', fontSize: 13, fontWeight: 800, border: 'none', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                            {actionReq.btn} →
+                          </button>
+                        </div>
+                      ) : (
+                        <div style={{ padding: '16px 20px', borderRadius: 16, background: '#F0FDF4', border: '1.5px solid #BBF7D0', display: 'flex', alignItems: 'center', gap: 14 }}>
+                          <CheckCircle2 size={20} color="#16A34A" />
+                          <div>
+                            <div style={{ fontSize: 14, fontWeight: 800, color: '#15803D' }}>You're all caught up!</div>
+                            <div style={{ fontSize: 12, color: '#166534', marginTop: 2 }}>No action is required from you at this time. The team is hard at work on your project.</div>
                           </div>
                         </div>
                       )}
-                    </div>
+
+                      <ProjectHeaderCard project={selected} isMobile={isMobile} ac={ac} brand={props.brand} />
+
+                      {/* ── Onboarding Setup Checklist — shown until all setup steps done ── */}
+                      {(() => {
+                        const requiresRend = selected.kickoffMode === 'rendering-first';
+                        const rendPaid = !!selected.renderingFeePaid || (props.renderingPackages || []).some(pkg => pkg.projectId === selected.id && (pkg.unlocked || pkg.status === 'Paid / Unlocked'));
+                        const contSigned = !!selected.contractAccepted || !!selected.kickoffGateCleared;
+                        const specUploaded = !!selected.specDoc?.url;
+                        const specApproved = ['signed', 'approved'].includes(selected.specDoc?.status);
+                        const depositInv = (props.invoices || []).find(i => (i.projectId === selected.id || i.parentId === selected.id) && (i.type || '').toLowerCase().includes('deposit'));
+                        const depositPaid = !!selected.depositPaid || (depositInv && isPaidStatus(depositInv.status));
+                        const allDone = contSigned && (!requiresRend || rendPaid) && (!specUploaded || specApproved) && depositPaid;
+                        const welcomeKey = `portal_welcomed_${user?.id}_${selected?.id}`;
+                        const alreadyDismissed = portalWelcomeDismissed || !!localStorage.getItem(welcomeKey);
+                        if (allDone && alreadyDismissed) return null;
+
+                        const steps = [
+                          ...(requiresRend ? [{ label: '3D rendering fee paid', done: rendPaid, action: null }] : []),
+                          { label: 'Project agreement signed', done: contSigned, action: null },
+                          { label: 'Project brief & spec uploaded by team', done: specUploaded, action: null, waiting: !specUploaded },
+                          { label: 'Review & approve project specification', done: specApproved, action: specUploaded && !specApproved ? () => setActiveTab('documents') : null, actionLabel: 'Review Now →', waiting: !specUploaded },
+                          { label: 'Initial deposit paid — production begins', done: depositPaid, action: !depositPaid ? () => setActiveTab('financials') : null, actionLabel: 'Pay Deposit →' },
+                        ];
+                        const nextStep = steps.find(s => !s.done && !s.waiting);
+                        const setupPct = Math.round((steps.filter(s => s.done).length / steps.length) * 100);
+
+                        return (
+                          <div style={{ padding: isMobile ? '18px 20px' : '22px 26px', borderRadius: 18, background: 'linear-gradient(135deg, #F4EFE6, #EDE4D8)', border: `1.5px solid var(--accent-secondary)30` }}>
+                            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 16 }}>
+                              <div>
+                                <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--accent-secondary)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 4 }}>Project Setup</div>
+                                <div style={{ fontSize: 17, fontWeight: 900, color: 'var(--accent-secondary)' }}>
+                                  {allDone ? '🎉 You\'re all set!' : nextStep ? `Next: ${nextStep.label}` : 'Waiting on the team'}
+                                </div>
+                              </div>
+                              <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                                <div style={{ fontSize: 20, fontWeight: 900, color: 'var(--accent-secondary)' }}>{setupPct}%</div>
+                                <div style={{ fontSize: 10, color: 'var(--text-secondary)', fontWeight: 700 }}>complete</div>
+                              </div>
+                            </div>
+                            {/* Progress bar */}
+                            <div style={{ height: 5, borderRadius: 3, background: 'rgba(200,169,110,0.2)', marginBottom: 16, overflow: 'hidden' }}>
+                              <div style={{ height: '100%', borderRadius: 3, background: 'var(--accent-secondary)', width: `${setupPct}%`, transition: 'width .5s' }} />
+                            </div>
+                            {/* Steps */}
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                              {steps.map((s, i) => (
+                                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', borderRadius: 10, background: s.done ? 'rgba(255,255,255,0.5)' : s.waiting ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.7)' }}>
+                                  <div style={{ width: 20, height: 20, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: s.done ? '#22C55E' : s.waiting ? '#94A3B8' : 'var(--accent-secondary)', color: '#fff', fontSize: 11, fontWeight: 900 }}>
+                                    {s.done ? '✓' : s.waiting ? '⏳' : i + 1}
+                                  </div>
+                                  <span style={{ flex: 1, fontSize: 12, fontWeight: s.done ? 600 : 700, color: s.done ? 'var(--text-secondary)' : s.waiting ? '#94A3B8' : 'var(--accent-secondary)', textDecoration: s.done ? 'line-through' : 'none' }}>{s.label}</span>
+                                  {s.action && (
+                                    <button onClick={s.action} style={{ padding: '4px 10px', borderRadius: 8, background: 'var(--accent-secondary)', color: '#fff', border: 'none', fontSize: 11, fontWeight: 800, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                                      {s.actionLabel}
+                                    </button>
+                                  )}
+                                  {s.waiting && !s.done && (
+                                    <span style={{ fontSize: 10, color: '#94A3B8', fontWeight: 700, whiteSpace: 'nowrap' }}>Waiting on team</span>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                            {allDone && !alreadyDismissed && (
+                              <button onClick={() => { localStorage.setItem(welcomeKey, '1'); setPortalWelcomeDismissed(true); }} style={{ marginTop: 14, alignSelf: 'flex-end', padding: '8px 18px', borderRadius: 10, border: 'none', background: 'var(--accent-secondary)', color: '#fff', fontSize: 12, fontWeight: 800, cursor: 'pointer', display: 'block', marginLeft: 'auto' }}>
+                                Got it — dismiss ✕
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })()}
+
+                      {/* ── Spec Doc Review Banner — shown when admin uploads spec but client hasn't approved ── */}
+                      {selected?.specDoc?.url && !['signed', 'approved'].includes(selected.specDoc?.status) && (
+                        <div style={{ padding: '16px 20px', borderRadius: 16, background: '#FFFBEB', border: '1.5px solid #FDE68A', display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+                            <span style={{ fontSize: 20, marginTop: 2 }}>📋</span>
+                            <div>
+                              <div style={{ fontSize: 14, fontWeight: 900, color: '#92400E', marginBottom: 3 }}>Your Project Brief Is Ready to Review</div>
+                              <div style={{ fontSize: 12, color: '#B45309', lineHeight: 1.5 }}>Your team has uploaded your project specification, scope, and brief. Please review and approve it so production can begin. Go to the <strong>Documents</strong> tab to view it.</div>
+                            </div>
+                          </div>
+                          <button onClick={() => setActiveTab('documents')} style={{ padding: '10px 20px', borderRadius: 10, background: '#D97706', color: '#fff', fontSize: 13, fontWeight: 800, border: 'none', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                            Review Brief →
+                          </button>
+                        </div>
+                      )}
+
+                    <ClientNextActionCard
+                      project={selected}
+                      invoices={props.invoices || []}
+                      renderingPackages={props.renderingPackages || []}
+                      addOns={props.addOns || []}
+                      setActiveTab={setActiveTab}
+                      isMobile={isMobile}
+                    />
+
+                    <ProjectRoadmap
+                      project={selected}
+                      invoices={props.invoices || []}
+                      renderingPackages={props.renderingPackages || []}
+                      setActiveTab={setActiveTab}
+                      isMobile={isMobile}
+                      onStageGuide={setActiveStageGuide}
+                    />
+                    {(() => {
+                      const initialDepositInvoice = gateInvoices.find(inv => {
+                        const t = (inv.type || '').toLowerCase();
+                        const title = (inv.title || '').toLowerCase();
+                        return t.includes('deposit') || title.includes('deposit');
+                      });
+                      const depositPaid = initialDepositInvoice && initialDepositInvoice.status === 'Paid';
+                      // Include gateCleared so the overview doesn't re-show ContractGate while
+                      // waiting for the Firestore snapshot to propagate after signing.
+                      const contractSigned = !!selected.contractAccepted || !!selected.kickoffGateCleared || !!gateCleared[selected.id];
+                      const showContractGate = !contractSigned && selected.renderingFeePaid;
+
+                      if (showContractGate) {
+                        return (
+                          <ContractGate
+                            project={selected}
+                            user={user}
+                            brand={props.brand}
+                            isMobile={isMobile}
+                          />
+                        );
+                      }
+
+                      const projectInvoices = (props.invoices || []).filter(i => i.projectId === selected.id || i.parentId === selected.id);
+                      const totalValue = projectInvoices
+                        .filter(i => i.type !== 'Quotation' && i.documentKind !== 'quotation')
+                        .reduce((sum, i) => sum + parseFloat(i.amount || i.total || 0), 0);
+                      const totalPaid = projectInvoices.reduce((sum, i) => sum + parseFloat(i.amountPaid || 0), 0);
+                      const balance = Math.max(0, totalValue - totalPaid);
+                      const progressPct = totalValue > 0 ? Math.min(100, Math.round((totalPaid / totalValue) * 100)) : 0;
+                      const currentStage = CLIENT_PROJECT_STAGES.find(s => s.id === selected.stageId);
+                      const estCompletion = selected.estimatedCompletion
+                        ? (() => {
+                            const d = selected.estimatedCompletion?.toDate ? selected.estimatedCompletion.toDate() : new Date(selected.estimatedCompletion);
+                            return isNaN(d) ? null : d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+                          })()
+                        : null;
+                      const projectTypeLabel = PROJECT_TYPES[selected.projectType]?.label || 'Custom Project';
+
+                      return (
+                        <div style={{
+                          borderRadius: 20,
+                          background: '#fff',
+                          border: '1.5px solid var(--border-color)',
+                          boxShadow: '0 4px 20px rgba(0,0,0,0.04)',
+                          overflow: 'hidden',
+                        }}>
+                          {/* Stage progress bar — "You are here" */}
+                          {currentStage && (
+                            <div style={{
+                              background: `linear-gradient(135deg, var(--accent-secondary), #4A3B32)`,
+                              padding: isMobile ? '16px 20px' : '18px 28px',
+                              color: '#fff',
+                            }}>
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 10 }}>
+                                <div style={{ fontSize: 11, fontWeight: 700, opacity: .65 }}>YOU ARE HERE</div>
+                                <div style={{ fontSize: 11, fontWeight: 800, background: 'rgba(255,255,255,0.15)', padding: '3px 10px', borderRadius: 20 }}>
+                                  Stage {selected.stageId} of {CLIENT_PROJECT_STAGES.length}
+                                </div>
+                              </div>
+                              <div style={{ fontSize: isMobile ? 16 : 19, fontWeight: 900, marginBottom: 8 }}>
+                                {currentStage.emoji} {currentStage.name}
+                              </div>
+                              {/* Mini stage dots */}
+                              <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                                {CLIENT_PROJECT_STAGES.map((s, i) => (
+                                  <div key={s.id} style={{
+                                    flex: s.id === selected.stageId ? 3 : 1,
+                                    height: 4,
+                                    borderRadius: 2,
+                                    background: s.id < selected.stageId ? 'rgba(255,255,255,0.8)' : s.id === selected.stageId ? '#fff' : 'rgba(255,255,255,0.2)',
+                                    transition: 'flex .3s ease',
+                                  }} />
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          <div style={{ padding: isMobile ? '20px 22px' : '20px 28px' }}>
+                          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ fontSize: 10, fontWeight: 800, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '.1em', marginBottom: 6 }}>
+                                {projectTypeLabel}
+                              </div>
+                              <div style={{ fontSize: isMobile ? 18 : 20, fontWeight: 900, color: 'var(--accent-secondary)', lineHeight: 1.2, marginBottom: 4 }}>
+                                {selected.title}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Progress bar */}
+                          {totalValue > 0 && (
+                            <div style={{ marginBottom: 16 }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6, fontSize: 11, fontWeight: 700 }}>
+                                <span style={{ color: 'var(--text-secondary)' }}>Payment Progress</span>
+                                <span style={{ color: 'var(--accent-secondary)' }}>{progressPct}%</span>
+                              </div>
+                              <div style={{ height: 8, background: 'var(--bg-secondary)', borderRadius: 4, overflow: 'hidden' }}>
+                                <div style={{
+                                  height: '100%',
+                                  width: `${progressPct}%`,
+                                  background: progressPct === 100 ? '#16A34A' : 'linear-gradient(90deg, var(--accent-primary), var(--accent-secondary))',
+                                  borderRadius: 4,
+                                  transition: 'width .4s ease',
+                                }} />
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Key facts grid */}
+                          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : '1fr 1fr 1fr 1fr', gap: 10 }}>
+                            {totalValue > 0 && (
+                              <div style={{ padding: '12px 14px', background: 'var(--bg-secondary)', borderRadius: 12 }}>
+                                <div style={{ fontSize: 9, fontWeight: 800, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 4 }}>Total Value</div>
+                                <div style={{ fontSize: 14, fontWeight: 900, color: 'var(--accent-secondary)' }}>GH₵ {totalValue.toLocaleString(undefined, { minimumFractionDigits: 0 })}</div>
+                              </div>
+                            )}
+                            {balance > 0 && (
+                              <div style={{ padding: '12px 14px', background: '#FEF3C7', borderRadius: 12 }}>
+                                <div style={{ fontSize: 9, fontWeight: 800, color: '#92400E', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 4 }}>Balance Due</div>
+                                <div style={{ fontSize: 14, fontWeight: 900, color: '#92400E' }}>GH₵ {balance.toLocaleString(undefined, { minimumFractionDigits: 0 })}</div>
+                              </div>
+                            )}
+                            {totalPaid > 0 && (
+                              <div style={{ padding: '12px 14px', background: '#F0FDF4', borderRadius: 12 }}>
+                                <div style={{ fontSize: 9, fontWeight: 800, color: '#15803D', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 4 }}>Paid To Date</div>
+                                <div style={{ fontSize: 14, fontWeight: 900, color: '#15803D' }}>GH₵ {totalPaid.toLocaleString(undefined, { minimumFractionDigits: 0 })}</div>
+                              </div>
+                            )}
+                            {estCompletion && (
+                              <div style={{ padding: '12px 14px', background: 'var(--bg-secondary)', borderRadius: 12 }}>
+                                <div style={{ fontSize: 9, fontWeight: 800, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 4 }}>Est. Completion</div>
+                                <div style={{ fontSize: 14, fontWeight: 900, color: 'var(--accent-secondary)' }}>{estCompletion}</div>
+                              </div>
+                            )}
+                          </div>
+                          </div>{/* close padding wrapper */}
+                        </div>
+                      );
+                    })()}
+
+                    {selected.quoteApproved && (
+                      <div style={{
+                        padding: '20px 24px', borderRadius: 20,
+                        background: 'linear-gradient(135deg, #FDFBF7, #F4EFE6)',
+                        border: '1.5px solid #C5A88060', marginBottom: 4,
+                        display: 'flex', flexDirection: isMobile ? 'column' : 'row',
+                        alignItems: isMobile ? 'flex-start' : 'center',
+                        justifyContent: 'space-between', gap: 16
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                          <div style={{ width: 44, height: 44, borderRadius: 14, background: '#C5A88020', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                            <FileText size={20} color="#8C6C52" />
+                          </div>
+                          <div>
+                            <div style={{ fontSize: 12, fontWeight: 800, color: '#8C6C52', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 2 }}>Contract Executed</div>
+                            <div style={{ fontSize: 16, fontWeight: 900, color: '#4A3B32' }}>Fabrication & Installation Agreement</div>
+                            <div style={{ fontSize: 11, color: '#716259', marginTop: 2 }}>
+                              Signed electronically via SMS OTP on {selected.quoteSignedAt
+                                ? (() => {
+                                    const d = selected.quoteSignedAt?.toDate ? selected.quoteSignedAt.toDate() : new Date(selected.quoteSignedAt);
+                                    return isNaN(d) ? '—' : d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+                                  })()
+                                : '—'}
+                            </div>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => printSignedContractDoc(selected, user, props.brand)}
+                          style={{
+                            display: 'inline-flex', alignItems: 'center', gap: 8,
+                            padding: '10px 20px', borderRadius: 10, border: '1px solid #8C6C52',
+                            background: 'transparent', color: '#4A3B32',
+                            fontSize: 13, fontWeight: 800, cursor: 'pointer',
+                            transition: 'all .2s',
+                            alignSelf: isMobile ? 'stretch' : 'auto',
+                            textAlign: 'center', justifyContent: 'center'
+                          }}
+                          onMouseOver={(e) => { e.currentTarget.style.background = '#8C6C52'; e.currentTarget.style.color = '#fff'; }}
+                          onMouseOut={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#4A3B32'; }}
+                        >
+                          <Download size={14} /> Download Contract (PDF)
+                        </button>
+                      </div>
+                    )}
+                    <SpecApprovalCard project={selected} user={user} brand={props.brand} isMobile={isMobile} invoices={props.invoices || []} />
+                    {(selected.stageId || 0) >= 8 ? (
+                      <div style={{ padding: '24px 28px', borderRadius: 20, background: 'linear-gradient(135deg, #F0FDF4, #DCFCE7)', border: '1.5px solid #86EFAC', marginBottom: 4 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
+                          <span style={{ fontSize: 28 }}>🎉</span>
+                          <div>
+                            <div style={{ fontSize: 11, fontWeight: 800, color: '#15803D', textTransform: 'uppercase', letterSpacing: '.06em' }}>Project Complete</div>
+                            <div style={{ fontSize: 19, fontWeight: 900, color: '#14532D' }}>Handover Complete!</div>
+                          </div>
+                        </div>
+                        <div style={{ fontSize: 13, color: '#166534', lineHeight: 1.6 }}>
+                          Your project has been successfully completed and handed over. Thank you for choosing Westline Future — we hope to work with you again soon!
+                        </div>
+                        <div style={{ marginTop: 14, padding: '10px 14px', background: 'rgba(255,255,255,0.5)', borderRadius: 12, fontSize: 12, color: '#15803D', display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span>📄</span> Your handover certificate is available in the <strong>Documents</strong> tab.
+                        </div>
+                      </div>
+                    ) : (
+                      <StageActionCard
+                        project={selected}
+                        user={user}
+                        approveQuote={props.approveQuote}
+                        approveSignoff={props.approveSignoff}
+                        payInvoice={props.payInvoice}
+                        updateProjectStage={props.updateProjectStage}
+                      />
+                    )}
+                    <InstallationStatusCard project={selected} />
+                    <ShippingTrackerCard project={selected} invoices={gateInvoices} />
+                  </div>
+                )})()}
+
+                {/* ── DESIGNS TAB ── */}
+                {activeTab === 'designs' && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+                    <ClientRenderingVault
+                      project={selected}
+                      brand={props.brand}
+                      renderingPackages={props.renderingPackages || []}
+                      invoices={props.invoices || []}
+                      finSettings={props.brand?.finSettings || {}}
+                    />
+                    {photosAvailable && (
+                      <div style={{ padding: isMobile ? '20px 18px' : '24px 28px', background: '#fff', borderRadius: isMobile ? 24 : 20, border: isMobile ? 'none' : '1px solid var(--border-color)', boxShadow: isMobile ? '0 2px 16px rgba(0,0,0,.08)' : '0 4px 20px rgba(0,0,0,.05)' }}>
+                        <div style={{ fontSize: 15, fontWeight: 800, color: `var(--accent-secondary)`, marginBottom: 20 }}>Site Photos</div>
+                        <PhotoFeed projectId={selected.id} />
+                      </div>
+                    )}
                   </div>
                 )}
 
-                {/* ── PHOTOS TAB ── */}
-                {activeTab === 'photos' && (
-                  <div style={{ padding: isMobile ? '20px 18px' : '24px 28px', background: '#fff', borderRadius: isMobile ? 24 : 20, border: isMobile ? 'none' : '1px solid #E5E7EB', boxShadow: isMobile ? '0 2px 16px rgba(0,0,0,.08)' : '0 4px 20px rgba(0,0,0,.05)' }}>
-                    <div style={{ fontSize: 15, fontWeight: 800, color: '#111827', marginBottom: 20 }}>Site Photos</div>
-                    <PhotoFeed projectId={selected.id} />
+                {/* ── FINANCIALS TAB ── */}
+                {activeTab === 'financials' && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+                    <PaymentsTab
+                      project={selected}
+                      user={user}
+                      transactions={props.transactions}
+                      invoices={props.invoices}
+                      formatPrice={props.formatPrice}
+                      brand={props.brand}
+                      isMobile={isMobile}
+                      finSettings={props.brand?.finSettings || {}}
+                    />
+                    <ClientAddOnsTab
+                      project={selected}
+                      addOns={props.addOns || []}
+                      invoices={props.invoices || []}
+                      user={user}
+                      isMobile={isMobile}
+                    />
+                    {user && <ReferralCard user={user} ac={ac} />}
                   </div>
-                )}
-
-                {/* ── PAYMENTS TAB ── */}
-                {activeTab === 'payments' && (
-                  <PaymentsTab
-                    project={selected}
-                    user={user}
-                    transactions={props.transactions}
-                    invoices={props.invoices}
-                    formatPrice={props.formatPrice}
-                    brand={props.brand}
-                    isMobile={isMobile}
-                  />
                 )}
 
                 {/* ── DOCUMENTS TAB ── */}
                 {activeTab === 'documents' && (
-                  <div style={{ padding: isMobile ? '20px 18px' : '24px 28px', background: '#fff', borderRadius: isMobile ? 24 : 20, border: isMobile ? 'none' : '1px solid #E5E7EB', boxShadow: isMobile ? '0 2px 16px rgba(0,0,0,.08)' : '0 4px 20px rgba(0,0,0,.05)' }}>
-                    <div style={{ fontSize: 15, fontWeight: 800, color: '#111827', marginBottom: 20 }}>Project Documents</div>
-                    <DocumentsTab projectId={selected.id} project={selected} />
+                  <DocumentsTab
+                    projectId={selected.id}
+                    project={selected}
+                    user={user}
+                    brand={props.brand}
+                    isMobile={isMobile}
+                    invoices={props.invoices || []}
+                  />
+                )}
+
+                {/* ── VAULT TAB ── */}
+                {activeTab === 'vault' && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+                    <ClientApprovalsTab
+                      project={selected}
+                      invoices={props.invoices || []}
+                      approvals={props.approvals || []}
+                      approveQuote={props.approveQuote}
+                      approveSignoff={props.approveSignoff}
+                      updateApproval={props.updateApproval}
+                      brand={props.brand}
+                      user={user}
+                      isMobile={isMobile}
+                      setActiveTab={setActiveTab}
+                      updateProjectStage={props.updateProjectStage}
+                    />
+                    <div style={{ padding: isMobile ? '20px 18px' : '24px 28px', background: '#fff', borderRadius: isMobile ? 24 : 20, border: isMobile ? 'none' : '1px solid var(--border-color)', boxShadow: isMobile ? '0 2px 16px rgba(0,0,0,.08)' : '0 4px 20px rgba(0,0,0,.05)' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 20 }}>
+                        <ShieldCheck size={20} color={`var(--accent-secondary)`} />
+                        <div style={{ fontSize: 15, fontWeight: 800, color: `var(--accent-secondary)` }}>Secure Document Vault</div>
+                      </div>
+                      <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 24 }}>
+                        Access and electronically sign your legally binding contracts, formal approvals, and project blueprints here.
+                      </p>
+                      <SecureVault projectId={selected.id} user={user} />
+                    </div>
                   </div>
                 )}
 
-                {/* ── MESSAGES TAB ── */}
-                {activeTab === 'messages' && (
-                  <div style={{
-                    padding: isMobile ? '20px 18px' : '24px 28px', background: '#fff',
-                    borderRadius: isMobile ? 24 : 20,
-                    border: isMobile ? 'none' : '1px solid #E5E7EB',
-                    boxShadow: isMobile ? '0 2px 16px rgba(0,0,0,.08)' : '0 4px 20px rgba(0,0,0,.05)',
-                    height: isMobile ? 'calc(100dvh - 320px)' : 560,
-                    minHeight: isMobile ? 320 : undefined,
-                    display: 'flex', flexDirection: 'column',
-                  }}>
-                    <div style={{ fontSize: 15, fontWeight: 800, color: '#111827', marginBottom: 16, flexShrink: 0 }}>Messages</div>
-                    <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-                      <ProjectChat
-                        project={selected}
-                        user={user}
-                        addProjectMessage={props.addProjectMessage}
-                      />
+                {/* ── UPLOADS TAB ── */}
+                {activeTab === 'uploads' && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+                    <div style={{ padding: isMobile ? '20px 18px' : '24px 28px', background: '#fff', borderRadius: isMobile ? 24 : 20, border: isMobile ? 'none' : '1px solid var(--border-color)', boxShadow: isMobile ? '0 2px 16px rgba(0,0,0,.08)' : '0 4px 20px rgba(0,0,0,.05)' }}>
+                      <ClientUploadsTab projectId={selected.id} user={user} brand={props.brand} />
                     </div>
                   </div>
+                )}
+
+                </>
                 )}
 
               </div>
@@ -3041,25 +6094,42 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
           display: 'flex',
         }}>
           {[
-            { id: 'timeline',  label: 'Progress',  icon: CheckCircle2 },
-            { id: 'photos',    label: 'Photos',    icon: Camera },
-            { id: 'payments',  label: 'Payments',  icon: CreditCard },
-            { id: 'documents', label: 'Docs',      icon: FileText },
+            { id: 'overview',  label: 'Overview',  icon: Home },
+            ...(selected?.kickoffMode !== 'direct-kickoff' || photosAvailable
+              ? [{ id: 'designs', label: 'Designs', icon: Palette, locked: !kickoffComplete }]
+              : []),
+            { id: 'financials',label: 'Financials',icon: CreditCard },
+            { id: 'documents', label: 'Documents', icon: FileText },
+            { id: 'uploads', label: 'Uploads', icon: Camera },
             { id: 'messages',  label: 'Messages',  icon: MessageSquare },
           ].map(t => {
             const active = activeTab === t.id;
-            const Icon = t.icon;
+            const Icon = t.locked ? Lock : t.icon;
             return (
               <button
                 key={t.id}
-                onClick={() => selected && setActiveTab(t.id)}
+                onClick={() => { if (selected && !t.locked) setActiveTab(t.id); }}
                 style={{
                   flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
-                  background: 'none', border: 'none', cursor: 'pointer',
+                  background: 'none', border: 'none', cursor: t.locked ? 'not-allowed' : 'pointer',
                   padding: '2px 4px 0', touchAction: 'manipulation', minHeight: 48,
-                  opacity: selected ? 1 : 0.4,
+                  opacity: !selected ? 0.4 : t.locked ? 0.4 : 1,
+                  position: 'relative',
                 }}
               >
+                {/* Unread badge — anchored to the icon */}
+                {t.id === 'messages' && totalUnread > 0 && (
+                  <div style={{
+                    position: 'absolute', top: 0, right: 'calc(50% - 28px)',
+                    background: '#EF4444', color: '#fff', fontSize: 9, fontWeight: 900,
+                    height: 16, minWidth: 16, borderRadius: 8, padding: '0 4px',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    boxShadow: '0 0 0 2px rgba(250,248,245,0.88)',
+                    zIndex: 2,
+                  }}>
+                    {totalUnread > 9 ? '9+' : totalUnread}
+                  </div>
+                )}
                 <div style={{
                   width: 48, height: 32, borderRadius: 16,
                   background: active ? `${ac}20` : 'transparent',
@@ -3073,7 +6143,9 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
                   color: active ? ac : '#8E8880',
                   transition: 'color .18s',
                   letterSpacing: '-.01em',
-                }}>{t.label}</span>
+                }}>
+                  {t.label}
+                </span>
               </button>
             );
           })}
@@ -3099,9 +6171,15 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
           user={user}
           onSubmit={async (data) => {
             if (props.submitTestimonial) await props.submitTestimonial(data);
+            // Persist so modal never shows again even after refresh
+            try { await updateDoc(doc(db, 'projects', selected.id), { reviewSubmitted: true, reviewSubmittedAt: serverTimestamp() }); } catch (_) {}
             setReviewSubmitted(true);
           }}
-          onDismiss={() => setReviewDismissed(true)}
+          onDismiss={async () => {
+            // Persist dismiss so it survives page refreshes
+            try { await updateDoc(doc(db, 'projects', selected.id), { reviewDismissed: true, reviewDismissedAt: serverTimestamp() }); } catch (_) {}
+            setReviewDismissed(true);
+          }}
         />
       )}
 

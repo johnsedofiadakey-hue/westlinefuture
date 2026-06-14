@@ -1,31 +1,52 @@
 import React, { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { useWindowWidth, isMob, DARK_TEXT, AC } from './PublicSite';
+import { useWindowWidth, isMob, DARK_TEXT, AC } from './sharedHelpers';
 import { sanitizeText } from '../lib/sanitize';
 import { AlertCircle, CheckCircle, MapPin, Clock, Phone, Mail, ArrowRight } from 'lucide-react';
+import { usePublicTranslation } from '../components/PubLayout';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const PHONE_RE = /^[+\d][\d\s\-()]{6,20}$/;
 
 const SERVICES = [
-  'Glass Facades & Windows',
-  'Shower Enclosures',
-  'Glass Partitions & Feature Walls',
-  'Kitchen Glass & Cabinet Fronts',
-  'Wardrobes & Interior Joinery',
-  'Staircases & Balustrades',
-  'Commercial Glazing',
+  'Full Interior Decoration (complete home)',
+  'Custom 3D Interior Design',
+  'Surface Finishes & Fixtures (tiles, flooring, doors, sanitary ware)',
+  'Fixed Custom Carpentry (kitchen cabinets, wardrobes, vanities)',
+  'Home Furniture (sofas, dining sets, beds)',
+  'Home Appliances (fridges, washing machines, TVs)',
+  'Décor & Accessories (curtains, lighting, mirrors)',
   'Other / Not Sure Yet',
 ];
 
 const BUDGETS = [
-  'Below GHS 10,000',
-  'GHS 10,000 – 30,000',
-  'GHS 30,000 – 80,000',
-  'GHS 80,000 – 200,000',
-  'Above GHS 200,000',
+  'Below GH₵ 50,000',
+  'GH₵ 50,000 – 200,000',
+  'GH₵ 200,000 – 500,000',
+  'GH₵ 500,000 – 1,000,000',
+  'Above GH₵ 1,000,000',
   'Prefer not to say',
 ];
+
+const PROPERTY_TYPES = [
+  'Private Residence',
+  'Apartment / Rental Unit',
+  'Commercial Space',
+  'Hotel / Hospitality',
+  'Office / Corporate',
+  'Developer / Multi-unit Project',
+  'Other',
+];
+
+const TIMELINES = [
+  'Urgent — within 2 weeks',
+  '1 month',
+  '2–3 months',
+  '3–6 months',
+  'Flexible / planning stage',
+];
+
+const YES_NO = ['Yes', 'No', 'Not sure yet'];
 
 export default function ContactPage({ brand, submitContact }) {
   const [searchParams] = useSearchParams();
@@ -33,16 +54,25 @@ export default function ContactPage({ brand, submitContact }) {
   const winW = useWindowWidth();
   const mob = isMob(winW);
   const ac = brand?.color || AC;
-  const wa = (brand?.whatsapp || '233598455012').replace(/\D/g, '');
-  const phone = brand?.phone || '+233 59 845 5012';
+  const wa = (brand?.whatsapp || '233247319778').replace(/\D/g, '');
+  const phone = brand?.phone || '0247319778';
   const email = brand?.email || 'admin@westlinefuture.com';
   const location = brand?.location || 'Spintex Road Industrial Area, Accra';
+
+  usePublicTranslation();
 
   const [form, setForm] = useState({
     firstName: '', lastName: '',
     phone: '', email: '',
     service: initialSubject || '',
+    propertyType: '',
+    projectLocation: '',
     budget: '',
+    timeline: '',
+    hasMeasurements: '',
+    needsRendering: initialSubject.toLowerCase().includes('rendering') ? 'Yes' : '',
+    visitPreference: '',
+    inspirationLinks: '',
     message: '',
   });
   const [errors, setErrors] = useState({});
@@ -58,6 +88,8 @@ export default function ContactPage({ brand, submitContact }) {
     if (!form.phone.trim()) errs.phone = 'Phone number is required';
     else if (!PHONE_RE.test(form.phone.trim())) errs.phone = 'Enter a valid phone number';
     if (form.email.trim() && !EMAIL_RE.test(form.email.trim())) errs.email = 'Enter a valid email address';
+    if (!form.service.trim()) errs.service = 'Select the main service or project type';
+    if (!form.projectLocation.trim()) errs.projectLocation = 'Project location is required';
     if (!form.message.trim()) errs.message = 'Tell us about your project';
     if (form.message.trim().length > 2000) errs.message = 'Message too long (max 2000 characters)';
     return errs;
@@ -70,15 +102,45 @@ export default function ContactPage({ brand, submitContact }) {
     if (Object.keys(errs).length) return;
     setLoading(true);
     try {
+      const intakeSummary = [
+        `Service: ${form.service || 'N/A'}`,
+        `Property Type: ${form.propertyType || 'N/A'}`,
+        `Location: ${form.projectLocation || 'N/A'}`,
+        `Budget: ${form.budget || 'N/A'}`,
+        `Timeline: ${form.timeline || 'N/A'}`,
+        `Measurements Available: ${form.hasMeasurements || 'N/A'}`,
+        `CAD/3D Rendering Needed: ${form.needsRendering || 'N/A'}`,
+        `Visit Preference: ${form.visitPreference || 'N/A'}`,
+        `Inspiration / Links: ${form.inspirationLinks || 'N/A'}`,
+      ].join('\n');
+
       await submitContact({
+        inquiryType: 'Project Intake',
+        stageIntent: form.needsRendering === 'Yes' ? 'Rendering-first consultation' : 'Project consultation',
         firstName: sanitizeText(form.firstName),
         lastName: sanitizeText(form.lastName),
         phone: form.phone.trim(),
         email: form.email.trim().toLowerCase(),
         subject: sanitizeText(form.service || 'General Enquiry'),
-        message: sanitizeText(`[Service: ${form.service || 'N/A'}] [Budget: ${form.budget || 'N/A'}]\n\n${form.message}`),
+        projectLocation: sanitizeText(form.projectLocation),
+        propertyType: sanitizeText(form.propertyType),
+        budget: sanitizeText(form.budget),
+        timeline: sanitizeText(form.timeline),
+        hasMeasurements: sanitizeText(form.hasMeasurements),
+        needsRendering: sanitizeText(form.needsRendering),
+        visitPreference: sanitizeText(form.visitPreference),
+        inspirationLinks: sanitizeText(form.inspirationLinks),
+        message: sanitizeText(`${intakeSummary}\n\nProject Brief:\n${form.message}`),
       });
-      setForm({ firstName: '', lastName: '', phone: '', email: '', service: '', budget: '', message: '' });
+      setForm({
+        firstName: '', lastName: '',
+        phone: '', email: '',
+        service: '', propertyType: '', projectLocation: '',
+        budget: '', timeline: '',
+        hasMeasurements: '', needsRendering: '',
+        visitPreference: '', inspirationLinks: '',
+        message: ''
+      });
       setErrors({});
       setSubmitted(true);
       setTimeout(() => setSubmitted(false), 8000);
@@ -92,8 +154,10 @@ export default function ContactPage({ brand, submitContact }) {
   const handleWhatsApp = () => {
     const name = form.firstName ? `Hi, I'm ${form.firstName}` : 'Hi';
     const svc = form.service ? ` I'm interested in ${form.service}.` : '';
-    const msg = form.message ? ` ${form.message}` : ' I would like to discuss a project with you.';
-    window.open(`https://wa.me/${wa}?text=${encodeURIComponent(name + svc + msg)}`, '_blank');
+    const locationText = form.projectLocation ? ` Location: ${form.projectLocation}.` : '';
+    const renderingText = form.needsRendering ? ` CAD/3D rendering needed: ${form.needsRendering}.` : '';
+    const msg = form.message ? ` Brief: ${form.message}` : ' I would like to discuss a project with you.';
+    window.open(`https://wa.me/${wa}?text=${encodeURIComponent(name + svc + locationText + renderingText + msg)}`, '_blank');
   };
 
   const inp = (field) => ({
@@ -128,7 +192,7 @@ export default function ContactPage({ brand, submitContact }) {
         paddingRight: '5vw',
       }}>
         <div style={{ maxWidth: 1200, margin: '0 auto' }}>
-          <div style={{ fontSize: 10, fontWeight: 800, color: ac, letterSpacing: '0.3em', textTransform: 'uppercase', marginBottom: 20 }}>
+          <div style={{ fontSize: 10, fontWeight: 800, color: `var(--accent-primary)`, letterSpacing: '0.3em', textTransform: 'uppercase', marginBottom: 20 }}>
             Get in Touch
           </div>
           <h1 style={{
@@ -137,10 +201,10 @@ export default function ContactPage({ brand, submitContact }) {
             letterSpacing: '-0.04em', lineHeight: 1.05, margin: '0 0 20px',
           }}>
             Let's build something<br />
-            <em style={{ fontStyle: 'italic', fontWeight: 400, color: ac }}>exceptional together.</em>
+            <em style={{ fontStyle: 'italic', fontWeight: 400, color: `var(--accent-primary)` }}>exceptional together.</em>
           </h1>
-          <p style={{ fontSize: mob ? 15 : 18, color: 'rgba(255,255,255,0.45)', maxWidth: 560, lineHeight: 1.7, margin: 0 }}>
-            Describe your project and a technical specialist will respond within 24 hours — or reach us instantly on WhatsApp.
+          <p style={{ fontSize: mob ? 15 : 18, color: 'rgba(255,255,255,0.75)', maxWidth: 560, lineHeight: 1.7, margin: 0 }}>
+            Submit a structured brief for design, sourcing, installation, or full project delivery. A technical specialist will qualify the next step within 24 hours.
           </p>
 
           {/* Quick contact strip */}
@@ -193,8 +257,8 @@ export default function ContactPage({ brand, submitContact }) {
               <h2 style={{ fontSize: mob ? 22 : 26, fontWeight: 800, color: DARK_TEXT, letterSpacing: '-0.03em', margin: '0 0 8px' }}>
                 Project Enquiry
               </h2>
-              <p style={{ fontSize: 14, color: 'rgba(17,24,39,0.5)', margin: 0 }}>
-                Fill in the details and we'll get back to you with a personalised quote.
+              <p style={{ fontSize: 14, color: 'rgba(24, 14, 6, 0.72)', margin: 0 }}>
+                Complete the intake so we can assess scope, rendering needs, timeline, and budget before issuing any formal quote.
               </p>
             </div>
 
@@ -257,7 +321,7 @@ export default function ContactPage({ brand, submitContact }) {
                     <label style={labelStyle}>Phone / WhatsApp *</label>
                     <input
                       value={form.phone} onChange={set('phone')} maxLength={25}
-                      style={inp('phone')} placeholder="+233 59 845 5012"
+                      style={inp('phone')} placeholder="+233 24 731 9778"
                       type="tel"
                       onFocus={() => setFocused('phone')} onBlur={() => setFocused(null)}
                     />
@@ -275,30 +339,117 @@ export default function ContactPage({ brand, submitContact }) {
                   </div>
                 </div>
 
-                {/* Service + Budget row */}
+                {/* Service + Property row */}
                 <div style={{ display: 'grid', gridTemplateColumns: mob ? '1fr' : '1fr 1fr', gap: 12 }}>
                   <div>
-                    <label style={labelStyle}>Service Interested In</label>
+                    <label style={labelStyle}>Main Service / Project Type *</label>
                     <select
                       value={form.service} onChange={set('service')}
-                      style={{ ...inp('service'), color: form.service ? DARK_TEXT : 'rgba(17,24,39,0.4)', appearance: 'none', backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%231A1410' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 14px center', paddingRight: 36 }}
+                      style={{ ...inp('service'), color: form.service ? DARK_TEXT : 'rgba(24, 14, 6, 0.4)', appearance: 'none', backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%231A1410' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 14px center', paddingRight: 36 }}
                       onFocus={() => setFocused('service')} onBlur={() => setFocused(null)}
                     >
                       <option value="">Select a service…</option>
                       {SERVICES.map(s => <option key={s} value={s}>{s}</option>)}
                     </select>
+                    <Err field="service" />
+                  </div>
+                  <div>
+                    <label style={labelStyle}>Property Type</label>
+                    <select
+                      value={form.propertyType} onChange={set('propertyType')}
+                      style={{ ...inp('propertyType'), color: form.propertyType ? DARK_TEXT : 'rgba(24, 14, 6, 0.4)', appearance: 'none', backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%231A1410' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 14px center', paddingRight: 36 }}
+                      onFocus={() => setFocused('propertyType')} onBlur={() => setFocused(null)}
+                    >
+                      <option value="">Select property type…</option>
+                      {PROPERTY_TYPES.map(p => <option key={p} value={p}>{p}</option>)}
+                    </select>
+                  </div>
+                </div>
+
+                {/* Location + Budget row */}
+                <div style={{ display: 'grid', gridTemplateColumns: mob ? '1fr' : '1fr 1fr', gap: 12 }}>
+                  <div>
+                    <label style={labelStyle}>Project Location *</label>
+                    <input
+                      value={form.projectLocation} onChange={set('projectLocation')} maxLength={160}
+                      style={inp('projectLocation')} placeholder="East Legon, Accra"
+                      onFocus={() => setFocused('projectLocation')} onBlur={() => setFocused(null)}
+                    />
+                    <Err field="projectLocation" />
                   </div>
                   <div>
                     <label style={labelStyle}>Approximate Budget</label>
                     <select
                       value={form.budget} onChange={set('budget')}
-                      style={{ ...inp('budget'), color: form.budget ? DARK_TEXT : 'rgba(17,24,39,0.4)', appearance: 'none', backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%231A1410' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 14px center', paddingRight: 36 }}
+                      style={{ ...inp('budget'), color: form.budget ? DARK_TEXT : 'rgba(24, 14, 6, 0.4)', appearance: 'none', backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%231A1410' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 14px center', paddingRight: 36 }}
                       onFocus={() => setFocused('budget')} onBlur={() => setFocused(null)}
                     >
                       <option value="">Select budget range…</option>
                       {BUDGETS.map(b => <option key={b} value={b}>{b}</option>)}
                     </select>
                   </div>
+                </div>
+
+                {/* Timeline + Rendering row */}
+                <div style={{ display: 'grid', gridTemplateColumns: mob ? '1fr' : '1fr 1fr', gap: 12 }}>
+                  <div>
+                    <label style={labelStyle}>Target Timeline</label>
+                    <select
+                      value={form.timeline} onChange={set('timeline')}
+                      style={{ ...inp('timeline'), color: form.timeline ? DARK_TEXT : 'rgba(24, 14, 6, 0.4)', appearance: 'none', backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%231A1410' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 14px center', paddingRight: 36 }}
+                      onFocus={() => setFocused('timeline')} onBlur={() => setFocused(null)}
+                    >
+                      <option value="">Select timeline…</option>
+                      {TIMELINES.map(t => <option key={t} value={t}>{t}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={labelStyle}>Need CAD / 3D Rendering?</label>
+                    <select
+                      value={form.needsRendering} onChange={set('needsRendering')}
+                      style={{ ...inp('needsRendering'), color: form.needsRendering ? DARK_TEXT : 'rgba(24, 14, 6, 0.4)', appearance: 'none', backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%231A1410' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 14px center', paddingRight: 36 }}
+                      onFocus={() => setFocused('needsRendering')} onBlur={() => setFocused(null)}
+                    >
+                      <option value="">Select option…</option>
+                      {YES_NO.map(v => <option key={v} value={v}>{v}</option>)}
+                    </select>
+                  </div>
+                </div>
+
+                {/* Measurements + Visit row */}
+                <div style={{ display: 'grid', gridTemplateColumns: mob ? '1fr' : '1fr 1fr', gap: 12 }}>
+                  <div>
+                    <label style={labelStyle}>Measurements Available?</label>
+                    <select
+                      value={form.hasMeasurements} onChange={set('hasMeasurements')}
+                      style={{ ...inp('hasMeasurements'), color: form.hasMeasurements ? DARK_TEXT : 'rgba(24, 14, 6, 0.4)', appearance: 'none', backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%231A1410' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 14px center', paddingRight: 36 }}
+                      onFocus={() => setFocused('hasMeasurements')} onBlur={() => setFocused(null)}
+                    >
+                      <option value="">Select option…</option>
+                      {YES_NO.map(v => <option key={v} value={v}>{v}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={labelStyle}>Preferred Next Step</label>
+                    <select
+                      value={form.visitPreference} onChange={set('visitPreference')}
+                      style={{ ...inp('visitPreference'), color: form.visitPreference ? DARK_TEXT : 'rgba(24, 14, 6, 0.4)', appearance: 'none', backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%231A1410' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 14px center', paddingRight: 36 }}
+                      onFocus={() => setFocused('visitPreference')} onBlur={() => setFocused(null)}
+                    >
+                      <option value="">Select preference…</option>
+                      {['Phone consultation', 'WhatsApp follow-up', 'Site visit', 'Showroom appointment'].map(v => <option key={v} value={v}>{v}</option>)}
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label style={labelStyle}>Inspiration Links / References</label>
+                  <textarea
+                    rows={3} value={form.inspirationLinks} onChange={set('inspirationLinks')} maxLength={1200}
+                    style={{ ...inp('inspirationLinks'), resize: 'none' }}
+                    placeholder="Paste Pinterest, Instagram, product links, or notes about the style you want."
+                    onFocus={() => setFocused('inspirationLinks')} onBlur={() => setFocused(null)}
+                  />
                 </div>
 
                 {/* Message */}
@@ -312,7 +463,7 @@ export default function ContactPage({ brand, submitContact }) {
                   />
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4, alignItems: 'center' }}>
                     <Err field="message" />
-                    <span style={{ fontSize: 11, color: '#6B7280', marginLeft: 'auto' }}>{form.message.length}/2000</span>
+                    <span style={{ fontSize: 11, color: `var(--text-secondary)`, marginLeft: 'auto' }}>{form.message.length}/2000</span>
                   </div>
                 </div>
 
@@ -324,14 +475,14 @@ export default function ContactPage({ brand, submitContact }) {
                     style={{
                       flex: 1, minWidth: 180,
                       padding: '16px 28px',
-                      background: loading ? 'rgba(17,24,39,0.5)' : DARK_TEXT,
+                      background: loading ? 'rgba(24, 14, 6, 0.5)' : DARK_TEXT,
                       color: '#fff', border: 'none', borderRadius: 12,
                       fontWeight: 800, fontSize: 14, cursor: loading ? 'not-allowed' : 'pointer',
                       display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
                       fontFamily: 'inherit', transition: 'opacity 0.2s',
                     }}
                   >
-                    {loading ? 'Sending…' : <><span>Send Enquiry</span><ArrowRight size={15} /></>}
+                    {loading ? 'Sending…' : <><span>Submit Project Intake</span><ArrowRight size={15} /></>}
                   </button>
                   <button
                     type="button"
@@ -351,7 +502,7 @@ export default function ContactPage({ brand, submitContact }) {
                   </button>
                 </div>
 
-                <p style={{ fontSize: 11, color: 'rgba(17,24,39,0.35)', margin: 0, textAlign: 'center' }}>
+                <p style={{ fontSize: 11, color: 'rgba(24, 14, 6, 0.65)', margin: 0, textAlign: 'center' }}>
                   Your details are used only to respond to this enquiry.
                 </p>
               </div>
@@ -366,11 +517,11 @@ export default function ContactPage({ brand, submitContact }) {
               <div style={cardHeadStyle(ac)}>Direct Contact</div>
               <InfoRow icon={<Phone size={15} />} href={`tel:${phone.replace(/\s/g,'')}`}>
                 <span style={{ fontWeight: 700, fontSize: 16, color: DARK_TEXT }}>{phone}</span>
-                <span style={{ fontSize: 12, color: 'rgba(17,24,39,0.45)', marginTop: 2 }}>Calls & SMS</span>
+                <span style={{ fontSize: 12, color: 'rgba(24, 14, 6, 0.7)', marginTop: 2 }}>Calls & SMS</span>
               </InfoRow>
               <InfoRow icon={<svg viewBox="0 0 24 24" width={15} height={15} fill="#25D366"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>} href={`https://wa.me/${wa}`} target>
                 <span style={{ fontWeight: 700, fontSize: 15, color: DARK_TEXT }}>WhatsApp</span>
-                <span style={{ fontSize: 12, color: 'rgba(17,24,39,0.45)', marginTop: 2 }}>Usually replies within 1 hour</span>
+                <span style={{ fontSize: 12, color: 'rgba(24, 14, 6, 0.7)', marginTop: 2 }}>Usually replies within 1 hour</span>
               </InfoRow>
               <InfoRow icon={<Mail size={15} />} href={`mailto:${email}`}>
                 <span style={{ fontWeight: 600, fontSize: 14, color: DARK_TEXT }}>{email}</span>
@@ -387,7 +538,7 @@ export default function ContactPage({ brand, submitContact }) {
                   { day: 'Sunday', hours: 'Closed' },
                 ].map(({ day, hours }) => (
                   <div key={day} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontSize: 13, color: 'rgba(17,24,39,0.6)', fontWeight: 500 }}>{day}</span>
+                    <span style={{ fontSize: 13, color: 'rgba(24, 14, 6, 0.6)', fontWeight: 500 }}>{day}</span>
                     <span style={{ fontSize: 13, fontWeight: 700, color: hours === 'Closed' ? '#EF4444' : DARK_TEXT }}>{hours}</span>
                   </div>
                 ))}
@@ -399,13 +550,13 @@ export default function ContactPage({ brand, submitContact }) {
               <div style={cardHeadStyle(ac)}>Location</div>
               <InfoRow icon={<MapPin size={15} />}>
                 <span style={{ fontWeight: 600, fontSize: 14, color: DARK_TEXT }}>{location}</span>
-                <span style={{ fontSize: 12, color: 'rgba(17,24,39,0.45)', marginTop: 2 }}>Site visits by appointment</span>
+                <span style={{ fontSize: 12, color: 'rgba(24, 14, 6, 0.45)', marginTop: 2 }}>Site visits by appointment</span>
               </InfoRow>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 12 }}>
                 {['Accra', 'Kumasi', 'Takoradi', 'Koforidua'].map(c => (
                   <span key={c} style={{
                     padding: '5px 12px', borderRadius: 100,
-                    background: 'rgba(35,31,120,0.1)', border: `1px solid ${ac}30`,
+                    background: 'rgba(24, 14, 6, 0.1)', border: `1px solid ${ac}30`,
                     fontSize: 11, fontWeight: 700, color: ac, letterSpacing: '0.05em',
                   }}>
                     {c}
@@ -422,7 +573,7 @@ export default function ContactPage({ brand, submitContact }) {
               borderRadius: 16,
             }}>
               <div style={{ fontSize: 13, fontWeight: 800, color: DARK_TEXT, marginBottom: 4 }}>Our Response Promise</div>
-              <p style={{ fontSize: 12, color: 'rgba(17,24,39,0.55)', margin: 0, lineHeight: 1.7 }}>
+              <p style={{ fontSize: 12, color: 'rgba(24, 14, 6, 0.55)', margin: 0, lineHeight: 1.7 }}>
                 All enquiries receive a personal response within 24 hours — not an automated reply. For urgent projects, WhatsApp us directly for the fastest service.
               </p>
             </div>
@@ -437,7 +588,7 @@ export default function ContactPage({ brand, submitContact }) {
 
 const labelStyle = {
   display: 'block', fontSize: 11, fontWeight: 700,
-  color: 'rgba(17,24,39,0.5)', letterSpacing: '0.06em',
+  color: 'rgba(24, 14, 6, 0.78)', letterSpacing: '0.06em',
   textTransform: 'uppercase', marginBottom: 6,
 };
 

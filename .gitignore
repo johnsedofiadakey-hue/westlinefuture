@@ -17,10 +17,17 @@ yarn-error.log*
 .aider*
 .claude/
 .firebase/
+scratch/
+accounts*.json
+*.local.json
 build_*.txt
 build_output*.txt
 build_debug.txt
 build_log.txt
+build_error*.txt
+empty_catalog.cjs
+fix_jsx.cjs
+sweep*.cjs
 REENGINEERING_PLAN_FULL.md
 PROJECT_AUDIT.md
 LUXESPACE_SETUP_MANUAL.md

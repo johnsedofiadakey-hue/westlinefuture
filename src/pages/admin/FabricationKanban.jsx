@@ -8,12 +8,12 @@ import { PAv, SBadge } from '../../components/Shared';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const STAGES = [
-  { id: 'queue', label: 'In Queue', color: '#6B7280', desc: 'Awaiting scheduling' },
+  { id: 'queue', label: 'In Queue', color: `var(--text-secondary)`, desc: 'Awaiting scheduling' },
   { id: 'cutting', label: 'Cutting & Sizing', color: '#2196F3', desc: 'Precision sizing' },
   { id: 'processing', label: 'Processing', color: '#9C27B0', desc: 'Edges & Holes' },
   { id: 'tempering', label: 'Tempering', color: '#FF9800', desc: 'Heat treatment' },
   { id: 'qc', label: 'Quality Control', color: '#16A34A', desc: 'Final inspection' },
-  { id: 'ready', label: 'Ready', color: '#111827', desc: 'Dispatch stage' }
+  { id: 'ready', label: 'Ready', color: `var(--accent-secondary)`, desc: 'Dispatch stage' }
 ];
 
 const QC_ITEMS = ['Edge Polish', 'Dimensional Accuracy', 'Clarity Check', 'Temper Verification', 'No Scratches'];
@@ -51,7 +51,7 @@ function QCChecklist({ job, updateJob, ac }) {
 }
 
 export default function FabricationKanban({ jobs = [], clients = [], dbClients = [], updateJob, createJob, sendWhatsAppUpdate, brand, ...props }) {
-  const ac = brand.color || '#0F766E';
+  const ac = brand.color || `var(--accent-secondary)`;
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
   const [showNewJob, setShowNewJob] = useState(false);
   const [jobDraft, setJobDraft] = useState({ projectTitle: '', item: '', priority: 'Normal', stage: 'queue', panels: [] });
@@ -80,11 +80,11 @@ export default function FabricationKanban({ jobs = [], clients = [], dbClients =
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: isMobile ? 'flex-start' : 'center', flexDirection: isMobile ? 'column' : 'row', gap: 16 }}>
           <div>
              <h2 className="lxfh" style={{ fontSize: isMobile ? 24 : 32, fontWeight: 400 }}>Factory Floor</h2>
-             <p className="lxf" style={{ color: '#6B7280', fontSize: 13 }}>Real-time fabrication command center.</p>
+             <p className="lxf" style={{ color: `var(--text-secondary)`, fontSize: 13 }}>Real-time fabrication command center.</p>
           </div>
           <div style={{ display: 'flex', gap: 12, width: isMobile ? '100%' : 'auto' }}>
              <button onClick={() => setShowNewJob(true)} className="p-btn-dark lxf" style={{ padding: '10px 20px', flex: isMobile ? 1 : 'none', display: 'flex', alignItems: 'center', gap: 8 }}><Plus size={16} /> New Job</button>
-             <div className="glass-panel" style={{ padding: '8px 16px', display: 'flex', alignItems: 'center', gap: 10, background: '#fff', border: '1px solid #E5E7EB' }}>
+             <div className="glass-panel" style={{ padding: '8px 16px', display: 'flex', alignItems: 'center', gap: 10, background: '#fff', border: '1px solid var(--border-color)' }}>
                 <Activity size={16} color={ac} />
                 <span className="lxf" style={{ fontSize: 12, fontWeight: 700 }}>{jobs.filter(j => j.stage !== 'ready').length} Active</span>
              </div>
@@ -100,10 +100,10 @@ export default function FabricationKanban({ jobs = [], clients = [], dbClients =
                   <div style={{ width: 10, height: 10, borderRadius: '50%', background: s.color, boxShadow: `0 0 10px ${s.color}66` }} />
                   <div>
                     <span className="lxfh" style={{ fontSize: 13, textTransform: 'uppercase', letterSpacing: '.1em', display: 'block' }}>{s.label}</span>
-                    <span style={{ fontSize: 9, color: '#6B7280', fontWeight: 700 }}>{s.desc}</span>
+                    <span style={{ fontSize: 9, color: `var(--text-secondary)`, fontWeight: 700 }}>{s.desc}</span>
                   </div>
                </div>
-               <span style={{ fontSize: 11, background: '#fff', border: '1px solid #E5E7EB', padding: '2px 8px', borderRadius: 10, color: '#111827', fontWeight: 800 }}>{jobs.filter(j => j.stage === s.id).length}</span>
+               <span style={{ fontSize: 11, background: '#fff', border: '1px solid var(--border-color)', padding: '2px 8px', borderRadius: 10, color: `var(--accent-secondary)`, fontWeight: 800 }}>{jobs.filter(j => j.stage === s.id).length}</span>
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: '4px' }}>
@@ -120,7 +120,7 @@ export default function FabricationKanban({ jobs = [], clients = [], dbClients =
                    >
                       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
                          <div>
-                            <div style={{ fontSize: 9, color: '#6B7280', fontWeight: 800, textTransform: 'uppercase', marginBottom: 2 }}>{j.id}</div>
+                            <div style={{ fontSize: 9, color: `var(--text-secondary)`, fontWeight: 800, textTransform: 'uppercase', marginBottom: 2 }}>{j.id}</div>
                             <div className="lxfh" style={{ fontSize: 15, fontWeight: 700 }}>{j.projectTitle}</div>
                          </div>
                          {j.priority === 'High' && <span style={{ fontSize: 9, background: '#FEF2F2', color: '#EF4444', padding: '2px 8px', borderRadius: 6, fontWeight: 800 }}>URGENT</span>}
@@ -129,10 +129,10 @@ export default function FabricationKanban({ jobs = [], clients = [], dbClients =
                       <div className="lxf" style={{ fontSize: 13, color: '#4B5563', marginBottom: 16, fontWeight: 500 }}>{j.item}</div>
                       
                       {/* PANEL SPECS */}
-                      <div style={{ background: '#F9FAFB', borderRadius: 12, padding: 12, marginBottom: 20 }}>
+                      <div style={{ background: `var(--bg-secondary)`, borderRadius: 12, padding: 12, marginBottom: 20 }}>
                          {j.panels?.map(p => (
                            <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginBottom: 4 }}>
-                              <span style={{ color: '#4B5563' }}>{p.w}x{p.h}mm • {p.t}</span>
+                              <span style={{ color: `var(--text-secondary)` }}>{p.w}x{p.h}mm • {p.t}</span>
                               <span style={{ color: p.status === 'Cut' ? '#16A34A' : '#9CA3AF', fontWeight: 700 }}>{p.status}</span>
                            </div>
                          ))}
@@ -169,7 +169,7 @@ export default function FabricationKanban({ jobs = [], clients = [], dbClients =
                  ))}
                </AnimatePresence>
                {jobs.filter(j => j.stage === s.id).length === 0 && (
-                 <div style={{ padding: 32, border: '1px dashed #E5E7EB', borderRadius: 20, textAlign: 'center', color: '#6B7280', fontSize: 12 }}>
+                 <div style={{ padding: 32, border: '1px dashed var(--border-color)', borderRadius: 20, textAlign: 'center', color: `var(--text-secondary)`, fontSize: 12 }}>
                     No jobs in {s.label}
                  </div>
                )}
@@ -179,23 +179,23 @@ export default function FabricationKanban({ jobs = [], clients = [], dbClients =
       </div>
 
       {showNewJob && (
-        <div className="overlay-modal" style={{ position: 'fixed', inset: 0, background: 'rgba(17,24,39,0.7)', backdropFilter: 'blur(8px)', zIndex: 9000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+        <div className="overlay-modal" style={{ position: 'fixed', inset: 0, background: 'rgba(92, 58, 33,0.7)', backdropFilter: 'blur(8px)', zIndex: 9000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
           <div className="p-card" style={{ width: '100%', maxWidth: 480, padding: 32, borderRadius: 24 }} onClick={e => e.stopPropagation()}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
               <h3 className="lxfh" style={{ fontSize: 20 }}>New Fabrication Job</h3>
-              <button onClick={() => setShowNewJob(false)} style={{ background: '#F9FAFB', border: 'none', width: 32, height: 32, borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>×</button>
+              <button onClick={() => setShowNewJob(false)} style={{ background: `var(--bg-secondary)`, border: 'none', width: 32, height: 32, borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>×</button>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
               <div>
-                <label style={{ fontSize: 11, fontWeight: 700, color: '#6B7280', display: 'block', marginBottom: 6 }}>PROJECT TITLE</label>
+                <label style={{ fontSize: 11, fontWeight: 700, color: `var(--text-secondary)`, display: 'block', marginBottom: 6 }}>PROJECT TITLE</label>
                 <input className="p-inp" placeholder="e.g. Penthouse Facade — Phase 2" value={jobDraft.projectTitle} onChange={e => setJobDraft(d => ({ ...d, projectTitle: e.target.value }))} style={{ width: '100%', height: 44, borderRadius: 10, padding: '0 14px' }} />
               </div>
               <div>
-                <label style={{ fontSize: 11, fontWeight: 700, color: '#6B7280', display: 'block', marginBottom: 6 }}>GLASS ITEM DESCRIPTION</label>
+                <label style={{ fontSize: 11, fontWeight: 700, color: `var(--text-secondary)`, display: 'block', marginBottom: 6 }}>GLASS ITEM DESCRIPTION</label>
                 <input className="p-inp" placeholder="e.g. 12mm Tempered Clear, Sliding Door" value={jobDraft.item} onChange={e => setJobDraft(d => ({ ...d, item: e.target.value }))} style={{ width: '100%', height: 44, borderRadius: 10, padding: '0 14px' }} />
               </div>
               <div>
-                <label style={{ fontSize: 11, fontWeight: 700, color: '#6B7280', display: 'block', marginBottom: 6 }}>PRIORITY</label>
+                <label style={{ fontSize: 11, fontWeight: 700, color: `var(--text-secondary)`, display: 'block', marginBottom: 6 }}>PRIORITY</label>
                 <select className="p-inp" value={jobDraft.priority} onChange={e => setJobDraft(d => ({ ...d, priority: e.target.value }))} style={{ width: '100%', height: 44, borderRadius: 10, padding: '0 14px' }}>
                   <option value="Normal">Normal</option>
                   <option value="High">High (URGENT)</option>
@@ -211,7 +211,7 @@ export default function FabricationKanban({ jobs = [], clients = [], dbClients =
                     setJobDraft({ projectTitle: '', item: '', priority: 'Normal', stage: 'queue', panels: [] });
                     setShowNewJob(false);
                   }}
-                  style={{ flex: 1, height: 48, borderRadius: 12, background: ac, color: '#111827', border: 'none', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}
+                  style={{ flex: 1, height: 48, borderRadius: 12, background: ac, color: `var(--accent-secondary)`, border: 'none', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}
                 >
                   Add to Queue
                 </button>

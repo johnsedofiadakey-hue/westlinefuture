@@ -52,13 +52,13 @@ class ErrorBoundary extends Component {
       return (
         <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#F8F6F3', fontFamily: 'sans-serif', padding: 40 }}>
           <div style={{ fontSize: 48, marginBottom: 16 }}>⚠️</div>
-          <h1 style={{ fontSize: 20, fontWeight: 800, color: '#111827', marginBottom: 8 }}>Something went wrong</h1>
+          <h1 style={{ fontSize: 20, fontWeight: 800, color: `var(--accent-secondary)`, marginBottom: 8 }}>Something went wrong</h1>
           <p style={{ color: '#888', fontSize: 13, marginBottom: 24, textAlign: 'center', maxWidth: 400 }}>
             An unexpected error occurred. Please reload the page. If this keeps happening, contact support.
           </p>
           <button
             onClick={() => window.location.reload()}
-            style={{ padding: '12px 28px', background: '#111827', color: '#fff', border: 'none', borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: 'pointer', letterSpacing: '0.05em' }}>
+            style={{ padding: '12px 28px', background: `var(--accent-secondary)`, color: '#fff', border: 'none', borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: 'pointer', letterSpacing: '0.05em' }}>
             Reload Page
           </button>
           {import.meta.env.DEV && (

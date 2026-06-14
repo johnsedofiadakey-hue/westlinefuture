@@ -5,6 +5,7 @@ import { getStorage } from "firebase/storage";
 import { getFunctions } from "firebase/functions";
 
 const env = import.meta.env;
+const isDevPhoneAuthTestMode = env.DEV && env.VITE_FIREBASE_PHONE_AUTH_TEST_MODE === 'true';
 const hasKeys = !!(
   env.VITE_FIREBASE_API_KEY &&
   env.VITE_FIREBASE_API_KEY !== 'undefined' &&
@@ -13,35 +14,47 @@ const hasKeys = !!(
   env.VITE_FIREBASE_APP_ID
 );
 
-const firebaseConfig = {
+export const firebaseConfig = {
   apiKey: env.VITE_FIREBASE_API_KEY || "mock-key",
   authDomain: env.VITE_FIREBASE_AUTH_DOMAIN,
-  projectId: env.VITE_FIREBASE_PROJECT_ID || "westlinefuture-mock",
+  projectId: env.VITE_FIREBASE_PROJECT_ID || "westline-mock",
   storageBucket: env.VITE_FIREBASE_STORAGE_BUCKET,
   messagingSenderId: env.VITE_FIREBASE_MESSAGING_SENDER_ID,
   appId: env.VITE_FIREBASE_APP_ID
 };
 
-let app, auth, db, storage, functions, isFirebaseEnabled = false;
+let app, auth, db, storage, functions, messaging, isFirebaseEnabled = false;
 
 try {
   if (hasKeys) {
     app = initializeApp(firebaseConfig);
     auth = getAuth(app);
+    auth.useDeviceLanguage();
+    if (isDevPhoneAuthTestMode) {
+      auth.settings.appVerificationDisabledForTesting = true;
+      console.warn("Firebase Phone Auth test mode is enabled. Use only Firebase console test phone numbers locally.");
+    }
     db = getFirestore(app);
     storage = getStorage(app);
     functions = getFunctions(app);
+    import('firebase/messaging').then(({ getMessaging, isSupported }) => {
+      isSupported().then(supported => {
+        if (supported) {
+          messaging = getMessaging(app);
+        }
+      });
+    }).catch(e => console.warn("Firebase messaging not loaded:", e));
     isFirebaseEnabled = true;
   } else {
     // Return null so consumers can guard explicitly
-    app = null; auth = null; db = null; storage = null; functions = null;
+    app = null; auth = null; db = null; storage = null; functions = null; messaging = null;
   }
 } catch (e) {
   console.warn("Firebase initialization failed:", e);
-  app = null; auth = null; db = null; storage = null; functions = null;
+  app = null; auth = null; db = null; storage = null; functions = null; messaging = null;
 }
 
-export { auth, db, storage, functions, isFirebaseEnabled };
+export { auth, db, storage, functions, messaging, isFirebaseEnabled };
 
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 

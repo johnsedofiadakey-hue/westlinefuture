@@ -1,20 +1,26 @@
 # Westline Future Platform
 
-A production-oriented ERP, CRM, client portal, and public website for Westline Future's glass, aluminum, interior finishing, procurement, and installation operations.
+A production-ready project operating system for Westline Future: public site, client portal, admin console, worker portal, finance, approvals, rendering packages, sourcing, logistics, installation, and handover.
 
 ## Overview
-
-Westline Future brings public marketing, project intake, client communication, payments, procurement tracking, staff operations, and admin reporting into one Firebase-backed React application.
+Westline Future manages the full project journey from initial intake to paid CAD/3D rendering access, final quote approval, project deposit, procurement, shipping, installation, inspection, and final settlement.
 
 ## Architecture
+The platform is built with React and Vite, backed by Firebase services:
 
-- `src/pages/`: Public site, login, client portal, worker view, and admin modules.
-- `src/components/`: Shared UI, payment, document, upload, and proposal components.
-- `src/context/`: Auth and application data pipelines.
-- `src/lib/`: Firebase, messaging, sanitization, error mapping, and utility services.
-- `functions/`: Firebase Cloud Functions for privileged account, payment, SMS, WhatsApp, and automation workflows.
-- `firebase/`: Firestore and Storage security rules.
-- `public/`: Static public assets, manifest, sitemap, and robots file.
+- **src/components/**: Shared UI elements, payment components, rendering managers, documents, and reusable controls.
+- **src/pages/**: High-level page modules (Public Site, Admin Portal, Client Portal, Account Manager Portal).
+- **src/data.jsx**: Centralized source of truth for default data, project stages, services, and fallback content.
+- **src/index.css**: Design system and print-safe global styles.
+- **functions/**: Firebase Cloud Functions for server-side payment and operational workflows.
+- **firebase/**: Firestore and Storage rules.
+
+## Key Features
+- **Public Site**: Service positioning, portfolio, catalog, and structured project intake.
+- **Admin Portal**: CRM, project board, client hub, invoices, quotes, staff, analytics, showcase, and system controls.
+- **Client Portal**: Project timeline, rendering access, approvals, payments, documents, add-ons, and messages.
+- **Worker Portal**: Assigned project execution, checklists, installation notes, and photo uploads.
+- **Finance**: Invoices, receipts, quotes, payment tracking, and payment verification hooks.
 
 ## Getting Started
 
@@ -23,25 +29,27 @@ npm install
 npm run dev
 ```
 
-## Verification
-
-```bash
-npm run lint
-npm run build
-npm audit --audit-level=moderate
-```
+### Installation
+1. Clone the repository:
+   ```bash
+   git clone <westline-future-repository-url>
+   ```
+2. Install dependencies:
+   ```bash
+   npm install
+   ```
+3. Start the development server:
+   ```bash
+   npm run dev
+   ```
 
 ## Deployment
-
-The app is configured for Firebase Hosting with SPA rewrites to `index.html`.
+The project is configured for Firebase Hosting.
 
 ```bash
 npm run build
-firebase deploy
+npx firebase-tools deploy --only hosting --project westlinefuture
 ```
 
-Cloud Function secrets should be configured with `firebase functions:secrets:set`, not exposed through `VITE_*` browser environment variables.
-
 ## License
-
-Commercial use only. Westline Future.
+Commercial Use Only — Westline Future.

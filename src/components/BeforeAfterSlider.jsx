@@ -54,7 +54,7 @@ export default function BeforeAfterSlider({ before, after, labelBefore = "Before
 
       {/* LABELS */}
       <div style={{ position: 'absolute', left: 20, bottom: 20, background: 'rgba(0,0,0,0.5)', color: '#fff', padding: '4px 12px', borderRadius: 20, fontSize: 10, fontWeight: 800, textTransform: 'uppercase' }}>{labelBefore}</div>
-      <div style={{ position: 'absolute', right: 20, bottom: 20, background: 'rgba(35, 31, 120, 0.8)', color: '#fff', padding: '4px 12px', borderRadius: 20, fontSize: 10, fontWeight: 800, textTransform: 'uppercase' }}>{labelAfter}</div>
+      <div style={{ position: 'absolute', right: 20, bottom: 20, background: 'rgba(92, 58, 33, 0.8)', color: '#fff', padding: '4px 12px', borderRadius: 20, fontSize: 10, fontWeight: 800, textTransform: 'uppercase' }}>{labelAfter}</div>
 
       {/* SLIDER HANDLE */}
       <div style={{ 
@@ -62,8 +62,8 @@ export default function BeforeAfterSlider({ before, after, labelBefore = "Before
         display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10, transform: 'translateX(-50%)'
       }}>
          <div style={{ width: 40, height: 40, borderRadius: '50%', background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 0 20px rgba(0,0,0,0.2)' }}>
-            <div style={{ width: 4, height: 4, borderRadius: '50%', background: '#111827', margin: '0 2px' }} />
-            <div style={{ width: 4, height: 4, borderRadius: '50%', background: '#111827', margin: '0 2px' }} />
+            <div style={{ width: 4, height: 4, borderRadius: '50%', background: `var(--accent-secondary)`, margin: '0 2px' }} />
+            <div style={{ width: 4, height: 4, borderRadius: '50%', background: `var(--accent-secondary)`, margin: '0 2px' }} />
          </div>
       </div>
     </div>

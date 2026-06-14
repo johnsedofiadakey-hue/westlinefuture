@@ -112,3 +112,18 @@ export function workflowProgress(project, context) {
     steps,
   };
 }
+
+export function clientPortalGateState(
+  project = {},
+  { renderingPaid = false, renderingPaymentConfirmedLocally = false } = {}
+) {
+  const renderingAccessConfirmed = renderingPaid || renderingPaymentConfirmedLocally;
+  const needsRenderingPayment = project.kickoffMode === 'rendering-first' && !renderingAccessConfirmed;
+  const needsContractSignature = project.quoteApproved === true && project.contractAccepted !== true;
+
+  return {
+    active: needsRenderingPayment || needsContractSignature,
+    needsRenderingPayment,
+    needsContractSignature,
+  };
+}

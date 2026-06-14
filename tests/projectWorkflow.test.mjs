@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   applicableWorkflowSteps,
+  clientPortalGateState,
   deriveWorkflowStep,
   workflowProgress,
   WORKFLOW_STEP
@@ -137,5 +138,42 @@ test('installation fee flag clears the installation payment gate', () => {
       installationFeePaid: true,
     }),
     WORKFLOW_STEP.SHIPPING
+  );
+});
+
+test('paid rendering opens the client workspace for site visit scheduling', () => {
+  assert.deepEqual(
+    clientPortalGateState(
+      {
+        kickoffMode: 'rendering-first',
+        renderingFeePaid: true,
+        quoteApproved: false,
+        contractAccepted: false,
+      },
+      { renderingPaid: true }
+    ),
+    {
+      active: false,
+      needsRenderingPayment: false,
+      needsContractSignature: false,
+    }
+  );
+});
+
+test('a cleared rendering payment never bypasses the later contract signature', () => {
+  assert.deepEqual(
+    clientPortalGateState(
+      {
+        kickoffMode: 'rendering-first',
+        quoteApproved: true,
+        contractAccepted: false,
+      },
+      { renderingPaymentConfirmedLocally: true }
+    ),
+    {
+      active: true,
+      needsRenderingPayment: false,
+      needsContractSignature: true,
+    }
   );
 });

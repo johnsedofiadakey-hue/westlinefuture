@@ -25,7 +25,7 @@ import WorldClassChat from '../components/WorldClassChat';
 import InvoiceDocument from '../components/InvoiceDocument';
 import ClientUploadsTab from '../components/ClientUploadsTab';
 import SecureVault from '../components/SecureVault';
-import { deriveWorkflowStep, WORKFLOW_STEP } from '../lib/projectWorkflow';
+import { clientPortalGateState, deriveWorkflowStep, WORKFLOW_STEP } from '../lib/projectWorkflow';
 
 const AC = `var(--accent-secondary)`;
 
@@ -5322,6 +5322,13 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
   const kickoffComplete = selected?.kickoffGateCleared || (selected?.kickoffMode === 'rendering-first' && renderingPaid);
   const stageId = selected?.stageId || 1;
   const photosAvailable = stageId >= 6; // Installation stage onwards
+  const portalGate = selected
+    ? clientPortalGateState(selected, {
+        renderingPaid,
+        renderingPaymentConfirmedLocally: !!gateCleared[selected.id],
+      })
+    : { active: false, needsRenderingPayment: false, needsContractSignature: false };
+  const showProjectsLoading = loadingProjects && projects.length === 0;
 
   const tabs = [
     { id: 'overview',  label: 'Overview',  icon: <Home size={14} /> },
@@ -5415,7 +5422,7 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
               Hey {(user?.name || 'there').split(' ')[0]} 👋
             </div>
             <div style={{ fontSize: 14, color: 'rgba(255,255,255,.45)', fontWeight: 500 }}>
-              {loadingProjects ? 'Loading your projects…' : projects.length === 0
+              {showProjectsLoading ? 'Loading your projects…' : projects.length === 0
                 ? 'No projects yet — contact our team'
                 : `${activeCount} active project${activeCount !== 1 ? 's' : ''}${completedCount > 0 ? ` · ${completedCount} completed` : ''}`}
             </div>
@@ -5474,7 +5481,7 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
               Welcome back, {(user?.name || 'there').split(' ')[0]} 👋
             </div>
             <div style={{ fontSize: 15, color: `var(--text-secondary)`, marginBottom: 20 }}>
-              {loadingProjects ? 'Loading your projects...' : projects.length === 0
+              {showProjectsLoading ? 'Loading your projects...' : projects.length === 0
                 ? 'You have no active projects yet. Speak to our team to get started.'
                 : `${activeCount} active project${activeCount !== 1 ? 's' : ''}${completedCount > 0 ? ` · ${completedCount} completed` : ''}`}
             </div>
@@ -5509,7 +5516,7 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
               />
             </div>
           </div>
-        ) : loadingProjects ? (
+        ) : showProjectsLoading ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginTop: isMobile ? 16 : 0 }}>
             {[1, 2, 3].map(i => (
               <div key={i} style={{ height: i === 1 ? 140 : 80, borderRadius: isMobile ? 24 : 20, background: '#fff', animation: 'pulse 1.5s infinite', animationDelay: `${i * 0.15}s`, boxShadow: isMobile ? '0 2px 12px rgba(0,0,0,.06)' : 'none' }} />
@@ -5594,17 +5601,8 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
 
                 {/* ── KICKOFF GATE ── */}
                 {(() => {
-                  const isCleared = selected.kickoffGateCleared || gateCleared[selected.id];
-                  const requiresRendering = selected.kickoffMode === 'rendering-first';
-                  const renderingPaidByFlag = !!selected.renderingFeePaid;
-                  const renderingPaidByInvoice = gateInvoices.some(inv => (inv.id === selected.renderingFeeInvoiceId || ['rendering','design','rendering fee','renderingfee'].includes((inv.type||'').toLowerCase())) && inv.status === 'Paid');
+                  if (!portalGate.active) return null;
                   const hasUnlockedDesignLocal = (props.renderingPackages || []).some(pkg => pkg.projectId === selected.id && (pkg.unlocked || pkg.status === 'Paid / Unlocked'));
-                  const renderingPaid = renderingPaidByFlag || renderingPaidByInvoice || hasUnlockedDesignLocal;
-                  const contractSigned = !!selected.contractAccepted || isCleared;
-                  // Rendering payment is the initial gate. Contract signing becomes
-                  // a later gate only after the negotiated quotation is approved.
-                  const gateActive = !isCleared && ((requiresRendering && !renderingPaid) || (selected.quoteApproved === true && !contractSigned));
-                  if (!gateActive) return null;
                   return (
                     <KickoffGate
                       project={selected}
@@ -5645,7 +5643,7 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
                 })()}
 
                 {/* Hide tabs and content while kickoff gate is active */}
-                {(selected.kickoffGateCleared || gateCleared[selected.id] || !!selected.contractAccepted) && (
+                {!portalGate.active && (
                 <>
 
 
@@ -5838,9 +5836,7 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
                       onStageGuide={setActiveStageGuide}
                     />
                     {(() => {
-                      // Include gateCleared so the overview doesn't re-show ContractGate while
-                      // waiting for the Firestore snapshot to propagate after signing.
-                      const contractSigned = !!selected.contractAccepted || !!selected.kickoffGateCleared || !!gateCleared[selected.id];
+                      const contractSigned = !!selected.contractAccepted;
                       const renderingApproved = selected.renderingApproved === true ||
                         selected.designApproved === true ||
                         String(selected.renderingStatus || '').toLowerCase() === 'approved';

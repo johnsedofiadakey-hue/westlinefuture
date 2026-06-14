@@ -28,7 +28,12 @@ import { ShippingDetailsCard, ProjectEconomics, DocumentVault } from './clienthu
 import ClientUploadsTab from '../../components/ClientUploadsTab';
 import SecureVault from '../../components/SecureVault';
 import RequestPaymentModal from './clienthub/RequestPaymentModal';
-import { deriveWorkflowStep, WORKFLOW_STEP } from '../../lib/projectWorkflow';
+import {
+  applicableWorkflowSteps,
+  deriveWorkflowStep,
+  workflowProgress,
+  WORKFLOW_STEP
+} from '../../lib/projectWorkflow';
 
 function getProjectWorkflowGuidance(project, invoices = [], approvals = [], renderingPackages = [], addOns = []) {
   if (!project) return null;
@@ -386,6 +391,92 @@ function AdminSiteVisitCard({ project, notify }) {
           <button onClick={complete} disabled={busy} style={{ padding: '11px 16px', borderRadius: 10, border: 'none', background: '#15803D', color: '#fff', fontWeight: 800, cursor: 'pointer' }}>{busy ? 'Completing...' : 'Mark Survey Complete'}</button>
         </div>
       )}
+    </div>
+  );
+}
+
+function DetailedWorkflowProgress({ project, invoices, renderingPackages }) {
+  const progress = workflowProgress(project, { invoices, renderingPackages });
+  const workflowSteps = progress.steps;
+  const currentIndex = progress.index;
+  const percent = currentIndex >= workflowSteps.length - 1
+    ? 100
+    : Math.round((currentIndex / (workflowSteps.length - 1)) * 100);
+
+  return (
+    <div style={{ padding: 22, background: '#fff', borderRadius: 18, border: '1px solid var(--border-color)' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 20, alignItems: 'flex-start', marginBottom: 16, flexWrap: 'wrap' }}>
+        <div>
+          <div style={{ fontSize: 10, fontWeight: 900, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 5 }}>
+            Complete operational workflow
+          </div>
+          <div style={{ fontSize: 18, fontWeight: 900, color: 'var(--accent-secondary)' }}>
+            Step {currentIndex + 1} of {workflowSteps.length}: {progress.meta?.label}
+          </div>
+          <div style={{ marginTop: 5, fontSize: 12, color: 'var(--text-secondary)' }}>
+            Current owner: <strong style={{ color: 'var(--accent-secondary)' }}>{progress.meta?.owner || 'project manager'}</strong>
+          </div>
+        </div>
+        <div style={{ minWidth: 150, textAlign: 'right' }}>
+          <div style={{ fontSize: 22, fontWeight: 900, color: 'var(--accent-secondary)' }}>{percent}%</div>
+          <div style={{ fontSize: 10, fontWeight: 800, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Workflow progress</div>
+        </div>
+      </div>
+
+      <div style={{ height: 8, background: 'var(--bg-secondary)', borderRadius: 20, overflow: 'hidden', marginBottom: 18 }}>
+        <div style={{ width: `${percent}%`, height: '100%', background: 'var(--accent-secondary)', borderRadius: 20, transition: 'width .35s ease' }} />
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 8 }}>
+        {workflowSteps.map((step, index) => {
+          const isDone = index < currentIndex;
+          const isCurrent = index === currentIndex;
+          const stage = CLIENT_PROJECT_STAGES.find(item => item.id === step.stageId);
+          return (
+            <div
+              key={step.id}
+              style={{
+                minHeight: 70,
+                padding: '11px 12px',
+                borderRadius: 10,
+                border: isCurrent ? `2px solid ${stage?.color || 'var(--accent-secondary)'}` : '1px solid var(--border-color)',
+                background: isDone ? '#F0FDF4' : isCurrent ? `${stage?.color || '#1A1410'}08` : '#fff',
+                display: 'flex',
+                gap: 9,
+                alignItems: 'flex-start',
+              }}
+            >
+              <div style={{
+                width: 23,
+                height: 23,
+                borderRadius: '50%',
+                flexShrink: 0,
+                display: 'grid',
+                placeItems: 'center',
+                background: isDone ? '#16A34A' : isCurrent ? (stage?.color || 'var(--accent-secondary)') : 'var(--bg-secondary)',
+                color: isDone || isCurrent ? '#fff' : 'var(--text-secondary)',
+                fontSize: 10,
+                fontWeight: 900,
+              }}>
+                {isDone ? <CheckCircle2 size={13} /> : index + 1}
+              </div>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 11, fontWeight: 900, color: isCurrent ? (stage?.color || 'var(--accent-secondary)') : 'var(--accent-secondary)', lineHeight: 1.3 }}>
+                  {step.label}
+                </div>
+                <div style={{ marginTop: 3, fontSize: 9, color: 'var(--text-secondary)', lineHeight: 1.35 }}>
+                  Stage {step.stageId} · {step.owner}
+                </div>
+                {isCurrent && (
+                  <div style={{ marginTop: 5, fontSize: 9, fontWeight: 900, color: stage?.color || 'var(--accent-secondary)', textTransform: 'uppercase' }}>
+                    Current action
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -839,6 +930,18 @@ export default function ClientHub({ clientId, dbClients = [], onBack, ...props }
   const workflowGuidance = selected
     ? getProjectWorkflowGuidance(selected, props.invoices || [], props.approvals || [], props.renderingPackages || [], props.addOns || [])
     : null;
+  const selectedWorkflowProgress = selected
+    ? workflowProgress(selected, {
+        invoices: props.invoices || [],
+        renderingPackages: props.renderingPackages || [],
+      })
+    : null;
+  const selectedWorkflowSteps = selected ? applicableWorkflowSteps(selected) : [];
+  const selectedWorkflowPercent = selectedWorkflowProgress
+    ? (selectedWorkflowProgress.index >= selectedWorkflowSteps.length - 1
+        ? 100
+        : Math.round((selectedWorkflowProgress.index / (selectedWorkflowSteps.length - 1)) * 100))
+    : 0;
 
   if (!client) return (
     <div style={{ padding: 60, textAlign: 'center' }}>
@@ -1011,7 +1114,7 @@ export default function ClientHub({ clientId, dbClients = [], onBack, ...props }
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <div style={{ fontSize: 10, fontWeight: 800, color: currentStageObj?.color || ac, background: `${currentStageObj?.color || ac}15`, padding: '5px 12px', borderRadius: 20 }}>
-                        {currentStageObj?.pct || 5}% complete
+                        {selectedWorkflowPercent}% complete
                       </div>
                       {nextStage && (
                         <button onClick={() => setShowAdvanceModal(true)}
@@ -1046,7 +1149,7 @@ export default function ClientHub({ clientId, dbClients = [], onBack, ...props }
                   </div>
                 </div>
                 <div style={{ marginTop: 10, height: 5, background: `var(--border-color)`, borderRadius: 3, overflow: 'hidden' }}>
-                  <div style={{ height: '100%', width: `${currentStageObj?.pct || 5}%`, background: currentStageObj?.color || ac, borderRadius: 3, transition: 'width 1s ease' }} />
+                  <div style={{ height: '100%', width: `${selectedWorkflowPercent}%`, background: currentStageObj?.color || ac, borderRadius: 3, transition: 'width 1s ease' }} />
                 </div>
               </div>
 
@@ -1435,6 +1538,12 @@ export default function ClientHub({ clientId, dbClients = [], onBack, ...props }
 
                   return (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 24, paddingBottom: 24 }}>
+                      <DetailedWorkflowProgress
+                        project={selected}
+                        invoices={props.invoices || []}
+                        renderingPackages={props.renderingPackages || []}
+                      />
+
                       {/* STATS STRIP */}
                       <div style={{ padding: '16px 24px', background: `var(--bg-secondary)`, borderRadius: 18, border: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <div>

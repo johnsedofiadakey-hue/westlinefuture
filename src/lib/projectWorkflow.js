@@ -11,6 +11,7 @@ export const WORKFLOW_STEP = {
   PRODUCTION: 'production',
   SHIPPING: 'shipping',
   GHANA_ARRIVAL_PAYMENT: 'ghana-arrival-payment',
+  INSTALLATION_PAYMENT: 'installation-payment',
   INSTALLATION: 'installation',
   INSPECTION: 'inspection',
   HANDOVER: 'handover',
@@ -29,10 +30,20 @@ export const PROJECT_WORKFLOW_STEPS = [
   { id: WORKFLOW_STEP.PRODUCTION, label: 'Procurement & Production', owner: 'project manager', stageId: 4 },
   { id: WORKFLOW_STEP.SHIPPING, label: 'Shipping & Delivery', owner: 'logistics', stageId: 5 },
   { id: WORKFLOW_STEP.GHANA_ARRIVAL_PAYMENT, label: 'Ghana Arrival & Final Goods Payment', owner: 'client and finance', stageId: 5 },
+  { id: WORKFLOW_STEP.INSTALLATION_PAYMENT, label: 'Installation Add-on Approval & Payment', owner: 'client and project manager', stageId: 5 },
   { id: WORKFLOW_STEP.INSTALLATION, label: 'Installation', owner: 'field team', stageId: 6 },
   { id: WORKFLOW_STEP.INSPECTION, label: 'Inspection & Sign-off', owner: 'client and project manager', stageId: 7 },
   { id: WORKFLOW_STEP.HANDOVER, label: 'Handover & Closeout', owner: 'project manager', stageId: 8 },
 ];
+
+export function applicableWorkflowSteps(project = {}) {
+  if (project.projectType === 'buy-only') {
+    return PROJECT_WORKFLOW_STEPS.filter(step =>
+      ![WORKFLOW_STEP.INSTALLATION_PAYMENT, WORKFLOW_STEP.INSTALLATION].includes(step.id)
+    );
+  }
+  return PROJECT_WORKFLOW_STEPS;
+}
 
 const isApproved = value => ['approved', 'signed', 'completed'].includes(String(value || '').toLowerCase());
 
@@ -57,14 +68,21 @@ export function deriveWorkflowStep(project = {}, { invoices = [], renderingPacka
   const depositPaid = project.depositPaid || project.initialDepositPaid ||
     paid(text => text.includes('initial-deposit') || text.includes('deposit') || text.includes('first instal'));
   const deliverablesSigned = project.productionAuthorized || project.specDoc?.status === 'signed';
+  const installationPaid = project.installationPaid || paid(text =>
+    text.includes('installation') || text.includes('install add-on') || text.includes('installation add-on')
+  );
 
   if (Number(project.stageId || 1) >= 8) return WORKFLOW_STEP.HANDOVER;
   if (Number(project.stageId || 1) >= 7) return WORKFLOW_STEP.INSPECTION;
   if (Number(project.stageId || 1) >= 6) return WORKFLOW_STEP.INSTALLATION;
   if (Number(project.stageId || 1) >= 5) {
-    return project.goodsArrivedInGhana && !project.goodsBalancePaid
-      ? WORKFLOW_STEP.GHANA_ARRIVAL_PAYMENT
-      : WORKFLOW_STEP.SHIPPING;
+    if (project.goodsArrivedInGhana && !project.goodsBalancePaid) {
+      return WORKFLOW_STEP.GHANA_ARRIVAL_PAYMENT;
+    }
+    if (project.projectType !== 'buy-only' && project.goodsBalancePaid && !installationPaid) {
+      return WORKFLOW_STEP.INSTALLATION_PAYMENT;
+    }
+    return WORKFLOW_STEP.SHIPPING;
   }
   if (Number(project.stageId || 1) >= 4 || deliverablesSigned) return WORKFLOW_STEP.PRODUCTION;
   if (depositPaid) return WORKFLOW_STEP.DELIVERABLES_APPROVAL;
@@ -78,18 +96,20 @@ export function deriveWorkflowStep(project = {}, { invoices = [], renderingPacka
   return project.renderingFeeInvoiceId ? WORKFLOW_STEP.RENDERING_PAYMENT : WORKFLOW_STEP.ONBOARDING;
 }
 
-export function workflowStepIndex(step) {
-  return PROJECT_WORKFLOW_STEPS.findIndex(item => item.id === step);
+export function workflowStepIndex(step, steps = PROJECT_WORKFLOW_STEPS) {
+  return steps.findIndex(item => item.id === step);
 }
 
 export function workflowProgress(project, context) {
+  const steps = applicableWorkflowSteps(project);
   const step = deriveWorkflowStep(project, context);
-  const index = Math.max(0, workflowStepIndex(step));
+  const index = Math.max(0, workflowStepIndex(step, steps));
   return {
     step,
     index,
-    total: PROJECT_WORKFLOW_STEPS.length,
-    percent: Math.round(((index + 1) / PROJECT_WORKFLOW_STEPS.length) * 100),
-    meta: PROJECT_WORKFLOW_STEPS[index],
+    total: steps.length,
+    percent: Math.round(((index + 1) / steps.length) * 100),
+    meta: steps[index],
+    steps,
   };
 }

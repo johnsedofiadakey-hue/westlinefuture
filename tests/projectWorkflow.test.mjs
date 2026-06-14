@@ -1,6 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { deriveWorkflowStep, WORKFLOW_STEP } from '../src/lib/projectWorkflow.js';
+import {
+  applicableWorkflowSteps,
+  deriveWorkflowStep,
+  workflowProgress,
+  WORKFLOW_STEP
+} from '../src/lib/projectWorkflow.js';
 
 test('rendering payment moves a legacy project to site visit scheduling', () => {
   assert.equal(
@@ -57,5 +62,51 @@ test('signed deliverables derive production for legacy records', () => {
       specDoc: { status: 'signed' },
     }),
     WORKFLOW_STEP.PRODUCTION
+  );
+});
+
+test('admin workflow progress includes every operational gate', () => {
+  const progress = workflowProgress({
+    id: 'p1',
+    stageId: 3,
+    renderingApproved: true,
+    quoteApproved: true,
+    contractAccepted: true,
+  });
+
+  assert.equal(progress.step, WORKFLOW_STEP.INITIAL_PAYMENT);
+  assert.equal(progress.meta.label, 'Initial Project Payment');
+  assert.equal(progress.total, 16);
+});
+
+test('buy-only workflow omits installation', () => {
+  const steps = applicableWorkflowSteps({ projectType: 'buy-only' });
+
+  assert.equal(steps.some(step => step.id === WORKFLOW_STEP.INSTALLATION), false);
+  assert.equal(steps.some(step => step.id === WORKFLOW_STEP.INSTALLATION_PAYMENT), false);
+  assert.equal(steps.length, 14);
+});
+
+test('Ghana arrival exposes goods balance then installation payment', () => {
+  assert.equal(
+    deriveWorkflowStep({
+      id: 'p1',
+      stageId: 5,
+      projectType: 'full-service',
+      goodsArrivedInGhana: true,
+      goodsBalancePaid: false,
+    }),
+    WORKFLOW_STEP.GHANA_ARRIVAL_PAYMENT
+  );
+
+  assert.equal(
+    deriveWorkflowStep({
+      id: 'p1',
+      stageId: 5,
+      projectType: 'full-service',
+      goodsArrivedInGhana: true,
+      goodsBalancePaid: true,
+    }),
+    WORKFLOW_STEP.INSTALLATION_PAYMENT
   );
 });

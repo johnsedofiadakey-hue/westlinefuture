@@ -5161,13 +5161,14 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
     }
   }, [verifyingPayment]);
 
-  // Subscribe to projects for this client.
-  // We skip orderBy to avoid needing a composite index (sort in JS instead).
-  // We try multiple possible clientId formats via 'in' to handle any phone format mismatch.
+  // Subscribe to projects for this client using TWO parallel listeners merged in JS.
+  // Listener A: clientId == user.id (covers old projects that only store the scalar field)
+  // Listener B: clientIds array-contains-any (covers new projects + all phone format variants)
+  // Both write into a shared Map keyed by project ID so duplicates are auto-deduplicated
+  // and every update from either listener always overwrites with the freshest data.
   useEffect(() => {
     if (!db || !user) { setLoadingProjects(false); return; }
 
-    // Build a de-duped list of every possible ID this client might be stored under
     const rawPhone = user.phone || '';
     const normalised = rawPhone.replace(/\D/g, '');
     const candidates = [...new Set([
@@ -5178,40 +5179,44 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
       normalised.startsWith('0') && normalised.length === 10 ? '233' + normalised.slice(1) : null,
       normalised.startsWith('233') ? normalised : null,
       normalised.length === 9 ? '233' + normalised : null,
-    ].filter(Boolean))].slice(0, 10); // Firestore 'in' supports max 10 values
+    ].filter(Boolean))].slice(0, 10);
 
     if (candidates.length === 0) { setLoadingProjects(false); return; }
 
-    const q = query(
-      collection(db, 'projects'),
-      where('clientIds', 'array-contains-any', candidates),
-      limit(50)
+    const merged = new Map(); // projectId → project data (always latest)
+    let errorA = null, errorB = null;
+
+    const publish = () => {
+      const sorted = Array.from(merged.values()).sort((a, b) => {
+        const ta = a.createdAt?.seconds ?? (a.createdAt ? new Date(a.createdAt).getTime() / 1000 : 0);
+        const tb = b.createdAt?.seconds ?? (b.createdAt ? new Date(b.createdAt).getTime() / 1000 : 0);
+        return tb - ta;
+      });
+      setProjects(sorted);
+      setProjectsError(errorA && errorB ? (errorA || 'query-failed') : null);
+      setSelectedId(prev => {
+        if (!prev && sorted.length > 0) return sorted[0].id;
+        if (prev && sorted.length > 0 && !sorted.find(p => p.id === prev)) return sorted[0].id;
+        return prev;
+      });
+      setLoadingProjects(false);
+    };
+
+    // Listener A — scalar clientId field (backward compat for projects without clientIds array)
+    const unsubA = onSnapshot(
+      query(collection(db, 'projects'), where('clientId', 'in', candidates.slice(0, 10)), limit(50)),
+      snap => { snap.docs.forEach(d => merged.set(d.id, { id: d.id, ...d.data() })); errorA = null; publish(); },
+      err => { console.warn('[ClientPortal] clientId query failed:', err.code); errorA = err.code; publish(); }
     );
-    const unsub = onSnapshot(q,
-      snap => {
-        const mine = snap.docs
-          .map(d => ({ id: d.id, ...d.data() }))
-          .sort((a, b) => {
-            const ta = a.createdAt?.seconds ?? (a.createdAt ? new Date(a.createdAt).getTime() / 1000 : 0);
-            const tb = b.createdAt?.seconds ?? (b.createdAt ? new Date(b.createdAt).getTime() / 1000 : 0);
-            return tb - ta;
-          });
-        setProjects(mine);
-        setProjectsError(null);
-        setSelectedId(prev => {
-          if (!prev && mine.length > 0) return mine[0].id;
-          if (prev && mine.length > 0 && !mine.find(p => p.id === prev)) return mine[0].id;
-          return prev;
-        });
-        setLoadingProjects(false);
-      },
-      err => {
-        console.error('[ClientPortal] projects query failed:', err.code, err.message);
-        setProjectsError(err.code || 'query-failed');
-        setLoadingProjects(false);
-      }
+
+    // Listener B — clientIds array (new projects, all phone format variants)
+    const unsubB = onSnapshot(
+      query(collection(db, 'projects'), where('clientIds', 'array-contains-any', candidates), limit(50)),
+      snap => { snap.docs.forEach(d => merged.set(d.id, { id: d.id, ...d.data() })); errorB = null; publish(); },
+      err => { console.warn('[ClientPortal] clientIds query failed:', err.code); errorB = err.code; publish(); }
     );
-    return unsub;
+
+    return () => { unsubA(); unsubB(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id, user?.uid, user?.phone]);
 

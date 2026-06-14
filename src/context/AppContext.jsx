@@ -190,17 +190,10 @@ export const AppProvider = ({ children }) => {
     } else {
       const mergedProjects = new Map();
       const publishClientProjects = () => setClients(Array.from(mergedProjects.values()));
-      // ✅ CRITICAL FIX #4: Optimize two-query client pattern with deduplication
-      const mergedSnapshots = new Map(); // Track which query returned which docs
-      const applyClientProjectSnap = (source, snap) => {
-        // Only process docs new to this source to avoid duplicate processing
-        snap.docs.forEach(d => {
-          const key = `${source}:${d.id}`;
-          if (!mergedSnapshots.has(key)) {
-            mergedSnapshots.set(key, true);
-            mergedProjects.set(d.id, normalizeProject(d));
-          }
-        });
+      // Always overwrite with the latest snapshot data — the Map key (project ID) handles
+      // deduplication between the two listeners. Never skip updates or the portal goes stale.
+      const applyClientProjectSnap = (_source, snap) => {
+        snap.docs.forEach(d => mergedProjects.set(d.id, normalizeProject(d)));
         publishClientProjects();
       };
 

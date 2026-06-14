@@ -6,6 +6,10 @@ const rules = await readFile(
   new URL('../firebase/firestore.rules', import.meta.url),
   'utf8',
 );
+const clientPortal = await readFile(
+  new URL('../src/pages/ClientPortal.jsx', import.meta.url),
+  'utf8',
+);
 
 test('phone-auth clients do not trigger unsafe UID profile role reads', () => {
   assert.match(
@@ -28,4 +32,15 @@ test('project access accepts normalized Firebase phone claims', () => {
   ) || [];
 
   assert.equal(normalizedPhoneMemberships.length, 2);
+});
+
+test('client project query uses one rules-compatible canonical identity', () => {
+  assert.match(
+    clientPortal,
+    /where\('clientIds', 'array-contains', canonicalClientId\)/,
+  );
+  assert.doesNotMatch(
+    clientPortal,
+    /where\('clientIds', 'array-contains-any'/,
+  );
 });

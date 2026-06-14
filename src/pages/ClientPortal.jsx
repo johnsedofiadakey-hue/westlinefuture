@@ -5218,16 +5218,14 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
     const clientAccessId = user.id || user.uid;
     if (!clientAccessId) { setLoadingProjects(false); return; }
     const phoneDigits = String(user.phone || user.phoneNumber || '').replace(/\D/g, '');
-    const candidates = [...new Set([
-      clientAccessId,
-      user.uid,
-      phoneDigits,
-      phoneDigits ? `+${phoneDigits}` : '',
-    ].filter(Boolean))].slice(0, 10);
+    // Use one canonical identity. Firestore rules are not filters, so an
+    // array-contains-any query with UID and phone variants cannot prove that
+    // every possible result belongs to the authenticated phone claim.
+    const canonicalClientId = phoneDigits || clientAccessId;
 
     const q = query(
       collection(db, 'projects'),
-      where('clientIds', 'array-contains-any', candidates),
+      where('clientIds', 'array-contains', canonicalClientId),
       limit(50)
     );
     const unsub = onSnapshot(q,

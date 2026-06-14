@@ -297,6 +297,9 @@ exports.scheduleProjectSiteVisit = onCall(async request => {
   if (project.kickoffMode !== 'direct-kickoff' && project.renderingFeePaid !== true) {
     throw new HttpsError('failed-precondition', 'The rendering fee must be verified before scheduling the technical site visit.');
   }
+  if (project.siteVisit?.status === 'completed') {
+    throw new HttpsError('failed-precondition', 'This technical site visit is already completed.');
+  }
   if (!privileged && source !== 'client_portal') {
     throw new HttpsError('permission-denied', 'Only staff can record phone or admin-arranged appointments.');
   }
@@ -352,7 +355,9 @@ exports.scheduleProjectSiteVisit = onCall(async request => {
       message: `The technical site visit for "${project.title || 'project'}" is scheduled for ${startAt.toLocaleString('en-GB', { timeZone: siteVisit.timezone })}.`,
       msg: 'Site visit appointment confirmed.',
       type: 'site_visit_scheduled',
-      link: userId === project.clientId ? '/portal?tab=overview' : '/admin/client-hub',
+      link: userId === project.clientId
+        ? `/portal?projectId=${encodeURIComponent(projectId)}&tab=overview`
+        : `/admin/operations?client=${encodeURIComponent(project.clientId || '')}&project=${encodeURIComponent(projectId)}&tab=overview`,
       projectId,
       read: false,
       createdAt: FieldValue.serverTimestamp(),

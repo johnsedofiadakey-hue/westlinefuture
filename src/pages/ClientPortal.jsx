@@ -12,7 +12,7 @@ import {
   ZoomIn, ScanSearch, PenTool, Printer, FileCheck, PenLine, ShieldCheck, Award, Map as MapIcon, HelpCircle, Calendar
 } from 'lucide-react';
 import { CLIENT_PROJECT_STAGES, PROJECT_TYPES } from '../data';
-import { calculateTimeline } from './sharedHelpers';
+import { calculateTimeline, minimumAppointmentDateTime } from './sharedHelpers';
 import { db, functions } from '../lib/firebase';
 import { httpsCallable } from 'firebase/functions';
 import {
@@ -1568,26 +1568,35 @@ function ClientSiteVisitScheduler({ project, isMobile }) {
   const [notes, setNotes] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [confirmation, setConfirmation] = useState('');
   const workflowStep = deriveWorkflowStep(project);
   if (![WORKFLOW_STEP.SITE_VISIT_SCHEDULING, WORKFLOW_STEP.SITE_SURVEY].includes(workflowStep)) return null;
 
   const scheduled = project.siteVisit?.status === 'scheduled';
   const submit = async () => {
     if (!startAt || busy) return;
+    const appointment = new Date(startAt);
+    if (Number.isNaN(appointment.getTime()) || appointment.getTime() < Date.now() + 30 * 60 * 1000) {
+      setError('Choose a date and time at least 30 minutes from now.');
+      return;
+    }
     setBusy(true);
     setError('');
+    setConfirmation('');
     try {
       const scheduleSiteVisit = httpsCallable(functions, 'scheduleProjectSiteVisit');
-      await scheduleSiteVisit({
+      const result = await scheduleSiteVisit({
         projectId: project.id,
-        startAt: new Date(startAt).toISOString(),
+        startAt: appointment.toISOString(),
         durationMinutes: 120,
         timezone: 'Africa/Accra',
         source: 'client_portal',
         notes,
       });
+      const confirmedStart = result.data?.siteVisit?.startAt || appointment.toISOString();
+      setConfirmation(`Visit confirmed for ${new Date(confirmedStart).toLocaleString('en-GB', { dateStyle: 'full', timeStyle: 'short' })}.`);
     } catch (e) {
-      setError(e?.message || 'Could not schedule the site visit.');
+      setError(String(e?.message || 'Could not schedule the site visit.').replace(/^Firebase:\s*/i, ''));
     } finally {
       setBusy(false);
     }
@@ -1608,12 +1617,13 @@ function ClientSiteVisitScheduler({ project, isMobile }) {
       </div>
       {!scheduled && (
         <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'minmax(220px, .8fr) 1.2fr auto', gap: 10 }}>
-          <input type="datetime-local" value={startAt} min={new Date(Date.now() + 3600000).toISOString().slice(0, 16)} onChange={e => setStartAt(e.target.value)} style={{ padding: '12px 14px', borderRadius: 12, border: '1.5px solid var(--border-color)', fontFamily: 'inherit' }} />
+          <input type="datetime-local" value={startAt} min={minimumAppointmentDateTime()} onChange={e => { setStartAt(e.target.value); setError(''); setConfirmation(''); }} style={{ padding: '12px 14px', borderRadius: 12, border: '1.5px solid var(--border-color)', fontFamily: 'inherit' }} />
           <input value={notes} onChange={e => setNotes(e.target.value)} placeholder="Access instructions or preferred contact" style={{ padding: '12px 14px', borderRadius: 12, border: '1.5px solid var(--border-color)', fontFamily: 'inherit' }} />
           <button onClick={submit} disabled={!startAt || busy} style={{ padding: '12px 18px', borderRadius: 12, border: 'none', background: startAt ? 'var(--accent-secondary)' : 'var(--border-color)', color: '#fff', fontWeight: 800, cursor: startAt ? 'pointer' : 'default' }}>{busy ? 'Scheduling...' : 'Confirm Visit'}</button>
         </div>
       )}
       {error && <div style={{ color: '#DC2626', fontSize: 12, marginTop: 10 }}>{error}</div>}
+      {confirmation && <div style={{ color: '#15803D', fontSize: 12, fontWeight: 700, marginTop: 10 }}>{confirmation}</div>}
     </div>
   );
 }

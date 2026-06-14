@@ -16,7 +16,7 @@ import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import AdminRenderingManager from '../../components/AdminRenderingManager';
 import AdminAddOnManager from '../../components/AdminAddOnManager';
 import WorldClassChat from '../../components/WorldClassChat';
-import { calculateTimeline } from '../sharedHelpers';
+import { calculateTimeline, minimumAppointmentDateTime } from '../sharedHelpers';
 
 import { AC, STAGE_ICONS, SCHEDULE_CONFIGS, PREMIUM_CATALOG, BD_ITEMS_CONFIG } from './clienthub/config.jsx';
 import { printInvoiceOrReceipt, printSignedContractDoc } from './clienthub/print';
@@ -328,12 +328,17 @@ function AdminSiteVisitCard({ project, notify }) {
   const completed = project.siteVisit?.status === 'completed';
   const schedule = async () => {
     if (!startAt || busy) return;
+    const appointment = new Date(startAt);
+    if (Number.isNaN(appointment.getTime()) || appointment.getTime() < Date.now() + 30 * 60 * 1000) {
+      notify?.('error', 'Choose a date and time at least 30 minutes from now.');
+      return;
+    }
     setBusy(true);
     try {
       const scheduleSiteVisit = httpsCallable(functions, 'scheduleProjectSiteVisit');
       await scheduleSiteVisit({
         projectId: project.id,
-        startAt: new Date(startAt).toISOString(),
+        startAt: appointment.toISOString(),
         durationMinutes: 120,
         timezone: 'Africa/Accra',
         source: 'phone',
@@ -380,7 +385,7 @@ function AdminSiteVisitCard({ project, notify }) {
       </div>
       {!scheduled && !completed && (
         <div style={{ display: 'grid', gridTemplateColumns: 'minmax(220px, .8fr) 1.2fr auto', gap: 10 }}>
-          <input type="datetime-local" value={startAt} min={new Date(Date.now() + 3600000).toISOString().slice(0, 16)} onChange={e => setStartAt(e.target.value)} style={{ padding: '11px 13px', borderRadius: 10, border: '1.5px solid var(--border-color)', fontFamily: 'inherit' }} />
+          <input type="datetime-local" value={startAt} min={minimumAppointmentDateTime()} onChange={e => setStartAt(e.target.value)} style={{ padding: '11px 13px', borderRadius: 10, border: '1.5px solid var(--border-color)', fontFamily: 'inherit' }} />
           <input value={notes} onChange={e => setNotes(e.target.value)} placeholder="Access instructions or phone arrangement note" style={{ padding: '11px 13px', borderRadius: 10, border: '1.5px solid var(--border-color)', fontFamily: 'inherit' }} />
           <button onClick={schedule} disabled={!startAt || busy} style={{ padding: '11px 16px', borderRadius: 10, border: 'none', background: startAt ? '#2563EB' : 'var(--border-color)', color: '#fff', fontWeight: 800, cursor: startAt ? 'pointer' : 'default' }}>{busy ? 'Saving...' : 'Record Visit'}</button>
         </div>
@@ -1526,13 +1531,6 @@ export default function ClientHub({ clientId, dbClients = [], onBack, ...props }
 
                 {/* TIMELINE */}
                 {activeTab === 'timeline' && (() => {
-                  const firstStage = applicableStages[0];
-                  const lastStage  = applicableStages[applicableStages.length - 1];
-                  const minDateObj = new Date(computedTimeline[firstStage?.id]?.startDate || selected.createdAt);
-                  const maxDateObj = new Date(computedTimeline[lastStage?.id]?.endDate   || selected.createdAt);
-                  const minDate    = minDateObj.getTime();
-                  const maxDate    = maxDateObj.getTime();
-                  const totalTime  = maxDate - minDate || 1;
                   // Use the same value as the overview card so they always agree
                   const totalProjectDays = totalCalendarDays;
 
@@ -1558,85 +1556,13 @@ export default function ClientHub({ clientId, dbClients = [], onBack, ...props }
                         )}
                       </div>
 
-                      {/* GANTT CHART VISUALIZER */}
-                      <div style={{ padding: '24px', background: '#fff', borderRadius: 20, border: '1px solid var(--border-color)', boxShadow: '0 4px 20px rgba(0,0,0,0.02)' }}>
-                        <div style={{ fontSize: 13, fontWeight: 800, color: `var(--accent-secondary)`, marginBottom: 20, display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <span style={{ width: 8, height: 8, borderRadius: '50%', background: ac }} />
-                          Gantt Visual Timeline
-                        </div>
-
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 14, position: 'relative' }}>
-                          {/* Horizontal Grid Lines */}
-                          <div style={{ position: 'absolute', left: '210px', right: 0, top: 0, bottom: 0, display: 'flex', justifyContent: 'space-between', pointerEvents: 'none', zIndex: 0 }}>
-                            {[0, 25, 50, 75, 100].map(pct => (
-                              <div key={pct} style={{ width: 1, borderLeft: '1px dashed var(--border-color)', height: '100%' }} />
-                            ))}
-                          </div>
-
-                          {applicableStages.map(s => {
-                            const stageInfo = computedTimeline[s.id] || {};
-                            const stTime = new Date(stageInfo.startDate).getTime();
-                            const enTime = new Date(stageInfo.endDate).getTime();
-
-                            const leftPercent = Math.max(0, Math.min(100, ((stTime - minDate) / totalTime) * 100));
-                            const widthPercent = Math.max(2, Math.min(100 - leftPercent, ((enTime - stTime) / totalTime) * 100));
-
-                            const isCurrent = s.id === selected.stageId;
-                            const isPast = (selected.stageId || 1) > s.id;
-
-                            return (
-                              <div key={s.id} style={{ display: 'flex', alignItems: 'center', height: 28, zIndex: 1 }}>
-                                {/* Stage Name Label */}
-                                <div style={{ width: 200, fontSize: 11, fontWeight: 800, color: isCurrent ? `var(--accent-secondary)` : `var(--text-secondary)`, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', paddingRight: 10 }}>
-                                  {s.name}
-                                </div>
-                                {/* Gantt Bar Container */}
-                                <div style={{ flex: 1, height: '100%', position: 'relative', background: '#FAFAF9', borderRadius: 6, overflow: 'hidden', border: '1px solid var(--border-color)' }}>
-                                  <div
-                                    style={{
-                                      position: 'absolute',
-                                      left: `${leftPercent}%`,
-                                      width: `${widthPercent}%`,
-                                      height: '100%',
-                                      background: s.color,
-                                      opacity: isCurrent ? 1 : isPast ? 0.6 : 0.25,
-                                      borderRadius: 5,
-                                      display: 'flex',
-                                      alignItems: 'center',
-                                      justifyContent: 'center',
-                                      fontSize: 9,
-                                      fontWeight: 900,
-                                      color: '#fff',
-                                      boxShadow: isCurrent ? `0 0 12px ${s.color}60` : 'none',
-                                      transition: 'all 0.3s'
-                                    }}
-                                    title={`${s.name}: ${stageInfo.startDate} to ${stageInfo.endDate} (${stageInfo.durationDays} days)`}
-                                  >
-                                    <span style={{ opacity: widthPercent > 12 ? 1 : 0, transition: 'opacity 0.2s', textShadow: '0 1px 2px rgba(0,0,0,0.2)' }}>
-                                      {stageInfo.durationDays}d
-                                    </span>
-                                  </div>
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-
-                        {/* Gantt Footer (Dates Timeline) */}
-                        <div style={{ display: 'flex', justifyContent: 'space-between', paddingLeft: 160, marginTop: 12, fontSize: 9, color: `var(--text-secondary)`, fontWeight: 700 }}>
-                          <span>{minDateObj.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</span>
-                          <span>{new Date(minDate + totalTime * 0.25).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</span>
-                          <span>{new Date(minDate + totalTime * 0.50).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</span>
-                          <span>{new Date(minDate + totalTime * 0.75).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</span>
-                          <span>{maxDateObj.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</span>
-                        </div>
-                      </div>
-
                       {/* STAGE SCHEDULER & DETAILS LIST */}
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                        <div style={{ fontSize: 13, fontWeight: 800, color: `var(--accent-secondary)`, display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#16A34A' }} />
-                          Stage Dates & Schedule Settings
+                        <div style={{ padding: '16px 18px', borderRadius: 14, background: '#FFFBEB', border: '1px solid #FDE68A', color: '#92400E' }}>
+                          <div style={{ fontSize: 13, fontWeight: 900, marginBottom: 4 }}>Working schedule</div>
+                          <div style={{ fontSize: 12, lineHeight: 1.5 }}>
+                            Automatic dates are planning estimates. Set a stage start date to confirm it; later stages will resequence from that decision.
+                          </div>
                         </div>
 
                         <div style={{ position: 'relative', paddingLeft: 44 }}>

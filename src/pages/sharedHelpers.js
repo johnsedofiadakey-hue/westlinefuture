@@ -15,6 +15,17 @@ export const LIGHT_BG = `var(--bg-primary)`;
 export const DARK_TEXT = `var(--accent-secondary)`;
 export const AC = `var(--accent-secondary)`;
 
+export function toLocalDateTimeInputValue(value) {
+  const date = value ? new Date(value) : new Date();
+  if (Number.isNaN(date.getTime())) return '';
+  const offsetMs = date.getTimezoneOffset() * 60 * 1000;
+  return new Date(date.getTime() - offsetMs).toISOString().slice(0, 16);
+}
+
+export function minimumAppointmentDateTime(minutesFromNow = 30) {
+  return toLocalDateTimeInputValue(Date.now() + minutesFromNow * 60 * 1000);
+}
+
 /**
  * High-performance Project Timeline Dependency Resolution Engine.
  * Dynamically computes sequential starts, ends, and handles manual overrides.

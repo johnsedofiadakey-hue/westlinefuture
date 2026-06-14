@@ -72,6 +72,26 @@ import { MessengerService } from './lib/MessengerService';
 import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { X } from 'lucide-react';
 
+const RoleResolutionError = ({ onLogout, error }) => (
+  <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', background: '#F8F6F3', padding: 24, fontFamily: 'Inter, sans-serif' }}>
+    <div style={{ width: 'min(440px, 100%)', background: '#fff', border: '1px solid rgba(26,20,16,.1)', borderRadius: 12, padding: 32, textAlign: 'center' }}>
+      <h1 style={{ margin: '0 0 10px', fontSize: 22, color: '#1A1410' }}>Account access needs attention</h1>
+      <p style={{ margin: '0 0 22px', color: '#756D65', lineHeight: 1.6, fontSize: 14 }}>
+        Your Firebase login is valid, but the system could not resolve an admin, staff, worker, or client profile for this account.
+        Sign out and try again, or ask an administrator to verify the account role.
+      </p>
+      {error && import.meta.env.DEV && (
+        <pre style={{ textAlign: 'left', whiteSpace: 'pre-wrap', fontSize: 11, color: '#A33', background: '#FFF7F5', padding: 12 }}>
+          {String(error.message || error)}
+        </pre>
+      )}
+      <button onClick={onLogout} style={{ border: 0, borderRadius: 8, padding: '12px 20px', background: '#1A1410', color: '#fff', fontWeight: 700, cursor: 'pointer' }}>
+        Sign out
+      </button>
+    </div>
+  </div>
+);
+
 
 
 
@@ -97,7 +117,8 @@ export default function App() {
     setCurrency, setLang, setBrand, setContent,
     loadMoreMessages, hasMoreMessages,
     loadMoreInvoices, hasMoreInvoices,
-    loadMoreWorkOrders, hasMoreWorkOrders
+    loadMoreWorkOrders, hasMoreWorkOrders,
+    authProfileLoading, userProfileError
   } = useContext(AppContext);
   
   const notify = useCallback((type, msg, duration = 5000) => {
@@ -815,7 +836,7 @@ export default function App() {
 
   // Handle redirection based on auth state
   useEffect(() => {
-    if (user) {
+    if (user?.role) {
       if (location.pathname === '/login') {
         navigate(
           user.role === 'admin' || user.role === 'staff' ? '/admin' :
@@ -2850,9 +2871,11 @@ export default function App() {
   };
 
 
-  const isProtectedRoute = location.pathname.startsWith('/admin') || location.pathname.startsWith('/portal');
+  const isProtectedRoute = location.pathname.startsWith('/admin')
+    || location.pathname.startsWith('/portal')
+    || location.pathname.startsWith('/work');
 
-  if (authLoading && isProtectedRoute) return (
+  if ((authLoading || authProfileLoading) && isProtectedRoute) return (
     <div style={{ background: `var(--accent-secondary)`, height: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: `var(--accent-secondary)`, fontFamily: 'Inter' }}>
       <div className="pulse" style={{ fontSize: '1.2rem', letterSpacing: '4px', textTransform: 'uppercase' }}>Authenticating</div>
       <div style={{ marginTop: '20px', fontSize: '0.8rem', opacity: 0.6 }}>Securing Westline Future Gateway...</div>
@@ -2910,7 +2933,13 @@ export default function App() {
                   staffMode={user?.role === 'staff'}
                   {...commonProps}
                 />
-              ) : <Navigate to="/login" />}
+              ) : user?.role === 'client' ? (
+                <Navigate to="/portal" replace />
+              ) : user?.role === 'worker' ? (
+                <Navigate to="/work" replace />
+              ) : (
+                <RoleResolutionError onLogout={handleLogout} error={userProfileError} />
+              )}
             </ProtectedRoute>
           } />
 
@@ -2925,8 +2954,12 @@ export default function App() {
                   {...commonProps}
                 />
               ) : (user?.role === 'admin' || user?.role === 'staff') ? (
-                <Navigate to="/admin" />
-              ) : <Navigate to="/login" />}
+                <Navigate to="/admin" replace />
+              ) : user?.role === 'worker' ? (
+                <Navigate to="/work" replace />
+              ) : (
+                <RoleResolutionError onLogout={handleLogout} error={userProfileError} />
+              )}
             </ProtectedRoute>
           } />
           <Route path="/field-upload" element={<FieldUpload {...commonProps} />} />
@@ -2935,7 +2968,11 @@ export default function App() {
             <ProtectedRoute>
               {user?.role === 'worker' || user?.role === 'staff' || user?.role === 'admin' ? (
                 <WorkerView user={user} onLogout={handleLogout} {...commonProps} />
-              ) : <Navigate to="/login" />}
+              ) : user?.role === 'client' ? (
+                <Navigate to="/portal" replace />
+              ) : (
+                <RoleResolutionError onLogout={handleLogout} error={userProfileError} />
+              )}
             </ProtectedRoute>
           } />
         </Routes>

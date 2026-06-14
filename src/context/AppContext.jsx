@@ -36,7 +36,7 @@ const mergeScopedRecords = (primary, scoped) => {
 };
 
 export const AppProvider = ({ children }) => {
-  const { currentUser } = useContext(AuthContext);
+  const { currentUser, loading: firebaseAuthLoading } = useContext(AuthContext);
   const [user, setUser] = useState(() => {
     try {
       const cached = localStorage.getItem('westline_user_cache');
@@ -122,33 +122,58 @@ export const AppProvider = ({ children }) => {
     }
 
     if (!email || !db) return null;
+    const direct = await getDoc(doc(db, 'users', authUser.uid));
+    if (direct.exists()) {
+      return { id: direct.id, uid: authUser.uid, ...direct.data() };
+    }
+
     const q = query(collection(db, 'users'), where('email', '==', email), limit(1));
     const snap = await getDocs(q);
     if (!snap.empty) {
       const uData = snap.docs[0].data();
-      return { id: snap.docs[0].id, ...uData };
+      return { id: snap.docs[0].id, uid: authUser.uid, ...uData };
     }
-    return { id: authUser.uid, email: email, role: 'client' };
+    return { id: authUser.uid, uid: authUser.uid, email, role: null, profileMissing: true };
   };
 
-  const { data: userProfile } = useQuery({
+  const {
+    data: userProfile,
+    isPending: userProfilePending,
+    isFetching: userProfileFetching,
+    error: userProfileError,
+  } = useQuery({
     queryKey: ['userProfile', currentUser?.uid, currentUser?.email, currentUser?.phoneNumber],
     queryFn: () => fetchUserProfile(currentUser),
     enabled: !!currentUser && !!db,
     staleTime: 5 * 60 * 1000,
+    retry: 1,
   });
 
   useEffect(() => {
-    if (userProfile && userProfile.id !== user?.id) {
+    if (userProfile) {
       setUser(userProfile);
       localStorage.setItem('westline_user_cache', JSON.stringify(userProfile));
-    } else if (currentUser === null && user !== null) {
-      // We only wipe user if auth state specifically resolves to null (logged out)
-      // but to be completely safe with offline mode, we'll only wipe if they don't have a cache
-      const cached = localStorage.getItem('westline_user_cache');
-      if (!cached) setUser(null);
+    } else if (!firebaseAuthLoading && currentUser === null) {
+      setUser(null);
+      localStorage.removeItem('westline_user_cache');
     }
-  }, [userProfile, currentUser, user]);
+  }, [userProfile, currentUser, firebaseAuthLoading]);
+
+  useEffect(() => {
+    if (!currentUser || !user) return;
+    const cacheBelongsToAuthUser = user.uid === currentUser.uid
+      || user.id === currentUser.uid
+      || (currentUser.phoneNumber && normalizePhoneId(user.phone) === normalizePhoneId(currentUser.phoneNumber))
+      || (currentUser.email && String(user.email || '').toLowerCase() === currentUser.email.toLowerCase());
+
+    if (!cacheBelongsToAuthUser) {
+      setUser(null);
+      localStorage.removeItem('westline_user_cache');
+    }
+  }, [currentUser, user]);
+
+  const authProfileLoading = firebaseAuthLoading
+    || (!!currentUser && (userProfilePending || userProfileFetching) && !userProfile);
 
   // Data Listeners
   useEffect(() => {
@@ -293,6 +318,33 @@ export const AppProvider = ({ children }) => {
       }, (err) => devWarn("Activity logs listener failed:", err));
     }
 
+    const listenMerged = (name, setter, label) => {
+      let topLevel = [];
+      let scoped = [];
+      const flush = () => setter(mergeScopedRecords(topLevel, scoped));
+      if (isWorker) {
+        setter([]);
+        return () => {};
+      }
+      const topQuery = user.role === 'admin'
+        ? collection(db, name)
+        : query(collection(db, name), where('clientId', '==', user.id));
+      const unsubTop = onSnapshot(topQuery, (snap) => {
+        topLevel = snap.docs.map(mapScopedDoc);
+        flush();
+      }, (err) => devWarn(`${label} Top-Level Sync Error:`, err));
+      const unsubScoped = user.role === 'admin'
+        ? onSnapshot(collectionGroup(db, name), (snap) => {
+            scoped = snap.docs.map(mapScopedDoc).filter(item => item.parentId);
+            flush();
+          }, (err) => devWarn(`${label} Scoped Sync Error:`, err))
+        : () => {};
+      return () => {
+        unsubTop();
+        unsubScoped();
+      };
+    };
+
     const unsubApprovals = listenMerged('approvals', setApprovals, 'Approval');
     const unsubCR = listenMerged('change_requests', setChangeRequests, 'CR');
     const unsubProc = listenMerged('procurements', setProcurements, 'Procurement');
@@ -313,6 +365,18 @@ export const AppProvider = ({ children }) => {
     const unsubShipments = isWorker ? (() => {}) : onSnapshot(user.role === 'admin' ? collection(db, 'shipments') : query(collection(db, 'shipments'), where('clientId', '==', user.id)), (snap) => {
       setShipments(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     }, (err) => devWarn("Shipment Sync Error:", err));
+
+    const unsubJobs = isAdminOrStaff ? onSnapshot(collection(db, 'jobs'), (snap) => {
+      setJobs(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    }, (err) => devWarn("Jobs Sync Error:", err)) : (() => {});
+
+    const unsubAssets = isAdminOrStaff ? onSnapshot(collection(db, 'assets'), (snap) => {
+      setAssets(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    }, (err) => devWarn("Assets Sync Error:", err)) : (() => {});
+
+    const unsubMaterials = isAdminOrStaff ? onSnapshot(collectionGroup(db, 'materials'), (snap) => {
+      setMaterials(snap.docs.map(mapScopedDoc));
+    }, (err) => devWarn("Materials Sync Error:", err)) : (() => {});
 
     // ✅ CRITICAL FIX #2: Reduced proposals limit from 200 → 50
     const unsubProposals = onSnapshot(user.role === 'admin' ? query(collection(db, 'proposals'), limit(50)) : query(collection(db, 'proposals'), where('clientId', '==', user.id)), (snap) => {
@@ -439,7 +503,7 @@ export const AppProvider = ({ children }) => {
 
   return (
     <AppContext.Provider value={{
-      user, setUser,
+      user, setUser, authProfileLoading, userProfileError,
       clients, proposals, invoices, bookings, emails, setEmails, dbClients, teamMembers, logs, shipments, messages, testimonials, tasks, transactions, renderingPackages, addOns, changeRequests, userNotifications, notifications, procurements, jobs, notes, media, approvals, materials, assets, workOrders, containers,
       brand, content, currency, lang,
       setCurrency, setLang, setBrand, setContent,

@@ -52,14 +52,18 @@ test('client matching never reads optional auth claims without a presence guard'
   assert.doesNotMatch(isClientBody, /request\.auth\.token\.phone_number/);
 });
 
-test('client project query uses one rules-compatible canonical identity', () => {
+test('client portal subscribes only to explicitly indexed project documents', () => {
   assert.match(
     clientPortal,
-    /where\('clientIds', 'array-contains', canonicalClientId\)/,
+    /Array\.isArray\(user\.projectIds\)/,
   );
   assert.doesNotMatch(
     clientPortal,
-    /where\('clientIds', 'array-contains-any'/,
+    /collection\(db, 'projects'\),\s*where\('clientIds'/,
+  );
+  assert.match(
+    clientPortal,
+    /doc\(db, 'projects', projectId\)/,
   );
   assert.match(
     clientPortal,

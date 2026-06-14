@@ -9,7 +9,7 @@ import {
   Truck, Wrench, ShoppingCart, ArrowRight, Lock,
   Download, File, Image, Archive, Package, Camera,
   X, Copy, Check, RefreshCw, Gift, Edit3, ChevronDown,
-  ZoomIn, ScanSearch, PenTool, Printer, FileCheck, PenLine, ShieldCheck, Award, Map, HelpCircle
+  ZoomIn, ScanSearch, PenTool, Printer, FileCheck, PenLine, ShieldCheck, Award, Map, HelpCircle, Calendar
 } from 'lucide-react';
 import { CLIENT_PROJECT_STAGES, PROJECT_TYPES } from '../data';
 import { calculateTimeline } from './sharedHelpers';
@@ -5209,34 +5209,32 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
     }
   }, [verifyingPayment]);
 
-  // Subscribe to projects for this client.
-  // We skip orderBy to avoid needing a composite index (sort in JS instead).
-  // Projects are assigned by clientIds. Portfolio-level inheritance should be materialized onto each project.
+  // Subscribe only to exact project documents indexed on the client profile.
+  // Firestore cannot safely prove ownership for a collection list query that
+  // derives phone variants in rules. Exact document reads remain fully scoped.
   useEffect(() => {
     if (!db || !user) { setLoadingProjects(false); return; }
 
-    const clientAccessId = user.id || user.uid;
-    if (!clientAccessId) { setLoadingProjects(false); return; }
-    const phoneDigits = String(user.phone || user.phoneNumber || '').replace(/\D/g, '');
-    // Use one canonical identity. Firestore rules are not filters, so an
-    // array-contains-any query with UID and phone variants cannot prove that
-    // every possible result belongs to the authenticated phone claim.
-    const canonicalClientId = phoneDigits || clientAccessId;
+    const projectIds = [...new Set(
+      (Array.isArray(user.projectIds) ? user.projectIds : [])
+        .map(id => String(id || '').trim())
+        .filter(Boolean)
+    )].slice(0, 50);
 
-    const q = query(
-      collection(db, 'projects'),
-      where('clientIds', 'array-contains', canonicalClientId),
-      limit(50)
-    );
-    const unsub = onSnapshot(q,
-      snap => {
-        const mine = snap.docs
-          .map(d => ({ id: d.id, ...d.data() }))
-          .sort((a, b) => {
-            const ta = a.createdAt?.seconds ?? (a.createdAt ? new Date(a.createdAt).getTime() / 1000 : 0);
-            const tb = b.createdAt?.seconds ?? (b.createdAt ? new Date(b.createdAt).getTime() / 1000 : 0);
-            return tb - ta;
-          });
+    if (projectIds.length === 0) {
+      setProjects([]);
+      setProjectsError(null);
+      setLoadingProjects(false);
+      return;
+    }
+
+    const projectMap = new Map();
+    const publish = () => {
+      const mine = Array.from(projectMap.values()).sort((a, b) => {
+        const ta = a.createdAt?.seconds ?? (a.createdAt ? new Date(a.createdAt).getTime() / 1000 : 0);
+        const tb = b.createdAt?.seconds ?? (b.createdAt ? new Date(b.createdAt).getTime() / 1000 : 0);
+        return tb - ta;
+      });
         setProjects(mine);
         setProjectsError(null);
         setSelectedId(prev => {
@@ -5245,16 +5243,25 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
           return prev;
         });
         setLoadingProjects(false);
+    };
+
+    const unsubs = projectIds.map(projectId => onSnapshot(
+      doc(db, 'projects', projectId),
+      snap => {
+        if (snap.exists()) projectMap.set(projectId, { id: snap.id, ...snap.data() });
+        else projectMap.delete(projectId);
+        publish();
       },
       err => {
         console.error('[ClientPortal] projects query failed:', err.code, err.message);
         setProjectsError(err.code || 'query-failed');
         setLoadingProjects(false);
       }
-    );
-    return unsub;
+    ));
+
+    return () => unsubs.forEach(unsub => unsub());
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id, user?.uid, user?.phone]);
+  }, [user?.id, user?.uid, JSON.stringify(user?.projectIds || [])]);
 
   const selected = projects.find(p => p.id === selectedId);
   const activeCount = projects.filter(p => p.status !== 'Completed').length;

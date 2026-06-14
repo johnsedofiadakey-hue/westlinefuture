@@ -64,7 +64,7 @@ import { onAuthStateChanged, signInWithEmailAndPassword, signOut, createUserWith
 import { httpsCallable } from 'firebase/functions';
 import { 
   collection, query, onSnapshot, getDocs, getDoc, doc, 
-  updateDoc, addDoc, setDoc, deleteDoc, writeBatch, orderBy, collectionGroup, limit, where, serverTimestamp, increment, or
+  updateDoc, addDoc, setDoc, deleteDoc, writeBatch, orderBy, collectionGroup, limit, where, serverTimestamp, increment, arrayUnion, or
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { uploadFile } from './lib/firebase';
@@ -1782,6 +1782,10 @@ export default function App() {
         progress: 0,
         createdAt: new Date().toISOString()
       });
+      await updateDoc(doc(db, 'users', id), {
+        projectIds: arrayUnion(docRef.id),
+        updatedAt: serverTimestamp(),
+      });
       notify('success', 'Project initialized for client portal.');
       logAction(id, 'Operations', `Started Project: ${data.project}`);
       return docRef.id;
@@ -1895,6 +1899,10 @@ export default function App() {
         timeline: initialTimeline,
         stageHistory: [{ stageId: 1, note: data.projectDate ? `Project created (backdated to ${data.projectDate})` : 'Project created', timestamp: effectiveDate, byRole: 'admin' }],
         createdAt: data.projectDate ? effectiveDate : serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+      await updateDoc(doc(db, 'users', clientId), {
+        projectIds: arrayUnion(docRef.id),
         updatedAt: serverTimestamp(),
       });
       

@@ -48,8 +48,6 @@ export function applicableWorkflowSteps(project = {}) {
 const isApproved = value => ['approved', 'signed', 'completed'].includes(String(value || '').toLowerCase());
 
 export function deriveWorkflowStep(project = {}, { invoices = [], renderingPackages = [] } = {}) {
-  if (project.workflowStep) return project.workflowStep;
-
   const projectInvoices = invoices.filter(invoice =>
     invoice.projectId === project.id || invoice.parentId === project.id
   );
@@ -68,7 +66,7 @@ export function deriveWorkflowStep(project = {}, { invoices = [], renderingPacka
   const depositPaid = project.depositPaid || project.initialDepositPaid ||
     paid(text => text.includes('initial-deposit') || text.includes('deposit') || text.includes('first instal'));
   const deliverablesSigned = project.productionAuthorized || project.specDoc?.status === 'signed';
-  const installationPaid = project.installationPaid || paid(text =>
+  const installationPaid = project.installationPaid || project.installationFeePaid || paid(text =>
     text.includes('installation') || text.includes('install add-on') || text.includes('installation add-on')
   );
 
@@ -93,7 +91,8 @@ export function deriveWorkflowStep(project = {}, { invoices = [], renderingPacka
   if (siteVisit.status === 'scheduled') return WORKFLOW_STEP.SITE_SURVEY;
   if (renderingPaid) return WORKFLOW_STEP.SITE_VISIT_SCHEDULING;
   if (project.kickoffMode === 'direct-kickoff') return WORKFLOW_STEP.QUOTE_NEGOTIATION;
-  return project.renderingFeeInvoiceId ? WORKFLOW_STEP.RENDERING_PAYMENT : WORKFLOW_STEP.ONBOARDING;
+  return project.workflowStep ||
+    (project.renderingFeeInvoiceId ? WORKFLOW_STEP.RENDERING_PAYMENT : WORKFLOW_STEP.ONBOARDING);
 }
 
 export function workflowStepIndex(step, steps = PROJECT_WORKFLOW_STEPS) {

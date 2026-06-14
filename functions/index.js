@@ -137,6 +137,7 @@ exports.verifyPaystackPayment = onCall(
 
     if (!reference) throw new Error("reference is required");
     if (!projectId) throw new Error("projectId is required");
+    await assertProjectAccess(request.auth, projectId);
 
     const VALID_TYPES = ["payment", "deposit", "final", "rendering", "renderingFee", "design", "addon", "installation", "goods_balance", "invoice", "milestone", "receipt"];
     if (!VALID_TYPES.includes(type)) {
@@ -210,6 +211,9 @@ exports.verifyPaystackPayment = onCall(
     // Check if this reference has already been processed for this invoice.
     try {
       const processedSnap = await db.collection('processedPayments').doc(reference).get();
+      if (processedSnap.exists && processedSnap.data().status === 'processing') {
+        throw new Error('This payment is already being reconciled. Please retry shortly.');
+      }
       if (processedSnap.exists && processedSnap.data().invoiceId === invoiceId) {
         logger.info(`verifyPaystackPayment: reference ${reference} already processed for invoice ${invoiceId} — returning cached result`);
         return {
@@ -2259,6 +2263,9 @@ exports.debugInvoice = onRequest(
 exports.paystackWebhook = onRequest(
   { cors: false, secrets: [PAYSTACK_SECRET_KEY] },
   async (request, response) => {
+    let webhookClaimRef = null;
+    let webhookOwnsClaim = false;
+
     if (request.method !== 'POST') {
       return response.status(405).json({ error: 'Method not allowed' });
     }
@@ -2295,14 +2302,57 @@ exports.paystackWebhook = onRequest(
 
       const db = getFirestore();
       const amountGHS = tx.amount / 100;
+      const projectRef = db.collection('projects').doc(projectId);
+      const initialProjectSnap = await projectRef.get();
+      if (!initialProjectSnap.exists) {
+        logger.error(`paystackWebhook: project ${projectId} was not found`);
+        return response.status(400).json({ error: 'Project not found' });
+      }
 
-      // Check if already processed (idempotent)
+      if (invoiceId) {
+        const ownershipSnap = await db.collection('invoices').doc(invoiceId).get();
+        if (!ownershipSnap.exists) {
+          logger.error(`paystackWebhook: invoice ${invoiceId} was not found`);
+          return response.status(400).json({ error: 'Invoice not found' });
+        }
+        const ownershipInvoice = ownershipSnap.data();
+        const invoiceProjectId = ownershipInvoice.projectId || ownershipInvoice.parentId;
+        if (invoiceProjectId && invoiceProjectId !== projectId) {
+          logger.error(`paystackWebhook: invoice ${invoiceId} belongs to ${invoiceProjectId}, not ${projectId}`);
+          return response.status(400).json({ error: 'Invoice does not belong to project' });
+        }
+      }
+
+      // Atomically claim the reference before touching invoices or ledgers.
+      // This prevents the webhook and callable verifier from incrementing the
+      // same invoice/project twice when they arrive at nearly the same time.
       const txId = `TX-${tx.reference}`;
-      const existingTx = await db.collection('projects').doc(projectId).collection('transactions').doc(txId).get();
-      if (existingTx.exists && existingTx.data().status === 'verified') {
+      webhookClaimRef = db.collection('processedPayments').doc(tx.reference);
+      const projectTransactionRef = projectRef.collection('transactions').doc(txId);
+      const claimed = await db.runTransaction(async transaction => {
+        const [processedSnap, existingTx] = await Promise.all([
+          transaction.get(webhookClaimRef),
+          transaction.get(projectTransactionRef),
+        ]);
+        if (processedSnap.exists || (existingTx.exists && existingTx.data().status === 'verified')) {
+          return false;
+        }
+        transaction.set(webhookClaimRef, {
+          reference: tx.reference,
+          projectId,
+          invoiceId: invoiceId || null,
+          amountGHS,
+          status: 'processing',
+          source: 'webhook',
+          claimedAt: FieldValue.serverTimestamp(),
+        });
+        return true;
+      });
+      if (!claimed) {
         logger.info(`paystackWebhook: transaction ${txId} already verified, skipping`);
         return response.status(200).json({ received: true, alreadyProcessed: true });
       }
+      webhookOwnsClaim = true;
 
       // Auto-generate invoice if missing for rendering payments
       let finalInvoiceId = invoiceId;
@@ -2364,9 +2414,6 @@ exports.paystackWebhook = onRequest(
 
       // Update project payment flags based on payment type
       if (payTypeLower === 'rendering' || payTypeLower === 'renderingfee' || payTypeLower === 'design') {
-        const projectRef = db.collection('projects').doc(projectId);
-        const renderingProjectSnap = await projectRef.get();
-        const renderingProject = renderingProjectSnap.exists ? renderingProjectSnap.data() : {};
         // Unlock the rendering package linked to this invoice
         await db.collection('renderingPackages')
           .where('projectId', '==', projectId)
@@ -2417,7 +2464,7 @@ exports.paystackWebhook = onRequest(
       }
 
       // Write the same normalized transaction to both ledgers and reconcile the project total.
-      const webhookProjectSnap = await db.collection('projects').doc(projectId).get();
+      const webhookProjectSnap = await projectRef.get();
       const webhookProject = webhookProjectSnap.exists ? webhookProjectSnap.data() : {};
       const webhookManagerId = webhookProject.projectManagerId || webhookProject.assignedStaff?.[0] || null;
       const webhookTransaction = {
@@ -2441,17 +2488,28 @@ exports.paystackWebhook = onRequest(
       };
       const webhookBatch = db.batch();
       webhookBatch.set(
-        db.collection('projects').doc(projectId).collection('transactions').doc(txId),
+        projectTransactionRef,
         webhookTransaction,
         { merge: true }
       );
       webhookBatch.set(db.collection('transactions').doc(txId), webhookTransaction, { merge: true });
       webhookBatch.set(
-        db.collection('projects').doc(projectId),
+        projectRef,
         { paidAmount: FieldValue.increment(amountGHS), updatedAt: FieldValue.serverTimestamp() },
         { merge: true }
       );
+      webhookBatch.set(webhookClaimRef, {
+        reference: tx.reference,
+        projectId,
+        invoiceId: finalInvoiceId || null,
+        transactionId: txId,
+        amountGHS,
+        status: 'completed',
+        source: 'webhook',
+        processedAt: FieldValue.serverTimestamp(),
+      }, { merge: true });
       await webhookBatch.commit();
+      webhookOwnsClaim = false;
 
       const managerMessage = `Payment of GHS ${amountGHS.toFixed(2)} received for "${webhookProject.title || projectId}" via Paystack. Ref: ${tx.reference}`;
       const managerRecipients = [...new Set(['admin', webhookManagerId, ...(webhookProject.assignedStaff || [])].filter(Boolean))];
@@ -2471,6 +2529,16 @@ exports.paystackWebhook = onRequest(
       return response.status(200).json({ received: true, processed: true });
     } catch (err) {
       logger.error('paystackWebhook error:', err.message);
+      if (webhookOwnsClaim && webhookClaimRef) {
+        try {
+          const claimSnap = await webhookClaimRef.get();
+          if (claimSnap.exists && claimSnap.data().status === 'processing' && claimSnap.data().source === 'webhook') {
+            await webhookClaimRef.delete();
+          }
+        } catch (cleanupError) {
+          logger.error('paystackWebhook: could not release failed payment claim', cleanupError.message);
+        }
+      }
       return response.status(500).json({ error: err.message });
     }
   }

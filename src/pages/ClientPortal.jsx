@@ -769,7 +769,7 @@ function SpecApprovalCard({ project, user, brand, isMobile, invoices = [] }) {
           <AlertCircle size={17} /> Legally binding approval
         </div>
         <div style={{ fontSize: 12, lineHeight: 1.6 }}>
-          Signing document version {Number(spec.version || 1)} confirms the final project scope used to prepare your quotation. Do not sign until the drawings, materials, quantities, specifications, deliverables, outcomes, and exclusions are correct.
+          Signing document version {Number(spec.version || 1)} authorises Westline Future to procure materials and begin production under the approved quotation and contract. Do not sign until the drawings, materials, quantities, specifications, deliverables, outcomes, and exclusions are correct.
         </div>
       </div>
 
@@ -789,14 +789,14 @@ function SpecApprovalCard({ project, user, brand, isMobile, invoices = [] }) {
       </a>
 
       <div style={{ padding: '12px 14px', borderRadius: 12, background: '#F0FDF4', border: '1px solid #BBF7D0', color: '#166534', fontSize: 12, lineHeight: 1.55, marginBottom: 16 }}>
-        <strong>What happens next:</strong> Signing confirms the final scope and unlocks quotation preparation. Procurement and production begin only after you approve the quotation and the initial deposit is verified.
+        <strong>What happens next:</strong> Your quotation, contract, and initial payment are already complete. Signing confirms the final production scope and authorises procurement and production to begin.
       </div>
 
       {!showRejectBox ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           {spec.status === 'approved' && (
             <div style={{ padding: '10px 12px', borderRadius: 10, background: '#FFFBEB', border: '1px solid #FDE68A', color: '#92400E', fontSize: 12 }}>
-              Your previous approval is recorded. A formal signature is still required before quotation preparation.
+              Your previous approval is recorded. A formal signature is still required before procurement and production can begin.
             </div>
           )}
           <div>
@@ -832,7 +832,7 @@ function SpecApprovalCard({ project, user, brand, isMobile, invoices = [] }) {
               style={{ marginTop: 3 }}
             />
             <span style={{ fontSize: 12, color: '#374151', lineHeight: 1.55 }}>
-              I understand that entering my legal name creates my electronic signature, is intended to be legally binding, and authorises Westline Future to prepare the final quotation from this approved project brief.
+              I understand that entering my legal name creates my electronic signature, is intended to be legally binding, and authorises Westline Future to procure materials and begin production under this approved document.
             </span>
           </label>
           {error && (
@@ -906,11 +906,11 @@ function ContractAgreementModal({ project, user, brand, onClose, onSigned, isMob
   const defaultClauses = [
     {
       title: 'Engagement',
-      text: `Westline Future Ltd. ("Contractor") and the Client agree to continue development of <strong>${project?.title || '[Project Name]'}</strong> from the approved 3D rendering into a detailed project brief, bill of materials, final deliverables, quotation, procurement, shipping, and installation workflow. The detailed scope is not final until the separate project brief is reviewed and signed.`,
+      text: `Westline Future Ltd. ("Contractor") and the Client agree to deliver <strong>${project?.title || '[Project Name]'}</strong> under the approved 3D rendering and negotiated quotation. After this contract is signed and the initial project payment is verified, Westline Future will issue the final drawings, bill of materials, scope, exclusions, and deliverables for the Client's production authorisation.`,
     },
     {
       title: 'Payment Terms',
-      text: 'The project price and payment values will be stated in the final quotation issued after the detailed project brief is signed. Production begins only after quotation approval and verification of the initial project deposit. The final goods balance is due after the goods arrive in Ghana and before release to site. Installation is billed separately as an approved add-on.',
+      text: 'The approved quotation states the project price and payment schedule. The initial project payment becomes due after this contract is signed. Procurement and production begin only after that payment is verified and the final deliverables document is signed. The final goods balance is due after the goods arrive in Ghana and before release to site. Installation is billed separately as an approved add-on.',
     },
     {
       title: '3D Design Approval',
@@ -2747,11 +2747,12 @@ function PaymentsTab({ project, user, transactions: propTxns, invoices: propInvs
     ?? (propTxns || []).filter(t => t.projectId === project.id);
   const rawInvoices = liveInvoices
     ?? (propInvs || []).filter(i => i.projectId === project.id || i.parentId === project.id);
-  const productionAuthorized = project.productionAuthorized === true || project.specDoc?.status === 'signed';
   const allInvoices = rawInvoices.filter(invoice => {
-    if (productionAuthorized) return true;
-    const descriptor = `${invoice.title || ''} ${invoice.type || ''} ${invoice.documentKind || ''}`.toLowerCase();
-    return descriptor.includes('rendering') || descriptor.includes('design fee');
+    const status = String(invoice.status || '').toLowerCase();
+    return invoice.internalOnly !== true &&
+      invoice.clientVisible !== false &&
+      status !== 'draft' &&
+      status !== 'void';
   });
 
   const parseAmount = value => parseFloat(String(value || '0').replace(/[^0-9.]/g, '')) || 0;
@@ -2780,7 +2781,7 @@ function PaymentsTab({ project, user, transactions: propTxns, invoices: propInvs
 
   // Which project stage triggers each standard milestone key
   const MILESTONE_TRIGGERS = {
-    'initial-deposit':          { stage: 3, label: 'After quote approval',      stageLabel: 'Stage 3 — Quote & Deposit' },
+    'initial-deposit':          { stage: 3, label: 'After contract signing',   stageLabel: 'Stage 3 — Contract & Payment' },
     'pre-installation-balance': { stage: 5, label: 'After arrival in Ghana',    stageLabel: 'Stage 5 — Shipping' },
     'post-rendering':  { stage: 3, label: 'After rendering approval',  stageLabel: 'Stage 3 — Quote' },
     'post-production': { stage: 5, label: 'After production complete', stageLabel: 'Stage 5 — Delivery' },
@@ -2796,7 +2797,12 @@ function PaymentsTab({ project, user, transactions: propTxns, invoices: propInvs
     if (totalPaid >= budget * m.cumPct - 0.01) return 'paid';
     // Determine if this milestone has been triggered (stage reached OR invoice activated by admin)
     const trigger = MILESTONE_TRIGGERS[m.key];
-    const stageReached = !trigger || (project.stageId || 1) >= trigger.stage;
+    const workflowGateReached = m.key === 'initial-deposit'
+      ? project.contractAccepted === true
+      : m.key === 'pre-installation-balance'
+        ? project.goodsArrivedInGhana === true
+        : true;
+    const stageReached = workflowGateReached && (!trigger || (project.stageId || 1) >= trigger.stage);
     const invoiceActivated = linkedInv && (linkedInv.due || ['Sent', 'Overdue'].includes(linkedInv.status));
     if (stageReached || invoiceActivated) {
       // Only show as "due" if previous milestones are settled
@@ -4948,7 +4954,7 @@ function KickoffGate({ project, user, brand, isMobile, invoices = [], hasUnlocke
           </div>
 
           <div style={{ padding: '12px 16px', borderRadius: 12, background: '#FFFBEB', border: '1px solid #FDE68A', fontSize: 12, color: '#92400E', marginBottom: 20 }}>
-            💡 <strong>After signing:</strong> Your full portal unlocks immediately. You'll be able to review your project brief, track progress, view designs, and manage payments — all in one place.
+            <strong>After signing:</strong> The initial project payment becomes the next required action. Once payment is verified, Westline will issue the final deliverables document for your production authorisation.
           </div>
 
           <button
@@ -5032,7 +5038,7 @@ function ContractGate({ project, user, brand, isMobile }) {
         </div>
 
         <div style={{ background: 'var(--bg-secondary)', borderRadius: 14, padding: '16px 20px', marginBottom: 20, fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
-          By signing this agreement you accept the legal and commercial terms for continuing from the approved rendering into the detailed project brief and quotation process. The final scope and price are approved separately.
+          By signing this agreement you accept the legal and commercial terms attached to the approved quotation. Your signature activates the initial project payment; the final drawings, bill of materials, scope, and deliverables are signed separately before production begins.
         </div>
 
         <button
@@ -5675,10 +5681,10 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
                 {activeTab === 'overview' && (() => {
                   const pendingInvoices = (props.invoices || []).filter(i => i.projectId === selected?.id && ['Sent', 'Partially Paid'].includes(i.status) && i.type !== 'Quotation');
                   const unsignedQuote = (props.approvals || []).find(a => a.projectId === selected?.id && ['Quotation', 'quotation'].includes(a.type) && a.status === 'Sent');
-                  const productionAuthorized = selected?.productionAuthorized === true || selected?.specDoc?.status === 'signed';
                   const specNeedsReview = selected?.specDoc?.url && !['signed', 'rejected'].includes(selected?.specDoc?.status);
-                  const actionReq = specNeedsReview ? { title: 'Project Brief Signature Required', desc: 'Review and sign the final project brief to unlock quotation preparation.', tab: 'documents', btn: 'Review & Sign', icon: <FileCheck size={18} color="#D97706" /> }
-                    : unsignedQuote && productionAuthorized ? { title: 'Final Quote Ready', desc: 'Production is authorised. Review and approve your final quote to continue.', tab: 'vault', btn: 'Review Quote', icon: <PenTool size={18} color="#DC2626" /> }
+                  const initialPaymentCleared = selected?.depositPaid === true || selected?.initialDepositPaid === true;
+                  const actionReq = specNeedsReview && initialPaymentCleared ? { title: 'Final Deliverables Signature Required', desc: 'Review and sign the final drawings, bill of materials, scope, and deliverables to authorise production.', tab: 'documents', btn: 'Review & Sign', icon: <FileCheck size={18} color="#D97706" /> }
+                    : unsignedQuote && !selected?.quoteApproved ? { title: 'Quotation Ready', desc: 'Review the negotiated project cost. Approve it or request a revised version.', tab: 'vault', btn: 'Review Quote', icon: <PenTool size={18} color="#DC2626" /> }
                     : pendingInvoices.length > 0 ? { title: 'Pending Invoice', desc: `You have ${pendingInvoices.length} unpaid invoice(s) on your account.`, tab: 'financials', btn: 'View Invoices', icon: <CreditCard size={18} color="#D97706" /> }
                     : null;
 
@@ -5713,7 +5719,10 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
                       {(() => {
                         const requiresRend = selected.kickoffMode === 'rendering-first';
                         const rendPaid = !!selected.renderingFeePaid || (props.renderingPackages || []).some(pkg => pkg.projectId === selected.id && (pkg.unlocked || pkg.status === 'Paid / Unlocked'));
-                        const contSigned = !!selected.contractAccepted || !!selected.kickoffGateCleared;
+                        const siteVisitComplete = selected.kickoffMode === 'direct-kickoff' || selected.siteVisit?.status === 'completed' || selected.siteSurveyCompleted === true;
+                        const renderingApproved = selected.kickoffMode === 'direct-kickoff' || selected.renderingApproved === true || selected.designApproved === true || String(selected.renderingStatus || '').toLowerCase() === 'approved';
+                        const quoteApproved = selected.quoteApproved === true || Boolean(selected.approvedQuoteId);
+                        const contSigned = !!selected.contractAccepted;
                         const specUploaded = !!selected.specDoc?.url;
                         const specApproved = ['signed', 'approved'].includes(selected.specDoc?.status);
                         const depositInv = (props.invoices || []).find(i =>
@@ -5721,17 +5730,20 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
                           isInitialProjectDepositInvoice(i)
                         );
                         const depositPaid = !!selected.depositPaid || (depositInv && isPaidStatus(depositInv.status));
-                        const allDone = contSigned && (!requiresRend || rendPaid) && (!specUploaded || specApproved) && depositPaid;
+                        const allDone = (!requiresRend || rendPaid) && siteVisitComplete && renderingApproved && quoteApproved && contSigned && depositPaid && specApproved;
                         const welcomeKey = `portal_welcomed_${user?.id}_${selected?.id}`;
                         const alreadyDismissed = portalWelcomeDismissed || !!localStorage.getItem(welcomeKey);
                         if (allDone && alreadyDismissed) return null;
 
                         const steps = [
-                          ...(requiresRend ? [{ label: '3D rendering fee paid', done: rendPaid, action: null }] : []),
-                          { label: 'Project agreement signed', done: contSigned, action: null },
-                          { label: 'Project brief & spec uploaded by team', done: specUploaded, action: null, waiting: !specUploaded },
-                          { label: 'Sign project brief & unlock quotation', done: specApproved, action: specUploaded && !specApproved ? () => setActiveTab('documents') : null, actionLabel: 'Review & Sign →', waiting: !specUploaded },
-                          { label: 'Approve quote & complete required payment', done: !!selected.quoteApproved && depositPaid, action: specApproved && (!selected.quoteApproved || !depositPaid) ? () => setActiveTab(selected.quoteApproved ? 'financials' : 'vault') : null, actionLabel: selected.quoteApproved ? 'Pay Now →' : 'Review Quote →', waiting: !specApproved },
+                          ...(requiresRend ? [{ label: 'Rendering fee paid', done: rendPaid, action: null }] : []),
+                          { label: 'Technical site visit completed', done: siteVisitComplete, action: null, waiting: requiresRend && !rendPaid },
+                          { label: 'Final 3D rendering approved', done: renderingApproved, action: siteVisitComplete && !renderingApproved ? () => setActiveTab('designs') : null, actionLabel: 'Review Design →', waiting: !siteVisitComplete },
+                          { label: 'Negotiated quotation approved', done: quoteApproved, action: renderingApproved && !quoteApproved ? () => setActiveTab('vault') : null, actionLabel: 'Review Quote →', waiting: !renderingApproved },
+                          { label: 'Project contract signed', done: contSigned, action: quoteApproved && !contSigned ? () => setActiveTab('overview') : null, actionLabel: 'Sign Contract →', waiting: !quoteApproved },
+                          { label: 'Initial project payment verified', done: depositPaid, action: contSigned && !depositPaid ? () => setActiveTab('financials') : null, actionLabel: 'Open Payments →', waiting: !contSigned },
+                          { label: 'Final deliverables issued by team', done: specUploaded, action: null, waiting: !depositPaid },
+                          { label: 'Production authorised', done: specApproved, action: specUploaded && !specApproved ? () => setActiveTab('documents') : null, actionLabel: 'Review & Sign →', waiting: !specUploaded },
                         ];
                         const nextStep = steps.find(s => !s.done && !s.waiting);
                         const setupPct = Math.round((steps.filter(s => s.done).length / steps.length) * 100);

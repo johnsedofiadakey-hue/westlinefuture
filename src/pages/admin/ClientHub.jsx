@@ -1494,7 +1494,7 @@ export default function ClientHub({ clientId, dbClients = [], onBack, ...props }
                                   await updateDoc(fsDoc(fsDb, 'renderingPackages', pkg.id), { unlocked: true, status: 'Paid / Unlocked' });
                                 }
                                 await props.updateProject?.(selected.id, { renderingFeePaid: true, renderingFeeUnlockedAt: new Date().toISOString() });
-                                props.notify?.('success', 'Rendering fee recorded as paid. The client can now sign the project agreement.');
+                                props.notify?.('success', 'Rendering fee recorded as paid. Schedule the technical site visit before preparing the 3D rendering.');
                               }}
                               style={{ padding: '10px 16px', borderRadius: 10, border: '1px solid #BBF7D0', background: '#F0FDF4', color: '#15803D', fontSize: 12, fontWeight: 700, cursor: 'pointer', alignSelf: 'flex-start' }}
                             >

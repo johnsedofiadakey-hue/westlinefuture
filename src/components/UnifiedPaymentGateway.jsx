@@ -15,7 +15,7 @@
  *   contactPhone {string}  — shown in error state
  *   onSuccess    {fn}      — called with invoiceId after verified payment
  */
-import React, { useState, useContext, useEffect } from 'react';
+import React, { useState, useContext, useRef } from 'react';
 import { ArrowRight, Loader2, CheckCircle2, AlertCircle, PhoneCall, ShieldCheck, CreditCard, Smartphone, Building2, Banknote, X } from 'lucide-react';
 import { functions } from '../lib/firebase';
 import { httpsCallable } from 'firebase/functions';
@@ -26,24 +26,12 @@ import { createPaystackPayment } from '../lib/paystack';
 function PaystackOption({ amountGHS, email, invoiceId, projectId, paymentType, description, publicKey, onSuccess, onError }) {
   const [status, setStatus] = useState('idle');
   const [lastClickTime, setLastClickTime] = React.useState(0);
+  const activeReference = useRef('');
 
   const amountPesewas = Math.round(parseFloat(amountGHS || 0) * 100);
-  const reference     = `WL-${Date.now()}-${Math.random().toString(36).slice(2, 7).toUpperCase()}`;
-
-  const config = {
-    reference,
-    email:     email || 'client@westlinefuture.com',
-    amount:    amountPesewas,
-    currency:  'GHS',
-    publicKey: publicKey || import.meta.env.VITE_PAYSTACK_PUBLIC_KEY || '',
-    channels:  ['card', 'mobile_money', 'bank', 'bank_transfer'],
-    metadata:  { invoiceId, projectId, paymentType, description },
-  };
-
-  const initializePayment = createPaystackPayment(config);
 
   const handleSuccess = async (res) => {
-    const ref = res?.reference || res?.trxref || String(res);
+    const ref = res?.reference || res?.trxref || activeReference.current || String(res);
     setStatus('verifying');
     // Persist reference to localStorage so admin can manually reconcile if all retries fail
     try { localStorage.setItem(`wl_pending_ref_${invoiceId || Date.now()}`, JSON.stringify({ ref, invoiceId, projectId, paymentType, ts: Date.now() })); } catch {}
@@ -53,7 +41,13 @@ function PaystackOption({ amountGHS, email, invoiceId, projectId, paymentType, d
       try {
         if (functions && projectId) {
           const verify = httpsCallable(functions, 'verifyPaystackPayment');
-          await verify({ reference: ref, projectId, invoiceId, type: paymentType });
+          await verify({
+            reference: ref,
+            projectId,
+            invoiceId,
+            type: paymentType,
+            expectedAmountGHS: Number(amountGHS),
+          });
         }
         try { localStorage.removeItem(`wl_pending_ref_${invoiceId || ''}`); } catch {}
         setStatus('success');
@@ -81,6 +75,23 @@ function PaystackOption({ amountGHS, email, invoiceId, projectId, paymentType, d
     setLastClickTime(now);
 
     setStatus('processing');
+    const reference = `WL-${Date.now()}-${Math.random().toString(36).slice(2, 7).toUpperCase()}`;
+    activeReference.current = reference;
+    const initializePayment = createPaystackPayment({
+      reference,
+      email: email || 'client@westlinefuture.com',
+      amount: amountPesewas,
+      currency: 'GHS',
+      publicKey: publicKey || import.meta.env.VITE_PAYSTACK_PUBLIC_KEY || '',
+      channels: ['card', 'mobile_money', 'bank', 'bank_transfer'],
+      metadata: {
+        invoiceId,
+        projectId,
+        paymentType,
+        description,
+        expectedAmountGHS: Number(amountGHS),
+      },
+    });
     initializePayment(handleSuccess, handleClose);
   };
 
@@ -214,18 +225,9 @@ export default function UnifiedPaymentGateway({
   const [offlineReference, setOfflineReference] = useState('');
   const [offlineBusy, setOfflineBusy] = useState(false);
   const [offlineSubmitted, setOfflineSubmitted] = useState(false);
-  const [publicGatewaySettings, setPublicGatewaySettings] = useState(null);
   const fullAmount = parseFloat(amountGHS || 0);
 
-  useEffect(() => {
-    if (!functions) return;
-    const loadSettings = httpsCallable(functions, 'getPublicPaymentSettings');
-    loadSettings()
-      .then(response => setPublicGatewaySettings(response.data || {}))
-      .catch(() => setPublicGatewaySettings({}));
-  }, []);
-
-  const gw             = { ...(publicGatewaySettings || {}), ...(brand?.gatewaySettings || {}) };
+  const gw             = brand?.gatewaySettings || {};
   const paystackKey    = gw.paystackPublicKey || import.meta.env.VITE_PAYSTACK_PUBLIC_KEY || '';
   const paystackActive = !!(gw.enablePaystack !== false && paystackKey);
   const hubtelActive   = gw.enableHubtel === true;

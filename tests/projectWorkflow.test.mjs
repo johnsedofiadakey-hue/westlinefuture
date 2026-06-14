@@ -110,3 +110,32 @@ test('Ghana arrival exposes goods balance then installation payment', () => {
     WORKFLOW_STEP.INSTALLATION_PAYMENT
   );
 });
+
+test('current payment flags override a stale persisted workflow step', () => {
+  assert.equal(
+    deriveWorkflowStep({
+      id: 'p1',
+      stageId: 3,
+      workflowStep: WORKFLOW_STEP.QUOTE_NEGOTIATION,
+      renderingApproved: true,
+      quoteApproved: true,
+      contractAccepted: true,
+      initialDepositPaid: true,
+    }),
+    WORKFLOW_STEP.DELIVERABLES_APPROVAL
+  );
+});
+
+test('installation fee flag clears the installation payment gate', () => {
+  assert.equal(
+    deriveWorkflowStep({
+      id: 'p1',
+      stageId: 5,
+      projectType: 'full-service',
+      goodsArrivedInGhana: true,
+      goodsBalancePaid: true,
+      installationFeePaid: true,
+    }),
+    WORKFLOW_STEP.SHIPPING
+  );
+});

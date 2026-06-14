@@ -624,7 +624,12 @@ export default function App() {
   // ✓ Removed checkManualSession — Firebase Auth's onAuthStateChanged() handles persistence securely
 
   const loginWithCredentials = async (username, password) => {
-    // Removed rate limit check
+    // Wait up to 3s for Firebase to finish initialising on cold load
+    let _attempts = 0;
+    while ((!db || !isFirebaseEnabled) && _attempts < 6) {
+      await new Promise(r => setTimeout(r, 500));
+      _attempts++;
+    }
     if (!db || !isFirebaseEnabled) {
       throw new Error("Database offline. Please check your internet connection.");
     }
@@ -1937,16 +1942,23 @@ export default function App() {
     if (!db) return;
     try {
       const project = clients.find(p => p.id === projectId);
-      await updateDoc(doc(db, 'projects', projectId), {
-        quoteApproved: true,
-        quoteApprovedAt: serverTimestamp(),
-      });
-      if (project?.stageId === 2) {
-        await updateProjectStage(projectId, 3, 'Quotation approved by client', { silent: true });
+      const productionAuthorized = project?.productionAuthorized === true || project?.specDoc?.status === 'signed';
+      if (!productionAuthorized) {
+        notify('error', 'Production must be authorised before the final quote can be approved.');
+        return;
       }
-      createNotification('admin', `Client approved quote for ${project?.name || 'Project'}`, 'quote_approved', `/admin/clients?tab=projects`);
-      notify('success', 'Quote approved — advancing to deposit stage', 'persistent');
-    } catch (e) { notify('error', 'Failed to approve quote'); }
+      const approveProjectQuote = httpsCallable(functions, 'approveProjectQuote');
+      await approveProjectQuote({
+        projectId,
+        approverName: user?.name || project?.clientName || 'Client',
+      });
+      notify('success', 'Final quote approved. Complete the required payment to begin production.', 'persistent');
+    } catch (e) {
+      const message = e?.message
+        ?.replace(/^Firebase:\s*/i, '')
+        ?.replace(/\s*\(functions\/[^)]+\)\.?$/i, '');
+      notify('error', message || 'Failed to approve quote');
+    }
   };
 
   const updateShippingDetails = async (projectId, details) => {
@@ -2525,7 +2537,12 @@ export default function App() {
       const isActualAdminMode = mode === 'admin' || isAdminEmail;
 
       if (isActualAdminMode) {
-        // Removed rate limit check
+        // Wait up to 3s for Firebase to finish initialising on cold load
+        let _attempts = 0;
+        while ((!isFirebaseEnabled || !auth) && _attempts < 6) {
+          await new Promise(r => setTimeout(r, 500));
+          _attempts++;
+        }
         if (!isFirebaseEnabled || !auth) {
           throw new Error("Database offline. Please check your internet connection.");
         }

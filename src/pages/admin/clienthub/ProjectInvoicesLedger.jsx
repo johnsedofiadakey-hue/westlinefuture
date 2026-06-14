@@ -15,6 +15,10 @@ export function ProjectInvoicesLedger({ project, client, invoices, brand, update
   const [confirmDeleteInvId, setConfirmDeleteInvId] = useState(null);
 
   const projectInvoices = (invoices || []).filter(inv => inv.parentId === project.id || inv.projectId === project.id);
+  const verificationPendingInvoices = projectInvoices.filter(inv =>
+    inv.awaitingConfirmation === true ||
+    String(inv.status || '').toLowerCase() === 'verification pending'
+  );
 
   // Project-level financial totals for the "Project Financial Position" strip in the PDF
   const projBudget   = Number(project.budget || project.projectTotal || 0);
@@ -204,6 +208,41 @@ export function ProjectInvoicesLedger({ project, client, invoices, brand, update
         </div>
       </div>
 
+      {verificationPendingInvoices.length > 0 && (() => {
+        const pending = verificationPendingInvoices[0];
+        const amount = Number(pending.amount || pending.total || 0);
+        const method = pending.paymentMethodSubmitted || 'offline payment';
+        return (
+          <div style={{ marginBottom: 18, padding: 16, borderRadius: 14, background: '#EFF6FF', border: '1.5px solid #93C5FD' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 14, marginBottom: 12 }}>
+              <div>
+                <div style={{ fontSize: 10, fontWeight: 900, color: '#1D4ED8', textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 4 }}>Admin action required</div>
+                <div style={{ fontSize: 15, fontWeight: 900, color: '#1E3A8A', marginBottom: 4 }}>Verify client payment before confirming</div>
+                <div style={{ fontSize: 12, color: '#475569', lineHeight: 1.5 }}>
+                  {pending.title || 'Invoice'} · {pending.currency || 'GHS'} {amount.toLocaleString(undefined, { minimumFractionDigits: 2 })} · Reported via {method}
+                </div>
+              </div>
+              <button onClick={() => openPaymentModal(pending)} style={{ flexShrink: 0, border: 'none', borderRadius: 10, padding: '9px 14px', background: '#1D4ED8', color: '#fff', fontSize: 11, fontWeight: 900, cursor: 'pointer' }}>
+                Review Payment
+              </button>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(175px, 1fr))', gap: 8 }}>
+              {[
+                'Check the bank, MoMo, cash receipt, or transfer evidence outside the portal.',
+                'Match the payer, amount, reference, payment date, and invoice.',
+                'Open Review Payment and record only the amount actually received.',
+                'Confirming updates the invoice, ledger, project gate, and client notification.',
+              ].map((step, index) => (
+                <div key={step} style={{ display: 'flex', gap: 8, padding: 10, borderRadius: 10, background: '#fff', border: '1px solid #DBEAFE' }}>
+                  <div style={{ width: 20, height: 20, borderRadius: '50%', background: '#DBEAFE', color: '#1D4ED8', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 900, flexShrink: 0 }}>{index + 1}</div>
+                  <div style={{ fontSize: 10, lineHeight: 1.45, color: '#475569' }}>{step}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
+
       {projectInvoices.length > 0 ? (
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
@@ -331,13 +370,21 @@ export function ProjectInvoicesLedger({ project, client, invoices, brand, update
 
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
               <div>
-                <div style={{ fontSize: 14, fontWeight: 900, color: '#4A3B32' }}>Quick Record Payment</div>
+                <div style={{ fontSize: 14, fontWeight: 900, color: '#4A3B32' }}>
+                  {payingInvoice.awaitingConfirmation === true || payingInvoice.status === 'Verification Pending' ? 'Verify Client Payment' : 'Record Payment'}
+                </div>
                 <div style={{ fontSize: 11, color: '#8C6C52', fontWeight: 700 }}>Invoice: WF-${(payingInvoice.id || '').slice(-8).toUpperCase()}</div>
               </div>
               <button onClick={() => setPayingInvoice(null)} style={{ border: 'none', background: '#F4EFE6', padding: 6, borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
                 <X size={15} color="#4A3B32" />
               </button>
             </div>
+
+            {(payingInvoice.awaitingConfirmation === true || payingInvoice.status === 'Verification Pending') && (
+              <div style={{ marginBottom: 16, padding: 12, borderRadius: 10, background: '#FFF7ED', border: '1px solid #FDBA74', color: '#9A3412', fontSize: 11, lineHeight: 1.5, fontWeight: 700 }}>
+                Confirm only after matching the payment against your bank, MoMo, cash receipt, or transfer records. The client submission alone is not proof of cleared funds.
+              </div>
+            )}
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginBottom: 20 }}>
               <div>
@@ -379,7 +426,8 @@ export function ProjectInvoicesLedger({ project, client, invoices, brand, update
                 disabled={savingPayment || !payAmt}
                 style={{ flex: 1, padding: '12px', borderRadius: 10, background: '#16A34A', color: '#fff', border: 'none', fontSize: 12, fontWeight: 900, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
               >
-                {savingPayment ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> : <CheckCircle2 size={14} />} Log Payment
+                {savingPayment ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> : <CheckCircle2 size={14} />}
+                {payingInvoice.awaitingConfirmation === true || payingInvoice.status === 'Verification Pending' ? 'Confirm & Record' : 'Record Payment'}
               </button>
               <button onClick={() => setPayingInvoice(null)} style={{ padding: '12px 18px', borderRadius: 10, background: '#F4EFE6', color: '#4A3B32', border: 'none', fontSize: 12, fontWeight: 800, cursor: 'pointer' }}>
                 Cancel

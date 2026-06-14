@@ -48,12 +48,12 @@ export const checkStageGates = (project, nextStageId, { invoices = [], changeReq
     canAdvance = false;
   }
 
-  // ✅ GATE 3: A signed specification/scope is mandatory before production.
-  if (nextStageId >= STAGE.PRODUCTION && (!project.specDoc?.url || project.specDoc?.status !== 'signed')) {
+  // ✅ GATE 3: Production authorisation unlocks the quotation stage.
+  if (nextStageId >= STAGE.QUOTATION && (!project.specDoc?.url || project.specDoc?.status !== 'signed')) {
     gates.push({
       id: 'spec-doc-unsigned',
-      label: 'Project Specification Unsigned',
-      message: 'Client must sign the final project specification before production begins',
+      label: 'Production Not Authorised',
+      message: 'Client must sign the final project specification before the quote unlocks',
       ok: false,
       priority: 'error',
     });

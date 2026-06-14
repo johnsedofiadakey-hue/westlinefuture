@@ -39,6 +39,12 @@ export function AdvanceModal({ project, stage, nextStage, invoices = [], onClose
       ok: !!(project.renderingApproved || project.designApproved || project.renderingStatus === 'Approved'),
     },
     {
+      id: 'production-authorised',
+      label: 'Client authorised production',
+      applies: nextStage.id >= 3,
+      ok: !!(project.productionAuthorized || project.specDoc?.status === 'signed'),
+    },
+    {
       id: 'quote-approved',
       label: 'Final quote approved',
       applies: nextStage.id >= 4,

@@ -5,7 +5,7 @@ import { collection, onSnapshot, query, orderBy, doc, updateDoc, addDoc, serverT
 import { AC, BD_ITEMS_CONFIG } from './config.jsx';
 
 // ─── Shipping Details Form ────────────────────────────────────────────────────
-export function ShippingDetailsCard({ project, updateShippingDetails }) {
+export function ShippingDetailsCard({ project, invoices = [], updateShippingDetails }) {
   const init = {
     vesselName: project.shippingDetails?.vesselName || '',
     blNumber: project.shippingDetails?.blNumber || '',
@@ -16,6 +16,17 @@ export function ShippingDetailsCard({ project, updateShippingDetails }) {
   const [form, setForm] = useState(init);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const projectInvoices = invoices.filter(inv => inv.projectId === project.id || inv.parentId === project.id);
+  const productionMilestoneInvoice = projectInvoices.find(inv => {
+    const key = String(inv.milestoneKey || '').toLowerCase();
+    const descriptor = `${inv.title || ''} ${inv.type || ''}`.toLowerCase();
+    return key === 'post-production' || descriptor.includes('30% production') || descriptor.includes('production milestone');
+  });
+  const productionMilestonePaid = project.postProductionPaid === true ||
+    ['paid', 'paid in full'].includes(String(productionMilestoneInvoice?.status || '').toLowerCase());
+  const paymentAwaitingVerification = productionMilestoneInvoice?.awaitingConfirmation === true ||
+    String(productionMilestoneInvoice?.status || '').toLowerCase() === 'verification pending';
+  const shippingStageReached = Number(project.stageId || 1) >= 5;
 
   // Re-sync if project changes
   useEffect(() => {
@@ -61,7 +72,62 @@ export function ShippingDetailsCard({ project, updateShippingDetails }) {
   };
 
   return (
-    <div style={{ padding: '20px 24px', background: '#fff', borderRadius: 20, border: '1px solid var(--border-color)' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <div style={{
+        padding: '16px 18px',
+        borderRadius: 16,
+        background: productionMilestonePaid ? '#F0FDF4' : paymentAwaitingVerification ? '#EFF6FF' : '#FFFBEB',
+        border: `1.5px solid ${productionMilestonePaid ? '#86EFAC' : paymentAwaitingVerification ? '#93C5FD' : '#FDE68A'}`,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+          <div style={{ fontSize: 20 }}>{productionMilestonePaid ? '🔓' : paymentAwaitingVerification ? '🔎' : '🔒'}</div>
+          <div style={{ flex: 1 }}>
+            <div style={{
+              fontSize: 10,
+              fontWeight: 900,
+              color: productionMilestonePaid ? '#15803D' : paymentAwaitingVerification ? '#1D4ED8' : '#B45309',
+              textTransform: 'uppercase',
+              letterSpacing: '.08em',
+              marginBottom: 4,
+            }}>
+              Client shipping access
+            </div>
+            <div style={{ fontSize: 15, fontWeight: 900, color: 'var(--accent-secondary)', marginBottom: 4 }}>
+              {productionMilestonePaid
+                ? '30% production milestone verified — shipping details unlocked'
+                : paymentAwaitingVerification
+                  ? 'Client payment submitted — admin verification required'
+                  : shippingStageReached
+                    ? 'Shipping details locked until the 30% milestone is paid'
+                    : 'Prepare shipping details before dispatch'}
+            </div>
+            <div style={{ fontSize: 12, lineHeight: 1.55, color: 'var(--text-secondary)' }}>
+              {productionMilestonePaid
+                ? 'Saved vessel, bill of lading, container, ETA, and notes are visible in the client portal.'
+                : paymentAwaitingVerification
+                  ? 'Open Payments, match the transfer or receipt against company records, and confirm it. Saving details here does not unlock them.'
+                  : shippingStageReached
+                    ? productionMilestoneInvoice
+                      ? `The ${productionMilestoneInvoice.title || '30% production milestone'} invoice is still outstanding. The client sees a payment prompt instead of these details.`
+                      : 'Create or activate the 30% production milestone invoice. The client remains locked until verified payment is recorded.'
+                    : 'You may enter provisional shipment information now. It remains private and will unlock only after the project reaches Shipping and the 30% payment is verified.'}
+            </div>
+          </div>
+          <div style={{
+            padding: '5px 10px',
+            borderRadius: 20,
+            background: '#fff',
+            fontSize: 10,
+            fontWeight: 900,
+            color: productionMilestonePaid ? '#15803D' : '#B45309',
+            whiteSpace: 'nowrap',
+          }}>
+            {productionMilestonePaid ? 'CLIENT CAN VIEW' : 'CLIENT LOCKED'}
+          </div>
+        </div>
+      </div>
+
+      <div style={{ padding: '20px 24px', background: '#fff', borderRadius: 20, border: '1px solid var(--border-color)' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <div style={{ width: 34, height: 34, borderRadius: 10, background: '#F0F9FF', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -133,6 +199,7 @@ export function ShippingDetailsCard({ project, updateShippingDetails }) {
           rows={3}
           style={{ ...inputStyle, resize: 'vertical', lineHeight: 1.6 }}
         />
+      </div>
       </div>
     </div>
   );

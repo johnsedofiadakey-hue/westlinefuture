@@ -9,9 +9,7 @@ import {
 import { PAv, PSBadge, isPaidStatus } from '../../components/Shared';
 import EmptyState from '../../components/ui/EmptyState';
 import { Users as UsersIcon } from 'lucide-react';
-
-const STAGE_LABELS = ['', 'Initiation', 'Design', 'Quote', 'Specification', 'Production', 'Installation Prep', 'Installation', 'Inspection', 'Handover'];
-const STAGE_COLORS = ['', '#94A3B8', '#8B5CF6', '#F59E0B', '#3B82F6', '#10B981', '#F97316', '#EF4444', '#EC4899', '#22C55E'];
+import { CLIENT_PROJECT_STAGES } from '../../data';
 
 export default function AdminClients({ dbClients, createClient, updateClient, deleteClient, deleteSelectedClients, deleteAllClients, resetUserPassword, brand, ...props }) {
   const [showAdd, setShowAdd] = useState(false);
@@ -216,8 +214,9 @@ export default function AdminClients({ dbClients, createClient, updateClient, de
               const latestProject = getLatestProject(client);
               const clientInvoices = invoices.filter(inv => inv.clientId === client.id);
               const stageId = latestProject?.stageId || 0;
-              const stageLabel = STAGE_LABELS[stageId] || latestProject?.status || 'Initiation';
-              const stageColor = STAGE_COLORS[stageId] || '#94A3B8';
+              const stageDef = CLIENT_PROJECT_STAGES.find(s => s.id === stageId);
+              const stageLabel = stageDef?.name || latestProject?.status || 'Active';
+              const stageColor = stageDef?.color || '#94A3B8';
               const stagePct = Math.round(((stageId || 1) / 8) * 100);
               const isCompleted = latestProject?.status === 'Completed' || stageId >= 8;
 

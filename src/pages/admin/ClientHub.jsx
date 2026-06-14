@@ -3,7 +3,7 @@ import {
   ArrowLeft, Plus, MessageSquare, AlertCircle, Briefcase,
   User, DollarSign, Phone, Calendar, Loader2,
   Users, UserCheck, ChevronRight, CheckCircle2, RefreshCw, PenTool,
-  FileText, Upload, ExternalLink, Trash2, ShieldCheck, X, Camera
+  FileText, Upload, ExternalLink, Trash2, ShieldCheck, X, Camera, Truck
 } from 'lucide-react';
 import { PAv, PSBadge } from '../../components/Shared';
 import { CLIENT_PROJECT_STAGES, PROJECT_TYPES, GLASS_CATALOG_DATA } from '../../data';
@@ -27,6 +27,217 @@ import { ShippingDetailsCard, ProjectEconomics, DocumentVault } from './clienthu
 import ClientUploadsTab from '../../components/ClientUploadsTab';
 import SecureVault from '../../components/SecureVault';
 import RequestPaymentModal from './clienthub/RequestPaymentModal';
+
+function getProjectWorkflowGuidance(project, invoices = [], approvals = [], renderingPackages = []) {
+  if (!project) return null;
+
+  const projectInvoices = invoices.filter(i => i.projectId === project.id || i.parentId === project.id);
+  const projectApprovals = approvals.filter(a => a.projectId === project.id);
+  const projectPackages = renderingPackages.filter(pkg => pkg.projectId === project.id);
+  const isPaid = value => ['paid', 'paid in full'].includes(String(value || '').toLowerCase());
+  const isQuote = invoice => {
+    const descriptor = `${invoice.type || ''} ${invoice.documentKind || ''}`.toLowerCase();
+    return descriptor.includes('quotation') || descriptor.includes('quote');
+  };
+
+  const renderingInvoice = projectInvoices.find(i =>
+    i.id === project.renderingFeeInvoiceId ||
+    ['rendering', 'rendering fee', 'design'].includes(String(i.type || '').toLowerCase())
+  );
+  const renderingPaid = project.renderingFeePaid === true || isPaid(renderingInvoice?.status);
+  const renderingFirst = project.kickoffMode === 'rendering-first';
+  const agreementSigned = project.contractAccepted === true;
+  const renderingApproved = project.designApproved === true ||
+    project.renderingApproved === true ||
+    projectPackages.some(pkg => String(pkg.status || '').toLowerCase() === 'approved');
+  const specUploaded = Boolean(project.specDoc?.url);
+  const productionAuthorized = project.productionAuthorized === true || project.specDoc?.status === 'signed';
+  const quoteInvoice = projectInvoices.find(isQuote);
+  const quoteApproval = projectApprovals.find(a =>
+    ['quotation', 'quote'].includes(String(a.type || '').toLowerCase()) &&
+    String(a.status || '').toLowerCase() === 'sent'
+  );
+  const quoteApproved = project.quoteApproved === true ||
+    String(quoteInvoice?.status || '').toLowerCase() === 'approved';
+  const verificationPending = projectInvoices.find(i =>
+    i.awaitingConfirmation === true ||
+    String(i.status || '').toLowerCase() === 'verification pending'
+  );
+  const unpaidInvoice = projectInvoices.find(i =>
+    !isQuote(i) && ['sent', 'overdue', 'pending', 'partially paid'].includes(String(i.status || '').toLowerCase())
+  );
+  const productionMilestoneInvoice = projectInvoices.find(i => {
+    const key = String(i.milestoneKey || '').toLowerCase();
+    const descriptor = `${i.title || ''} ${i.type || ''}`.toLowerCase();
+    return key === 'post-production' || descriptor.includes('30% production') || descriptor.includes('production milestone');
+  });
+  const productionMilestonePaid = project.postProductionPaid === true ||
+    ['paid', 'paid in full'].includes(String(productionMilestoneInvoice?.status || '').toLowerCase());
+
+  const result = (waitingOn, title, summary, client, manager, paymentInvoice = null) => ({
+    waitingOn, title, summary, client, manager, paymentInvoice,
+  });
+
+  if (renderingFirst && !renderingInvoice) {
+    return result(
+      'project manager',
+      'Issue the rendering fee invoice',
+      'The paid design journey cannot begin until a rendering fee invoice is issued.',
+      { title: 'No action yet', body: 'The client is waiting for the rendering fee invoice.', action: 'Waiting for Westline' },
+      { title: 'Create the rendering fee invoice', body: 'Open Payments, issue the rendering/design fee invoice, and notify the client.', tab: 'financials', action: 'Open Payments' }
+    );
+  }
+
+  if (renderingFirst && !renderingPaid) {
+    return result(
+      'client',
+      'Rendering fee awaiting payment',
+      'The design package remains locked until this invoice is paid and verified.',
+      { title: 'Pay the rendering fee', body: 'Open Financials and pay online or submit an offline payment notice.', action: 'Payment required' },
+      { title: 'Monitor or verify payment', body: 'Do not unlock the rendering manually. If offline payment is submitted, verify it in Payments.', tab: 'financials', action: 'Review Payments' }
+    );
+  }
+
+  if (!agreementSigned) {
+    return result(
+      'client',
+      'Project agreement awaiting signature',
+      'The client must sign the project agreement before the managed project journey continues.',
+      { title: 'Read and sign the agreement', body: 'The client must review the legal terms and complete the electronic signature.', action: 'Signature required' },
+      { title: 'Review the agreement status', body: 'Confirm the correct agreement is available, then send the client a reminder from Messages.', tab: 'messages', action: 'Open Messages' }
+    );
+  }
+
+  if (renderingFirst && projectPackages.length === 0) {
+    return result(
+      'project manager',
+      'Upload the paid rendering package',
+      'Payment and agreement are complete. The client now needs the design package for review.',
+      { title: 'No action yet', body: 'The client is waiting for the rendering package.', action: 'Waiting for Westline' },
+      { title: 'Upload and publish the rendering', body: 'Open Designs, upload the correct version, and make it available for client review.', tab: 'renderings', action: 'Open Designs' }
+    );
+  }
+
+  if (renderingFirst && !renderingApproved) {
+    return result(
+      'client',
+      'Rendering awaiting client approval',
+      'The client must approve the final design or request revisions before the legal specification is finalized.',
+      { title: 'Review the rendering', body: 'Approve the final design or place clear revision comments.', action: 'Design review required' },
+      { title: 'Monitor design feedback', body: 'Respond to comments, upload revisions, and keep the approved version clearly identified.', tab: 'renderings', action: 'Open Designs' }
+    );
+  }
+
+  if (!specUploaded) {
+    return result(
+      'project manager',
+      'Prepare the final project specification',
+      'The signed specification is the production authorization and must contain final drawings, materials, scope, exclusions, and deliverables.',
+      { title: 'No action yet', body: 'The client is waiting for the final specification document.', action: 'Waiting for Westline' },
+      { title: 'Upload the final specification', body: 'Open Project Brief, verify the complete legal document, and publish it for signature.', tab: 'spec', action: 'Open Project Brief' }
+    );
+  }
+
+  if (!productionAuthorized) {
+    return result(
+      'client',
+      'Production authorization awaiting signature',
+      'The final quotation remains locked until the client signs the project specification.',
+      { title: 'Review and authorise production', body: 'Open the full specification, confirm both legal acknowledgements, and sign.', action: 'Signature required' },
+      { title: 'Wait for the client signature', body: 'Review the document status in Project Brief. Use Messages for a specific reminder or clarification.', tab: 'spec', action: 'Open Project Brief' }
+    );
+  }
+
+  if (!quoteInvoice) {
+    return result(
+      'project manager',
+      'Create and issue the final quotation',
+      'Production is authorised. The approved scope can now be priced and issued to the client.',
+      { title: 'No action yet', body: 'The client is waiting for the final quotation.', action: 'Waiting for Westline' },
+      { title: 'Issue the final quotation', body: 'Create the quote from the authorised scope, check totals and payment schedule, then send it.', tab: 'financials', action: 'Open Payments' }
+    );
+  }
+
+  if (!quoteApproved || quoteApproval) {
+    return result(
+      'client',
+      'Final quotation awaiting approval',
+      'The client must approve the issued quotation before the required project payment is collected.',
+      { title: 'Review and approve the quote', body: 'Check scope, exclusions, milestones, and total before confirming approval.', action: 'Approval required' },
+      { title: 'Monitor quote approval', body: 'Answer commercial questions and revise the quote if scope changes. Do not record approval manually.', tab: 'financials', action: 'Review Quote' }
+    );
+  }
+
+  if (verificationPending) {
+    const amount = Number(verificationPending.amount || verificationPending.total || 0);
+    return result(
+      'project manager',
+      'Client payment needs verification',
+      `The client reported an offline payment${amount ? ` of ${verificationPending.currency || 'GHS'} ${amount.toLocaleString()}` : ''}. The invoice and project gate remain pending until an administrator verifies it.`,
+      { title: 'Payment submitted', body: 'The client is waiting for Westline to verify the transfer or cash payment.', action: 'Waiting for confirmation' },
+      { title: 'Verify and record the payment', body: 'Match the bank/cash evidence, amount, payer, reference, and date. Then confirm it in Payments.', tab: 'financials', action: 'Verify Payment' },
+      verificationPending
+    );
+  }
+
+  if (Number(project.stageId || 1) >= 5 && !productionMilestonePaid) {
+    return result(
+      productionMilestoneInvoice ? 'client' : 'project manager',
+      productionMilestoneInvoice ? '30% production milestone awaiting payment' : 'Issue the 30% production milestone invoice',
+      'Shipping details and ETA remain locked until the full production milestone payment is verified.',
+      {
+        title: productionMilestoneInvoice ? 'Pay the 30% production milestone' : 'No action yet',
+        body: productionMilestoneInvoice ? 'The client should pay online or submit an offline payment notice.' : 'The client is waiting for Westline to issue the milestone invoice.',
+        action: productionMilestoneInvoice ? 'Payment required' : 'Waiting for Westline',
+      },
+      {
+        title: productionMilestoneInvoice ? 'Monitor or verify the payment' : 'Create the milestone invoice',
+        body: productionMilestoneInvoice ? 'Use Payments to verify offline funds. Shipping information unlocks only after full payment.' : 'Open Payments and issue the 30% Production Milestone invoice.',
+        tab: 'financials',
+        action: 'Open Payments',
+      }
+    );
+  }
+
+  if (unpaidInvoice) {
+    return result(
+      'client',
+      'Project payment awaiting payment',
+      'The quote is approved, but the required invoice must be paid before the next gated stage.',
+      { title: 'Pay the outstanding invoice', body: 'Use Paystack or submit an offline payment notice from Financials.', action: 'Payment required' },
+      { title: 'Monitor the outstanding invoice', body: 'Review the due date and payment schedule. Use Messages if a reminder is required.', tab: 'financials', action: 'Open Payments' }
+    );
+  }
+
+  if (Number(project.stageId || 1) < 4 && project.depositPaid === true) {
+    return result(
+      'project manager',
+      'All production gates are complete',
+      'Specification, quotation, and required payment are complete. The project manager can now advance the project to production.',
+      { title: 'No action required', body: 'The client has completed the current approvals and payment.', action: 'Waiting for Westline' },
+      { title: 'Advance to Procurement & Production', body: 'Confirm the assigned team and schedule, then use Advance to begin production.', tab: 'team', action: 'Review Team' }
+    );
+  }
+
+  if (Number(project.stageId || 1) >= 5 && productionMilestonePaid && !project.shippingDetails?.vesselName) {
+    return result(
+      'project manager',
+      'Add shipping details and ETA',
+      'The 30% production milestone is verified, so shipment information can now be released to the client.',
+      { title: 'Shipping access unlocked', body: 'The client is waiting for vessel, container, bill of lading, and ETA details.', action: 'Waiting for shipment details' },
+      { title: 'Publish shipment information', body: 'Open Shipping, enter the confirmed logistics details and ETA, then save.', tab: 'shipping', action: 'Open Shipping' }
+    );
+  }
+
+  const stage = CLIENT_PROJECT_STAGES.find(item => item.id === project.stageId);
+  return result(
+    stage?.whoActs === 'client' ? 'client' : stage?.whoActs === 'worker' ? 'worker' : 'project manager',
+    `${stage?.name || 'Project'} is active`,
+    stage?.clientMsg || 'The project is moving through its approved workflow.',
+    { title: stage?.whoActs === 'client' ? 'Client action required' : 'Track current progress', body: stage?.clientMsg || 'No client action is required right now.', action: stage?.whoActs === 'client' ? 'Action required' : 'No action now' },
+    { title: 'Complete the current stage work', body: stage?.adminPrompt || 'Update progress, dates, ownership, and evidence before advancing.', tab: stage?.whoActs === 'worker' ? 'team' : 'timeline', action: stage?.whoActs === 'worker' ? 'Review Team' : 'Open Timeline' }
+  );
+}
 
 // ─── Stage Scheduler Row ─────────────────────────────────────────────────────
 // Extracted so each row has its own local state for the duration input.
@@ -465,12 +676,16 @@ export default function ClientHub({ clientId, dbClients = [], onBack, ...props }
     { id: 'spec',       label: 'Project Brief', icon: <FileText size={14} /> },
     { id: 'timeline',   label: 'Timeline',   icon: <Calendar size={14} /> },
     { id: 'financials', label: 'Payments',   icon: <DollarSign size={14} /> },
+    { id: 'shipping',   label: 'Shipping',   icon: <Truck size={14} /> },
     { id: 'renderings', label: 'Designs',    icon: <PenTool size={14} /> },
     { id: 'vault',      label: 'Vault',      icon: <ShieldCheck size={14} /> },
     { id: 'uploads',    label: 'Uploads',    icon: <Camera size={14} /> },
     { id: 'team',       label: 'Team',       icon: <Users size={14} /> },
     { id: 'messages',   label: 'Messages',   icon: <MessageSquare size={14} /> }
   ];
+  const workflowGuidance = selected
+    ? getProjectWorkflowGuidance(selected, props.invoices || [], props.approvals || [], props.renderingPackages || [])
+    : null;
 
   if (!client) return (
     <div style={{ padding: 60, textAlign: 'center' }}>
@@ -682,44 +897,41 @@ export default function ClientHub({ clientId, dbClients = [], onBack, ...props }
                 </div>
               </div>
 
-              {(() => {
-                const projectInvoices = (props.invoices || []).filter(i => i.projectId === selected.id || i.parentId === selected.id);
-                const projectApprovals = (props.approvals || []).filter(a => a.projectId === selected.id);
-                const pendingQuote = projectApprovals.find(a => ['Quotation', 'quotation'].includes(a.type) && a.status === 'Sent');
-                const pendingSpec = selected.specDoc?.url && selected.specDoc?.status !== 'signed';
-                const unpaidInvoice = projectInvoices.find(i => ['Sent', 'Overdue'].includes(i.status) && !['Quotation', 'quotation'].includes(i.type));
-                const verificationPending = projectInvoices.find(i =>
-                  i.awaitingConfirmation === true ||
-                  i.status?.toLowerCase() === 'verification pending'
-                );
-
-                const blocker = pendingQuote ? { msg: 'Client needs to sign Quotation / Contract', type: 'client' }
-                  : pendingSpec ? { msg: 'Client needs to sign Project Specification before Production', type: 'client' }
-                  : verificationPending ? { msg: `Client has notified offline payment for (${verificationPending.title}). Pending your verification.`, type: 'admin' }
-                  : unpaidInvoice ? { msg: `Client has unpaid invoice (${unpaidInvoice.title || 'Invoice'})`, type: 'client' }
-                  : selected.stageId === 1 && !selected.specDoc?.url ? { msg: 'Admin needs to generate Specification / Quote', type: 'admin' }
-                  : null;
-
-                return (
-                  <div style={{ marginBottom: 16 }}>
-                    {blocker && (
-                      <div style={{ padding: '12px 16px', borderRadius: 12, background: blocker.type === 'admin' ? '#FEF2F2' : '#FFFBEB', border: `1.5px solid ${blocker.type === 'admin' ? '#FECACA' : '#FDE68A'}`, display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
-                        <div style={{ fontSize: 16 }}>{blocker.type === 'admin' ? '⚠️' : '⏳'}</div>
-                        <div style={{ flex: 1 }}>
-                          <div style={{ fontSize: 11, fontWeight: 800, color: blocker.type === 'admin' ? '#991B1B' : '#B45309', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 2 }}>Current Blocker</div>
-                          <div style={{ fontSize: 13, color: blocker.type === 'admin' ? '#7F1D1D' : '#92400E', fontWeight: 600 }}>{blocker.msg}</div>
-                        </div>
-                        {blocker.type === 'client' && (
-                          <button onClick={() => setShowRequestPaymentModal(true)} style={{ flexShrink: 0, padding: '6px 12px', borderRadius: 8, background: '#D97706', color: '#fff', border: 'none', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
-                            Send Reminder
+              {workflowGuidance && (
+                <div style={{ marginBottom: 16, padding: 16, borderRadius: 16, background: workflowGuidance.paymentInvoice ? '#EFF6FF' : '#FFFBEB', border: `1.5px solid ${workflowGuidance.paymentInvoice ? '#93C5FD' : '#FDE68A'}` }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 14, alignItems: 'flex-start', marginBottom: 14 }}>
+                    <div>
+                      <div style={{ fontSize: 10, fontWeight: 900, color: workflowGuidance.paymentInvoice ? '#1D4ED8' : '#B45309', textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 4 }}>
+                        Workflow Guidance · Waiting on {workflowGuidance.waitingOn}
+                      </div>
+                      <div style={{ fontSize: 16, fontWeight: 900, color: 'var(--accent-secondary)', marginBottom: 4 }}>{workflowGuidance.title}</div>
+                      <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.55 }}>{workflowGuidance.summary}</div>
+                    </div>
+                    {workflowGuidance.paymentInvoice && (
+                      <button onClick={() => setActiveTab('financials')} style={{ flexShrink: 0, padding: '9px 14px', borderRadius: 10, background: '#1D4ED8', color: '#fff', border: 'none', fontSize: 11, fontWeight: 900, cursor: 'pointer' }}>
+                        Verify Payment
+                      </button>
+                    )}
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: 10 }}>
+                    {[
+                      { label: 'Client should', data: workflowGuidance.client, color: '#B45309' },
+                      { label: 'Project manager should', data: workflowGuidance.manager, color: '#1D4ED8' },
+                    ].map(item => (
+                      <div key={item.label} style={{ padding: 13, borderRadius: 12, background: '#fff', border: '1px solid rgba(0,0,0,.07)' }}>
+                        <div style={{ fontSize: 9, fontWeight: 900, color: item.color, textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 5 }}>{item.label}</div>
+                        <div style={{ fontSize: 13, fontWeight: 900, color: 'var(--accent-secondary)', marginBottom: 3 }}>{item.data.title}</div>
+                        <div style={{ fontSize: 11, lineHeight: 1.5, color: 'var(--text-secondary)', minHeight: 33 }}>{item.data.body}</div>
+                        {item.label === 'Project manager should' && (
+                          <button onClick={() => setActiveTab(item.data.tab)} style={{ marginTop: 9, border: 'none', background: 'transparent', color: item.color, fontSize: 11, fontWeight: 900, cursor: 'pointer', padding: 0 }}>
+                            {item.data.action} <ChevronRight size={11} style={{ verticalAlign: 'middle' }} />
                           </button>
                         )}
                       </div>
-                    )}
-                    
+                    ))}
                   </div>
-                );
-              })()}
+                </div>
+              )}
 
               {/* Tab Bar */}
               <div style={{ position: 'sticky', top: -16, zIndex: 10, display: 'flex', gap: 4, marginBottom: 14, flexShrink: 0, background: 'rgba(250, 250, 249, 0.85)', backdropFilter: 'blur(12px)', padding: 6, borderRadius: 14, border: '1px solid var(--border-color)', margin: '0 -4px 14px -4px' }}>
@@ -904,7 +1116,6 @@ export default function ClientHub({ clientId, dbClients = [], onBack, ...props }
                         </div>
                       </div>
                     )}
-                    {selected.stageId === 4 && <ShippingDetailsCard project={selected} updateShippingDetails={props.updateShippingDetails} />}
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
                       {[
                         { label: 'Project Type', value: PROJECT_TYPES[selected.projectType]?.label || 'Full Service', icon: '📋' },
@@ -1202,6 +1413,15 @@ export default function ClientHub({ clientId, dbClients = [], onBack, ...props }
                     <div style={{ height: 1, background: 'var(--border-color)', margin: '16px 0' }} />
                     <AdminAddOnManager project={selected} brand={brand} addOns={props.addOns} invoices={props.invoices} createInvoice={props.createInvoice} />
                   </div>
+                )}
+
+                {/* SHIPPING */}
+                {activeTab === 'shipping' && (
+                  <ShippingDetailsCard
+                    project={selected}
+                    invoices={props.invoices}
+                    updateShippingDetails={props.updateShippingDetails}
+                  />
                 )}
 
                 {/* VAULT */}

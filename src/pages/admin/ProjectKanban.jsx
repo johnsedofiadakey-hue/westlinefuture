@@ -767,6 +767,7 @@ export default function ProjectKanban({ clients = [], brand, updateProjectStage,
   const totalProjects = clients.length;
   const activeProjects = clients.filter(p => (p.stageId || 1) < 8 && p.status !== 'Archived' && p.projectLifecycleStatus !== 'Archived').length;
   const completedProjects = clients.filter(p => (p.stageId || 1) >= 8 && p.status !== 'Archived' && p.projectLifecycleStatus !== 'Archived').length;
+  const blockedProjects = clients.filter(p => p.status !== 'Archived' && p.projectLifecycleStatus !== 'Archived' && (p.isBlocked || p.blocked || getProjectHealth(p, invoices).label === 'At Risk')).length;
   const healthStats = clients.reduce((acc, p) => {
     if (p.status === 'Archived' || p.projectLifecycleStatus === 'Archived') return acc;
     const label = getProjectHealth(p, invoices).label;

@@ -205,25 +205,15 @@ export default function QuoteNegotiationCard({
               style={{ resize: 'vertical' }}
             />
           </label>
-          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(180px, .5fr) minmax(0, 1.5fr)', gap: 12 }}>
-            <label style={{ display: 'grid', gap: 5, fontSize: 11, fontWeight: 800, color: 'var(--text-secondary)' }}>
-              PAYMENT SCHEDULE
-              <select className="p-inp" value={form.paymentSchedule} onChange={event => setForm(current => ({ ...current, paymentSchedule: event.target.value }))}>
-                <option value="standard">60% initial / 40% Ghana arrival</option>
-                <option value="70-30">70% initial / 30% final</option>
-                <option value="custom">Custom schedule</option>
-              </select>
-            </label>
-            <label style={{ display: 'grid', gap: 5, fontSize: 11, fontWeight: 800, color: 'var(--text-secondary)' }}>
-              NEGOTIATION NOTE
-              <input
-                className="p-inp"
-                value={form.negotiationNote}
-                onChange={event => setForm(current => ({ ...current, negotiationNote: event.target.value }))}
-                placeholder="Record agreed discounts, exclusions, or the reason for this revision."
-              />
-            </label>
-          </div>
+          <label style={{ display: 'grid', gap: 5, fontSize: 11, fontWeight: 800, color: 'var(--text-secondary)' }}>
+            NEGOTIATION NOTE
+            <input
+              className="p-inp"
+              value={form.negotiationNote}
+              onChange={event => setForm(current => ({ ...current, negotiationNote: event.target.value }))}
+              placeholder="Record agreed discounts, exclusions, or the reason for this revision."
+            />
+          </label>
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
             <button onClick={() => setShowForm(false)} style={{ padding: '10px 15px', borderRadius: 10, border: '1px solid var(--border-color)', background: '#fff', fontSize: 12, fontWeight: 800, cursor: 'pointer' }}>
               Cancel

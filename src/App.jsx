@@ -1942,9 +1942,9 @@ export default function App() {
       name: m.name,
       pct: m.pct,
       amount: fmt(num * m.pct),
-      stageId: m.stageId,
-      milestoneKey: m.milestoneKey,
-      invoiceType: m.invoiceType,
+      stageId: m.stageId || null,
+      milestoneKey: m.milestoneKey || null,
+      ...(m.invoiceType ? { invoiceType: m.invoiceType } : {}),
       status: 'Pending',
     }));
   };

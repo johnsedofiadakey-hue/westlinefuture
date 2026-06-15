@@ -1650,6 +1650,8 @@ function ClientApprovalsTab({ project, invoices = [], approvals = [], approveQuo
   const [quoteChangeNote, setQuoteChangeNote] = useState('');
   const [quoteChangeBusy, setQuoteChangeBusy] = useState(false);
   const [quoteChangeMessage, setQuoteChangeMessage] = useState('');
+  const [quoteAction, setQuoteAction] = useState('approve'); // 'approve' | 'request' | 'counter'
+  const [counterPrice, setCounterPrice] = useState('');
 
   const quoteDocs = invoices
     .filter(i => (i.projectId === project.id || i.parentId === project.id) && ['Quotation', 'quote', 'quotation'].includes(i.type || i.documentKind))
@@ -1695,7 +1697,12 @@ function ClientApprovalsTab({ project, invoices = [], approvals = [], approveQuo
   };
 
   const handleQuoteChangeRequest = async () => {
-    if (!activeQuote || !quoteChangeNote.trim() || quoteChangeBusy) return;
+    if (!activeQuote || quoteChangeBusy) return;
+    const isCounter = quoteAction === 'counter';
+    const note = isCounter
+      ? `Counter offer: GHS ${counterPrice}${quoteChangeNote.trim() ? ` — ${quoteChangeNote.trim()}` : ''}`
+      : quoteChangeNote.trim();
+    if (!note) return;
     setQuoteChangeBusy(true);
     setQuoteChangeMessage('');
     try {
@@ -1703,16 +1710,20 @@ function ClientApprovalsTab({ project, invoices = [], approvals = [], approveQuo
       await requestChanges({
         projectId: project.id,
         quoteId: activeQuote.id,
-        note: quoteChangeNote.trim(),
+        note,
+        ...(isCounter && counterPrice ? { counterPrice: Number(String(counterPrice).replace(/[^0-9.]/g, '')) } : {}),
       });
       setQuoteChangeNote('');
-      setQuoteChangeMessage('Your request was sent. The project manager will issue a revised quotation.');
+      setCounterPrice('');
+      setQuoteChangeMessage(isCounter
+        ? 'Your counter offer has been sent. The project manager will review and respond.'
+        : 'Your request was sent. The project manager will issue a revised quotation.');
     } catch (error) {
       setQuoteChangeMessage(
         error?.message
           ?.replace(/^Firebase:\s*/i, '')
           ?.replace(/\s*\(functions\/[^)]+\)\.?$/i, '') ||
-        'The quotation change request could not be sent.'
+        'The request could not be sent.'
       );
     } finally {
       setQuoteChangeBusy(false);
@@ -1872,56 +1883,208 @@ function ClientApprovalsTab({ project, invoices = [], approvals = [], approveQuo
         {/* Quote documents */}
         {!activeQuote ? (
           <div style={{ padding: '14px 16px', borderRadius: 14, background: `var(--bg-secondary)`, border: '1px solid var(--border-color)', fontSize: 12, color: `var(--text-secondary)` }}>
-            No quote has been issued for this project yet.
+            No quotation has been issued for this project yet. The project manager will send one once the 3D rendering is approved.
           </div>
-        ) : (
-          <div style={{ padding: 16, borderRadius: 16, background: `var(--bg-secondary)`, border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: 14 }}>
-            <div style={{ display: 'flex', gap: 14, alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}>
-              <div>
-                <div style={{ fontSize: 13, fontWeight: 900, color: `var(--accent-secondary)` }}>{activeQuote.title || `Quotation v${activeQuote.version || 1}`}</div>
-                <div style={{ fontSize: 11, color: `var(--text-secondary)`, marginTop: 3 }}>
-                  Version {activeQuote.version || 1} · {activeQuote.amount ? `GHS ${Number(String(activeQuote.amount).replace(/[^0-9.]/g, '')).toLocaleString()}` : `GHS ${Number(activeQuote.total || 0).toLocaleString()}`} · {activeQuote.status || 'Sent'}
+        ) : (() => {
+          const qTotal = Number(activeQuote.total || activeQuote.amount || 0);
+          const fmtGHS = n => `GHS ${Number(n).toLocaleString('en-GH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+          const changesRequested = String(activeQuote.status || '').toLowerCase() === 'changes requested';
+          const pmPhone = project.pmPhone || project.projectManagerPhone || '+233244927349';
+          const pmWA = `https://wa.me/${pmPhone.replace(/\D/g, '')}?text=${encodeURIComponent(`Hi, I'm reviewing the quotation for my project "${project.title || ''}" (Ref: ${project.id?.slice(0,8) || ''}).`)}`;
+
+          return (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+
+            {/* ── Quote header card ───────────────────── */}
+            <div style={{ borderRadius: 18, border: '1.5px solid var(--border-color)', overflow: 'hidden', background: '#fff' }}>
+
+              {/* Top bar */}
+              <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 10 }}>
+                <div>
+                  <div style={{ fontSize: 10, fontWeight: 900, letterSpacing: '.1em', color: 'var(--text-secondary)', textTransform: 'uppercase', marginBottom: 4 }}>Official Quotation · v{activeQuote.version || 1}</div>
+                  <div style={{ fontSize: 17, fontWeight: 900, color: 'var(--text-primary)', lineHeight: 1.2 }}>{activeQuote.title || `${project.title || 'Project'} Quotation`}</div>
+                  <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 3 }}>Issued {activeQuote.date || new Date().toLocaleDateString('en-GB')}</div>
                 </div>
-                {activeQuote.scopeSummary && <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 8, lineHeight: 1.55 }}>{activeQuote.scopeSummary}</div>}
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ fontSize: 24, fontWeight: 900, color: 'var(--accent-secondary)', letterSpacing: '-.5px' }}>{fmtGHS(qTotal)}</div>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: project.quoteApproved ? '#16A34A' : changesRequested ? '#D97706' : '#6366F1', textTransform: 'uppercase', letterSpacing: '.06em', marginTop: 2 }}>
+                    {project.quoteApproved ? '✓ Approved' : changesRequested ? 'Revision Pending' : 'Awaiting Approval'}
+                  </div>
+                </div>
               </div>
-              <button onClick={() => downloadInvoicePDF(activeQuote, project, user, brand)} style={{ padding: '9px 13px', borderRadius: 10, border: '1px solid var(--border-color)', background: '#fff', fontSize: 11, fontWeight: 800, cursor: 'pointer' }}>Download Quotation</button>
+
+              {/* Scope summary */}
+              {activeQuote.scopeSummary && (
+                <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--border-color)', fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.65, fontStyle: 'italic' }}>
+                  "{activeQuote.scopeSummary}"
+                </div>
+              )}
+
+              {/* Inclusions / Exclusions */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', borderBottom: '1px solid var(--border-color)' }}>
+                <div style={{ padding: '14px 20px', borderRight: '1px solid var(--border-color)' }}>
+                  <div style={{ fontSize: 10, fontWeight: 900, color: '#15803D', textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 10 }}>✓ Included</div>
+                  {['Product sourcing & materials', 'Procurement management', 'Production & fabrication', 'International shipping to Ghana'].map(item => (
+                    <div key={item} style={{ display: 'flex', alignItems: 'flex-start', gap: 7, marginBottom: 7 }}>
+                      <span style={{ color: '#16A34A', fontWeight: 900, fontSize: 12, lineHeight: 1.4 }}>·</span>
+                      <span style={{ fontSize: 11, color: 'var(--text-primary)', lineHeight: 1.4 }}>{item}</span>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ padding: '14px 20px' }}>
+                  <div style={{ fontSize: 10, fontWeight: 900, color: '#DC2626', textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 10 }}>✗ Excluded</div>
+                  {['On-site installation (billed separately as an add-on)', 'Customs duties & port charges (if applicable)', 'Client-supplied materials'].map(item => (
+                    <div key={item} style={{ display: 'flex', alignItems: 'flex-start', gap: 7, marginBottom: 7 }}>
+                      <span style={{ color: '#DC2626', fontWeight: 900, fontSize: 12, lineHeight: 1.4 }}>·</span>
+                      <span style={{ fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.4 }}>{item}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Payment schedule preview */}
+              {qTotal > 0 && (
+                <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--border-color)', background: '#FAFAFA' }}>
+                  <div style={{ fontSize: 10, fontWeight: 900, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 10 }}>Payment Schedule (on approval)</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+                    {[
+                      { pct: '60%', label: 'Initial deposit', trigger: 'Due on contract signing', amount: qTotal * 0.6 },
+                      { pct: '30%', label: 'Production balance', trigger: 'Due when production is complete', amount: qTotal * 0.3 },
+                      { pct: '10%', label: 'Final arrival balance', trigger: 'Due when goods arrive in Ghana', amount: qTotal * 0.1 },
+                    ].map(({ pct, label, trigger, amount }) => (
+                      <div key={pct} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span style={{ fontSize: 11, fontWeight: 900, color: 'var(--accent-secondary)', minWidth: 32 }}>{pct}</span>
+                          <div>
+                            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-primary)' }}>{label}</div>
+                            <div style={{ fontSize: 10, color: 'var(--text-secondary)' }}>{trigger}</div>
+                          </div>
+                        </div>
+                        <span style={{ fontSize: 12, fontWeight: 800, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>{fmtGHS(amount)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Footer actions */}
+              <div style={{ padding: '12px 20px', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <button onClick={() => downloadInvoicePDF(activeQuote, project, user, brand)} style={{ padding: '8px 13px', borderRadius: 9, border: '1px solid var(--border-color)', background: '#fff', fontSize: 11, fontWeight: 800, cursor: 'pointer', color: 'var(--text-secondary)' }}>
+                  Download PDF
+                </button>
+                <a href={pmWA} target="_blank" rel="noreferrer" style={{ padding: '8px 13px', borderRadius: 9, border: '1px solid #25D36640', background: '#F0FDF4', fontSize: 11, fontWeight: 800, cursor: 'pointer', color: '#16A34A', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                  💬 Message Project Manager
+                </a>
+              </div>
             </div>
 
-            {!project.quoteApproved && String(activeQuote.status || '').toLowerCase() !== 'changes requested' && (
-              <>
-                <div style={{ padding: '11px 13px', borderRadius: 11, background: '#EFF6FF', border: '1px solid #BFDBFE', color: '#1E40AF', fontSize: 12, lineHeight: 1.5 }}>
-                  Approve only when the total and scope match your negotiation. Otherwise describe what must change; the current version will pause until a revised quotation is issued.
+            {/* ── Client response area ─────────────────── */}
+            {!project.quoteApproved && !changesRequested && (
+              <div style={{ borderRadius: 18, border: '1.5px solid var(--border-color)', overflow: 'hidden', background: '#fff' }}>
+
+                {/* Action tabs */}
+                <div style={{ display: 'flex', borderBottom: '1px solid var(--border-color)' }}>
+                  {[
+                    { key: 'approve', label: '✓ Approve' },
+                    { key: 'request', label: 'Request Changes' },
+                    { key: 'counter', label: 'Counter Offer' },
+                  ].map(tab => (
+                    <button
+                      key={tab.key}
+                      onClick={() => { setQuoteAction(tab.key); setQuoteChangeMessage(''); }}
+                      style={{ flex: 1, padding: '12px 8px', border: 'none', background: quoteAction === tab.key ? '#fff' : '#FAFAFA', fontSize: 11, fontWeight: 900, cursor: 'pointer', color: quoteAction === tab.key ? (tab.key === 'approve' ? '#16A34A' : tab.key === 'counter' ? '#7C3AED' : '#DC2626') : 'var(--text-secondary)', borderBottom: quoteAction === tab.key ? `2px solid ${tab.key === 'approve' ? '#16A34A' : tab.key === 'counter' ? '#7C3AED' : '#DC2626'}` : '2px solid transparent', transition: 'all .15s' }}
+                    >
+                      {tab.label}
+                    </button>
+                  ))}
                 </div>
-                <textarea
-                  value={quoteChangeNote}
-                  onChange={event => setQuoteChangeNote(event.target.value)}
-                  placeholder="What amount, scope item, material, quantity, or payment term should change?"
-                  rows={3}
-                  style={{ width: '100%', boxSizing: 'border-box', padding: '11px 12px', borderRadius: 11, border: '1px solid var(--border-color)', resize: 'vertical', fontFamily: 'inherit', fontSize: 12 }}
-                />
-                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, flexWrap: 'wrap' }}>
-                  <button
-                    onClick={handleQuoteChangeRequest}
-                    disabled={quoteChangeBusy || !quoteChangeNote.trim()}
-                    style={{ padding: '9px 13px', borderRadius: 10, border: '1.5px solid #DC2626', background: '#fff', color: '#DC2626', fontSize: 11, fontWeight: 900, cursor: quoteChangeNote.trim() ? 'pointer' : 'default', opacity: quoteChangeNote.trim() ? 1 : .5 }}
-                  >
-                    {quoteChangeBusy ? 'Sending...' : 'Request Revised Quote'}
-                  </button>
-                  {approveQuote && (
-                    <button onClick={() => approveQuote(project.id)} style={{ padding: '9px 13px', borderRadius: 10, border: 'none', background: `var(--accent-primary)`, color: '#fff', fontSize: 11, fontWeight: 900, cursor: 'pointer' }}>Approve Quotation</button>
+
+                <div style={{ padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  {quoteAction === 'approve' && (
+                    <>
+                      <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+                        By approving this quotation you confirm the total of <strong>{fmtGHS(qTotal)}</strong> and the scope above. The project contract will be issued immediately and the 60% initial deposit invoice will become due within 7 days.
+                      </div>
+                      <button
+                        onClick={() => approveQuote && approveQuote(project.id)}
+                        style={{ alignSelf: 'flex-end', padding: '11px 22px', borderRadius: 11, border: 'none', background: '#16A34A', color: '#fff', fontSize: 12, fontWeight: 900, cursor: 'pointer' }}
+                      >
+                        Approve Quotation →
+                      </button>
+                    </>
+                  )}
+
+                  {quoteAction === 'request' && (
+                    <>
+                      <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+                        Describe exactly what needs to change — scope items, quantities, materials, or a specific amount. The project manager will issue a revised quotation.
+                      </div>
+                      <textarea
+                        value={quoteChangeNote}
+                        onChange={e => setQuoteChangeNote(e.target.value)}
+                        placeholder="e.g. Please remove the frameless shower enclosure from the scope. The revised total should be below GHS 70,000."
+                        rows={4}
+                        style={{ width: '100%', boxSizing: 'border-box', padding: '11px 13px', borderRadius: 11, border: '1px solid var(--border-color)', resize: 'vertical', fontFamily: 'inherit', fontSize: 12, lineHeight: 1.5 }}
+                      />
+                      <button
+                        onClick={handleQuoteChangeRequest}
+                        disabled={quoteChangeBusy || !quoteChangeNote.trim()}
+                        style={{ alignSelf: 'flex-end', padding: '11px 18px', borderRadius: 11, border: 'none', background: '#DC2626', color: '#fff', fontSize: 12, fontWeight: 900, cursor: quoteChangeNote.trim() ? 'pointer' : 'default', opacity: quoteChangeNote.trim() ? 1 : .5 }}
+                      >
+                        {quoteChangeBusy ? 'Sending…' : 'Send Change Request →'}
+                      </button>
+                    </>
+                  )}
+
+                  {quoteAction === 'counter' && (
+                    <>
+                      <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+                        Propose a revised total. The project manager will review your offer and respond with an updated quotation or a discussion.
+                      </div>
+                      <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                        <span style={{ fontSize: 12, fontWeight: 800, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>GHS</span>
+                        <input
+                          type="number"
+                          value={counterPrice}
+                          onChange={e => setCounterPrice(e.target.value)}
+                          placeholder="Your proposed total"
+                          style={{ flex: 1, padding: '10px 13px', borderRadius: 11, border: '1.5px solid #7C3AED60', fontFamily: 'inherit', fontSize: 14, fontWeight: 800, color: 'var(--text-primary)' }}
+                        />
+                      </div>
+                      <textarea
+                        value={quoteChangeNote}
+                        onChange={e => setQuoteChangeNote(e.target.value)}
+                        placeholder="Optional: explain the basis for your proposed price."
+                        rows={3}
+                        style={{ width: '100%', boxSizing: 'border-box', padding: '11px 13px', borderRadius: 11, border: '1px solid var(--border-color)', resize: 'vertical', fontFamily: 'inherit', fontSize: 12, lineHeight: 1.5 }}
+                      />
+                      <button
+                        onClick={handleQuoteChangeRequest}
+                        disabled={quoteChangeBusy || !counterPrice}
+                        style={{ alignSelf: 'flex-end', padding: '11px 18px', borderRadius: 11, border: 'none', background: '#7C3AED', color: '#fff', fontSize: 12, fontWeight: 900, cursor: counterPrice ? 'pointer' : 'default', opacity: counterPrice ? 1 : .5 }}
+                      >
+                        {quoteChangeBusy ? 'Sending…' : 'Submit Counter Offer →'}
+                      </button>
+                    </>
+                  )}
+
+                  {quoteChangeMessage && (
+                    <div style={{ fontSize: 12, fontWeight: 700, color: quoteChangeMessage.startsWith('Your counter') || quoteChangeMessage.startsWith('Your request') ? '#15803D' : '#DC2626', padding: '10px 13px', borderRadius: 9, background: quoteChangeMessage.startsWith('Your counter') || quoteChangeMessage.startsWith('Your request') ? '#F0FDF4' : '#FEF2F2' }}>
+                      {quoteChangeMessage}
+                    </div>
                   )}
                 </div>
-              </>
-            )}
-
-            {String(activeQuote.status || '').toLowerCase() === 'changes requested' && !project.quoteApproved && (
-              <div style={{ padding: '11px 13px', borderRadius: 11, background: '#FFF7ED', border: '1px solid #FED7AA', color: '#9A3412', fontSize: 12, lineHeight: 1.5 }}>
-                Revision requested. The project manager is preparing quotation v{Number(activeQuote.version || 1) + 1}. You cannot approve this version now.
               </div>
             )}
-            {quoteChangeMessage && <div style={{ fontSize: 12, color: quoteChangeMessage.startsWith('Your request') ? '#15803D' : '#DC2626', fontWeight: 700 }}>{quoteChangeMessage}</div>}
+
+            {changesRequested && !project.quoteApproved && (
+              <div style={{ padding: '13px 16px', borderRadius: 14, background: '#FFF7ED', border: '1px solid #FED7AA', color: '#9A3412', fontSize: 12, lineHeight: 1.55 }}>
+                <strong>Revision in progress.</strong> The project manager is preparing quotation v{Number(activeQuote.version || 1) + 1} based on your feedback. You will be notified when the updated quote is ready.
+              </div>
+            )}
           </div>
-        )}
+          );
+        })()}
         {quoteDocs.length > 1 && (
           <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
             {quoteDocs.length - 1} previous quotation version{quoteDocs.length === 2 ? '' : 's'} retained in the audit history.

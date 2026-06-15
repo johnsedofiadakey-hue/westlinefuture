@@ -1933,7 +1933,7 @@ function ClientApprovalsTab({ project, invoices = [], approvals = [], approveQuo
                 </div>
                 <div style={{ padding: '14px 20px' }}>
                   <div style={{ fontSize: 10, fontWeight: 900, color: '#DC2626', textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 10 }}>✗ Excluded</div>
-                  {['On-site installation (billed separately as an add-on)', 'Customs duties & port charges (if applicable)', 'Client-supplied materials'].map(item => (
+                  {['On-site installation (billed as a separate add-on)', 'Any out-of-scope purchases not in this quote', 'Client-requested additions after quote approval'].map(item => (
                     <div key={item} style={{ display: 'flex', alignItems: 'flex-start', gap: 7, marginBottom: 7 }}>
                       <span style={{ color: '#DC2626', fontWeight: 900, fontSize: 12, lineHeight: 1.4 }}>·</span>
                       <span style={{ fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.4 }}>{item}</span>

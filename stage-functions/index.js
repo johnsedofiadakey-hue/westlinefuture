@@ -6,6 +6,15 @@ const { TranslationServiceClient } = require('@google-cloud/translate').v3;
 initializeApp();
 const translationClient = new TranslationServiceClient();
 
+const CORS_OPTS = {
+  cors: [
+    'https://westlinedecor.com',
+    'https://www.westlinedecor.com',
+    'https://westlinefuture.web.app',
+    'https://westlinefuture.firebaseapp.com',
+  ],
+};
+
 const normalizePhone = value => String(value || '').replace(/\D/g, '');
 const parseMoney = value => {
   const parsed = Number(String(value ?? '').replace(/[^0-9.-]/g, ''));
@@ -67,7 +76,7 @@ const decodeTranslationEntities = value => String(value || '')
   .replace(/&lt;/g, '<')
   .replace(/&gt;/g, '>');
 
-exports.signProjectAgreement = onCall(async request => {
+exports.signProjectAgreement = onCall(CORS_OPTS, async request => {
   if (!request.auth) {
     throw new HttpsError('unauthenticated', 'Sign in before signing the project agreement.');
   }
@@ -268,7 +277,7 @@ exports.signProjectAgreement = onCall(async request => {
   };
 });
 
-exports.scheduleProjectSiteVisit = onCall(async request => {
+exports.scheduleProjectSiteVisit = onCall(CORS_OPTS, async request => {
   if (!request.auth) {
     throw new HttpsError('unauthenticated', 'Sign in before scheduling a site visit.');
   }
@@ -368,7 +377,7 @@ exports.scheduleProjectSiteVisit = onCall(async request => {
   return { scheduled: true, siteVisit };
 });
 
-exports.completeProjectSiteVisit = onCall(async request => {
+exports.completeProjectSiteVisit = onCall(CORS_OPTS, async request => {
   if (!request.auth) {
     throw new HttpsError('unauthenticated', 'Sign in before completing a site visit.');
   }
@@ -449,7 +458,7 @@ exports.completeProjectSiteVisit = onCall(async request => {
   return { completed: true, completedAt };
 });
 
-exports.translateChatMessage = onCall(async request => {
+exports.translateChatMessage = onCall(CORS_OPTS, async request => {
   if (!request.auth) {
     throw new HttpsError('unauthenticated', 'Sign in before translating a message.');
   }
@@ -487,7 +496,7 @@ exports.translateChatMessage = onCall(async request => {
   }
 });
 
-exports.registerProjectUpload = onCall(async request => {
+exports.registerProjectUpload = onCall(CORS_OPTS, async request => {
   if (!request.auth) {
     throw new HttpsError('unauthenticated', 'Sign in before registering an upload.');
   }
@@ -565,7 +574,7 @@ exports.registerProjectUpload = onCall(async request => {
   return { registered: true, uploadId: uploadRef.id };
 });
 
-exports.signVaultDocument = onCall(async request => {
+exports.signVaultDocument = onCall(CORS_OPTS, async request => {
   if (!request.auth) {
     throw new HttpsError('unauthenticated', 'Sign in before signing a vault document.');
   }
@@ -646,7 +655,7 @@ exports.signVaultDocument = onCall(async request => {
   return { signed: true, signedAt };
 });
 
-exports.toggleProjectTeamAssignment = onCall(async request => {
+exports.toggleProjectTeamAssignment = onCall(CORS_OPTS, async request => {
   if (!request.auth) {
     throw new HttpsError('unauthenticated', 'Sign in before changing project assignments.');
   }
@@ -747,7 +756,7 @@ exports.toggleProjectTeamAssignment = onCall(async request => {
   return result;
 });
 
-exports.submitOfflinePayment = onCall(async request => {
+exports.submitOfflinePayment = onCall(CORS_OPTS, async request => {
   if (!request.auth) {
     throw new HttpsError('unauthenticated', 'Sign in before submitting an offline payment.');
   }
@@ -864,7 +873,7 @@ exports.submitOfflinePayment = onCall(async request => {
   return { submitted: true, submissionId: submissionRef.id, invoiceId, status: 'Verification Pending' };
 });
 
-exports.submitWorkerFieldReport = onCall(async request => {
+exports.submitWorkerFieldReport = onCall(CORS_OPTS, async request => {
   if (!request.auth) {
     throw new HttpsError('unauthenticated', 'Sign in before submitting a field report.');
   }
@@ -994,7 +1003,7 @@ exports.submitWorkerFieldReport = onCall(async request => {
   return { submitted: true, projectId, stageId: nextStage };
 });
 
-exports.markGoodsArrivedInGhana = onCall(async request => {
+exports.markGoodsArrivedInGhana = onCall(CORS_OPTS, async request => {
   if (!request.auth) {
     throw new HttpsError('unauthenticated', 'Sign in before confirming goods arrival.');
   }
@@ -1099,7 +1108,7 @@ exports.markGoodsArrivedInGhana = onCall(async request => {
   return { confirmed: true, invoiceId, amount: balanceAmount };
 });
 
-exports.submitProjectSignoff = onCall(async request => {
+exports.submitProjectSignoff = onCall(CORS_OPTS, async request => {
   if (!request.auth) {
     throw new HttpsError('unauthenticated', 'Sign in before approving the final inspection.');
   }
@@ -1186,7 +1195,7 @@ exports.submitProjectSignoff = onCall(async request => {
   };
 });
 
-exports.respondToProjectAddOn = onCall(async request => {
+exports.respondToProjectAddOn = onCall(CORS_OPTS, async request => {
   if (!request.auth) {
     throw new HttpsError('unauthenticated', 'Sign in before responding to an add-on.');
   }
@@ -1317,7 +1326,7 @@ const requireAssignedWorkerProject = async (db, auth, projectId) => {
   return { projectRef, project };
 };
 
-exports.submitWorkerProjectNote = onCall(async request => {
+exports.submitWorkerProjectNote = onCall(CORS_OPTS, async request => {
   if (!request.auth) throw new HttpsError('unauthenticated', 'Sign in before posting a field update.');
   const projectId = String(request.data?.projectId || '').trim();
   const text = String(request.data?.text || '').trim().slice(0, 2000);
@@ -1363,7 +1372,7 @@ exports.submitWorkerProjectNote = onCall(async request => {
   return { submitted: true };
 });
 
-exports.registerWorkerProjectDocument = onCall(async request => {
+exports.registerWorkerProjectDocument = onCall(CORS_OPTS, async request => {
   if (!request.auth) throw new HttpsError('unauthenticated', 'Sign in before registering a field document.');
   const projectId = String(request.data?.projectId || '').trim();
   const url = String(request.data?.url || '').trim();
@@ -1389,7 +1398,7 @@ exports.registerWorkerProjectDocument = onCall(async request => {
   return { registered: true, documentId: documentRef.id, fileUrl: url };
 });
 
-exports.signProjectSpecification = onCall(async request => {
+exports.signProjectSpecification = onCall(CORS_OPTS, async request => {
   if (!request.auth) {
     throw new HttpsError('unauthenticated', 'Sign in before signing the project specification.');
   }
@@ -1570,7 +1579,7 @@ exports.signProjectSpecification = onCall(async request => {
   };
 });
 
-exports.submitRenderingDecision = onCall(async request => {
+exports.submitRenderingDecision = onCall(CORS_OPTS, async request => {
   if (!request.auth) {
     throw new HttpsError('unauthenticated', 'Sign in before responding to the rendering.');
   }
@@ -1732,7 +1741,7 @@ exports.submitRenderingDecision = onCall(async request => {
   };
 });
 
-exports.approveProjectQuote = onCall(async request => {
+exports.approveProjectQuote = onCall(CORS_OPTS, async request => {
   if (!request.auth) {
     throw new HttpsError('unauthenticated', 'Sign in before approving the final quote.');
   }
@@ -1933,7 +1942,7 @@ exports.approveProjectQuote = onCall(async request => {
   return { approved: true, quoteId: quote.id, contractUnlocked: true, approvedAt };
 });
 
-exports.requestProjectQuoteChanges = onCall(async request => {
+exports.requestProjectQuoteChanges = onCall(CORS_OPTS, async request => {
   if (!request.auth) {
     throw new HttpsError('unauthenticated', 'Sign in before requesting quotation changes.');
   }

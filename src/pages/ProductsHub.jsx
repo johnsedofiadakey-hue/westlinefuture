@@ -285,7 +285,7 @@ const DetailModal = ({ product, onClose, ac, navigate, mob }) => {
                            key={o} 
                            onClick={() => setSelectedGlass(o)}
                            style={{ 
-                             padding: '10px 16px', borderRadius: 12, fontSize: 11, fontWeight: 700, border: 'none', cursor: 'pointer',
+                             padding: '10px 16px', borderRadius: 12, fontSize: 11, fontWeight: 700, cursor: 'pointer',
                              background: selectedGlass === o ? `${ac}15` : '#F9F9F9',
                              color: selectedGlass === o ? ac : 'rgba(0,0,0,0.5)',
                              border: selectedGlass === o ? `1px solid ${ac}` : '1px solid transparent'
@@ -381,7 +381,7 @@ function BuyNowModal({ product, user, brand, onClose }) {
   const email   = user?.proxyEmail || (user?.phone ? `${user.phone}@clients.westlinefuture.com` : 'order@westlinefuture.com');
   const { brand: ctxBrand } = useContext(AppContext);
   const gw = ctxBrand?.gatewaySettings || {};
-  const paystackKey = gw.paystackPublicKey || '';
+  const paystackKey = gw.paystackPublicKey || import.meta.env.VITE_PAYSTACK_PUBLIC_KEY || '';
   const paystackActive = !!(gw.enablePaystack !== false && paystackKey);
   const hubtelActive = !!(gw.enableHubtel && gw.hubtelClientId && gw.hubtelClientSecret && gw.hubtelMerchantId);
   const paymentAvailable = paystackActive || hubtelActive;

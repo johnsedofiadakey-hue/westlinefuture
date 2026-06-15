@@ -24,9 +24,10 @@ The platform is built with React and Vite, backed by Firebase services:
 
 ## Getting Started
 
-### Prerequisites
-- Node.js (v18+)
-- npm or yarn
+```bash
+npm install
+npm run dev
+```
 
 ### Installation
 1. Clone the repository:

@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
-import { usePaystackPayment } from 'react-paystack';
 import { Lock, ShieldCheck, CheckCircle, ArrowRight, X, AlertCircle } from 'lucide-react';
 import { Spinner } from './Shared';
 import { functions } from '../lib/firebase';
+import { createPaystackPayment } from '../lib/paystack';
 const _dev = import.meta.env.DEV;
 const devLog = (...a) => { if (_dev) console.log(...a); };
 import { httpsCallable } from 'firebase/functions';
@@ -30,7 +30,7 @@ export default function PaystackPayModal({ invoice, brand, onClose, onSuccess })
     }
   };
 
-  const initializePayment = usePaystackPayment(config);
+  const initializePayment = createPaystackPayment(config);
 
   const handlePaystackSuccess = async (reference) => {
     const ref = reference?.reference || reference?.trxref || String(reference);
@@ -129,7 +129,10 @@ export default function PaystackPayModal({ invoice, brand, onClose, onSuccess })
               <button
                 onClick={() => {
                   if (status !== 'idle') return;
-                  initializePayment(handlePaystackSuccess, handlePaystackClose);
+                  initializePayment(handlePaystackSuccess, handlePaystackClose).catch((err) => {
+                    setError(err.message || 'Unable to open Paystack checkout.');
+                    setStatus('error');
+                  });
                 }}
                 disabled={status !== 'idle'}
                 className="p-btn-dark lxf"

@@ -4,7 +4,7 @@ import { AuthContext } from './AuthContext';
 import { useQuery } from '@tanstack/react-query';
 import {
   collection, query, onSnapshot, getDocs, getDoc, doc,
-  orderBy, limit, where, serverTimestamp
+  orderBy, limit, where, collectionGroup
 } from 'firebase/firestore';
 import { BRAND0, INITIAL_CONTENT, HERO_SLIDES, SERVICES_DATA, PORTFOLIO_DATA, ABOUT_DATA, GLASS_CATALOG_DATA, GLASS_CATALOG_CATEGORIES, CLIENTS_DATA, PROPOSALS_DATA, INVOICES_DATA, BOOKINGS_DATA, TEAM_MEMBERS, normalizeStageId } from '../data';
 
@@ -13,8 +13,30 @@ export const AppContext = createContext();
 const devLog = (...args) => { if (import.meta.env.DEV) console.log(...args); };
 const devWarn = (...args) => { if (import.meta.env.DEV) console.warn(...args); };
 
+const mapScopedDoc = (d) => {
+  const data = d.data();
+  const parentProject = d.ref.parent.parent;
+  const parentId = parentProject?.id || data.parentId || data.projectId || null;
+  return {
+    id: d.id,
+    scopedId: parentId ? `${parentId}/${d.id}` : d.id,
+    parentId,
+    projectId: data.projectId || parentId,
+    ...data
+  };
+};
+
+const mergeScopedRecords = (primary, scoped) => {
+  const map = new Map();
+  [...primary, ...scoped].forEach((item) => {
+    const key = item.scopedId || item.id;
+    map.set(key, item);
+  });
+  return Array.from(map.values());
+};
+
 export const AppProvider = ({ children }) => {
-  const { currentUser } = useContext(AuthContext);
+  const { currentUser, loading: firebaseAuthLoading } = useContext(AuthContext);
   const [user, setUser] = useState(() => {
     try {
       const cached = localStorage.getItem('westline_user_cache');
@@ -23,6 +45,14 @@ export const AppProvider = ({ children }) => {
       return null;
     }
   });
+
+  const normalizePhone = (value) => {
+    if (!value) return '';
+    let clean = String(value).replace(/\D/g, '');
+    if (clean.startsWith('0') && clean.length === 10) return `233${clean.slice(1)}`;
+    if (clean.length === 9) return `233${clean}`;
+    return clean;
+  };
 
   // App Data State
   const [clients, setClients] = useState([]);
@@ -92,33 +122,58 @@ export const AppProvider = ({ children }) => {
     }
 
     if (!email || !db) return null;
+    const direct = await getDoc(doc(db, 'users', authUser.uid));
+    if (direct.exists()) {
+      return { id: direct.id, uid: authUser.uid, ...direct.data() };
+    }
+
     const q = query(collection(db, 'users'), where('email', '==', email), limit(1));
     const snap = await getDocs(q);
     if (!snap.empty) {
       const uData = snap.docs[0].data();
-      return { id: snap.docs[0].id, ...uData };
+      return { id: snap.docs[0].id, uid: authUser.uid, ...uData };
     }
-    return { id: authUser.uid, email: email, role: 'client' };
+    return { id: authUser.uid, uid: authUser.uid, email, role: null, profileMissing: true };
   };
 
-  const { data: userProfile } = useQuery({
+  const {
+    data: userProfile,
+    isPending: userProfilePending,
+    isFetching: userProfileFetching,
+    error: userProfileError,
+  } = useQuery({
     queryKey: ['userProfile', currentUser?.uid, currentUser?.email, currentUser?.phoneNumber],
     queryFn: () => fetchUserProfile(currentUser),
     enabled: !!currentUser && !!db,
     staleTime: 5 * 60 * 1000,
+    retry: 1,
   });
 
   useEffect(() => {
-    if (userProfile && userProfile.id !== user?.id) {
+    if (userProfile) {
       setUser(userProfile);
       localStorage.setItem('westline_user_cache', JSON.stringify(userProfile));
-    } else if (currentUser === null && user !== null) {
-      // We only wipe user if auth state specifically resolves to null (logged out)
-      // but to be completely safe with offline mode, we'll only wipe if they don't have a cache
-      const cached = localStorage.getItem('westline_user_cache');
-      if (!cached) setUser(null);
+    } else if (!firebaseAuthLoading && currentUser === null) {
+      setUser(null);
+      localStorage.removeItem('westline_user_cache');
     }
-  }, [userProfile, currentUser, user]);
+  }, [userProfile, currentUser, firebaseAuthLoading]);
+
+  useEffect(() => {
+    if (!currentUser || !user) return;
+    const cacheBelongsToAuthUser = user.uid === currentUser.uid
+      || user.id === currentUser.uid
+      || (currentUser.phoneNumber && normalizePhoneId(user.phone) === normalizePhoneId(currentUser.phoneNumber))
+      || (currentUser.email && String(user.email || '').toLowerCase() === currentUser.email.toLowerCase());
+
+    if (!cacheBelongsToAuthUser) {
+      setUser(null);
+      localStorage.removeItem('westline_user_cache');
+    }
+  }, [currentUser, user]);
+
+  const authProfileLoading = firebaseAuthLoading
+    || (!!currentUser && (userProfilePending || userProfileFetching) && !userProfile);
 
   // Data Listeners
   useEffect(() => {
@@ -136,8 +191,16 @@ export const AppProvider = ({ children }) => {
 
     devLog("[FETCH] Initializing Data Pipeline for user:", user.id);
 
-    const isAdminOrStaff = user.role === 'admin' || user.role === 'staff';
-    const isWorker = user.role === 'worker';
+    const normalizedRole = String(user.role || '').toLowerCase();
+    const isAdminOrStaff = [
+      'admin',
+      'staff',
+      'project manager',
+      'project_manager',
+      'finance manager',
+      'operations manager',
+    ].includes(normalizedRole);
+    const isWorker = normalizedRole === 'worker';
     const staffUid = user.uid || user.id;
 
     // Admin → all projects. Staff/Worker → only their assigned projects. Client → their own projects.
@@ -150,11 +213,11 @@ export const AppProvider = ({ children }) => {
     const safeNormalizeProject = (d) => { try { return normalizeProject(d); } catch (e) { devWarn(`Bad project doc ${d.id}:`, e); return null; } };
 
     let unsubProject = () => {};
-    if (user.role === 'admin') {
+    if (normalizedRole === 'admin') {
       unsubProject = onSnapshot(collection(db, 'projects'), (snap) => {
         setClients(snap.docs.map(safeNormalizeProject).filter(Boolean));
       }, (err) => devWarn("Project Sync Error:", err));
-    } else if (user.role === 'staff') {
+    } else if (isAdminOrStaff) {
       const assignedProjects = new Map();
       const publishAssignedProjects = () => setClients(Array.from(assignedProjects.values()));
       const applyAssignedSnapshot = (source, snap) => {
@@ -183,7 +246,7 @@ export const AppProvider = ({ children }) => {
         unsubManagedProjects();
       };
       publishAssignedProjects();
-    } else if (user.role === 'worker') {
+    } else if (isWorker) {
       unsubProject = onSnapshot(query(collection(db, 'projects'), where('assignedWorkers', 'array-contains', staffUid)), (snap) => {
         setClients(snap.docs.map(safeNormalizeProject).filter(Boolean));
       }, (err) => devWarn("Assigned worker project sync error:", err));
@@ -214,7 +277,7 @@ export const AppProvider = ({ children }) => {
     }
 
     let unsubUser = () => {};
-    if (user.role === 'admin' || user.role === 'staff') {
+    if (isAdminOrStaff) {
       unsubUser = onSnapshot(collection(db, 'users'), (snap) => {
         const { team, clientList } = snap.docs.reduce((acc, d) => {
           const u = { id: d.id, ...d.data() };
@@ -233,7 +296,7 @@ export const AppProvider = ({ children }) => {
       }, (err) => devWarn("Client Profile Sync Error:", err));
     }
 
-    const unsubInvoices = onSnapshot(isAdminOrStaff
+    const unsubInvoices = isWorker ? (() => {}) : onSnapshot(isAdminOrStaff
       ? query(collection(db, 'invoices'), orderBy('createdAt', 'desc'), limit(invoiceLimit))
       : query(collection(db, 'invoices'), where('clientId', '==', user.id), limit(invoiceLimit)), (snap) => {
       const all = snap.docs.map(d => {
@@ -256,41 +319,65 @@ export const AppProvider = ({ children }) => {
       }, (err) => devWarn("Activity logs listener failed:", err));
     }
 
-    // ✅ CRITICAL FIX #2: Reduce approvals limit from 200 → 50 with pagination
-    const unsubApprovals = onSnapshot(user.role === 'admin' ? query(collection(db, 'approvals'), limit(50)) : query(collection(db, 'approvals'), where('clientId', '==', user.id), limit(50)), (snap) => {
-      setApprovals(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    }, (err) => devWarn("Approval Sync Error:", err));
+    const listenMerged = (name, setter, label) => {
+      let topLevel = [];
+      let scoped = [];
+      const flush = () => setter(mergeScopedRecords(topLevel, scoped));
+      if (isWorker) {
+        setter([]);
+        return () => {};
+      }
+      const topQuery = isAdminOrStaff
+        ? collection(db, name)
+        : query(collection(db, name), where('clientId', '==', user.id));
+      const unsubTop = onSnapshot(topQuery, (snap) => {
+        topLevel = snap.docs.map(mapScopedDoc);
+        flush();
+      }, (err) => devWarn(`${label} Top-Level Sync Error:`, err));
+      const unsubScoped = isAdminOrStaff
+        ? onSnapshot(collectionGroup(db, name), (snap) => {
+            scoped = snap.docs.map(mapScopedDoc).filter(item => item.parentId);
+            flush();
+          }, (err) => devWarn(`${label} Scoped Sync Error:`, err))
+        : () => {};
+      return () => {
+        unsubTop();
+        unsubScoped();
+      };
+    };
 
-    const unsubCR = onSnapshot(user.role === 'admin' ? collection(db, 'change_requests') : query(collection(db, 'change_requests'), where('clientId', '==', user.id)), (snap) => {
-      setChangeRequests(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    }, (err) => devWarn("CR Sync Error:", err));
+    const unsubApprovals = listenMerged('approvals', setApprovals, 'Approval');
+    const unsubCR = listenMerged('change_requests', setChangeRequests, 'CR');
+    const unsubProc = listenMerged('procurements', setProcurements, 'Procurement');
+    const unsubNotes = listenMerged('notes', setNotes, 'Note');
+    const unsubMedia = listenMerged('media', setMedia, 'Media');
 
-    const unsubProc = onSnapshot(user.role === 'admin' ? collection(db, 'procurements') : query(collection(db, 'procurements'), where('clientId', '==', user.id)), (snap) => {
-      setProcurements(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    }, (err) => devWarn("Procurement Sync Error:", err));
-
-    const unsubNotes = onSnapshot(user.role === 'admin' ? collection(db, 'notes') : query(collection(db, 'notes'), where('clientId', '==', user.id)), (snap) => {
-      setNotes(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    }, (err) => devWarn("Note Sync Error:", err));
-
-    const unsubMedia = onSnapshot(user.role === 'admin' ? collection(db, 'media') : query(collection(db, 'media'), where('clientId', '==', user.id)), (snap) => {
-      setMedia(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    }, (err) => devWarn("Media Sync Error:", err));
-
-    const unsubWorkOrders = onSnapshot(user.role === 'admin'
+    const unsubWorkOrders = isWorker ? (() => {}) : onSnapshot(user.role === 'admin'
       ? query(collection(db, 'work_orders'), orderBy('createdAt', 'desc'), limit(workOrderLimit))
       : query(collection(db, 'work_orders'), where('clientId', '==', user.id), limit(workOrderLimit)), (snap) => {
       const all = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       setWorkOrders(user.role === 'admin' ? all : all.sort((a,b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0)));
     }, (err) => devWarn("Work Order Sync Error:", err));
 
-    const unsubContainers = onSnapshot(user.role === 'admin' ? collection(db, 'containers') : query(collection(db, 'containers'), where('clientId', '==', user.id)), (snap) => {
+    const unsubContainers = isWorker ? (() => {}) : onSnapshot(user.role === 'admin' ? collection(db, 'containers') : query(collection(db, 'containers'), where('clientId', '==', user.id)), (snap) => {
       setContainers(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     }, (err) => devWarn("Container Sync Error:", err));
 
-    const unsubShipments = onSnapshot(user.role === 'admin' ? collection(db, 'shipments') : query(collection(db, 'shipments'), where('clientId', '==', user.id)), (snap) => {
+    const unsubShipments = isWorker ? (() => {}) : onSnapshot(user.role === 'admin' ? collection(db, 'shipments') : query(collection(db, 'shipments'), where('clientId', '==', user.id)), (snap) => {
       setShipments(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     }, (err) => devWarn("Shipment Sync Error:", err));
+
+    const unsubJobs = isAdminOrStaff ? onSnapshot(collection(db, 'jobs'), (snap) => {
+      setJobs(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    }, (err) => devWarn("Jobs Sync Error:", err)) : (() => {});
+
+    const unsubAssets = isAdminOrStaff ? onSnapshot(collection(db, 'assets'), (snap) => {
+      setAssets(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    }, (err) => devWarn("Assets Sync Error:", err)) : (() => {});
+
+    const unsubMaterials = isAdminOrStaff ? onSnapshot(collectionGroup(db, 'materials'), (snap) => {
+      setMaterials(snap.docs.map(mapScopedDoc));
+    }, (err) => devWarn("Materials Sync Error:", err)) : (() => {});
 
     // ✅ CRITICAL FIX #2: Reduced proposals limit from 200 → 50
     const unsubProposals = onSnapshot(user.role === 'admin' ? query(collection(db, 'proposals'), limit(50)) : query(collection(db, 'proposals'), where('clientId', '==', user.id)), (snap) => {
@@ -311,11 +398,11 @@ export const AppProvider = ({ children }) => {
       setTransactions(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     }, (err) => devWarn("Transactions listener failed:", err));
 
-    const unsubRenderingPackages = onSnapshot(user.role === 'admin' ? collection(db, 'renderingPackages') : query(collection(db, 'renderingPackages'), where('clientId', '==', user.id)), (snap) => {
+    const unsubRenderingPackages = onSnapshot(isAdminOrStaff ? collection(db, 'renderingPackages') : query(collection(db, 'renderingPackages'), where('clientId', '==', user.id)), (snap) => {
       setRenderingPackages(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     }, (err) => devWarn("Rendering Packages Sync Error:", err));
 
-    const unsubAddOns = onSnapshot(user.role === 'admin' ? collection(db, 'addOns') : query(collection(db, 'addOns'), where('clientId', '==', user.id)), (snap) => {
+    const unsubAddOns = onSnapshot(isAdminOrStaff ? collection(db, 'addOns') : query(collection(db, 'addOns'), where('clientId', '==', user.id)), (snap) => {
       setAddOns(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     }, (err) => devWarn("Add-ons Sync Error:", err));
 
@@ -363,6 +450,9 @@ export const AppProvider = ({ children }) => {
       unsubWorkOrders();
       unsubContainers();
       unsubShipments();
+      unsubJobs();
+      unsubAssets();
+      unsubMaterials();
       unsubProposals();
       unsubBookings();
       unsubTrans();
@@ -414,7 +504,7 @@ export const AppProvider = ({ children }) => {
 
   return (
     <AppContext.Provider value={{
-      user, setUser,
+      user, setUser, authProfileLoading, userProfileError,
       clients, proposals, invoices, bookings, emails, setEmails, dbClients, teamMembers, logs, shipments, messages, testimonials, tasks, transactions, renderingPackages, addOns, changeRequests, userNotifications, notifications, procurements, jobs, notes, media, approvals, materials, assets, workOrders, containers,
       brand, content, currency, lang,
       setCurrency, setLang, setBrand, setContent,

@@ -10,6 +10,7 @@ import AdminGovernance from './AdminGovernance';
 export default function AdminInstallations({ clients = [], updateProject, dbClients, brand, transactions = [], recordOfflinePayment, calculateProjectPulse, teamMembers = [], assignWorkerToProject, ...props }) {
   const ac = brand.color || `var(--accent-secondary)`;
   const [search, setSearch] = useState('');
+  const [stageFilter, setStageFilter] = useState('active-field');
   const [sel, setSel] = useState(null);
   const [showManual, setShowManual] = useState(false);
   const [manData, setManData] = useState({ amount: '', method: 'Bank Transfer', ref: '' });
@@ -28,7 +29,24 @@ export default function AdminInstallations({ clients = [], updateProject, dbClie
       setManSaving(false);
     }
   };
-  const filtered = (clients || []).filter(c => (c.project || '').toLowerCase().includes(search.toLowerCase()));
+  const projectName = (project) => project.project || project.title || 'Untitled project';
+  const clientName = (project) => project.name || project.clientName || 'Unknown client';
+  const projectStageId = (project) => project.stageId || project.stage || 1;
+  const isFieldStage = (project) => [7, 8, 9].includes(projectStageId(project)) || (project.assignedWorkers || []).length > 0;
+  const filtered = (clients || []).filter(c => {
+    const haystack = [projectName(c), clientName(c), c.location, c.nextAction, c.status].filter(Boolean).join(' ').toLowerCase();
+    if (search && !haystack.includes(search.toLowerCase())) return false;
+    if (stageFilter === 'active-field') return isFieldStage(c);
+    if (stageFilter === 'delivery') return projectStageId(c) === 7;
+    if (stageFilter === 'installation') return projectStageId(c) === 8;
+    if (stageFilter === 'inspection') return projectStageId(c) === 9;
+    if (stageFilter === 'assigned') return (c.assignedWorkers || []).length > 0;
+    return true;
+  });
+  const deliveryCount = (clients || []).filter(c => projectStageId(c) === 7).length;
+  const installationCount = (clients || []).filter(c => projectStageId(c) === 8).length;
+  const inspectionCount = (clients || []).filter(c => projectStageId(c) === 9).length;
+  const crewAssignedCount = (clients || []).filter(c => (c.assignedWorkers || []).length > 0).length;
 
   if (sel) {
     const proj = clients.find(x => x.id === sel);
@@ -69,13 +87,14 @@ export default function AdminInstallations({ clients = [], updateProject, dbClie
             
             {/* TIMELINE EDITOR */}
             <div className="p-card" style={{ padding: 24 }}>
-              <h3 className="lxfh" style={{ fontSize: 18, marginBottom: 24 }}>Project Journey</h3>
+              <h3 className="lxfh" style={{ fontSize: 18, marginBottom: 24 }}>Field Stage Control</h3>
               <div style={{ display: 'flex', flexDirection: 'column', position: 'relative' }}>
                 <div style={{ position: 'absolute', left: 15, top: 0, bottom: 0, width: 2, background: `var(--border-color)` }} />
                 
                 {PROJECT_STAGES.map((s, idx) => {
-                  const isCurrent = (proj.stage || 1) === s.id;
-                  const isPast = (proj.stage || 1) > s.id;
+                  const currentStageId = projectStageId(proj);
+                  const isCurrent = currentStageId === s.id;
+                  const isPast = currentStageId > s.id;
                   const isLast = idx === PROJECT_STAGES.length - 1;
                   
                   return (
@@ -274,6 +293,37 @@ export default function AdminInstallations({ clients = [], updateProject, dbClie
           <Search size={14} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: `var(--text-secondary)` }} />
           <input className="p-inp" placeholder="Search projects..." value={search} onChange={e => setSearch(e.target.value)} style={{ paddingLeft: 34, width: 240 }} />
         </div>
+        <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+          <select value={stageFilter} onChange={e => setStageFilter(e.target.value)} className="p-inp" style={{ height: 40, width: 180, fontSize: 12, fontWeight: 700 }}>
+            <option value="active-field">Active field work</option>
+            <option value="delivery">Shipping & delivery</option>
+            <option value="installation">Installation only</option>
+            <option value="inspection">Inspection only</option>
+            <option value="assigned">Crew assigned</option>
+            <option value="all">All projects</option>
+          </select>
+          <div style={{ position: 'relative' }}>
+            <Search size={14} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#6B7280' }} />
+            <input className="p-inp" placeholder="Search projects..." value={search} onChange={e => setSearch(e.target.value)} style={{ paddingLeft: 34, width: 240 }} />
+          </div>
+        </div>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 14 }}>
+        {[
+          { label: 'Delivery Ready', value: deliveryCount, color: '#607D8B' },
+          { label: 'Installing Now', value: installationCount, color: '#16A34A' },
+          { label: 'Inspection Queue', value: inspectionCount, color: '#14B8A6' },
+          { label: 'Crew Assigned', value: crewAssignedCount, color: ac },
+        ].map(stat => (
+          <div key={stat.label} className="p-card" style={{ padding: 18, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              <div className="lxf" style={{ fontSize: 10, color: '#6B7280', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '.08em' }}>{stat.label}</div>
+              <div className="lxfh" style={{ fontSize: 28, color: stat.color, marginTop: 4 }}>{stat.value}</div>
+            </div>
+            <HardHat size={22} color={stat.color} />
+          </div>
+        ))}
       </div>
       
       <div className="ops-grid" style={{ 
@@ -282,7 +332,7 @@ export default function AdminInstallations({ clients = [], updateProject, dbClie
         gap: 24 
       }}>
         {filtered.map(c => {
-          const currentStageObj = PROJECT_STAGES.find(s => s.id === (c.stage || 1));
+          const currentStageObj = PROJECT_STAGES.find(s => s.id === projectStageId(c));
           return (
             <div key={c.id} className="p-card fade-in" style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 20 }}>
                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
@@ -308,6 +358,9 @@ export default function AdminInstallations({ clients = [], updateProject, dbClie
 
                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 16, borderTop: '1px solid var(--bg-secondary)' }}>
                   <div style={{ display: 'flex', gap: 8 }}>
+                     <div className="lxf" style={{ fontSize: 11, color: '#6B7280', display: 'flex', alignItems: 'center', gap: 5 }}>
+                       <UserCheck size={13} /> {(c.assignedWorkers || []).length} crew
+                     </div>
                      <button 
                         onClick={() => props.sendWhatsAppUpdate(c.id, c.id, currentStageObj?.name || 'New Stage')}
                         className="p-btn-light" 
@@ -332,7 +385,7 @@ export default function AdminInstallations({ clients = [], updateProject, dbClie
                         gap: 4
                      }}
                   >
-                     Manage Operations <ArrowRight size={14} />
+                     Open Field File <ArrowRight size={14} />
                   </button>
                </div>
             </div>

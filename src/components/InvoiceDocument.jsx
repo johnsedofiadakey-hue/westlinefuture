@@ -30,9 +30,8 @@ const fmtDate = (d) => {
 
 const PAYMENT_SCHEDULES = {
   standard: [
-    { key: 'post-rendering', label: 'First instalment after rendering approval', pct: 0.60 },
-    { key: 'post-production', label: 'Second instalment after production', pct: 0.30 },
-    { key: 'post-shipping', label: 'Final settlement at delivery and handover', pct: 0.10 },
+    { key: 'initial-deposit', label: 'Initial project deposit after quote approval', pct: 0.60 },
+    { key: 'pre-installation-balance', label: 'Final goods balance when goods arrive in Ghana', pct: 0.40 },
   ],
   '50-50': [
     { key: 'deposit', label: 'Project mobilisation deposit', pct: 0.50 },

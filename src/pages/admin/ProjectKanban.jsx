@@ -717,11 +717,14 @@ export default function ProjectKanban({ clients = [], brand, updateProjectStage,
   const { isMobile } = useResponsive(); // ✅ CRITICAL FIX #7: Get responsive state
   const ac = brand?.color || `var(--accent-secondary)`;
   const [search, setSearch] = useState('');
+  const [viewMode, setViewMode] = useState('board');
+  const [focusFilter, setFocusFilter] = useState('all');
+  const [stageFilter, setStageFilter] = useState('all');
+  const [ownerFilter, setOwnerFilter] = useState('all');
   const [dragProject, setDragProject] = useState(null);
   const [dragOverCol, setDragOverCol] = useState(null);
   const [openProject, setOpenProject] = useState(null);
   const [showArchived, setShowArchived] = useState(false);
-  const [viewMode, setViewMode] = useState('board');
   const [healthFilter, setHealthFilter] = useState('all');
   const [sortBy, setSortBy] = useState('risk');
   const [compact, setCompact] = useState(false);
@@ -809,6 +812,7 @@ export default function ProjectKanban({ clients = [], brand, updateProjectStage,
         {[
           { label: 'Total', value: totalProjects, color: `var(--accent-secondary)` },
           { label: 'Active', value: activeProjects, color: '#2196F3' },
+          { label: 'Blocked', value: blockedProjects, color: '#EF4444' },
           { label: 'Completed', value: completedProjects, color: '#16A34A' },
           { label: 'Blocked', value: healthStats.Blocked || 0, color: '#DC2626' },
           { label: 'Waiting', value: healthStats['Waiting Client'] || 0, color: '#D97706' },
@@ -903,6 +907,77 @@ export default function ProjectKanban({ clients = [], brand, updateProjectStage,
               })}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {viewMode === 'board' ? (
+        <div style={{ display: 'flex', gap: 16, overflowX: 'auto', paddingBottom: 16, minHeight: 400 }}>
+          {KANBAN_COLS.map(col => (
+            <KanbanColumn
+              key={col.id}
+              col={col}
+              projects={projectsByCol[col.id] || []}
+              ac={ac}
+              onOpen={setOpenProject}
+              onDragStart={setDragProject}
+              onDrop={handleDrop}
+              onDragOver={colId => setDragOverCol(colId)}
+              onDragLeave={() => setDragOverCol(null)}
+              isDragOver={dragOverCol === col.id}
+            />
+          ))}
+        </div>
+      ) : (
+        <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 18, overflow: 'hidden' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(220px, 1.4fr) minmax(160px, .9fr) minmax(150px, .8fr) minmax(180px, 1fr) minmax(150px, .8fr) 90px', gap: 16, padding: '14px 18px', background: '#F9FAFB', color: '#6B7280', fontSize: 10, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '.08em' }}>
+            <div>Project</div>
+            <div>Stage</div>
+            <div>Owner</div>
+            <div>Next Action</div>
+            <div>Budget</div>
+            <div></div>
+          </div>
+          {filtered.length === 0 ? (
+            <div style={{ padding: 36, textAlign: 'center', color: '#6B7280', fontSize: 13 }}>No projects match the current filters.</div>
+          ) : filtered.map(project => {
+            const stage = STAGE_MAP[project.stageId || 1] || CLIENT_PROJECT_STAGES[0];
+            return (
+              <button
+                key={project.id}
+                onClick={() => setOpenProject(project)}
+                style={{
+                  width: '100%',
+                  display: 'grid',
+                  gridTemplateColumns: 'minmax(220px, 1.4fr) minmax(160px, .9fr) minmax(150px, .8fr) minmax(180px, 1fr) minmax(150px, .8fr) 90px',
+                  gap: 16,
+                  padding: '16px 18px',
+                  border: 'none',
+                  borderTop: '1px solid #E5E7EB',
+                  background: '#fff',
+                  cursor: 'pointer',
+                  alignItems: 'center',
+                  textAlign: 'left',
+                }}
+              >
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 14, fontWeight: 800, color: '#111827', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{projectTitle(project)}</div>
+                  <div style={{ fontSize: 11, color: '#6B7280', marginTop: 3 }}>{clientName(project)}</div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: stage.color, flexShrink: 0 }} />
+                  <span style={{ fontSize: 12, fontWeight: 800, color: stage.color }}>{stage.short}</span>
+                </div>
+                <div style={{ fontSize: 12, color: '#4B5563', fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{ownerLabel(project, teamMembers)}</div>
+                <div style={{ fontSize: 12, color: isBlocked(project) ? '#EF4444' : '#4B5563', fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {project.nextAction || (isWaitingOnClient(project) ? 'Client action required' : 'Internal update due')}
+                </div>
+                <div style={{ fontSize: 12, color: '#111827', fontWeight: 800 }}>{moneyLabel(project.budget || project.totalAmount)}</div>
+                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: ac, fontSize: 11, fontWeight: 900 }}>Open <ChevronRight size={13} /></span>
+                </div>
+              </button>
+            );
+          })}
         </div>
       )}
 

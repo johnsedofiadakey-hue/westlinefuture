@@ -64,13 +64,33 @@ import { onAuthStateChanged, signInWithEmailAndPassword, signOut, createUserWith
 import { httpsCallable } from 'firebase/functions';
 import { 
   collection, query, onSnapshot, getDocs, getDoc, doc, 
-  updateDoc, addDoc, setDoc, deleteDoc, orderBy, collectionGroup, limit, where, serverTimestamp, increment, or
+  updateDoc, addDoc, setDoc, deleteDoc, writeBatch, orderBy, collectionGroup, limit, where, serverTimestamp, increment, arrayUnion, or
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { uploadFile } from './lib/firebase';
 import { MessengerService } from './lib/MessengerService';
 import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { X } from 'lucide-react';
+
+const RoleResolutionError = ({ onLogout, error }) => (
+  <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', background: '#F8F6F3', padding: 24, fontFamily: 'Inter, sans-serif' }}>
+    <div style={{ width: 'min(440px, 100%)', background: '#fff', border: '1px solid rgba(26,20,16,.1)', borderRadius: 12, padding: 32, textAlign: 'center' }}>
+      <h1 style={{ margin: '0 0 10px', fontSize: 22, color: '#1A1410' }}>Account access needs attention</h1>
+      <p style={{ margin: '0 0 22px', color: '#756D65', lineHeight: 1.6, fontSize: 14 }}>
+        Your Firebase login is valid, but the system could not resolve an admin, staff, worker, or client profile for this account.
+        Sign out and try again, or ask an administrator to verify the account role.
+      </p>
+      {error && import.meta.env.DEV && (
+        <pre style={{ textAlign: 'left', whiteSpace: 'pre-wrap', fontSize: 11, color: '#A33', background: '#FFF7F5', padding: 12 }}>
+          {String(error.message || error)}
+        </pre>
+      )}
+      <button onClick={onLogout} style={{ border: 0, borderRadius: 8, padding: '12px 20px', background: '#1A1410', color: '#fff', fontWeight: 700, cursor: 'pointer' }}>
+        Sign out
+      </button>
+    </div>
+  </div>
+);
 
 
 
@@ -97,7 +117,8 @@ export default function App() {
     setCurrency, setLang, setBrand, setContent,
     loadMoreMessages, hasMoreMessages,
     loadMoreInvoices, hasMoreInvoices,
-    loadMoreWorkOrders, hasMoreWorkOrders
+    loadMoreWorkOrders, hasMoreWorkOrders,
+    authProfileLoading, userProfileError
   } = useContext(AppContext);
   
   const notify = useCallback((type, msg, duration = 5000) => {
@@ -245,6 +266,7 @@ export default function App() {
     if (clean.length >= 10) return clean;
     return clean;
   };
+  const normalizeClientId = (value) => normalizePhone(String(value || '')) || String(value || '').trim();
 
   /**
    * Build a de-duped array of every possible client ID format for a given
@@ -413,7 +435,7 @@ export default function App() {
 
         for (const item of ALL_PROJECT_DATA) {
           const pid = item.id.toString();
-          const cid = item.email ? (userMap[item.email] || item.email.replace(/[.@]/g, '_')) : `CL_${pid}`;
+          const cid = item.phone ? normalizeClientId(item.phone) : (item.email ? (userMap[item.email] || item.email.replace(/[.@]/g, '_')) : `CL_${pid}`);
 
           if (!userMap[item.email]) {
             await setDoc(doc(db, 'users', cid), {
@@ -526,7 +548,7 @@ export default function App() {
         const woId = `WO-${pid}-KITCHEN`;
         await setDoc(doc(db, 'work_orders', woId), {
           id: woId, projectId: pid,
-          clientId: item.email === 'client@westlinefuture.com' ? 'ELITE-CLIENT' : (item.clientId || 'DEMO-CLIENT'),
+            clientId: item.email === 'client@westlinefuture.com' ? 'ELITE-CLIENT' : (item.clientId || 'DEMO-CLIENT'),
           title: 'Modern Kitchen Fit-out', stage: item.stage,
           status: 'In Progress', atRisk: false, createdAt: new Date().toISOString()
         });
@@ -624,12 +646,9 @@ export default function App() {
   // ✓ Removed checkManualSession — Firebase Auth's onAuthStateChanged() handles persistence securely
 
   const loginWithCredentials = async (username, password) => {
-    // Wait up to 3s for Firebase to finish initialising on cold load
-    let _attempts = 0;
-    while ((!db || !isFirebaseEnabled) && _attempts < 6) {
-      await new Promise(r => setTimeout(r, 500));
-      _attempts++;
-    }
+    // Removed rate limit check
+    let _att = 0;
+    while ((!db || !isFirebaseEnabled) && _att < 6) { await new Promise(r => setTimeout(r, 500)); _att++; }
     if (!db || !isFirebaseEnabled) {
       throw new Error("Database offline. Please check your internet connection.");
     }
@@ -819,7 +838,7 @@ export default function App() {
 
   // Handle redirection based on auth state
   useEffect(() => {
-    if (user) {
+    if (user?.role) {
       if (location.pathname === '/login') {
         navigate(
           user.role === 'admin' || user.role === 'staff' ? '/admin' :
@@ -847,81 +866,9 @@ export default function App() {
   // Canonical invoice-paid check — normalises "Paid", "paid", "Paid in Full"
   const isPaid = (status) => ['paid', 'paid in full'].includes(String(status || '').toLowerCase().trim());
 
-  const updateStage = async (projectId, stageId) => {
-    try {
-      // Unified 8-stage pipeline — always use CLIENT_PROJECT_STAGES
-      const stageObj = CLIENT_PROJECT_STAGES.find(s => s.id === stageId);
-      const clientStageName = stageObj?.name || `Stage ${stageId}`;
-      const project = clients.find(p => p.id === projectId);
-
-      // ✅ PHASE 3 FIX #13: Use centralized stage gate validation (was scattered in 2 places)
-      const gates = checkStageGates(project, stageId, { invoices, changeRequests: [] });
-      if (!gates.canAdvance) {
-        gates.blockers.forEach(b => notify('error', `Stage locked: ${b.message}`));
-        return;
-      }
-
-      if (stageObj) {
-         if (stageObj.requiresPayment) {
-            const projectInvoices = invoices.filter(i => i.parentId === projectId);
-            const unpaid = projectInvoices.filter(i => !isPaid(i.status));
-            if (unpaid.length > 0) {
-               notify('error', 'Stage locked: Outstanding payments required.');
-               return;
-            }
-         }
-         
-         // AUTOMATED MILESTONE INVOICING (8-stage pipeline)
-         const invoiceTriggers = {
-           1: { title: 'Initial Consultation & Design Deposit', percent: 10 },
-           2: { title: 'Fabrication Commencement Payment', percent: 40 },
-           4: { title: 'Pre-Installation Logistics Settlement', percent: 40 },
-           8: { title: 'Final Handover & Quality Settlement', percent: 10 }
-         };
-
-         if (invoiceTriggers[stageId] && project) {
-            const { title, percent } = invoiceTriggers[stageId];
-            const baseBudget = parseFloat(String(project.budget || '0').replace(/[^0-9.]/g, '')) || 0;
-            const amount = (baseBudget * percent) / 100;
-            
-            if (amount > 0) {
-              const existing = invoices.find(i => i.parentId === projectId && i.title === title);
-              if (!existing) {
-                if (import.meta.env.DEV) devLog(`[AUTO-INVOICE] Generating ${title} for Project ${projectId}`);
-                await createInvoice({
-                  parentId: projectId,
-                  clientId: project.clientId,
-                  clientEmail: project.email,
-                  title: title,
-                  amount: amount,
-                  date: new Date().toISOString().split('T')[0],
-                  due: new Date(Date.now() + 7*24*60*60*1000).toISOString().split('T')[0],
-                  status: 'Pending',
-                  type: 'Milestone'
-                });
-                createNotification(project.clientId, `New Invoice Generated: ${title}`, 'info', '/portal');
-              }
-            }
-         }
-
-         // FEEDBACK LOOP: If stage is 8 (Handover), request feedback
-         if (stageId === 8 && project) {
-           createNotification(project.clientId, "Project Complete! We'd love to hear your feedback on your Westline Future experience.", "success", "/portal?action=feedback");
-         }
-      }
-      
-      const stageObjForPct = CLIENT_PROJECT_STAGES.find(s => s.id === stageId);
-      await updateDoc(doc(db, 'projects', projectId), { stageId, progress: stageObjForPct?.pct ?? Math.round((stageId / 8) * 100) });
-
-      // Notify client of stage change (only when admin moves project forward)
-      if (project?.clientId) {
-        const clientMsg = stageObj?.clientMsg || `Your project has progressed to ${clientStageName}.`;
-        createNotification(project.clientId, `📍 Project Update: "${project.title || 'Your project'}" has moved to ${clientStageName}. ${clientMsg}`, 'info', `/portal?projectId=${projectId}`);
-      }
-
-      logAction(projectId, 'Stage', `Moved to Stage ${stageId} — ${clientStageName}`);
-    } catch (e) { devErr(e); }
-  };
+  // Legacy admin screens still call updateStage. Route every transition through
+  // the same canonical advancement implementation and gate model.
+  const updateStage = (...args) => updateProjectStage(...args);
 
   const createProposal = async (data) => {
     if (!db) return;
@@ -1029,6 +976,430 @@ export default function App() {
       notify('success', 'Quotation deleted');
     } catch (err) {
       notify('error', 'Failed to delete quotation');
+    }
+  };
+
+  const getProjectClientId = (projectId) => {
+    return clients.find(p => p.id === projectId)?.clientId || null;
+  };
+
+  const recordProjectActivity = async (projectId, action, data = {}) => {
+    if (!db || !projectId) return;
+    const project = clients.find(p => p.id === projectId);
+    const clientId = data.clientId || project?.clientId || null;
+    const payload = {
+      projectId,
+      clientId,
+      action: sanitizeText(action || 'Project activity'),
+      actorId: user?.uid || user?.id || 'system',
+      actorName: user?.name || user?.displayName || user?.email || 'Westline Future',
+      actorRole: user?.role || 'admin',
+      created_at: new Date().toISOString(),
+      createdAt: serverTimestamp(),
+      ...data,
+    };
+    try {
+      await addDoc(collection(db, 'activity_logs'), payload);
+      await addDoc(collection(db, 'projects', projectId, 'activity_logs'), payload);
+    } catch (e) {
+      devWarn('[activityLog]', e);
+    }
+  };
+
+  const computeNextProjectAction = (project, targetStageId = project?.stageId || 1) => {
+    if (!project) return 'Review project setup';
+    if (targetStageId <= 1) return 'Issue and verify rendering fee';
+    if (targetStageId === 2) {
+      if (!project.renderingApproved) return 'Upload or complete rendering review';
+      if (!project.contractAccepted) return 'Awaiting contract signature';
+      if (project.specDoc?.status !== 'signed') return 'Prepare or sign project brief';
+      return 'Prepare final quotation';
+    }
+    if (targetStageId === 3) return project.depositPaid ? 'Advance to production' : 'Awaiting quote approval and initial deposit';
+    if (targetStageId === 4) return 'Track procurement and production';
+    if (targetStageId === 5) {
+      if (!project.shippingDetails?.vesselName) return 'Publish shipping details and ETA';
+      if (!project.goodsArrivedInGhana) return 'Track shipment and confirm Ghana arrival';
+      if (!project.goodsBalancePaid) return 'Verify final goods balance';
+      if (!project.installationFeePaid) return 'Prepare or collect installation add-on';
+      return 'Assign crew and begin installation';
+    }
+    if (targetStageId === 6) return 'Field team installation updates required';
+    if (targetStageId === 7) return 'Awaiting inspection sign-off';
+    return CLIENT_PROJECT_STAGES.find(s => s.id === targetStageId)?.adminPrompt || 'Monitor project progress';
+  };
+
+  const createRenderingPackage = async (projectId, data = {}) => {
+    if (!db || !projectId) return null;
+    try {
+      const projectSnap = await getDoc(doc(db, 'projects', projectId));
+      if (!projectSnap.exists()) throw new Error('Project not found');
+      const project = projectSnap.data();
+      const clientId = data.clientId || project.clientId || getProjectClientId(projectId);
+      const packageRef = await addDoc(collection(db, 'renderingPackages'), {
+        projectId,
+        clientId,
+        title: sanitizeText(data.title || `${project.title || 'Project'} Rendering Package`),
+        status: data.status || 'invoice_required',
+        accessStatus: data.accessStatus || 'locked',
+        includedRevisions: Number(data.includedRevisions ?? 2),
+        usedRevisions: Number(data.usedRevisions ?? 0),
+        extraRevisionFee: parseMoney(data.extraRevisionFee),
+        versions: data.versions || [],
+        comments: [],
+        approvedVersion: null,
+        invoiceId: data.invoiceId || null,
+        createdBy: user?.uid || user?.id || 'admin',
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+      await updateDoc(doc(db, 'projects', projectId), {
+        renderingPackageId: packageRef.id,
+        renderingStatus: 'invoice_required',
+        nextAction: 'Issue rendering fee invoice',
+        updatedAt: serverTimestamp(),
+      });
+      await recordProjectActivity(projectId, 'Rendering package created', { renderingPackageId: packageRef.id, clientId });
+      notify('success', 'Rendering package created');
+      return packageRef.id;
+    } catch (e) {
+      notify('error', 'Failed to create rendering package: ' + e.message);
+      return null;
+    }
+  };
+
+  const issueRenderingInvoice = async (projectId, amount, provider = 'paystack') => {
+    if (!db || !projectId) return null;
+    try {
+      const projectSnap = await getDoc(doc(db, 'projects', projectId));
+      if (!projectSnap.exists()) throw new Error('Project not found');
+      const project = projectSnap.data();
+      const fee = parseMoney(amount || project.renderingFee);
+      if (!fee) throw new Error('Rendering fee amount is required.');
+      const invoiceId = await createInvoice({
+        projectId,
+        parentId: projectId,
+        clientId: project.clientId,
+        clientName: project.clientName || project.name || '',
+        clientEmail: project.email || '',
+        clientPhone: project.phone || '',
+        title: `Rendering / CAD 3D Access Fee — ${project.title || 'Project'}`,
+        type: 'rendering_fee',
+        invoiceType: 'rendering_fee',
+        stageGate: 2,
+        provider,
+        amount: fee,
+        total: fee,
+        currency: 'GHS',
+        status: 'Pending',
+        due: new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0],
+      });
+      await updateDoc(doc(db, 'projects', projectId), {
+        renderingInvoiceId: invoiceId,
+        renderingFee: fee,
+        renderingStatus: 'invoice_sent',
+        nextAction: 'Awaiting rendering fee payment',
+        updatedAt: serverTimestamp(),
+      });
+      if (project.renderingPackageId) {
+        await updateDoc(doc(db, 'renderingPackages', project.renderingPackageId), {
+          invoiceId,
+          status: 'invoice_sent',
+          updatedAt: serverTimestamp(),
+        });
+      }
+      await recordProjectActivity(projectId, 'Rendering fee invoice issued', { invoiceId, amount: fee, clientId: project.clientId });
+      return invoiceId;
+    } catch (e) {
+      notify('error', 'Failed to issue rendering invoice: ' + e.message);
+      return null;
+    }
+  };
+
+  const approveRenderingPackage = async (projectId, packageId = null, comment = '') => {
+    if (!db || !projectId) return;
+    try {
+      const projectSnap = await getDoc(doc(db, 'projects', projectId));
+      if (!projectSnap.exists()) throw new Error('Project not found');
+      const project = projectSnap.data();
+      const targetPackageId = packageId || project.renderingPackageId;
+      if (targetPackageId) {
+        await updateDoc(doc(db, 'renderingPackages', targetPackageId), {
+          status: 'approved',
+          approvedAt: serverTimestamp(),
+          approvedBy: user?.uid || user?.id || project.clientId || 'client',
+          approvalComment: sanitizeText(comment || ''),
+          updatedAt: serverTimestamp(),
+        });
+      }
+      await updateDoc(doc(db, 'projects', projectId), {
+        renderingApproved: true,
+        renderingApprovedAt: serverTimestamp(),
+        renderingStatus: 'approved',
+        workflowStep: 'quote-negotiation',
+        nextAction: 'Prepare final project quote',
+        updatedAt: serverTimestamp(),
+      });
+      await recordProjectActivity(projectId, 'Rendering approved', { renderingPackageId: targetPackageId, clientId: project.clientId });
+      notify('success', 'Rendering approved. Final quote can now be prepared.');
+    } catch (e) {
+      notify('error', 'Failed to approve rendering');
+    }
+  };
+
+  const createQuoteVersion = async (projectId, data = {}) => {
+    if (!db || !projectId) return null;
+    try {
+      const projectSnap = await getDoc(doc(db, 'projects', projectId));
+      if (!projectSnap.exists()) throw new Error('Project not found');
+      const project = projectSnap.data();
+      const renderingApproved = project.kickoffMode === 'direct-kickoff' ||
+        project.renderingApproved === true ||
+        project.designApproved === true ||
+        String(project.renderingStatus || '').toLowerCase() === 'approved';
+      if (!renderingApproved && !data.adminOverride) {
+        notify('error', 'Final quote is locked until rendering is approved.');
+        return null;
+      }
+
+      const [projectQuotes, parentQuotes] = await Promise.all([
+        getDocs(query(collection(db, 'invoices'), where('projectId', '==', projectId))),
+        getDocs(query(collection(db, 'invoices'), where('parentId', '==', projectId))),
+      ]);
+      const existingQuotes = new Map();
+      [...projectQuotes.docs, ...parentQuotes.docs].forEach(snapshot => {
+        const invoice = snapshot.data();
+        const descriptor = `${invoice.type || ''} ${invoice.documentKind || ''}`.toLowerCase();
+        if (descriptor.includes('quotation') || descriptor.includes('quote')) {
+          existingQuotes.set(snapshot.id, { id: snapshot.id, ref: snapshot.ref, ...invoice });
+        }
+      });
+      const version = Number(data.version || Math.max(
+        0,
+        ...[...existingQuotes.values()].map(quote => Number(quote.version || 0))
+      ) + 1);
+      const total = parseMoney(data.total || data.amount || project.budget || project.projectTotal);
+      if (total <= 0) throw new Error('Enter the negotiated project total.');
+
+      const quoteRef = doc(collection(db, 'invoices'));
+      const batch = writeBatch(db);
+      const normalizedItems = Array.isArray(data.items) && data.items.length > 0
+        ? data.items.map((item, index) => ({
+            desc: sanitizeText(item.desc || item.description || `Scope item ${index + 1}`),
+            notes: sanitizeText(item.notes || ''),
+            qty: Number(item.qty || 1),
+            rate: parseMoney(item.rate ?? item.amount),
+            unit: item.unit || 'item',
+            total: parseMoney(item.total ?? (Number(item.qty || 1) * parseMoney(item.rate ?? item.amount))),
+          }))
+        : [{
+            desc: sanitizeText(data.scopeSummary || data.title || project.title || 'Approved project scope'),
+            notes: sanitizeText(data.notes || ''),
+            qty: 1,
+            rate: total,
+            unit: 'project',
+            total,
+          }];
+      const title = sanitizeText(data.title || `${project.title || 'Project'} Quotation v${version}`);
+      const paymentSchedule = data.paymentSchedule || project.paymentSchedule || 'standard';
+      const negotiatedMilestones = buildDefaultMilestones(total, paymentSchedule);
+      batch.set(quoteRef, {
+        projectId,
+        parentId: projectId,
+        clientId: project.clientId,
+        clientName: project.clientName || '',
+        clientEmail: project.clientEmail || project.email || '',
+        clientPhone: project.clientPhone || project.phone || '',
+        version,
+        title,
+        type: 'Quotation',
+        documentKind: 'quotation',
+        invoiceType: 'quotation',
+        items: normalizedItems,
+        scopeSummary: sanitizeText(data.scopeSummary || ''),
+        scopeItems: data.scopeItems || normalizedItems,
+        exclusions: data.exclusions || [],
+        optionalItems: data.optionalItems || [],
+        discounts: data.discounts || [],
+        paymentSchedule,
+        negotiationNote: sanitizeText(data.negotiationNote || data.notes || ''),
+        amount: total,
+        total,
+        amountDue: total,
+        balanceDue: total,
+        amountPaid: 0,
+        paidAmount: 0,
+        currency: data.currency || 'GHS',
+        status: 'Sent',
+        date: new Date().toISOString().split('T')[0],
+        due: null,
+        createdBy: user?.uid || user?.id || 'admin',
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+
+      existingQuotes.forEach(quote => {
+        if (!['approved', 'superseded', 'cancelled'].includes(String(quote.status || '').toLowerCase())) {
+          batch.update(quote.ref, {
+            status: 'Superseded',
+            supersededBy: quoteRef.id,
+            supersededAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          });
+        }
+      });
+
+      batch.update(doc(db, 'projects', projectId), {
+        stageId: Math.max(Number(project.stageId || 1), 3),
+        progress: Math.max(Number(project.progress || 0), 33),
+        activeQuoteId: quoteRef.id,
+        activeQuoteVersion: version,
+        quoteStatus: 'sent',
+        quoteApproved: false,
+        approvedQuoteId: null,
+        quoteChangeRequested: false,
+        quoteChangeRequestPending: false,
+        quoteChangeRequestNote: '',
+        changeRequestPending: false,
+        workflowStep: 'quote-negotiation',
+        projectTotal: total,
+        budget: String(total),
+        paymentSchedule,
+        milestones: negotiatedMilestones,
+        nextAction: 'Client reviews the quotation and approves it or requests a revised version',
+        updatedAt: serverTimestamp(),
+      });
+      await batch.commit();
+
+      const projectChangeRequests = await getDocs(query(
+        collection(db, 'change_requests'),
+        where('projectId', '==', projectId)
+      ));
+      await Promise.all(projectChangeRequests.docs
+        .filter(requestDoc => {
+          const requestData = requestDoc.data();
+          return String(requestData.type || '').toLowerCase() === 'quotation' &&
+            String(requestData.status || '').toLowerCase() === 'pending';
+        })
+        .map(requestDoc =>
+          updateDoc(requestDoc.ref, {
+            status: 'resolved',
+            resolution: `Superseded by quotation v${version}`,
+            resolvedAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          })
+        ));
+      await addDoc(collection(db, 'notifications'), {
+        userId: project.clientId,
+        title: `Quotation v${version} ready`,
+        message: `${title} is ready for review. Approve the total or request changes with a clear note.`,
+        type: 'quotation_ready',
+        link: '/portal',
+        projectId,
+        clientId: project.clientId,
+        read: false,
+        createdAt: serverTimestamp(),
+      });
+      await addDoc(collection(db, 'clients', project.clientId, 'messages'), {
+        text: `Quotation v${version} is ready for review: ${title} — GHS ${total.toLocaleString()}. Approve it if the negotiated amount is correct, or request a revised version with your comments.`,
+        senderRole: 'system',
+        senderName: 'Project Workflow',
+        isInternal: false,
+        readByAdmin: true,
+        readByClient: false,
+        projectId,
+        createdAt: serverTimestamp(),
+      });
+      await recordProjectActivity(projectId, `Quote v${version} created`, { quoteId: quoteRef.id, amount: total, clientId: project.clientId });
+      notify('success', `Quotation v${version} sent to the client`);
+      return quoteRef.id;
+    } catch (e) {
+      notify('error', 'Failed to create quote: ' + e.message);
+      return null;
+    }
+  };
+
+  const createAddOn = async (projectId, data = {}) => {
+    if (!db || !projectId) return null;
+    try {
+      const project = clients.find(p => p.id === projectId) || {};
+      const amount = parseMoney(data.amount || data.price);
+      const addOnRef = await addDoc(collection(db, 'addOns'), {
+        projectId,
+        clientId: data.clientId || project.clientId || getProjectClientId(projectId),
+        description: sanitizeText(data.description || data.title || 'Project add-on'),
+        reason: sanitizeText(data.reason || ''),
+        amount,
+        timelineImpactDays: Number(data.timelineImpactDays || 0),
+        approvalStatus: data.approvalStatus || 'pending',
+        invoiceStatus: 'not_invoiced',
+        paymentStatus: 'unpaid',
+        linkedFiles: data.linkedFiles || [],
+        createdBy: user?.uid || user?.id || 'admin',
+        approvedBy: null,
+        paidAt: null,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+      await recordProjectActivity(projectId, 'Add-on requested', { addOnId: addOnRef.id, amount });
+      notify('success', 'Add-on request created');
+      return addOnRef.id;
+    } catch (e) {
+      notify('error', 'Failed to create add-on: ' + e.message);
+      return null;
+    }
+  };
+
+  const approveAddOn = async (addOnId, projectId) => {
+    if (!db || !addOnId || !projectId) return;
+    try {
+      const addOnSnap = await getDoc(doc(db, 'addOns', addOnId));
+      if (!addOnSnap.exists()) throw new Error('Add-on not found');
+      const addOn = addOnSnap.data();
+      const amount = parseMoney(addOn.amount);
+      const batch = writeBatch(db);
+      batch.update(doc(db, 'addOns', addOnId), {
+        approvalStatus: 'approved',
+        approvedBy: user?.uid || user?.id || 'client',
+        approvedAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+      batch.update(doc(db, 'projects', projectId), {
+        approvedAddOnsTotal: increment(amount),
+        projectTotal: increment(amount),
+        updatedAt: serverTimestamp(),
+      });
+      await batch.commit();
+      await recordProjectActivity(projectId, 'Add-on approved', { addOnId, amount, clientId: addOn.clientId });
+      notify('success', 'Add-on approved and added to project total');
+    } catch (e) {
+      notify('error', 'Failed to approve add-on: ' + e.message);
+    }
+  };
+
+  const updateProjectTimeline = async (projectId, stageId, patch = {}) => {
+    if (!db || !projectId || !stageId) return;
+    try {
+      const snap = await getDoc(doc(db, 'projects', projectId));
+      if (!snap.exists()) throw new Error('Project not found');
+      const project = snap.data();
+      const previous = (project.stageTimeline || []).find(t => Number(t.stageId) === Number(stageId)) || {};
+      const stageTimeline = CLIENT_PROJECT_STAGES.map(stage => {
+        const current = (project.stageTimeline || []).find(t => Number(t.stageId) === stage.id) || { stageId: stage.id, owner: stage.whoActs };
+        return stage.id === Number(stageId)
+          ? { ...current, ...patch, stageId: stage.id, updatedAt: new Date().toISOString(), updatedBy: user?.uid || user?.id || 'admin' }
+          : current;
+      });
+      await updateDoc(doc(db, 'projects', projectId), { stageTimeline, updatedAt: serverTimestamp() });
+      await recordProjectActivity(projectId, `Timeline updated for stage ${stageId}`, {
+        stageId,
+        previousEstimatedEndDate: previous.estimatedEndDate || null,
+        newEstimatedEndDate: patch.estimatedEndDate || previous.estimatedEndDate || null,
+        delayReason: patch.delayReason || '',
+      });
+      notify('success', 'Timeline updated');
+    } catch (e) {
+      notify('error', 'Failed to update timeline');
     }
   };
 
@@ -1269,7 +1640,7 @@ export default function App() {
 
   const createProcurement = async (projectId, data) => {
     if (!db) return;
-    try { await addDoc(collection(db, 'projects', projectId, 'procurements'), { ...data, createdAt: new Date().toISOString() }); notify('success', 'Tracker Updated'); } 
+    try { await addDoc(collection(db, 'projects', projectId, 'procurements'), { ...data, projectId, clientId: data.clientId || getProjectClientId(projectId), createdAt: new Date().toISOString() }); notify('success', 'Tracker Updated'); }
     catch(e) { notify('error', 'Failed to update procurement'); }
   };
   const updateProcurement = async (projectId, id, data) => {
@@ -1301,7 +1672,7 @@ export default function App() {
       // Shipments are linked to a project, default to first active if not specified
       const pid = data.projectId || (clients.length > 0 ? clients[0].id : null);
       if (!pid) return notify('error', 'No project selected for shipment');
-      await addDoc(collection(db, 'projects', pid, 'procurements'), { ...data, isShipment: true, createdAt: new Date().toISOString() }); 
+      await addDoc(collection(db, 'projects', pid, 'procurements'), { ...data, projectId: pid, clientId: data.clientId || getProjectClientId(pid), isShipment: true, createdAt: new Date().toISOString() });
       notify('success', 'Shipment Tracked'); 
     } catch(e) { notify('error', 'Failed to create shipment'); }
   };
@@ -1317,7 +1688,7 @@ export default function App() {
 
   const createNote = async (projectId, data) => {
     if (!db) return;
-    try { await addDoc(collection(db, 'projects', projectId, 'notes'), { ...data, createdAt: new Date().toISOString() }); }
+    try { await addDoc(collection(db, 'projects', projectId, 'notes'), { ...data, projectId, clientId: data.clientId || getProjectClientId(projectId), createdAt: new Date().toISOString() }); }
     catch(e) { devErr(e); }
   };
   const deleteNote = async (projectId, id) => {
@@ -1377,7 +1748,7 @@ export default function App() {
     try {
       const client = clients.find(c => c.id === clientId);
       if (!client?.phone) return;
-      const project = projects.find(p => p.id === projectId);
+      const project = clients.find(p => p.id === projectId);
       const firstName = (client.name || '').split(' ')[0] || 'there';
       const projectTitle = project?.title || 'your project';
       const message = `Hi ${firstName}, your project "${projectTitle}" has moved to the ${stageName} stage. Log in to your portal to see what's next: https://westlinefuture.web.app`;
@@ -1509,11 +1880,16 @@ export default function App() {
   };
 
 
+  const parseMoney = (value) => {
+    if (typeof value === 'number') return value;
+    const n = parseFloat(String(value || '').replace(/[^0-9.]/g, ''));
+    return Number.isFinite(n) ? n : 0;
+  };
+
   const createProject = async (data) => {
     if (!db) return;
     try {
-      const rawId = typeof data.clientId === 'object' ? data.clientId?.id : data.clientId;
-      const id = normalizePhone(rawId);
+      const id = normalizeClientId(data.clientId);
       if (!id) throw new Error("Identifier Validation Failed: Client ID is required.");
 
       const docRef = await addDoc(collection(db, 'projects'), {
@@ -1521,8 +1897,20 @@ export default function App() {
         clientId: id,
         clientIds: buildClientIds(id, data.phone || data.clientPhone),
         status: 'Initialized',
+        stageId: 1,
+        stageModel: 'westline-8-stage-v2',
+        renderingStatus: 'not_started',
+        quoteStatus: 'not_started',
+        depositStatus: 'not_started',
+        projectTotal: parseMoney(data.budget),
+        approvedAddOnsTotal: 0,
+        paidAmount: 0,
         progress: 0,
         createdAt: new Date().toISOString()
+      });
+      await updateDoc(doc(db, 'users', id), {
+        projectIds: arrayUnion(docRef.id),
+        updatedAt: serverTimestamp(),
       });
       notify('success', 'Project initialized for client portal.');
       logAction(id, 'Operations', `Started Project: ${data.project}`);
@@ -1533,16 +1921,14 @@ export default function App() {
   };
 
   const buildDefaultMilestones = (budget, paymentSchedule = 'standard') => {
-    const num = parseFloat(String(budget).replace(/[^0-9.]/g, '')) || 0;
+    const num = parseMoney(budget);
     if (!num) return [];
     const fmt = (v) => `GH₵ ${v.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
     const ts = Date.now();
     const SCHEDULES = {
       standard: [
-        { name: '10% Deposit',        pct: 0.10, stageId: 1 },
-        { name: '40% Pre-production', pct: 0.40, stageId: 3 },
-        { name: '40% Pre-delivery',   pct: 0.40, stageId: 6 },
-        { name: '10% Completion',     pct: 0.10, stageId: 8 },
+        { name: '60% Initial Project Deposit',             pct: 0.60, stageId: 3, milestoneKey: 'initial-deposit' },
+        { name: '40% Final Goods Balance on Ghana Arrival', pct: 0.40, stageId: 5, milestoneKey: 'pre-installation-balance' },
       ],
       '70-30': [
         { name: '70% Before Delivery', pct: 0.70, stageId: 3 },
@@ -1556,6 +1942,8 @@ export default function App() {
       pct: m.pct,
       amount: fmt(num * m.pct),
       stageId: m.stageId,
+      milestoneKey: m.milestoneKey,
+      invoiceType: m.invoiceType,
       status: 'Pending',
     }));
   };
@@ -1563,7 +1951,7 @@ export default function App() {
   const createClientProject = async (data) => {
     if (!db) return;
     try {
-      const clientId = typeof data.clientId === 'object' ? data.clientId?.id : data.clientId;
+      const clientId = normalizeClientId(data.clientId);
       if (!clientId) throw new Error('Client ID is required.');
       const milestones = data.milestones?.length ? data.milestones : buildDefaultMilestones(data.budget, data.paymentSchedule);
       const effectiveDate = data.projectDate ? new Date(data.projectDate).toISOString() : new Date().toISOString();
@@ -1596,6 +1984,9 @@ export default function App() {
         clientIds: buildClientIds(clientId, data.phone || data.clientPhone),
         projectType: data.projectType || 'full-service',
         stageId: 1,
+        stageModel: 'westline-8-stage-v2',
+        workflowModel: 'westline-client-journey-v3',
+        workflowStep: data.kickoffMode === 'direct-kickoff' ? 'quote-negotiation' : 'rendering-payment',
         status: 'Active',
         projectLifecycleStatus: 'Active',
         budget: data.budget || '',
@@ -1605,10 +1996,21 @@ export default function App() {
         renderingFeePaid: false,
         renderingUnlocked: false,
         renderingApproved: false,
+        siteVisit: {
+          status: 'not_scheduled',
+          source: null,
+          startAt: null,
+          endAt: null,
+          timezone: 'Africa/Accra',
+          scheduledBy: null,
+          scheduledAt: null,
+          completedAt: null,
+        },
+        siteSurveyCompleted: false,
         quoteStatus: 'not_started',
         quoteApproved: false,
         depositPaid: false,
-        nextAction: data.renderingFee ? 'Create and send rendering fee invoice' : 'Confirm rendering fee and upload design package',
+        nextAction: data.renderingFee ? 'Client pays rendering fee, then schedules the technical site visit' : 'Confirm the project launch requirements',
         breakdown: data.breakdown || null,
         paymentSchedule: data.paymentSchedule || 'standard',
         kickoffMode: data.kickoffMode || 'rendering-first',
@@ -1623,6 +2025,10 @@ export default function App() {
         timeline: initialTimeline,
         stageHistory: [{ stageId: 1, note: data.projectDate ? `Project created (backdated to ${data.projectDate})` : 'Project created', timestamp: effectiveDate, byRole: 'admin' }],
         createdAt: data.projectDate ? effectiveDate : serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+      await updateDoc(doc(db, 'users', clientId), {
+        projectIds: arrayUnion(docRef.id),
         updatedAt: serverTimestamp(),
       });
       
@@ -1707,6 +2113,15 @@ export default function App() {
       const snap = await getDoc(doc(db, 'projects', projectId));
       if (!snap.exists()) throw new Error('Project not found');
       const data = snap.data();
+      const gateResult = checkStageGates(
+        { id: projectId, ...data },
+        newStageId,
+        { invoices, changeRequests }
+      );
+      if (!gateResult.canAdvance && !options.gateOverride) {
+        const message = gateResult.blockers.map(blocker => blocker.message).join(' ');
+        throw new Error(message || 'Required project gates have not been completed.');
+      }
       const effectiveTimestamp = options.overrideDate
         ? new Date(options.overrideDate).toISOString()
         : new Date().toISOString();
@@ -1771,15 +2186,11 @@ export default function App() {
         } catch (_) {}
       }
 
-      // ── Auto-activate milestone invoice when trigger stage is reached ──────
-      // Stage 3 → post-rendering (60%), Stage 5 → post-production (30%), Stage 6 → final balance (before installation)
-      const MILESTONE_STAGE_TRIGGERS = { 3: 'post-rendering', 5: 'post-production', 6: 'completion' };
-      const MILESTONE_LABELS = {
-        'post-rendering':  '60% Rendering Milestone',
-        'post-production': '30% Production Milestone',
-        'completion':      'Final Balance Payment',
-        'post-shipping':   '10% Delivery Milestone',
-      };
+      // Payment invoices are activated by the event that makes them due:
+      // quote approval activates the initial deposit; confirmed Ghana arrival
+      // activates the final goods balance. A stage number alone is insufficient.
+      const MILESTONE_STAGE_TRIGGERS = {};
+      const MILESTONE_LABELS = {};
       const triggerKey = MILESTONE_STAGE_TRIGGERS[newStageId];
       if (triggerKey) {
         try {
@@ -1803,17 +2214,7 @@ export default function App() {
           const allDocs = [...invSnap.docs, ...invSnap2.docs].filter(
             (d, i, arr) => arr.findIndex(x => x.id === d.id) === i
           );
-          // For Stage 7 (final payment), also search by type 'final'/'settlement' if no milestoneKey match
-          let finalDocs = allDocs;
-          if (triggerKey === 'completion' && allDocs.length === 0) {
-            const fallbackQ = query(collection(db, 'invoices'), where('parentId', '==', projectId));
-            const fallbackSnap = await getDocs(fallbackQ);
-            finalDocs = fallbackSnap.docs.filter(d => {
-              const t = `${d.data().type || ''} ${d.data().title || ''} ${d.data().milestoneKey || ''}`.toLowerCase();
-              return t.includes('final') || t.includes('settlement') || t.includes('completion') || t.includes('balance');
-            });
-          }
-          for (const invDoc of finalDocs) {
+          for (const invDoc of allDocs) {
             if (!isPaid(invDoc.data().status)) {
               await updateDoc(invDoc.ref, {
                 due: dueStr,
@@ -1824,23 +2225,17 @@ export default function App() {
             }
           }
           // Client-visible system message + push notification
-          if (data.clientId && finalDocs.length > 0) {
+          if (data.clientId && allDocs.length > 0) {
             const milestoneLabel = MILESTONE_LABELS[triggerKey] || 'Payment Milestone';
-            const isFinal = triggerKey === 'completion';
-            const msgText = isFinal
-              ? `🏗️ Your goods are ready for installation! Your final balance payment is now due by ${new Date(dueStr + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'long' })}. Please clear the balance before installation begins — you can pay by bank transfer, mobile money, or cash. Contact us to arrange an offline payment.`
-              : `💳 Payment milestone reached: your *${milestoneLabel}* invoice is now due (${dueStr}). Please open your Payments tab to settle.`;
+            const msgText = `💳 Payment milestone reached: your *${milestoneLabel}* invoice is now due (${dueStr}). Please open your Payments tab to settle.`;
             await addDoc(collection(db, 'clients', data.clientId, 'messages'), {
               text: msgText,
               senderRole: 'system', senderId: 'system', senderName: 'Westline Future',
               isInternal: false, readByAdmin: true, readByClient: false, createdAt: serverTimestamp(),
             });
-            // Strong push notification for final payment
             await addDoc(collection(db, 'notifications'), {
               userId: data.clientId,
-              message: isFinal
-                ? `🏗️ Ready for installation — your final balance is due by ${dueStr}. Pay via the Payments tab.`
-                : `💳 ${milestoneLabel} invoice is now due (${dueStr}). Open Payments tab.`,
+              message: `💳 ${milestoneLabel} invoice is now due (${dueStr}). Open Payments tab.`,
               type: 'payment_due',
               link: '/portal',
               read: false,
@@ -1862,18 +2257,26 @@ export default function App() {
       }
       notify('success', `Project advanced to ${stage?.name}`, 'persistent');
       logAction(data.clientId, 'Projects', `Stage ${newStageId} — ${projectId}`);
+      return true;
     } catch (e) {
-      notify('error', 'Failed to update stage');
+      notify('error', e?.message || 'Failed to update stage');
       devErr(e);
+      throw e;
     }
   };
 
-  const addClientMessage = async (clientId, text, senderRole = 'admin', isInternal = false) => {
+  const addClientMessage = async (clientId, text, senderRole = 'admin', isInternal = false, meta = {}) => {
     if (!db || !text?.trim()) return;
     const senderName = user?.name || user?.displayName || 'Westline Future Team';
     try {
       await addDoc(collection(db, 'clients', clientId, 'messages'), {
         text: sanitizeText(text.trim()),
+        type: meta.type || 'text',
+        audioUrl: meta.audioUrl || null,
+        duration: meta.duration || null,
+        transcript: meta.transcript || null,
+        originalLanguage: meta.originalLanguage || null,
+        translations: meta.translations || {},
         senderRole,
         senderId: user?.uid || user?.id || 'admin',
         senderName,
@@ -1920,21 +2323,20 @@ export default function App() {
     if (!db) return;
     try {
       const project = clients.find(p => p.id === projectId) || {};
-      // Client-allowed write: flags the sign-off
-      await updateDoc(doc(db, 'projects', projectId), {
-        signOffApproved: true,
-        signOffApprovedAt: serverTimestamp(),
+      const submitProjectSignoff = httpsCallable(functions, 'submitProjectSignoff');
+      const response = await submitProjectSignoff({
+        projectId,
+        approverName: user?.name || project.clientName || 'Client',
+        legalConsent: true,
       });
-      // Admin advances the stage (this succeeds if called by admin, or silently fails for client)
-      try {
-        await updateProjectStage(projectId, 8, 'Client signed off on inspection', { silent: true });
-      } catch (_) {
-        // Fallback: notify admin to complete the handover manually
-        await createNotification('admin', `Client signed off on project "${project.title || projectId}" — please advance to Stage 8 (Handover).`, 'info', `/admin/clients?tab=projects`);
-      }
-      notify('success', 'Sign-off confirmed! Your project is being completed.', 'persistent');
+      notify('success', 'Inspection approved. The project has moved to handover and closeout.', 'persistent');
+      return response.data;
     } catch (e) {
-      notify('error', 'Failed to record sign-off. Please try again.');
+      const message = e?.message
+        ?.replace(/^Firebase:\s*/i, '')
+        ?.replace(/\s*\(functions\/[^)]+\)\.?$/i, '');
+      notify('error', message || 'Failed to record sign-off. Please try again.');
+      throw e;
     }
   };
 
@@ -1942,9 +2344,12 @@ export default function App() {
     if (!db) return;
     try {
       const project = clients.find(p => p.id === projectId);
-      const productionAuthorized = project?.productionAuthorized === true || project?.specDoc?.status === 'signed';
-      if (!productionAuthorized) {
-        notify('error', 'Production must be authorised before the final quote can be approved.');
+      const renderingApproved = project?.kickoffMode === 'direct-kickoff' ||
+        project?.renderingApproved === true ||
+        project?.designApproved === true ||
+        String(project?.renderingStatus || '').toLowerCase() === 'approved';
+      if (!renderingApproved) {
+        notify('error', 'The final rendering must be approved before the quotation can be approved.');
         return;
       }
       const approveProjectQuote = httpsCallable(functions, 'approveProjectQuote');
@@ -1952,7 +2357,7 @@ export default function App() {
         projectId,
         approverName: user?.name || project?.clientName || 'Client',
       });
-      notify('success', 'Final quote approved. Complete the required payment to begin production.', 'persistent');
+      notify('success', 'Final quote approved. The project contract is now ready for signature.', 'persistent');
     } catch (e) {
       const message = e?.message
         ?.replace(/^Firebase:\s*/i, '')
@@ -1983,6 +2388,11 @@ export default function App() {
         fileType: file.type || 'application/octet-stream',
         size: file.size,
         stageId: meta.stageId || null,
+        documentType: meta.documentType || meta.category || (meta.stageId === 3 ? 'rendering' : 'project'),
+        category: meta.category || (meta.stageId === 3 ? 'rendering' : 'project'),
+        clientVisible: meta.clientVisible ?? !(meta.documentType === 'rendering' || meta.category === 'rendering' || meta.stageId === 3),
+        projectId,
+        clientId: meta.clientId || getProjectClientId(projectId),
         uploadedBy: meta.uploadedBy || 'admin',
         createdAt: serverTimestamp(),
       };
@@ -2057,6 +2467,8 @@ export default function App() {
       const details = emailData.details || {};
       const payload = {
          itemName: `${details.productName || 'Marketplace Item'} (x${details.quantity || 1})`,
+         projectId,
+         clientId: getProjectClientId(projectId),
          source: 'Westline Future Marketplace',
          estimatedCost: details.price || 0,
          actualCost: details.price || 0,
@@ -2090,6 +2502,22 @@ export default function App() {
     } catch (e) {
       devErr(e);
       notify('error', 'Deployment failed');
+      throw e;
+    }
+  };
+
+  const addContainer = async (data) => {
+    if (!db) return;
+    try {
+      const docRef = await addDoc(collection(db, 'containers'), {
+        ...data,
+        createdAt: data.createdAt || serverTimestamp(),
+        updatedAt: serverTimestamp()
+      });
+      notify('success', 'Shipment added');
+      return docRef.id;
+    } catch (e) {
+      notify('error', 'Failed to add shipment: ' + e.message);
       throw e;
     }
   };
@@ -2476,7 +2904,7 @@ export default function App() {
     submitMarketplace: submitMarketplaceInquiry,
     sendOTP, verifyOTP, findUserByPhone,
     loginWithCredentials, resetUserPassword, changeClientPassword,
-    deleteClient, 
+    deleteClient, deleteAllClients, deleteSelectedClients,
     activeMagicCode, 
     userNotifications, markNotificationRead,
     submitMarketplaceInquiry,
@@ -2495,6 +2923,7 @@ export default function App() {
     jobs, createJob, updateJob,
     createClientProject, updateProjectStage, addClientMessage, addProjectMessage, assignWorkerToProject, deleteProject,
     approveQuote, approveSignoff, updateShippingDetails, addProjectDocument, createStaffAccount, deleteMember, updateMember,
+    createQuoteVersion,
     workOrders, containers,
     updateWorkOrder: (id, d) => db && updateDoc(doc(db, 'work_orders', id), { ...d, updatedAt: serverTimestamp() }),
     createWorkOrder,
@@ -2537,12 +2966,9 @@ export default function App() {
       const isActualAdminMode = mode === 'admin' || isAdminEmail;
 
       if (isActualAdminMode) {
-        // Wait up to 3s for Firebase to finish initialising on cold load
-        let _attempts = 0;
-        while ((!isFirebaseEnabled || !auth) && _attempts < 6) {
-          await new Promise(r => setTimeout(r, 500));
-          _attempts++;
-        }
+        // Removed rate limit check
+        let _att2 = 0;
+        while ((!isFirebaseEnabled || !auth) && _att2 < 6) { await new Promise(r => setTimeout(r, 500)); _att2++; }
         if (!isFirebaseEnabled || !auth) {
           throw new Error("Database offline. Please check your internet connection.");
         }
@@ -2582,9 +3008,11 @@ export default function App() {
   };
 
 
-  const isProtectedRoute = location.pathname.startsWith('/admin') || location.pathname.startsWith('/portal');
+  const isProtectedRoute = location.pathname.startsWith('/admin')
+    || location.pathname.startsWith('/portal')
+    || location.pathname.startsWith('/work');
 
-  if (authLoading && isProtectedRoute) return (
+  if ((authLoading || authProfileLoading) && isProtectedRoute) return (
     <div style={{ background: `var(--accent-secondary)`, height: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: `var(--accent-secondary)`, fontFamily: 'Inter' }}>
       <div className="pulse" style={{ fontSize: '1.2rem', letterSpacing: '4px', textTransform: 'uppercase' }}>Authenticating</div>
       <div style={{ marginTop: '20px', fontSize: '0.8rem', opacity: 0.6 }}>Securing Westline Future Gateway...</div>
@@ -2642,7 +3070,13 @@ export default function App() {
                   staffMode={user?.role === 'staff'}
                   {...commonProps}
                 />
-              ) : <Navigate to="/login" />}
+              ) : user?.role === 'client' ? (
+                <Navigate to="/portal" replace />
+              ) : user?.role === 'worker' ? (
+                <Navigate to="/work" replace />
+              ) : (
+                <RoleResolutionError onLogout={handleLogout} error={userProfileError} />
+              )}
             </ProtectedRoute>
           } />
 
@@ -2657,8 +3091,12 @@ export default function App() {
                   {...commonProps}
                 />
               ) : (user?.role === 'admin' || user?.role === 'staff') ? (
-                <Navigate to="/admin" />
-              ) : <Navigate to="/login" />}
+                <Navigate to="/admin" replace />
+              ) : user?.role === 'worker' ? (
+                <Navigate to="/work" replace />
+              ) : (
+                <RoleResolutionError onLogout={handleLogout} error={userProfileError} />
+              )}
             </ProtectedRoute>
           } />
           <Route path="/field-upload" element={<FieldUpload {...commonProps} />} />
@@ -2667,7 +3105,11 @@ export default function App() {
             <ProtectedRoute>
               {user?.role === 'worker' || user?.role === 'staff' || user?.role === 'admin' ? (
                 <WorkerView user={user} onLogout={handleLogout} {...commonProps} />
-              ) : <Navigate to="/login" />}
+              ) : user?.role === 'client' ? (
+                <Navigate to="/portal" replace />
+              ) : (
+                <RoleResolutionError onLogout={handleLogout} error={userProfileError} />
+              )}
             </ProtectedRoute>
           } />
         </Routes>

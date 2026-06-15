@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Anchor, Loader2, TrendingUp, Plus, X, AlertCircle, FileText, Download, Upload, Camera } from 'lucide-react';
-import { db } from '../../../lib/firebase';
-import { collection, onSnapshot, query, orderBy, doc, updateDoc, addDoc, serverTimestamp } from 'firebase/firestore';
+import { Anchor, Loader2, TrendingUp, Plus, X, FileText, Download, Upload, Camera } from 'lucide-react';
+import { db, functions } from '../../../lib/firebase';
+import { collection, onSnapshot, query, orderBy, doc, updateDoc } from 'firebase/firestore';
+import { httpsCallable } from 'firebase/functions';
 import { AC, BD_ITEMS_CONFIG } from './config.jsx';
 
 // ─── Shipping Details Form ────────────────────────────────────────────────────
-export function ShippingDetailsCard({ project, invoices = [], updateShippingDetails }) {
+export function ShippingDetailsCard({ project, invoices = [], updateShippingDetails, notify }) {
   const init = {
     vesselName: project.shippingDetails?.vesselName || '',
     blNumber: project.shippingDetails?.blNumber || '',
@@ -16,16 +17,17 @@ export function ShippingDetailsCard({ project, invoices = [], updateShippingDeta
   const [form, setForm] = useState(init);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [confirmingArrival, setConfirmingArrival] = useState(false);
   const projectInvoices = invoices.filter(inv => inv.projectId === project.id || inv.parentId === project.id);
-  const productionMilestoneInvoice = projectInvoices.find(inv => {
+  const goodsBalanceInvoice = projectInvoices.find(inv => {
     const key = String(inv.milestoneKey || '').toLowerCase();
     const descriptor = `${inv.title || ''} ${inv.type || ''}`.toLowerCase();
-    return key === 'post-production' || descriptor.includes('30% production') || descriptor.includes('production milestone');
+    return key === 'pre-installation-balance' || descriptor.includes('goods balance') || descriptor.includes('ghana arrival');
   });
-  const productionMilestonePaid = project.postProductionPaid === true ||
-    ['paid', 'paid in full'].includes(String(productionMilestoneInvoice?.status || '').toLowerCase());
-  const paymentAwaitingVerification = productionMilestoneInvoice?.awaitingConfirmation === true ||
-    String(productionMilestoneInvoice?.status || '').toLowerCase() === 'verification pending';
+  const goodsBalancePaid = project.goodsBalancePaid === true || project.postProductionPaid === true ||
+    ['paid', 'paid in full'].includes(String(goodsBalanceInvoice?.status || '').toLowerCase());
+  const paymentAwaitingVerification = goodsBalanceInvoice?.awaitingConfirmation === true ||
+    String(goodsBalanceInvoice?.status || '').toLowerCase() === 'verification pending';
   const shippingStageReached = Number(project.stageId || 1) >= 5;
 
   // Re-sync if project changes
@@ -48,6 +50,20 @@ export function ShippingDetailsCard({ project, invoices = [], updateShippingDeta
     await updateShippingDetails(project.id, form);
     setSaving(false);
     setSaved(true);
+  };
+
+  const handleConfirmArrival = async () => {
+    if (!functions || confirmingArrival) return;
+    setConfirmingArrival(true);
+    try {
+      const confirmArrival = httpsCallable(functions, 'markGoodsArrivedInGhana');
+      const response = await confirmArrival({ projectId: project.id, arrivalNote: form.notes });
+      notify?.('success', `Goods arrival confirmed. Final goods balance invoice ${response.data?.invoiceId || ''} is now due.`);
+    } catch (error) {
+      notify?.('error', error?.message || 'Could not confirm goods arrival.');
+    } finally {
+      setConfirmingArrival(false);
+    }
   };
 
   const inputStyle = {
@@ -76,41 +92,41 @@ export function ShippingDetailsCard({ project, invoices = [], updateShippingDeta
       <div style={{
         padding: '16px 18px',
         borderRadius: 16,
-        background: productionMilestonePaid ? '#F0FDF4' : paymentAwaitingVerification ? '#EFF6FF' : '#FFFBEB',
-        border: `1.5px solid ${productionMilestonePaid ? '#86EFAC' : paymentAwaitingVerification ? '#93C5FD' : '#FDE68A'}`,
+        background: project.goodsArrivedInGhana ? (goodsBalancePaid ? '#F0FDF4' : paymentAwaitingVerification ? '#EFF6FF' : '#FFFBEB') : '#F8FAFC',
+        border: `1.5px solid ${project.goodsArrivedInGhana ? (goodsBalancePaid ? '#86EFAC' : paymentAwaitingVerification ? '#93C5FD' : '#FDE68A') : '#CBD5E1'}`,
       }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-          <div style={{ fontSize: 20 }}>{productionMilestonePaid ? '🔓' : paymentAwaitingVerification ? '🔎' : '🔒'}</div>
+          <div style={{ fontSize: 20 }}>{project.goodsArrivedInGhana ? (goodsBalancePaid ? '✅' : paymentAwaitingVerification ? '🔎' : '💳') : '🚢'}</div>
           <div style={{ flex: 1 }}>
             <div style={{
               fontSize: 10,
               fontWeight: 900,
-              color: productionMilestonePaid ? '#15803D' : paymentAwaitingVerification ? '#1D4ED8' : '#B45309',
+              color: goodsBalancePaid ? '#15803D' : paymentAwaitingVerification ? '#1D4ED8' : '#B45309',
               textTransform: 'uppercase',
               letterSpacing: '.08em',
               marginBottom: 4,
             }}>
-              Client shipping access
+              Shipping and Ghana arrival
             </div>
             <div style={{ fontSize: 15, fontWeight: 900, color: 'var(--accent-secondary)', marginBottom: 4 }}>
-              {productionMilestonePaid
-                ? '30% production milestone verified — shipping details unlocked'
+              {goodsBalancePaid
+                ? 'Final goods balance verified — installation payment is next'
                 : paymentAwaitingVerification
                   ? 'Client payment submitted — admin verification required'
-                  : shippingStageReached
-                    ? 'Shipping details locked until the 30% milestone is paid'
-                    : 'Prepare shipping details before dispatch'}
+                  : project.goodsArrivedInGhana
+                    ? 'Goods are in Ghana — final goods balance is due'
+                    : shippingStageReached
+                      ? 'Publish tracking details, then confirm arrival in Ghana'
+                      : 'Prepare shipping details before dispatch'}
             </div>
             <div style={{ fontSize: 12, lineHeight: 1.55, color: 'var(--text-secondary)' }}>
-              {productionMilestonePaid
-                ? 'Saved vessel, bill of lading, container, ETA, and notes are visible in the client portal.'
+              {goodsBalancePaid
+                ? 'The core project balance is cleared. Create and collect the separate installation-service add-on before moving goods to site.'
                 : paymentAwaitingVerification
-                  ? 'Open Payments, match the transfer or receipt against company records, and confirm it. Saving details here does not unlock them.'
-                  : shippingStageReached
-                    ? productionMilestoneInvoice
-                      ? `The ${productionMilestoneInvoice.title || '30% production milestone'} invoice is still outstanding. The client sees a payment prompt instead of these details.`
-                      : 'Create or activate the 30% production milestone invoice. The client remains locked until verified payment is recorded.'
-                    : 'You may enter provisional shipment information now. It remains private and will unlock only after the project reaches Shipping and the 30% payment is verified.'}
+                  ? 'Open Payments, match the transfer or receipt against company records, and confirm it.'
+                  : project.goodsArrivedInGhana
+                    ? `The ${goodsBalanceInvoice?.title || 'final goods balance'} invoice is outstanding. Installation remains blocked until it is paid.`
+                    : 'Shipping details are client-visible during the shipping stage. Confirm Ghana arrival only after the goods physically arrive; that action issues the final goods balance automatically.'}
             </div>
           </div>
           <div style={{
@@ -119,10 +135,10 @@ export function ShippingDetailsCard({ project, invoices = [], updateShippingDeta
             background: '#fff',
             fontSize: 10,
             fontWeight: 900,
-            color: productionMilestonePaid ? '#15803D' : '#B45309',
+            color: goodsBalancePaid ? '#15803D' : '#B45309',
             whiteSpace: 'nowrap',
           }}>
-            {productionMilestonePaid ? 'CLIENT CAN VIEW' : 'CLIENT LOCKED'}
+            {project.goodsArrivedInGhana ? (goodsBalancePaid ? 'BALANCE PAID' : 'PAYMENT DUE') : 'TRACKING VISIBLE'}
           </div>
         </div>
       </div>
@@ -149,6 +165,22 @@ export function ShippingDetailsCard({ project, invoices = [], updateShippingDeta
         >
           {saving ? <><Loader2 size={13} className="spin" /> Saving...</> : saved ? '✓ Saved' : 'Save'}
         </button>
+        {shippingStageReached && (
+          <button
+            onClick={handleConfirmArrival}
+            disabled={confirmingArrival || project.goodsArrivedInGhana}
+            style={{
+              height: 34, padding: '0 14px', borderRadius: 10,
+              background: project.goodsArrivedInGhana ? '#F0FDF4' : '#B45309',
+              color: project.goodsArrivedInGhana ? '#15803D' : '#fff',
+              border: project.goodsArrivedInGhana ? '1px solid #86EFAC' : 'none',
+              fontSize: 11, fontWeight: 800, cursor: project.goodsArrivedInGhana ? 'default' : 'pointer',
+              marginLeft: 8,
+            }}
+          >
+            {confirmingArrival ? 'Confirming...' : project.goodsArrivedInGhana ? 'Goods Arrival Confirmed' : 'Mark Arrived in Ghana'}
+          </button>
+        )}
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
@@ -206,7 +238,7 @@ export function ShippingDetailsCard({ project, invoices = [], updateShippingDeta
 }
 
 // ─── Project Economics ────────────────────────────────────────────────────────
-export function ProjectEconomics({ project, user, notify: _notify }) {
+export function ProjectEconomics({ project, notify: _notify }) {
   const notify = _notify || ((type, msg) => { if (import.meta.env.DEV) console.warn(`[ProjectEconomics] ${type}: ${msg}`); });
   const costs = project.costs || {};
   const [form, setForm] = useState({
@@ -215,12 +247,8 @@ export function ProjectEconomics({ project, user, notify: _notify }) {
     installation: { enabled: costs.installation?.enabled ?? false, amount: costs.installation?.amount || '' },
     extras: costs.extras || [],
   });
-  const [surcharges, setSurcharges] = useState(project.surcharges || []);
-  const [newSC, setNewSC] = useState({ label: '', amount: '', reason: '', date: new Date().toISOString().slice(0, 10) });
-  const [showAddSC, setShowAddSC] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saved,  setSaved]  = useState(false);
-  const [savingSC, setSavingSC] = useState(false);
 
   useEffect(() => {
     const c = project.costs || {};
@@ -230,7 +258,6 @@ export function ProjectEconomics({ project, user, notify: _notify }) {
       installation: { enabled: c.installation?.enabled ?? false, amount: c.installation?.amount || '' },
       extras: c.extras || [],
     });
-    setSurcharges(project.surcharges || []);
     setSaved(false);
   }, [project.id]);
 
@@ -242,7 +269,6 @@ export function ProjectEconomics({ project, user, notify: _notify }) {
 
   const totalCOGS = BD_ITEMS_CONFIG.filter(i => form[i.key].enabled).reduce((s, i) => s + (Number(form[i.key].amount) || 0), 0)
     + form.extras.reduce((s, e) => s + (Number(e.amount) || 0), 0);
-  const totalSurcharges = surcharges.reduce((s, sc) => s + (Number(sc.amount) || 0), 0);
   const salePrice   = Number(project.budget) || 0;
   const grossProfit = salePrice - totalCOGS;
   const margin      = salePrice > 0 ? (grossProfit / salePrice) * 100 : 0;
@@ -265,63 +291,6 @@ export function ProjectEconomics({ project, user, notify: _notify }) {
       notify('error', e.message || 'Failed to save project economics');
     }
     setSaving(false);
-  };
-
-  const handleAddSurcharge = async () => {
-    if (!newSC.label.trim() || !newSC.amount || !newSC.reason.trim()) return;
-    setSavingSC(true);
-    try {
-      const entry = {
-        id: `sc_${Date.now()}`,
-        label: newSC.label.trim(),
-        amount: Number(newSC.amount) || 0,
-        reason: newSC.reason.trim(),
-        date: newSC.date,
-        addedBy: user?.name || user?.displayName || 'Admin',
-        addedAt: new Date().toISOString(),
-      };
-      const updated = [...surcharges, entry];
-      const newBudget = salePrice + entry.amount;
-      await updateDoc(doc(db, 'projects', project.id), { surcharges: updated, budget: String(newBudget) });
-      setSurcharges(updated);
-
-      // Auto-create a surcharge invoice so client gets billed
-      await addDoc(collection(db, 'invoices'), {
-        parentId: project.id,
-        projectId: project.id,
-        clientId: project.clientId,
-        title: `Surcharge: ${entry.label}`,
-        description: entry.reason,
-        amount: entry.amount,
-        type: 'Surcharge',
-        status: 'Sent',
-        due: entry.date,
-        date: entry.date,
-        autoGenerated: true,
-        surchargeId: entry.id,
-        createdAt: serverTimestamp(),
-      });
-
-      setNewSC({ label: '', amount: '', reason: '', date: new Date().toISOString().slice(0, 10) });
-      setShowAddSC(false);
-    } catch (e) {
-      if (import.meta.env.DEV) console.error('[Surcharge save]', e);
-      notify('error', e.message || 'Failed to add surcharge');
-    }
-    setSavingSC(false);
-  };
-
-  const removeSurcharge = async (id) => {
-    const sc = surcharges.find(s => s.id === id);
-    const updated = surcharges.filter(s => s.id !== id);
-    const newBudget = Math.max(0, salePrice - (sc?.amount || 0));
-    try {
-      await updateDoc(doc(db, 'projects', project.id), { surcharges: updated, budget: String(newBudget) });
-      setSurcharges(updated);
-    } catch (e) {
-      if (import.meta.env.DEV) console.error('[Surcharge remove]', e);
-      notify('error', e.message || 'Failed to remove surcharge');
-    }
   };
 
   const fmt = v => `GHS ${Number(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -393,79 +362,6 @@ export function ProjectEconomics({ project, user, notify: _notify }) {
             </div>
           ))}
         </div>
-      </div>
-
-      {/* ── Price Adjustments / Surcharges ── */}
-      <div style={{ padding: '20px 24px', background: '#fff', borderRadius: 18, border: '1px solid var(--border-color)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: (surcharges.length > 0 || showAddSC) ? 16 : 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div style={{ width: 34, height: 34, borderRadius: 10, background: '#FEF2F2', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <AlertCircle size={15} color="#DC2626" />
-            </div>
-            <div>
-              <div style={{ fontSize: 13, fontWeight: 800, color: `var(--accent-secondary)` }}>Price Adjustments</div>
-              <div style={{ fontSize: 11, color: `var(--text-secondary)` }}>Documented surcharges — visible to client with full reason</div>
-            </div>
-          </div>
-          <button onClick={() => setShowAddSC(p => !p)} style={{ height: 32, padding: '0 14px', borderRadius: 9, background: showAddSC ? `var(--bg-secondary)` : `var(--accent-secondary)`, color: showAddSC ? `var(--text-secondary)` : '#fff', border: showAddSC ? '1.5px solid var(--border-color)' : 'none', fontSize: 12, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, transition: 'all .2s' }}>
-            {showAddSC ? 'Cancel' : <><Plus size={13} /> Add Surcharge</>}
-          </button>
-        </div>
-
-        {surcharges.length > 0 && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: showAddSC ? 16 : 0 }}>
-            {surcharges.map(sc => (
-              <div key={sc.id} style={{ padding: '14px 16px', borderRadius: 14, background: '#FEF2F2', border: '1.5px solid #FCA5A520' }}>
-                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                      <span style={{ fontSize: 13, fontWeight: 800, color: `var(--accent-secondary)` }}>{sc.label}</span>
-                      <span style={{ fontSize: 12, fontWeight: 900, color: '#DC2626' }}>+{fmt(sc.amount)}</span>
-                    </div>
-                    <div style={{ fontSize: 12, color: `var(--text-secondary)`, lineHeight: 1.5, marginBottom: 6 }}>{sc.reason}</div>
-                    <div style={{ fontSize: 10, color: `var(--text-secondary)`, fontWeight: 600 }}>{sc.date} · Added by {sc.addedBy}</div>
-                  </div>
-                  <button onClick={() => removeSurcharge(sc.id)} style={{ width: 28, height: 28, borderRadius: 7, border: '1.5px solid #FECACA', background: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><X size={12} color="#DC2626" /></button>
-                </div>
-              </div>
-            ))}
-            <div style={{ fontSize: 12, fontWeight: 800, color: `var(--text-secondary)`, textAlign: 'right' }}>
-              Total adjustments: <span style={{ color: '#DC2626' }}>+{fmt(totalSurcharges)}</span>
-            </div>
-          </div>
-        )}
-
-        {surcharges.length === 0 && !showAddSC && (
-          <div style={{ fontSize: 12, color: `var(--text-secondary)`, padding: '6px 0' }}>No price adjustments on this project.</div>
-        )}
-
-        {showAddSC && (
-          <div style={{ background: '#FAFAF9', borderRadius: 14, border: '1.5px solid var(--border-color)', padding: 16 }}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 160px', gap: 10 }}>
-                <div>
-                  <div style={{ fontSize: 10, fontWeight: 800, color: `var(--text-secondary)`, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 6 }}>Adjustment Label *</div>
-                  <input value={newSC.label} onChange={e => setNewSC(p => ({ ...p, label: e.target.value }))} placeholder="e.g. Material price increase" style={{ width: '100%', padding: '9px 12px', borderRadius: 10, border: '1.5px solid var(--border-color)', fontSize: 13, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' }} />
-                </div>
-                <div>
-                  <div style={{ fontSize: 10, fontWeight: 800, color: `var(--text-secondary)`, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 6 }}>Amount (GHS) *</div>
-                  <input type="number" min="0" value={newSC.amount} onChange={e => setNewSC(p => ({ ...p, amount: e.target.value }))} placeholder="0.00" style={{ width: '100%', padding: '9px 12px', borderRadius: 10, border: '1.5px solid var(--border-color)', fontSize: 13, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' }} />
-                </div>
-              </div>
-              <div>
-                <div style={{ fontSize: 10, fontWeight: 800, color: `var(--text-secondary)`, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 6 }}>Reason / Explanation * (visible to client)</div>
-                <textarea value={newSC.reason} onChange={e => setNewSC(p => ({ ...p, reason: e.target.value }))} placeholder="Explain why this adjustment was necessary — the client will see this..." rows={3} style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid var(--border-color)', fontSize: 13, outline: 'none', resize: 'vertical', boxSizing: 'border-box', fontFamily: 'inherit', lineHeight: 1.6 }} />
-              </div>
-              <div>
-                <div style={{ fontSize: 10, fontWeight: 800, color: `var(--text-secondary)`, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 6 }}>Effective Date</div>
-                <input type="date" value={newSC.date} onChange={e => setNewSC(p => ({ ...p, date: e.target.value }))} style={{ padding: '9px 12px', borderRadius: 10, border: '1.5px solid var(--border-color)', fontSize: 13, outline: 'none', fontFamily: 'inherit' }} />
-              </div>
-              <button onClick={handleAddSurcharge} disabled={savingSC || !newSC.label.trim() || !newSC.amount || !newSC.reason.trim()} style={{ height: 42, borderRadius: 11, background: (newSC.label.trim() && newSC.amount && newSC.reason.trim()) ? '#DC2626' : `var(--border-color)`, color: '#fff', border: 'none', fontSize: 13, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, transition: 'background .2s' }}>
-                {savingSC ? <><Loader2 size={14} className="spin" /> Saving...</> : 'Add Price Adjustment'}
-              </button>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );

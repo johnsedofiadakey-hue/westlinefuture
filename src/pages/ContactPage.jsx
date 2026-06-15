@@ -6,7 +6,7 @@ import { AlertCircle, CheckCircle, MapPin, Clock, Phone, Mail, ArrowRight } from
 import { usePublicTranslation } from '../components/PubLayout';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
-const PHONE_RE = /^[\+\d][\d\s\-\(\)]{6,20}$/;
+const PHONE_RE = /^[+\d][\d\s\-()]{6,20}$/;
 
 const SERVICES = [
   'Full Interior Decoration (complete home)',

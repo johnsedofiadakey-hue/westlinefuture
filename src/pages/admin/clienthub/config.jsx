@@ -21,11 +21,10 @@ export const STAGE_ICONS = {
 export const SCHEDULE_CONFIGS = {
   standard: {
     label: 'Standard',
-    sub: '60% after rendering · 30% after production · 10% after delivery',
+    sub: '60% initial deposit · 40% when goods arrive in Ghana',
     milestones: [
-      { key: 'post-rendering',  label: 'Design & Rendering Approval — First Instalment',       pct: 0.60, cumPct: 0.60 },
-      { key: 'post-production', label: 'Manufacturing & Production — Second Instalment',        pct: 0.30, cumPct: 0.90 },
-      { key: 'post-shipping',   label: 'Final Delivery & Project Handover — Settlement',        pct: 0.10, cumPct: 1.00 },
+      { key: 'initial-deposit',          label: 'Approved Quotation — Initial Project Deposit', pct: 0.60, cumPct: 0.60 },
+      { key: 'pre-installation-balance', label: 'Goods Arrived in Ghana — Final Goods Balance', pct: 0.40, cumPct: 1.00 },
     ],
   },
   '50-50': {

@@ -132,8 +132,8 @@ export default function AdminLayout({ user, onLogout, onPreview, brand, view, se
       label: 'Projects',
       items: [
         { id: 'projects', label: 'Project Board', icon: <Kanban size={18} /> },
-        { id: 'installations', label: 'Installations', icon: <Activity size={18} /> },
-        { id: 'logistics', label: 'Logistics', icon: <Truck size={18} /> },
+        { id: 'installations', label: 'Field Operations', icon: <HardHat size={18} /> },
+        { id: 'logistics', label: 'Supply Chain', icon: <Truck size={18} /> },
       ]
     },
     {

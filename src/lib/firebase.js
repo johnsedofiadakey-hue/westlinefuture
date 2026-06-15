@@ -1,27 +1,36 @@
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
+import { initializeFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 import { getFunctions } from "firebase/functions";
 
 const env = import.meta.env;
+const westlineFirebaseConfig = {
+  apiKey: "AIzaSyCt-3XYvaehM0vfzC6ldATaqw7iawk8wSw",
+  authDomain: "westlinefuture.firebaseapp.com",
+  projectId: "westlinefuture",
+  storageBucket: "westlinefuture.firebasestorage.app",
+  messagingSenderId: "552268332392",
+  appId: "1:552268332392:web:28a020be199bce1b47eadd",
+};
+const resolvedFirebaseConfig = {
+  apiKey: env.VITE_FIREBASE_API_KEY || westlineFirebaseConfig.apiKey,
+  authDomain: env.VITE_FIREBASE_AUTH_DOMAIN || westlineFirebaseConfig.authDomain,
+  projectId: env.VITE_FIREBASE_PROJECT_ID || westlineFirebaseConfig.projectId,
+  storageBucket: env.VITE_FIREBASE_STORAGE_BUCKET || westlineFirebaseConfig.storageBucket,
+  messagingSenderId: env.VITE_FIREBASE_MESSAGING_SENDER_ID || westlineFirebaseConfig.messagingSenderId,
+  appId: env.VITE_FIREBASE_APP_ID || westlineFirebaseConfig.appId,
+};
 const isDevPhoneAuthTestMode = env.DEV && env.VITE_FIREBASE_PHONE_AUTH_TEST_MODE === 'true';
 const hasKeys = !!(
-  env.VITE_FIREBASE_API_KEY &&
-  env.VITE_FIREBASE_API_KEY !== 'undefined' &&
-  env.VITE_FIREBASE_AUTH_DOMAIN &&
-  env.VITE_FIREBASE_PROJECT_ID &&
-  env.VITE_FIREBASE_APP_ID
+  resolvedFirebaseConfig.apiKey &&
+  resolvedFirebaseConfig.apiKey !== 'undefined' &&
+  resolvedFirebaseConfig.authDomain &&
+  resolvedFirebaseConfig.projectId &&
+  resolvedFirebaseConfig.appId
 );
 
-export const firebaseConfig = {
-  apiKey: env.VITE_FIREBASE_API_KEY || "mock-key",
-  authDomain: env.VITE_FIREBASE_AUTH_DOMAIN,
-  projectId: env.VITE_FIREBASE_PROJECT_ID || "westline-mock",
-  storageBucket: env.VITE_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-  appId: env.VITE_FIREBASE_APP_ID
-};
+export const firebaseConfig = resolvedFirebaseConfig;
 
 let app, auth, db, storage, functions, messaging, isFirebaseEnabled = false;
 
@@ -34,7 +43,13 @@ try {
       auth.settings.appVerificationDisabledForTesting = true;
       console.warn("Firebase Phone Auth test mode is enabled. Use only Firebase console test phone numbers locally.");
     }
-    db = getFirestore(app);
+    // Some mobile networks, proxies, privacy extensions, and antivirus tools
+    // break Firestore's default streaming WebChannel transport with HTTP 400
+    // responses. Long polling keeps realtime listeners reliable in those
+    // environments instead of showing cached data and then dropping it.
+    db = initializeFirestore(app, {
+      experimentalForceLongPolling: true,
+    });
     storage = getStorage(app);
     functions = getFunctions(app);
     import('firebase/messaging').then(({ getMessaging, isSupported }) => {

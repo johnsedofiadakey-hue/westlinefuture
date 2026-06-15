@@ -30,7 +30,7 @@ const methodRegistry = {
     icon: '💳',
     enabled: false, // Set via gateway settings
     requiresSetup: true,
-    configFields: ['paystackPublicKey', 'paystackSecretKey'],
+    configFields: ['paystackPublicKey'],
   },
   [PAYMENT_METHODS.HUBTEL]: {
     id: PAYMENT_METHODS.HUBTEL,
@@ -39,7 +39,7 @@ const methodRegistry = {
     icon: '📱',
     enabled: false,
     requiresSetup: true,
-    configFields: ['hubtelClientId', 'hubtelClientSecret', 'hubtelMerchantId'],
+    configFields: ['hubtelClientId', 'hubtelMerchantId'],
   },
   [PAYMENT_METHODS.BANK_TRANSFER]: {
     id: PAYMENT_METHODS.BANK_TRANSFER,

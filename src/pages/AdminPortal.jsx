@@ -44,8 +44,6 @@ export default function AdminPortal({ user, onLogout, onPreview, content, setCon
   const [mod, setMod] = useState(null);
   const [aiContext, setAiContext] = useState({});
   const [searchQuery, setSearchQuery] = useState('');
-  const [msgDraft, setMsgDraft] = useState('');
-  const msgInputRef = useRef(null);
   const { brand } = props;
 
   const handleSelectClient = (id) => {

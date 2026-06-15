@@ -3,7 +3,8 @@ import {
   Lock, FileText, Download, CheckCircle2, AlertCircle, Send, X,
   PlusCircle, Trash2, Check, Banknote, Building2, Smartphone, Clock, Info
 } from 'lucide-react';
-import { db } from '../lib/firebase';
+import { db, functions } from '../lib/firebase';
+import { httpsCallable } from 'firebase/functions';
 import {
   updateDoc, doc, collection, addDoc, onSnapshot, query, orderBy,
   serverTimestamp, deleteDoc, writeBatch
@@ -75,24 +76,14 @@ export default function ClientRenderingVault({
 
   const handleApprove = async (pkg) => {
     try {
-      // Mark the rendering package as approved
-      await updateDoc(doc(db, 'renderingPackages', pkg.id), {
-        status: 'Approved',
-        approvedAt: serverTimestamp(),
+      const submitRenderingDecision = httpsCallable(functions, 'submitRenderingDecision');
+      await submitRenderingDecision({
+        projectId: project.id,
+        packageId: pkg.id,
+        action: 'approve',
       });
-      // Set renderingApproved on the project — this is what the AdvanceModal
-      // gate checks before allowing progression to Stage 3 (Quote & Deposit).
-      // Also clear any pending change request.
-      await updateDoc(doc(db, 'projects', project.id), {
-        renderingApproved: true,
-        renderingApprovedAt: serverTimestamp(),
-        changeRequestPending: false,
-      });
-      await postSystemMessage(
-        `✅ ${project.clientName || 'Client'} approved the design rendering "${pkg.title}". The project is cleared to proceed to quotation.`
-      );
-    } catch (e) {
-      console.error(e);
+    } catch (err) {
+      console.error('[ClientRenderingVault] Rendering approval failed:', err);
     }
   };
 
@@ -102,29 +93,13 @@ export default function ClientRenderingVault({
     setChangeRequestBusy(true);
     try {
       const pkg = changeRequestPkg;
-      const newRevCount = (pkg.usedRevisions || 0) + 1;
-      const batch = writeBatch(db);
-      batch.update(doc(db, 'renderingPackages', pkg.id), {
-        status: 'Changes Requested',
-        usedRevisions: newRevCount,
+      const submitRenderingDecision = httpsCallable(functions, 'submitRenderingDecision');
+      await submitRenderingDecision({
+        projectId: project.id,
+        packageId: pkg.id,
+        action: 'request_changes',
+        note: changeRequestNote.trim(),
       });
-      batch.update(doc(db, 'projects', project.id), {
-        changeRequestPending: true,
-        renderingApproved: false,
-      });
-      await batch.commit();
-      await postSystemMessage(
-        `🔄 ${project.clientName || 'Client'} requested changes on "${pkg.title}": "${changeRequestNote.trim()}"`
-      );
-      // Notify admin
-      await addDoc(collection(db, 'notifications'), {
-        userId: 'admin',
-        message: `${project.clientName || 'Client'} requested changes on "${pkg.title}" in "${project.title}": ${changeRequestNote.trim()}`,
-        type: 'change_request',
-        link: '/admin',
-        read: false,
-        createdAt: new Date(),
-      }).catch(() => {});
       setChangeRequestPkg(null);
       setChangeRequestNote('');
     } catch (err) {
@@ -139,36 +114,19 @@ export default function ClientRenderingVault({
     if (!linkedInv) return;
     setPaySubmitting(prev => ({ ...prev, [pkg.id]: true }));
     try {
-      await updateDoc(doc(db, 'invoices', linkedInv.id), {
-        awaitingConfirmation: true,
-        paymentMethodSubmitted: method,
-        paymentSubmittedAt: serverTimestamp(),
+      const submitOfflinePayment = httpsCallable(functions, 'submitOfflinePayment');
+      await submitOfflinePayment({
+        projectId: project.id,
+        invoiceId: linkedInv.id,
+        amount: parseAmount(linkedInv.amount || linkedInv.total),
+        method: method === 'bank' ? 'bank' : 'cash',
+        reference: '',
       });
       const methodLabel = method === 'bank' ? 'bank transfer' : 'offline/in-person payment';
       await postSystemMessage(
         `💳 ${project.clientName || 'Client'} submitted a ${methodLabel} for the rendering fee invoice "${linkedInv.invoiceNumber || 'INV'}" — ${linkedInv.currency || 'GHS'} ${parseAmount(linkedInv.amount || linkedInv.total).toLocaleString()}. Awaiting admin confirmation.`
       );
 
-      // Notify admin
-      await addDoc(collection(db, 'notifications'), {
-        userId: 'admin',
-        message: `${project.clientName || 'Client'} submitted an offline payment (${methodLabel}) for ${linkedInv.currency || 'GHS'} ${parseAmount(linkedInv.amount || linkedInv.total).toLocaleString()}. Please confirm receipt.`,
-        type: 'payment_submitted',
-        link: '/admin',
-        read: false,
-        createdAt: serverTimestamp(),
-      }).catch(() => {});
-      const managerId = project.projectManagerId || project.assignedStaff?.[0];
-      if (managerId) {
-        await addDoc(collection(db, 'notifications'), {
-          userId: managerId,
-          message: `${project.clientName || 'Client'} submitted an offline payment (${methodLabel}) for ${linkedInv.currency || 'GHS'} ${parseAmount(linkedInv.amount || linkedInv.total).toLocaleString()}. Please confirm receipt.`,
-          type: 'payment_submitted',
-          link: '/admin/client-hub',
-          read: false,
-          createdAt: serverTimestamp(),
-        }).catch(() => {});
-      }
     } catch (err) {
       console.error('[ClientRenderingVault] Offline payment submit failed:', err);
     } finally {
@@ -194,47 +152,17 @@ export default function ClientRenderingVault({
     if (!newPinText.trim() || submittingPin || !selectedCoords) return;
     setSubmittingPin(true);
     try {
-      const pkg = projectPackages.find(p => p.id === selectedCoords.packageId);
-      const newRevCount = (pkg?.usedRevisions || 0) + 1;
-
-      // Atomic batch: pin creation + package freeze + project freeze all succeed or all fail
-      const batch = writeBatch(db);
-      const pinRef = doc(collection(db, 'projects', project.id, 'markups'));
-      batch.set(pinRef, {
+      const submitRenderingDecision = httpsCallable(functions, 'submitRenderingDecision');
+      await submitRenderingDecision({
+        projectId: project.id,
         packageId: selectedCoords.packageId,
-        x: selectedCoords.x,
-        y: selectedCoords.y,
+        action: 'request_changes',
         note: newPinText.trim(),
-        authorName: project.clientName || 'Client',
-        authorRole: 'client',
-        status: 'Open',
-        createdAt: serverTimestamp(),
+        coordinates: {
+          x: selectedCoords.x,
+          y: selectedCoords.y,
+        },
       });
-      if (pkg) {
-        batch.update(doc(db, 'renderingPackages', pkg.id), {
-          status: 'Changes Requested',
-          usedRevisions: newRevCount,
-        });
-      }
-      batch.update(doc(db, 'projects', project.id), {
-        changeRequestPending: true,
-      });
-      await batch.commit();
-
-      // System message visible in client + admin chat
-      await postSystemMessage(
-        `📌 ${project.clientName || 'Client'} requested changes on the rendering "${pkg?.title || 'design'}" — pin #${newRevCount} placed. Project is on hold pending revision.`
-      );
-
-      // Notify admin via notification document
-      await addDoc(collection(db, 'notifications'), {
-        userId: 'admin',
-        message: `${project.clientName || 'Client'} placed a feedback pin on "${pkg?.title || 'design'}" in "${project.title}" — project is now on hold.`,
-        type: 'change_request',
-        link: '/admin',
-        read: false,
-        createdAt: serverTimestamp(),
-      }).catch(() => {});
 
       setShowPinModal(false);
       setSelectedCoords(null);

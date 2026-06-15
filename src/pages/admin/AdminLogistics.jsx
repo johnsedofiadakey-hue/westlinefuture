@@ -26,6 +26,9 @@ export default function AdminLogistics({ containers = [], workOrders = [], clien
 
   const warehouseCount = containers.filter(c => c.status === 'Warehouse').length;
   const warehouseItems = containers.filter(c => c.status === 'Warehouse').reduce((acc, c) => acc + (c.items?.length || 0), 0);
+  const atRiskCount = containers.filter(c => c.atRisk || c.status === 'Customs').length;
+  const localReadyCount = containers.filter(c => c.status === 'Local').length;
+  const linkedWorkOrderCount = workOrders.filter(wo => wo.logisticsStatus && wo.logisticsStatus !== 'Local').length;
 
   const handleCreateContainer = async () => {
     if (!newContainer.shipmentRef.trim()) { props.notify?.('error', 'Shipment reference required'); return; }
@@ -56,7 +59,7 @@ export default function AdminLogistics({ containers = [], workOrders = [], clien
   const handleUpdateContainerStatus = async (id, status) => {
      const container = containers.find(c => c.id === id);
      
-     // 🛡️ FINANCIAL GATEKEEPER: Check if linked items are paid for before dispatching/clearing
+     // Financial gatekeeper: linked work orders must be settled before dispatching or clearing.
      if (['Sea', 'Customs', 'Local'].includes(status)) {
         const linkedWorkOrders = workOrders.filter(wo => container?.items?.includes(wo.id));
         const unpaidItems = linkedWorkOrders.filter(wo => {
@@ -89,10 +92,13 @@ export default function AdminLogistics({ containers = [], workOrders = [], clien
         <div>
            <h2 className="lxfh" style={{ fontSize: 28, fontWeight: 700, color: `var(--accent-secondary)` }}>Logistics Switchboard</h2>
            <div style={{ display: 'flex', gap: 16, marginTop: 12 }}>
-              {['containers', 'procurement'].map(t => (
+              {[
+                { id: 'containers', label: 'Shipments' },
+                { id: 'procurement', label: 'Procurement Lists' },
+              ].map(t => (
                 <button 
-                  key={t}
-                  onClick={() => setActiveTab(t)}
+                  key={t.id}
+                  onClick={() => setActiveTab(t.id)}
                   style={{ 
                     background: 'none', border: 'none', padding: '0 0 8px', 
                     fontSize: 12, fontWeight: 800, color: activeTab === t ? ac : `var(--text-secondary)`,
@@ -100,7 +106,7 @@ export default function AdminLogistics({ containers = [], workOrders = [], clien
                     cursor: 'pointer', textTransform: 'uppercase', letterSpacing: 1
                   }}
                 >
-                  {t}
+                  {t.label}
                 </button>
               ))}
            </div>
@@ -111,14 +117,31 @@ export default function AdminLogistics({ containers = [], workOrders = [], clien
         </div>
       </div>
 
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 14 }}>
+        {[
+          { label: 'Active Shipments', value: containers.length, color: '#111827', icon: <Ship size={20} /> },
+          { label: 'At Risk / Customs', value: atRiskCount, color: '#EF4444', icon: <ShieldAlert size={20} /> },
+          { label: 'Local Ready', value: localReadyCount, color: '#16A34A', icon: <MapPin size={20} /> },
+          { label: 'Open Work Orders', value: linkedWorkOrderCount, color: ac, icon: <Package size={20} /> },
+        ].map(stat => (
+          <div key={stat.label} className="p-card" style={{ padding: 18, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              <div className="lxf" style={{ fontSize: 10, color: '#6B7280', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '.08em' }}>{stat.label}</div>
+              <div className="lxfh" style={{ fontSize: 28, color: stat.color, marginTop: 4 }}>{stat.value}</div>
+            </div>
+            <div style={{ color: stat.color }}>{stat.icon}</div>
+          </div>
+        ))}
+      </div>
+
       {activeTab === 'containers' && (
-         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(400px, 1fr))', gap: 24 }}>
+         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))', gap: 24 }}>
             {containers.length === 0 && (
               <div style={{ gridColumn: '1 / -1' }}>
                 <EmptyState
                   icon={<Ship size={28} />}
                   title="No shipments tracked"
-                  description="Add a container to start tracking your international glass shipments."
+                  description="Add a shipment to start tracking supplier dispatch, warehouse arrival, customs, local hub, and site delivery."
                   action={{ label: '+ New Container', onClick: () => setShowAddContainer(true) }}
                 />
               </div>
@@ -256,7 +279,7 @@ export default function AdminLogistics({ containers = [], workOrders = [], clien
          <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
             <div className="p-card" style={{ padding: 24, background: `var(--accent-secondary)`, color: '#fff', borderRadius: 32 }}>
                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-                  <h3 className="lxfh" style={{ fontSize: 18, color: '#fff' }}>Asset Pulse</h3>
+                  <h3 className="lxfh" style={{ fontSize: 18, color: '#fff' }}>Site Equipment Pulse</h3>
                   <Scan size={20} color={ac} />
                </div>
                <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>

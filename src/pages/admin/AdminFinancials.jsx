@@ -113,10 +113,8 @@ export default function AdminFinancials({ invoices = [], transactions = [], clie
       enableHubtel:        false,
       enablePaystack:      true,
       paystackPublicKey:   '',
-      paystackSecretKey:   '',
       vapidKey:            '',
       hubtelClientId:      '',
-      hubtelClientSecret:  '',
       hubtelMerchantId:    '',
     }
   );
@@ -163,7 +161,10 @@ export default function AdminFinancials({ invoices = [], transactions = [], clie
   const saveGatewaySettings = async () => {
     setGatewayLoading(true);
     try {
-      if (props.syncCMS) await props.syncCMS('gatewaySettings', gatewaySettings);
+      const publicGatewaySettings = { ...gatewaySettings };
+      delete publicGatewaySettings.paystackSecretKey;
+      delete publicGatewaySettings.hubtelClientSecret;
+      if (props.syncCMS) await props.syncCMS('gatewaySettings', publicGatewaySettings);
       notify('success', 'Gateway settings saved');
       setHubtelTest(null); // reset test result after saving new creds
       setGatewaySettingsDirty(false); // allow Firebase sync to update form if needed
@@ -181,24 +182,18 @@ export default function AdminFinancials({ invoices = [], transactions = [], clie
     setHubtelTest('testing');
     try {
       const fn = httpsCallable(functions, 'testHubtelConnection');
-      // Pass live form values directly — no need to save first
-      const res = await fn({
-        hubtelClientId:     gatewaySettings.hubtelClientId     || '',
-        hubtelClientSecret: gatewaySettings.hubtelClientSecret || '',
-        hubtelMerchantId:   gatewaySettings.hubtelMerchantId   || '',
-        enableHubtel:       true,
-      });
+      const res = await fn();
       setHubtelTest({ ok: true, message: res.data?.message || 'Credentials verified — Hubtel connection is working.' });
     } catch (err) {
       // Parse the Firebase HttpsError message
       const raw = err?.message || '';
       let friendly = raw;
       if (raw.includes('401') || raw.toLowerCase().includes('unauthorized')) {
-        friendly = 'Hubtel rejected the credentials (401 Unauthorized). Check that your Client ID and Client Secret are correct for the Hubtel Merchant Checkout API. Log in to merchants.hubtel.com → Settings → API Keys.';
+        friendly = 'Hubtel rejected the server credentials (401 Unauthorized). Check the Hubtel credentials configured in Firebase Functions.';
       } else if (raw.toLowerCase().includes('not enabled')) {
         friendly = 'Hubtel is not enabled. Toggle "Enable Hubtel" on and save first.';
       } else if (raw.toLowerCase().includes('incomplete') || raw.toLowerCase().includes('credentials')) {
-        friendly = 'One or more Hubtel fields are empty. Fill in Client ID, Client Secret, and Merchant Account Number.';
+        friendly = 'Hubtel server credentials are incomplete. Configure HUBTEL_PAYMENT_CLIENT_ID, HUBTEL_PAYMENT_CLIENT_SECRET, and HUBTEL_PAYMENT_MERCHANT_ID in the Functions environment.';
       } else if (raw.includes('400')) {
         friendly = 'Hubtel returned a Bad Request (400). Check that the Merchant Account Number is your Hubtel-registered mobile money number (e.g. 0550000000).';
       }
@@ -513,11 +508,7 @@ export default function AdminFinancials({ invoices = [], transactions = [], clie
                   ) : (
                     <span style={{ fontSize: 11, fontWeight: 800, padding: '4px 10px', borderRadius: 999, background: '#FEF3C7', color: '#92400E' }}>⚠ Public Key Missing — clients will see "gateway not configured"</span>
                   )}
-                  {gatewaySettings.paystackSecretKey ? (
-                    <span style={{ fontSize: 11, fontWeight: 800, padding: '4px 10px', borderRadius: 999, background: '#D1FAE5', color: '#065F46' }}>✓ Secret Key Set</span>
-                  ) : (
-                    <span style={{ fontSize: 11, fontWeight: 800, padding: '4px 10px', borderRadius: 999, background: '#FEE2E2', color: '#991B1B' }}>✗ Secret Key Missing — payments will fail at verification</span>
-                  )}
+                  <span style={{ fontSize: 11, fontWeight: 800, padding: '4px 10px', borderRadius: 999, background: '#EFF6FF', color: '#1D4ED8' }}>Secret key managed by Firebase Functions</span>
                 </div>
                 <div style={{ padding: '12px 16px', borderRadius: 10, background: '#F0FDF4', border: '1.5px solid #BBF7D0', fontSize: 12, lineHeight: 1.7, color: '#15803D' }}>
                   <strong>Where to find these keys:</strong> Log in to{' '}
@@ -525,7 +516,7 @@ export default function AdminFinancials({ invoices = [], transactions = [], clie
                     dashboard.paystack.com <ExternalLink size={10} style={{ verticalAlign: 'middle' }} />
                   </a>{' '}
                   → Settings → API Keys &amp; Webhooks. Use <strong>Test keys</strong> while testing, <strong>Live keys</strong> for real payments.
-                  Public key starts with <code style={{ background: '#DCFCE7', padding: '1px 4px', borderRadius: 3 }}>pk_</code>, Secret key starts with <code style={{ background: '#DCFCE7', padding: '1px 4px', borderRadius: 3 }}>sk_</code>.
+                  Public key starts with <code style={{ background: '#DCFCE7', padding: '1px 4px', borderRadius: 3 }}>pk_</code>. Configure the secret key with Firebase Functions secrets; it must never be saved in this portal.
                 </div>
                 {/* Key format warnings — shown inline next to the field */}
                 {gatewaySettings.paystackPublicKey && !gatewaySettings.paystackPublicKey.startsWith('pk_') && (
@@ -533,12 +524,7 @@ export default function AdminFinancials({ invoices = [], transactions = [], clie
                     ⚠ Public Key should start with <code>pk_</code>. It looks like you may have entered the Secret Key here. Please double-check.
                   </div>
                 )}
-                {gatewaySettings.paystackSecretKey && !gatewaySettings.paystackSecretKey.startsWith('sk_') && (
-                  <div style={{ padding: '10px 14px', borderRadius: 8, background: '#FEF3C7', border: '1.5px solid #FDE68A', fontSize: 12, color: '#92400E', fontWeight: 700 }}>
-                    ⚠ Secret Key should start with <code>sk_</code>. Please double-check.
-                  </div>
-                )}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div>
                   <PFormField label="Paystack Public Key" sub="Shown to clients — safe to expose. Must start with pk_">
                     <input
                       className="p-inp"
@@ -547,17 +533,6 @@ export default function AdminFinancials({ invoices = [], transactions = [], clie
                       placeholder="pk_test_... or pk_live_..."
                       autoComplete="off"
                       style={{ borderColor: gatewaySettings.paystackPublicKey && !gatewaySettings.paystackPublicKey.startsWith('pk_') ? '#F59E0B' : undefined }}
-                    />
-                  </PFormField>
-                  <PFormField label="Paystack Secret Key" sub="Server-side only — never shared. Must start with sk_">
-                    <input
-                      className="p-inp"
-                      type="password"
-                      value={gatewaySettings.paystackSecretKey || ''}
-                      onChange={e => updateGateway(s => ({ ...s, paystackSecretKey: e.target.value.trim() }))}
-                      placeholder="sk_test_... or sk_live_..."
-                      autoComplete="off"
-                      style={{ borderColor: gatewaySettings.paystackSecretKey && !gatewaySettings.paystackSecretKey.startsWith('sk_') ? '#F59E0B' : undefined }}
                     />
                   </PFormField>
                 </div>
@@ -589,12 +564,9 @@ export default function AdminFinancials({ invoices = [], transactions = [], clie
                   <div>③ <strong>Merchant Account Number</strong> → Same portal → <strong>Programmable API Keys → Account ID tab</strong> → copy the <strong>Collection Account number</strong> (e.g. <code style={{ background: '#E0F2FE', padding: '1px 5px', borderRadius: 3 }}>2039233</code>). This is the account that receives payments.</div>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                   <PFormField label="Hubtel Client ID (API Key)" sub="From merchants.hubtel.com → Settings → App Integrations">
                     <input className="p-inp" type="password" value={gatewaySettings.hubtelClientId || ''} onChange={e => { updateGateway(s => ({ ...s, hubtelClientId: e.target.value })); setHubtelTest(null); }} placeholder="API Client ID" autoComplete="off" />
-                  </PFormField>
-                  <PFormField label="Hubtel Client Secret (API Secret)" sub="From the same App Integrations page">
-                    <input className="p-inp" type="password" value={gatewaySettings.hubtelClientSecret || ''} onChange={e => { updateGateway(s => ({ ...s, hubtelClientSecret: e.target.value })); setHubtelTest(null); }} placeholder="API Client Secret" autoComplete="off" />
                   </PFormField>
                   <PFormField label="Merchant Account Number" sub="Collection Account number from developers.hubtel.com → Account ID tab (e.g. 2039233)">
                     <input className="p-inp" value={gatewaySettings.hubtelMerchantId || ''} onChange={e => { updateGateway(s => ({ ...s, hubtelMerchantId: e.target.value })); setHubtelTest(null); }} placeholder="e.g. 2039233" autoComplete="off" />
@@ -605,8 +577,8 @@ export default function AdminFinancials({ invoices = [], transactions = [], clie
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
                   <button
                     onClick={testHubtelConnection}
-                    disabled={hubtelTest === 'testing' || !gatewaySettings.hubtelClientId || !gatewaySettings.hubtelClientSecret || !gatewaySettings.hubtelMerchantId}
-                    style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 18px', borderRadius: 10, border: '1.5px solid var(--border-color)', background: 'var(--bg-secondary)', fontSize: 12, fontWeight: 700, cursor: 'pointer', opacity: (!gatewaySettings.hubtelClientId || !gatewaySettings.hubtelClientSecret || !gatewaySettings.hubtelMerchantId) ? 0.5 : 1 }}
+                    disabled={hubtelTest === 'testing' || !gatewaySettings.hubtelClientId || !gatewaySettings.hubtelMerchantId}
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 18px', borderRadius: 10, border: '1.5px solid var(--border-color)', background: 'var(--bg-secondary)', fontSize: 12, fontWeight: 700, cursor: 'pointer', opacity: (!gatewaySettings.hubtelClientId || !gatewaySettings.hubtelMerchantId) ? 0.5 : 1 }}
                   >
                     {hubtelTest === 'testing' ? <><Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> Testing…</> : <><Zap size={13} /> Test Connection</>}
                   </button>

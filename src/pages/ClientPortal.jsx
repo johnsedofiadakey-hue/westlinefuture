@@ -313,10 +313,11 @@ const STAGE_ICONS = {
 // ─── Payment Schedule Configs ─────────────────────────────────────────────────
 const SCHEDULE_CONFIGS = {
   standard: {
-    label: 'Standard (60/40)',
+    label: 'Standard (60/30/10)',
     milestones: [
-      { key: 'initial-deposit',          label: '60% Initial Project Deposit',             pct: 0.60, cumPct: 0.60 },
-      { key: 'pre-installation-balance', label: '40% When Goods Arrive in Ghana',          pct: 0.40, cumPct: 1.00 },
+      { key: 'initial-deposit',          label: '60% Initial Project Deposit',           pct: 0.60, cumPct: 0.60 },
+      { key: 'production-balance',       label: '30% Production Balance',                pct: 0.30, cumPct: 0.90 },
+      { key: 'pre-installation-balance', label: '10% Final Arrival Balance (Ghana)',     pct: 0.10, cumPct: 1.00 },
     ],
   },
   '50-50': {

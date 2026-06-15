@@ -1927,8 +1927,9 @@ export default function App() {
     const ts = Date.now();
     const SCHEDULES = {
       standard: [
-        { name: '60% Initial Project Deposit',             pct: 0.60, stageId: 3, milestoneKey: 'initial-deposit' },
-        { name: '40% Final Goods Balance on Ghana Arrival', pct: 0.40, stageId: 5, milestoneKey: 'pre-installation-balance' },
+        { name: '60% Initial Project Deposit',           pct: 0.60, stageId: 3, milestoneKey: 'initial-deposit' },
+        { name: '30% Production Balance',                 pct: 0.30, stageId: 4, milestoneKey: 'production-balance' },
+        { name: '10% Final Arrival Balance (Ghana)',      pct: 0.10, stageId: 5, milestoneKey: 'pre-installation-balance' },
       ],
       '70-30': [
         { name: '70% Before Delivery', pct: 0.70, stageId: 3 },

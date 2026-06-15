@@ -2982,7 +2982,11 @@ function PaymentsTab({ project, user, transactions: propTxns, invoices: propInvs
     ?? (propInvs || []).filter(i => i.projectId === project.id || i.parentId === project.id);
   const allInvoices = rawInvoices.filter(invoice => {
     const status = String(invoice.status || '').toLowerCase();
-    return invoice.internalOnly !== true &&
+    const isQuotation = ['quotation', 'quote'].includes(String(invoice.type || '').toLowerCase()) ||
+      ['quotation', 'quote'].includes(String(invoice.documentKind || '').toLowerCase()) ||
+      String(invoice.invoiceType || '').toLowerCase() === 'quotation';
+    return !isQuotation &&
+      invoice.internalOnly !== true &&
       invoice.clientVisible !== false &&
       status !== 'draft' &&
       status !== 'void';

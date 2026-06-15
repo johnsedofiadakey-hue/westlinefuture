@@ -25,7 +25,7 @@ import WorldClassChat from '../components/WorldClassChat';
 import InvoiceDocument from '../components/InvoiceDocument';
 import ClientUploadsTab from '../components/ClientUploadsTab';
 import SecureVault from '../components/SecureVault';
-import { clientPortalGateState, deriveWorkflowStep, WORKFLOW_STEP } from '../lib/projectWorkflow';
+import { clientPortalGateState, deriveWorkflowStep, workflowProgress, WORKFLOW_STEP } from '../lib/projectWorkflow';
 
 const AC = `var(--accent-secondary)`;
 
@@ -1479,7 +1479,11 @@ function ClientNextActionCard({ project, invoices = [], renderingPackages = [], 
     i.type !== 'Quotation' && i.documentKind !== 'quotation' &&
     (i.status === 'Overdue' || i.status === 'Sent' || (i.due != null && i.due !== ''))
   );
-  const pendingQuote = projectInvoices.find(i => ['Quotation', 'quote', 'quotation'].includes(i.type || i.documentKind) && !['approved'].includes(String(i.status || '').toLowerCase()) && !isPaidStatus(i.status));
+  const quoteInvoices = projectInvoices
+    .filter(i => ['Quotation', 'quote', 'quotation'].includes(i.type || i.documentKind))
+    .sort((a, b) => Number(b.version || 0) - Number(a.version || 0));
+  const pendingQuote = quoteInvoices.find(i => i.id === project.activeQuoteId) ||
+    quoteInvoices.find(i => !['approved', 'superseded', 'cancelled'].includes(String(i.status || '').toLowerCase()));
 
   const noRendering = project.kickoffMode === 'direct-kickoff';
   const renderingPaid = project.renderingFeePaid === true || projectPackages.some(pkg => {
@@ -1509,10 +1513,14 @@ function ClientNextActionCard({ project, invoices = [], renderingPackages = [], 
     action = { tone: '#2563EB', bg: '#EFF6FF', icon: <Clock size={18} />, title: 'Your 3D rendering is being prepared', body: 'The site survey is complete. Westline Future has been prompted to prepare and upload your rendering package.', button: 'View Timeline', tab: 'overview' };
   } else if (!noRendering && lockedRendering) {
     action = { tone: '#D97706', bg: '#FFF7ED', icon: <Lock size={18} />, title: 'Design package is being verified', body: 'Your payment or rendering access is still being verified.', button: 'View Designs', tab: 'designs' };
+  } else if (!noRendering && project.changeRequestPending) {
+    action = { tone: '#D97706', bg: '#FFF7ED', icon: <Clock size={18} />, title: 'Rendering revision in progress', body: 'Your change request is with the design team. You will be notified when the revised 3D rendering is ready for review.', button: 'View Request', tab: 'designs' };
   } else if (!noRendering && reviewRendering) {
     action = { tone: 'var(--accent-primary)', bg: '#F4EFE6', icon: <PenTool size={18} />, title: 'Review your rendering', body: 'Your design package is unlocked. Review it, leave pins, request changes, or approve the final version.', button: 'Review Design', tab: 'designs' };
+  } else if (pendingQuote && renderingApproved && !project.quoteApproved && String(pendingQuote.status || '').toLowerCase() === 'changes requested') {
+    action = { tone: '#D97706', bg: '#FFF7ED', icon: <Clock size={18} />, title: 'Revised quotation in progress', body: 'Your quotation feedback was sent. The project manager is preparing the next version.', button: 'View Negotiation', tab: 'vault' };
   } else if (pendingQuote && renderingApproved && !project.quoteApproved) {
-    action = { tone: 'var(--accent-primary)', bg: '#FDFAF6', icon: <FileText size={18} />, title: 'Quotation ready for negotiation', body: 'Review the project cost. Approve it or request changes before the contract is issued.', button: 'View Quote', tab: 'documents' };
+    action = { tone: 'var(--accent-primary)', bg: '#FDFAF6', icon: <FileText size={18} />, title: 'Quotation ready for negotiation', body: 'Review the project cost. Approve it or request changes before the contract is issued.', button: 'Review Quotation', tab: 'vault' };
   } else if (project.quoteApproved && !project.contractAccepted) {
     action = { tone: '#7C3AED', bg: '#F5F3FF', icon: <PenLine size={18} />, title: 'Sign the project contract', body: 'Your negotiated quotation is approved. Review and sign the contract and terms to unlock the initial payment.', button: 'Review Contract', tab: 'documents' };
   } else if (project.contractAccepted && !project.depositPaid && !project.initialDepositPaid) {
@@ -1638,8 +1646,16 @@ function ClientApprovalsTab({ project, invoices = [], approvals = [], approveQuo
   const [reconsiderTarget, setReconsiderTarget] = useState(null);
   const [reconsiderText, setReconsiderText] = useState('');
   const [reconsiderBusy, setReconsiderBusy] = useState(false);
+  const [quoteChangeNote, setQuoteChangeNote] = useState('');
+  const [quoteChangeBusy, setQuoteChangeBusy] = useState(false);
+  const [quoteChangeMessage, setQuoteChangeMessage] = useState('');
 
-  const quoteDocs = invoices.filter(i => (i.projectId === project.id || i.parentId === project.id) && ['Quotation', 'quote', 'quotation'].includes(i.type || i.documentKind));
+  const quoteDocs = invoices
+    .filter(i => (i.projectId === project.id || i.parentId === project.id) && ['Quotation', 'quote', 'quotation'].includes(i.type || i.documentKind))
+    .sort((a, b) => Number(b.version || 0) - Number(a.version || 0));
+  const activeQuote = quoteDocs.find(quote => quote.id === project.activeQuoteId) ||
+    quoteDocs.find(quote => !['superseded', 'cancelled'].includes(String(quote.status || '').toLowerCase())) ||
+    quoteDocs[0];
   const productionAuthorized = project.productionAuthorized === true || project.specDoc?.status === 'signed';
   const pendingApprovals = (approvals || []).filter(a => a.projectId === project.id && a.status === 'pending');
   const pastApprovals = (approvals || []).filter(a => a.projectId === project.id && a.status !== 'pending');
@@ -1674,6 +1690,31 @@ function ClientApprovalsTab({ project, invoices = [], approvals = [], approveQuo
       setSignOffDone(true);
     } finally {
       setSignOffBusy(false);
+    }
+  };
+
+  const handleQuoteChangeRequest = async () => {
+    if (!activeQuote || !quoteChangeNote.trim() || quoteChangeBusy) return;
+    setQuoteChangeBusy(true);
+    setQuoteChangeMessage('');
+    try {
+      const requestChanges = httpsCallable(functions, 'requestProjectQuoteChanges');
+      await requestChanges({
+        projectId: project.id,
+        quoteId: activeQuote.id,
+        note: quoteChangeNote.trim(),
+      });
+      setQuoteChangeNote('');
+      setQuoteChangeMessage('Your request was sent. The project manager will issue a revised quotation.');
+    } catch (error) {
+      setQuoteChangeMessage(
+        error?.message
+          ?.replace(/^Firebase:\s*/i, '')
+          ?.replace(/\s*\(functions\/[^)]+\)\.?$/i, '') ||
+        'The quotation change request could not be sent.'
+      );
+    } finally {
+      setQuoteChangeBusy(false);
     }
   };
 
@@ -1828,24 +1869,63 @@ function ClientApprovalsTab({ project, invoices = [], approvals = [], approveQuo
         )}
 
         {/* Quote documents */}
-        {quoteDocs.length === 0 ? (
+        {!activeQuote ? (
           <div style={{ padding: '14px 16px', borderRadius: 14, background: `var(--bg-secondary)`, border: '1px solid var(--border-color)', fontSize: 12, color: `var(--text-secondary)` }}>
             No quote has been issued for this project yet.
           </div>
-        ) : quoteDocs.map(inv => (
-          <div key={inv.id} style={{ padding: 16, borderRadius: 16, background: `var(--bg-secondary)`, border: '1px solid var(--border-color)', display: 'flex', gap: 14, alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}>
-            <div>
-              <div style={{ fontSize: 13, fontWeight: 900, color: `var(--accent-secondary)` }}>{inv.title || `Quote v${inv.version || 1}`}</div>
-              <div style={{ fontSize: 11, color: `var(--text-secondary)`, marginTop: 3 }}>{inv.amount ? `GHS ${Number(String(inv.amount).replace(/[^0-9.]/g, '')).toLocaleString()}` : `GHS ${Number(inv.total || 0).toLocaleString()}`} · {inv.status || 'Pending'}</div>
+        ) : (
+          <div style={{ padding: 16, borderRadius: 16, background: `var(--bg-secondary)`, border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <div style={{ display: 'flex', gap: 14, alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 900, color: `var(--accent-secondary)` }}>{activeQuote.title || `Quotation v${activeQuote.version || 1}`}</div>
+                <div style={{ fontSize: 11, color: `var(--text-secondary)`, marginTop: 3 }}>
+                  Version {activeQuote.version || 1} · {activeQuote.amount ? `GHS ${Number(String(activeQuote.amount).replace(/[^0-9.]/g, '')).toLocaleString()}` : `GHS ${Number(activeQuote.total || 0).toLocaleString()}`} · {activeQuote.status || 'Sent'}
+                </div>
+                {activeQuote.scopeSummary && <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 8, lineHeight: 1.55 }}>{activeQuote.scopeSummary}</div>}
+              </div>
+              <button onClick={() => downloadInvoicePDF(activeQuote, project, user, brand)} style={{ padding: '9px 13px', borderRadius: 10, border: '1px solid var(--border-color)', background: '#fff', fontSize: 11, fontWeight: 800, cursor: 'pointer' }}>Download Quotation</button>
             </div>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button onClick={() => downloadInvoicePDF(inv, project, user, brand)} style={{ padding: '9px 13px', borderRadius: 10, border: '1px solid var(--border-color)', background: '#fff', fontSize: 11, fontWeight: 800, cursor: 'pointer' }}>Download</button>
-              {approveQuote && !project.quoteApproved && (
-                <button onClick={() => approveQuote(project.id)} style={{ padding: '9px 13px', borderRadius: 10, border: 'none', background: `var(--accent-primary)`, color: '#fff', fontSize: 11, fontWeight: 900, cursor: 'pointer' }}>Approve Quote</button>
-              )}
-            </div>
+
+            {!project.quoteApproved && String(activeQuote.status || '').toLowerCase() !== 'changes requested' && (
+              <>
+                <div style={{ padding: '11px 13px', borderRadius: 11, background: '#EFF6FF', border: '1px solid #BFDBFE', color: '#1E40AF', fontSize: 12, lineHeight: 1.5 }}>
+                  Approve only when the total and scope match your negotiation. Otherwise describe what must change; the current version will pause until a revised quotation is issued.
+                </div>
+                <textarea
+                  value={quoteChangeNote}
+                  onChange={event => setQuoteChangeNote(event.target.value)}
+                  placeholder="What amount, scope item, material, quantity, or payment term should change?"
+                  rows={3}
+                  style={{ width: '100%', boxSizing: 'border-box', padding: '11px 12px', borderRadius: 11, border: '1px solid var(--border-color)', resize: 'vertical', fontFamily: 'inherit', fontSize: 12 }}
+                />
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, flexWrap: 'wrap' }}>
+                  <button
+                    onClick={handleQuoteChangeRequest}
+                    disabled={quoteChangeBusy || !quoteChangeNote.trim()}
+                    style={{ padding: '9px 13px', borderRadius: 10, border: '1.5px solid #DC2626', background: '#fff', color: '#DC2626', fontSize: 11, fontWeight: 900, cursor: quoteChangeNote.trim() ? 'pointer' : 'default', opacity: quoteChangeNote.trim() ? 1 : .5 }}
+                  >
+                    {quoteChangeBusy ? 'Sending...' : 'Request Revised Quote'}
+                  </button>
+                  {approveQuote && (
+                    <button onClick={() => approveQuote(project.id)} style={{ padding: '9px 13px', borderRadius: 10, border: 'none', background: `var(--accent-primary)`, color: '#fff', fontSize: 11, fontWeight: 900, cursor: 'pointer' }}>Approve Quotation</button>
+                  )}
+                </div>
+              </>
+            )}
+
+            {String(activeQuote.status || '').toLowerCase() === 'changes requested' && !project.quoteApproved && (
+              <div style={{ padding: '11px 13px', borderRadius: 11, background: '#FFF7ED', border: '1px solid #FED7AA', color: '#9A3412', fontSize: 12, lineHeight: 1.5 }}>
+                Revision requested. The project manager is preparing quotation v{Number(activeQuote.version || 1) + 1}. You cannot approve this version now.
+              </div>
+            )}
+            {quoteChangeMessage && <div style={{ fontSize: 12, color: quoteChangeMessage.startsWith('Your request') ? '#15803D' : '#DC2626', fontWeight: 700 }}>{quoteChangeMessage}</div>}
           </div>
-        ))}
+        )}
+        {quoteDocs.length > 1 && (
+          <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
+            {quoteDocs.length - 1} previous quotation version{quoteDocs.length === 2 ? '' : 's'} retained in the audit history.
+          </div>
+        )}
         {project.quoteApproved && (
           <div style={{ padding: 14, borderRadius: 14, background: '#F0FDF4', color: '#16A34A', fontSize: 12, fontWeight: 800, display: 'flex', alignItems: 'center', gap: 8 }}>
             <CheckCircle2 size={15} /> Quote approved — project is moving forward.
@@ -3871,17 +3951,27 @@ function ProjectRoadmap({ project, invoices = [], renderingPackages = [], setAct
     const typeStages = PROJECT_TYPES[project.projectType]?.stages || CLIENT_PROJECT_STAGES.map(s => s.id);
     return typeStages.includes(s.id);
   });
-  const currentStageId = project.stageId || 1;
   const projectInvoices = invoices.filter(i => i.projectId === project.id || i.parentId === project.id);
+  const currentStageId = Math.max(
+    Number(project.stageId || 1),
+    Number(workflowProgress(project, {
+      invoices: projectInvoices,
+      renderingPackages,
+    }).meta?.stageId || 1)
+  );
   const hasUnpaidInvoice = projectInvoices.some(i =>
     !['paid','paid in full'].includes(String(i.status || '').toLowerCase()) &&
     i.type !== 'Quotation' && i.documentKind !== 'quotation' &&
     (i.status === 'Overdue' || i.status === 'Sent' || (i.due != null && i.due !== ''))
   );
-  const hasUnpaidQuote = projectInvoices.some(i =>
-    ['Quotation','quote','quotation'].includes(i.type || i.documentKind) &&
-    !['approved'].includes(String(i.status || '').toLowerCase())
-  );
+  const quotationRecords = projectInvoices
+    .filter(i => ['Quotation','quote','quotation'].includes(i.type || i.documentKind))
+    .sort((a, b) => Number(b.version || 0) - Number(a.version || 0));
+  const activeQuotation = quotationRecords.find(quote => quote.id === project.activeQuoteId) ||
+    quotationRecords.find(quote => !['superseded', 'cancelled'].includes(String(quote.status || '').toLowerCase()));
+  const hasUnpaidQuote = Boolean(activeQuotation && String(activeQuotation.status || '').toLowerCase() !== 'approved');
+  const quoteRevisionPending = String(activeQuotation?.status || '').toLowerCase() === 'changes requested' ||
+    project.quoteChangeRequested === true;
   const contractSigned = !!project.contractAccepted;
   const briefSigned = project.productionAuthorized === true || project.specDoc?.status === 'signed';
   const renderingPkg = (renderingPackages || []).find(p => p.projectId === project.id);
@@ -3911,8 +4001,10 @@ function ProjectRoadmap({ project, invoices = [], renderingPackages = [], setAct
     3: { who: briefSigned ? 'done' : 'client',
          msg: briefSigned
            ? 'The quotation, contract, initial payment, and final deliverables are approved. Production is authorised.'
-           : !project.quoteApproved && hasUnpaidQuote
-             ? 'Review the quotation. Approve the agreed cost or request a revised version.'
+           : quoteRevisionPending
+             ? 'Your quotation feedback was sent. The project manager is preparing a revised version.'
+             : !project.quoteApproved && hasUnpaidQuote
+               ? 'Review the quotation. Approve the agreed cost or request a revised version.'
              : project.quoteApproved && !contractSigned
                ? 'The quotation is approved. Review and sign the project contract and terms.'
                : contractSigned && !project.depositPaid && !project.initialDepositPaid
@@ -3924,7 +4016,7 @@ function ProjectRoadmap({ project, invoices = [], renderingPackages = [], setAct
            : hasUnpaidQuote
              ? 'Your quotation is ready for review.'
              : 'We are preparing your quotation for cost negotiation.',
-         action: hasUnpaidQuote ? { label: 'Review Quote →', tab: 'documents' } : null,
+         action: hasUnpaidQuote ? { label: quoteRevisionPending ? 'View Negotiation →' : 'Review Quote →', tab: 'vault' } : null,
     },
     4: { who: 'westline', msg: 'We are procuring your materials and fabricating your custom furniture and fixtures at our production facility.' },
     5: { who: project.goodsArrivedInGhana && !project.goodsBalancePaid ? 'client' : 'westline',
@@ -5674,10 +5766,18 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
                 {/* ── OVERVIEW TAB ── */}
                 {activeTab === 'overview' && (() => {
                   const pendingInvoices = (props.invoices || []).filter(i => i.projectId === selected?.id && ['Sent', 'Partially Paid'].includes(i.status) && i.type !== 'Quotation');
-                  const unsignedQuote = (props.approvals || []).find(a => a.projectId === selected?.id && ['Quotation', 'quotation'].includes(a.type) && a.status === 'Sent');
+                  const projectQuotes = (props.invoices || [])
+                    .filter(invoice =>
+                      (invoice.projectId === selected?.id || invoice.parentId === selected?.id) &&
+                      ['Quotation', 'quotation', 'quote'].includes(invoice.type || invoice.documentKind)
+                    )
+                    .sort((a, b) => Number(b.version || 0) - Number(a.version || 0));
+                  const unsignedQuote = projectQuotes.find(quote => quote.id === selected?.activeQuoteId) ||
+                    projectQuotes.find(quote => !['approved', 'superseded', 'cancelled'].includes(String(quote.status || '').toLowerCase()));
                   const specNeedsReview = selected?.specDoc?.url && !['signed', 'rejected'].includes(selected?.specDoc?.status);
                   const initialPaymentCleared = selected?.depositPaid === true || selected?.initialDepositPaid === true;
                   const actionReq = specNeedsReview && initialPaymentCleared ? { title: 'Final Deliverables Signature Required', desc: 'Review and sign the final drawings, bill of materials, scope, and deliverables to authorise production.', tab: 'documents', btn: 'Review & Sign', icon: <FileCheck size={18} color="#D97706" /> }
+                    : unsignedQuote && !selected?.quoteApproved && String(unsignedQuote.status || '').toLowerCase() === 'changes requested' ? { title: 'Quotation Revision Requested', desc: 'Your feedback was sent. The project manager is preparing the next quotation version.', tab: 'vault', btn: 'View Negotiation', icon: <Clock size={18} color="#D97706" /> }
                     : unsignedQuote && !selected?.quoteApproved ? { title: 'Quotation Ready', desc: 'Review the negotiated project cost. Approve it or request a revised version.', tab: 'vault', btn: 'Review Quote', icon: <PenTool size={18} color="#DC2626" /> }
                     : pendingInvoices.length > 0 ? { title: 'Pending Invoice', desc: `You have ${pendingInvoices.length} unpaid invoice(s) on your account.`, tab: 'financials', btn: 'View Invoices', icon: <CreditCard size={18} color="#D97706" /> }
                     : null;

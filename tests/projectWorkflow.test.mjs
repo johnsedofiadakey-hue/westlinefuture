@@ -127,6 +127,45 @@ test('current payment flags override a stale persisted workflow step', () => {
   );
 });
 
+test('a rendering revision request returns both portals to rendering review', () => {
+  assert.equal(
+    deriveWorkflowStep({
+      id: 'p1',
+      stageId: 2,
+      renderingApproved: false,
+      renderingStatus: 'changes_requested',
+      changeRequestPending: true,
+    }, {
+      renderingPackages: [{
+        id: 'render-1',
+        projectId: 'p1',
+        status: 'Changes Requested',
+      }],
+    }),
+    WORKFLOW_STEP.RENDERING_REVIEW
+  );
+});
+
+test('a quotation revision request remains in negotiation', () => {
+  assert.equal(
+    deriveWorkflowStep({
+      id: 'p1',
+      stageId: 3,
+      renderingApproved: true,
+      quoteApproved: false,
+      quoteChangeRequested: true,
+    }, {
+      invoices: [{
+        id: 'quote-1',
+        projectId: 'p1',
+        type: 'Quotation',
+        status: 'Changes Requested',
+      }],
+    }),
+    WORKFLOW_STEP.QUOTE_NEGOTIATION
+  );
+});
+
 test('installation fee flag clears the installation payment gate', () => {
   assert.equal(
     deriveWorkflowStep({

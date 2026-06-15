@@ -16,8 +16,8 @@ export default function AdminRenderingManager({
   brand,
   renderingPackages = [],
   invoices = [],
+  changeRequests = [],
   notify,
-  createInvoice,
 }) {
   const ac = brand?.color || 'var(--accent-secondary)';
   const [loading, setLoading] = useState(false);
@@ -30,11 +30,6 @@ export default function AdminRenderingManager({
   // Pre-select the rendering fee invoice that was auto-created at project setup (if any)
   const [linkedInvoiceId, setLinkedInvoiceId] = useState(project?.renderingFeeInvoiceId || '');
   const [includedRevisions, setIncludedRevisions] = useState(2);
-
-  // Invoice auto-prompt modal
-  const [showInvoicePrompt, setShowInvoicePrompt] = useState(false);
-  const [invoiceAmount, setInvoiceAmount] = useState(project?.renderingFee || '');
-  const [creatingInvoice, setCreatingInvoice] = useState(false);
 
   // Phase 3 states
   const [markups, setMarkups] = useState([]);
@@ -51,6 +46,11 @@ export default function AdminRenderingManager({
 
   const projectPackages = renderingPackages.filter(r => r.projectId === project?.id);
   const projectInvoices = invoices.filter(i => i.projectId === project?.id);
+  const projectRenderingRequests = changeRequests.filter(request =>
+    request.projectId === project?.id &&
+    String(request.type || '').toLowerCase() === 'rendering' &&
+    String(request.status || '').toLowerCase() === 'pending'
+  );
 
   // ── Rendering fee payment status (real-time from project doc) ─────────────
   const renderingFeePaid = !!project?.renderingFeePaid;
@@ -111,9 +111,7 @@ export default function AdminRenderingManager({
         // Project already has a rendering fee invoice — link it directly, no new invoice needed
         handleUpload(existingRenderingInvId);
       } else {
-        // No existing invoice — prompt admin to create one
-        setInvoiceAmount(project?.renderingFee || '');
-        setShowInvoicePrompt(true);
+        notify?.('error', 'This project has no rendering-fee invoice. Correct the project setup before publishing the rendering.');
       }
     } else {
       handleUpload(linkedInvoiceId);
@@ -137,6 +135,15 @@ export default function AdminRenderingManager({
         status: isRenderingPaid || !invId ? 'Paid / Unlocked' : 'Locked',
         createdAt: serverTimestamp()
       });
+      await updateDoc(doc(db, 'projects', project.id), {
+        stageId: Math.max(Number(project.stageId || 1), 2),
+        progress: Math.max(Number(project.progress || 0), 25),
+        renderingStatus: 'under_review',
+        renderingApproved: false,
+        workflowStep: 'rendering-review',
+        nextAction: 'Client reviews the 3D rendering and approves it or requests changes',
+        updatedAt: serverTimestamp(),
+      });
       await postSystemMessage(
         `🎨 A new 3D rendering package is ready: "${pkgTitle}". ${invId ? 'Your verified rendering payment unlocks access for review.' : 'It is now available for review.'}`
       );
@@ -150,44 +157,6 @@ export default function AdminRenderingManager({
       notify?.('error', 'Failed to publish rendering package');
     } finally {
       setLoading(false);
-    }
-  };
-
-  // ── Create invoice from auto-prompt + proceed to upload ───────────────────
-  const handleCreateInvoiceAndUpload = async () => {
-    if (!invoiceAmount || parseFloat(invoiceAmount) <= 0) {
-      notify?.('error', 'Please enter a valid rendering fee amount');
-      return;
-    }
-    setCreatingInvoice(true);
-    try {
-      let newInvoiceId = null;
-      if (createInvoice) {
-        const inv = await createInvoice({
-          projectId: project.id,
-          parentId: project.id,
-          clientId: project.clientId,
-          title: `Rendering Fee — ${pkgTitle}`,
-          invoiceType: 'Rendering Fee',
-          type: 'rendering',
-          amount: parseFloat(invoiceAmount),
-          currency: 'GHS',
-          status: 'Pending',
-          dueDate: (() => {
-            const d = new Date();
-            d.setDate(d.getDate() + 3);
-            return d.toISOString().split('T')[0];
-          })(),
-        });
-        newInvoiceId = inv?.id || inv;
-      }
-      setShowInvoicePrompt(false);
-      await handleUpload(newInvoiceId);
-    } catch (err) {
-      if (import.meta.env.DEV) console.error('[AdminRenderingManager] Create invoice failed:', err);
-      notify?.('error', 'Could not create invoice. Upload without invoice instead?');
-    } finally {
-      setCreatingInvoice(false);
     }
   };
 
@@ -226,13 +195,29 @@ export default function AdminRenderingManager({
       await updateDoc(doc(db, 'projects', project.id), {
         changeRequestPending: false,
         renderingApproved: false,
+        renderingStatus: 'revision_ready',
+        workflowStep: 'rendering-review',
+        nextAction: 'Client reviews and approves the revised 3D rendering',
+        updatedAt: serverTimestamp(),
       });
       // Save new file URL and reset package to Pending for client re-review
       await updateDoc(doc(db, 'renderingPackages', pkg.id), {
         status: 'Pending',
         fileUrl: newUrl,
         revisedAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
       });
+      const packageRequests = projectRenderingRequests.filter(request =>
+        !request.renderingPackageId || request.renderingPackageId === pkg.id
+      );
+      await Promise.all(packageRequests.map(request =>
+        updateDoc(doc(db, 'change_requests', request.id), {
+          status: 'resolved',
+          resolution: 'Revised rendering uploaded for client review',
+          resolvedAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        })
+      ));
       setRevisionUrls(prev => { const n = { ...prev }; delete n[pkg.id]; return n; });
       await postSystemMessage(
         `🔄 Admin has resolved the change request for "${pkg.title}" and uploaded a revision. The design is now awaiting your review and approval.`
@@ -389,7 +374,7 @@ export default function AdminRenderingManager({
             <div className="p-field">
               <label style={{ fontSize: 10, fontWeight: 800, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Link to Existing Invoice (Optional)</label>
               <select className="p-inp" value={linkedInvoiceId} onChange={e => setLinkedInvoiceId(e.target.value)}>
-                <option value="">-- Auto-Create Invoice on Upload --</option>
+                <option value="">-- Select existing rendering invoice --</option>
                 {projectInvoices.map(inv => (
                   <option key={inv.id} value={inv.id}>{inv.invoiceNumber || 'INV'} — {inv.title} ({inv.status})</option>
                 ))}
@@ -428,6 +413,10 @@ export default function AdminRenderingManager({
             const statusColor = isUnlocked ? '#10B981' : isAwaitingConfirmation ? '#3B82F6' : '#F59E0B';
             const packageMarkups = markups.filter(m => m.packageId === pkg.id);
             const openPins = packageMarkups.filter(m => m.status === 'Open');
+            const packageRequests = projectRenderingRequests.filter(request =>
+              !request.renderingPackageId || request.renderingPackageId === pkg.id
+            );
+            const latestRequest = packageRequests[0];
             const displayImage = isImageFile(pkg.fileUrl) ? pkg.fileUrl : blueprintImg;
 
             return (
@@ -460,15 +449,22 @@ export default function AdminRenderingManager({
                     No manual confirmation needed. ──────────────────────────────────────── */}
 
                 {/* ── MARK CHANGE COMPLETE — shown when change request is pending ── */}
-                {project.changeRequestPending && openPins.length > 0 && isUnlocked && (
+                {project.changeRequestPending && (openPins.length > 0 || packageRequests.length > 0 || pkg.status === 'Changes Requested') && isUnlocked && (
                   <div style={{ padding: '16px 20px', background: '#FFFBEB', border: '1.5px solid #FDE68A', borderRadius: 14, display: 'flex', flexDirection: 'column', gap: 14 }}>
                     <div>
                       <div style={{ fontSize: 13, fontWeight: 800, color: '#92400E', marginBottom: 4 }}>
-                        {openPins.length} Open Pin{openPins.length !== 1 ? 's' : ''} — Client Awaiting Revision
+                        Client Awaiting Rendering Revision
                       </div>
                       <div style={{ fontSize: 12, color: '#78350F', lineHeight: 1.5 }}>
-                        Address all client pins, paste the revised file URL below, then click Mark Change Complete to unfreeze the project.
+                        {openPins.length > 0
+                          ? `Address ${openPins.length} open feedback pin${openPins.length === 1 ? '' : 's'}, upload the revised file, then return it to the client for approval.`
+                          : 'Review the client note, upload the revised file, then return it to the client for approval.'}
                       </div>
+                      {latestRequest?.note && (
+                        <div style={{ marginTop: 10, padding: '10px 12px', borderRadius: 10, background: '#fff', border: '1px solid #FDE68A', color: '#78350F', fontSize: 12, lineHeight: 1.5 }}>
+                          <strong>Client request:</strong> {latestRequest.note}
+                        </div>
+                      )}
                     </div>
                     <input
                       className="p-inp"
@@ -627,80 +623,6 @@ export default function AdminRenderingManager({
               </div>
             );
           })}
-        </div>
-      )}
-
-      {/* ── INVOICE AUTO-PROMPT MODAL ── */}
-      {showInvoicePrompt && (
-        <div
-          onClick={() => !creatingInvoice && setShowInvoicePrompt(false)}
-          style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
-        >
-          <div
-            onClick={e => e.stopPropagation()}
-            style={{ background: '#fff', borderRadius: 24, padding: '32px 28px', width: '100%', maxWidth: 460, boxShadow: '0 20px 60px rgba(0,0,0,0.15)', display: 'flex', flexDirection: 'column', gap: 20 }}
-          >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-              <div>
-                <div style={{ fontSize: 18, fontWeight: 900, color: 'var(--accent-secondary)', marginBottom: 4 }}>Create Rendering Fee Invoice?</div>
-                <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-                  No invoice was linked. Auto-create one now so the client can see and pay it before viewing the rendering.
-                </div>
-              </div>
-              {!creatingInvoice && (
-                <button onClick={() => setShowInvoicePrompt(false)} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', marginLeft: 8 }}>
-                  <X size={20} />
-                </button>
-              )}
-            </div>
-
-            <div style={{ padding: '16px 20px', background: 'var(--bg-secondary)', borderRadius: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--text-secondary)' }}>
-                <span>Client</span><strong style={{ color: 'var(--accent-secondary)' }}>{project.clientName}</strong>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--text-secondary)' }}>
-                <span>Project</span><strong style={{ color: 'var(--accent-secondary)' }}>{project.title}</strong>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--text-secondary)' }}>
-                <span>Invoice Title</span><strong style={{ color: 'var(--accent-secondary)' }}>Rendering Fee — {pkgTitle}</strong>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--text-secondary)' }}>
-                <span>Due Date</span><strong style={{ color: 'var(--accent-secondary)' }}>Today + 3 days</strong>
-              </div>
-            </div>
-
-            <div>
-              <label style={{ fontSize: 10, fontWeight: 800, color: 'var(--text-secondary)', textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>Amount (GHS)</label>
-              <input
-                className="p-inp"
-                type="number"
-                value={invoiceAmount}
-                onChange={e => setInvoiceAmount(e.target.value)}
-                placeholder="e.g. 500"
-                style={{ width: '100%', boxSizing: 'border-box' }}
-              />
-              {!invoiceAmount && (
-                <div style={{ fontSize: 11, color: '#EF4444', marginTop: 4 }}>Enter the rendering fee amount to continue</div>
-              )}
-            </div>
-
-            <div style={{ display: 'flex', gap: 12 }}>
-              <button
-                onClick={() => { setShowInvoicePrompt(false); handleUpload(null); }}
-                disabled={creatingInvoice}
-                style={{ flex: 1, padding: '12px', border: '1.5px solid var(--border-color)', borderRadius: 12, background: 'none', fontSize: 13, fontWeight: 700, cursor: 'pointer', color: 'var(--text-secondary)' }}
-              >
-                Upload Without Invoice
-              </button>
-              <button
-                onClick={handleCreateInvoiceAndUpload}
-                disabled={creatingInvoice || !invoiceAmount}
-                style={{ flex: 2, padding: '12px', border: 'none', borderRadius: 12, background: 'var(--accent-secondary)', color: '#fff', fontSize: 13, fontWeight: 800, cursor: (creatingInvoice || !invoiceAmount) ? 'default' : 'pointer', opacity: (creatingInvoice || !invoiceAmount) ? 0.6 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
-              >
-                {creatingInvoice ? 'Creating…' : <><Receipt size={15} /> Create Invoice & Publish</>}
-              </button>
-            </div>
-          </div>
         </div>
       )}
 

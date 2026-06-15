@@ -191,8 +191,16 @@ export const AppProvider = ({ children }) => {
 
     devLog("[FETCH] Initializing Data Pipeline for user:", user.id);
 
-    const isAdminOrStaff = user.role === 'admin' || user.role === 'staff';
-    const isWorker = user.role === 'worker';
+    const normalizedRole = String(user.role || '').toLowerCase();
+    const isAdminOrStaff = [
+      'admin',
+      'staff',
+      'project manager',
+      'project_manager',
+      'finance manager',
+      'operations manager',
+    ].includes(normalizedRole);
+    const isWorker = normalizedRole === 'worker';
     const staffUid = user.uid || user.id;
 
     // Admin → all projects. Staff/Worker → only their assigned projects. Client → their own projects.
@@ -205,11 +213,11 @@ export const AppProvider = ({ children }) => {
     const safeNormalizeProject = (d) => { try { return normalizeProject(d); } catch (e) { devWarn(`Bad project doc ${d.id}:`, e); return null; } };
 
     let unsubProject = () => {};
-    if (user.role === 'admin') {
+    if (normalizedRole === 'admin') {
       unsubProject = onSnapshot(collection(db, 'projects'), (snap) => {
         setClients(snap.docs.map(safeNormalizeProject).filter(Boolean));
       }, (err) => devWarn("Project Sync Error:", err));
-    } else if (user.role === 'staff') {
+    } else if (isAdminOrStaff) {
       const assignedProjects = new Map();
       const publishAssignedProjects = () => setClients(Array.from(assignedProjects.values()));
       const applyAssignedSnapshot = (source, snap) => {
@@ -238,7 +246,7 @@ export const AppProvider = ({ children }) => {
         unsubManagedProjects();
       };
       publishAssignedProjects();
-    } else if (user.role === 'worker') {
+    } else if (isWorker) {
       unsubProject = onSnapshot(query(collection(db, 'projects'), where('assignedWorkers', 'array-contains', staffUid)), (snap) => {
         setClients(snap.docs.map(safeNormalizeProject).filter(Boolean));
       }, (err) => devWarn("Assigned worker project sync error:", err));
@@ -276,7 +284,7 @@ export const AppProvider = ({ children }) => {
     }
 
     let unsubUser = () => {};
-    if (user.role === 'admin' || user.role === 'staff') {
+    if (isAdminOrStaff) {
       unsubUser = onSnapshot(collection(db, 'users'), (snap) => {
         const { team, clientList } = snap.docs.reduce((acc, d) => {
           const u = { id: d.id, ...d.data() };
@@ -326,14 +334,14 @@ export const AppProvider = ({ children }) => {
         setter([]);
         return () => {};
       }
-      const topQuery = user.role === 'admin'
+      const topQuery = isAdminOrStaff
         ? collection(db, name)
         : query(collection(db, name), where('clientId', '==', user.id));
       const unsubTop = onSnapshot(topQuery, (snap) => {
         topLevel = snap.docs.map(mapScopedDoc);
         flush();
       }, (err) => devWarn(`${label} Top-Level Sync Error:`, err));
-      const unsubScoped = user.role === 'admin'
+      const unsubScoped = isAdminOrStaff
         ? onSnapshot(collectionGroup(db, name), (snap) => {
             scoped = snap.docs.map(mapScopedDoc).filter(item => item.parentId);
             flush();
@@ -397,11 +405,11 @@ export const AppProvider = ({ children }) => {
       setTransactions(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     }, (err) => devWarn("Transactions listener failed:", err));
 
-    const unsubRenderingPackages = onSnapshot(user.role === 'admin' ? collection(db, 'renderingPackages') : query(collection(db, 'renderingPackages'), where('clientId', '==', user.id)), (snap) => {
+    const unsubRenderingPackages = onSnapshot(isAdminOrStaff ? collection(db, 'renderingPackages') : query(collection(db, 'renderingPackages'), where('clientId', '==', user.id)), (snap) => {
       setRenderingPackages(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     }, (err) => devWarn("Rendering Packages Sync Error:", err));
 
-    const unsubAddOns = onSnapshot(user.role === 'admin' ? collection(db, 'addOns') : query(collection(db, 'addOns'), where('clientId', '==', user.id)), (snap) => {
+    const unsubAddOns = onSnapshot(isAdminOrStaff ? collection(db, 'addOns') : query(collection(db, 'addOns'), where('clientId', '==', user.id)), (snap) => {
       setAddOns(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     }, (err) => devWarn("Add-ons Sync Error:", err));
 

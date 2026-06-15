@@ -69,6 +69,18 @@ export function deriveWorkflowStep(project = {}, { invoices = [], renderingPacka
   const installationPaid = project.installationPaid || project.installationFeePaid || paid(text =>
     text.includes('installation') || text.includes('install add-on') || text.includes('installation add-on')
   );
+  const renderingChangesPending = project.changeRequestPending === true && (
+    String(project.renderingStatus || '').toLowerCase() === 'changes_requested' ||
+    renderingPackages.some(pkg =>
+      pkg.projectId === project.id &&
+      String(pkg.status || '').toLowerCase() === 'changes requested'
+    )
+  );
+  const quoteChangesPending = project.quoteChangeRequested === true ||
+    projectInvoices.some(invoice =>
+      (descriptor(invoice).includes('quotation') || descriptor(invoice).includes('quote')) &&
+      String(invoice.status || '').toLowerCase() === 'changes requested'
+    );
 
   if (Number(project.stageId || 1) >= 8) return WORKFLOW_STEP.HANDOVER;
   if (Number(project.stageId || 1) >= 7) return WORKFLOW_STEP.INSPECTION;
@@ -86,6 +98,8 @@ export function deriveWorkflowStep(project = {}, { invoices = [], renderingPacka
   if (depositPaid) return WORKFLOW_STEP.DELIVERABLES_APPROVAL;
   if (project.contractAccepted) return WORKFLOW_STEP.INITIAL_PAYMENT;
   if (quoteApproved) return WORKFLOW_STEP.CONTRACT_SIGNING;
+  if (quoteChangesPending) return WORKFLOW_STEP.QUOTE_NEGOTIATION;
+  if (renderingChangesPending) return WORKFLOW_STEP.RENDERING_REVIEW;
   if (renderingApproved) return WORKFLOW_STEP.QUOTE_NEGOTIATION;
   if (siteVisit.status === 'completed' || project.siteSurveyCompleted) return WORKFLOW_STEP.RENDERING_REVIEW;
   if (siteVisit.status === 'scheduled') return WORKFLOW_STEP.SITE_SURVEY;

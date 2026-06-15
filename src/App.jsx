@@ -1151,41 +1151,165 @@ export default function App() {
       const projectSnap = await getDoc(doc(db, 'projects', projectId));
       if (!projectSnap.exists()) throw new Error('Project not found');
       const project = projectSnap.data();
-      if (!project.renderingApproved && !data.adminOverride) {
+      const renderingApproved = project.kickoffMode === 'direct-kickoff' ||
+        project.renderingApproved === true ||
+        project.designApproved === true ||
+        String(project.renderingStatus || '').toLowerCase() === 'approved';
+      if (!renderingApproved && !data.adminOverride) {
         notify('error', 'Final quote is locked until rendering is approved.');
         return null;
       }
-      const existing = await getDocs(query(collection(db, 'quotes'), where('projectId', '==', projectId)));
-      const version = Number(data.version || existing.size + 1);
+
+      const [projectQuotes, parentQuotes] = await Promise.all([
+        getDocs(query(collection(db, 'invoices'), where('projectId', '==', projectId))),
+        getDocs(query(collection(db, 'invoices'), where('parentId', '==', projectId))),
+      ]);
+      const existingQuotes = new Map();
+      [...projectQuotes.docs, ...parentQuotes.docs].forEach(snapshot => {
+        const invoice = snapshot.data();
+        const descriptor = `${invoice.type || ''} ${invoice.documentKind || ''}`.toLowerCase();
+        if (descriptor.includes('quotation') || descriptor.includes('quote')) {
+          existingQuotes.set(snapshot.id, { id: snapshot.id, ref: snapshot.ref, ...invoice });
+        }
+      });
+      const version = Number(data.version || Math.max(
+        0,
+        ...[...existingQuotes.values()].map(quote => Number(quote.version || 0))
+      ) + 1);
       const total = parseMoney(data.total || data.amount || project.budget || project.projectTotal);
-      const quoteRef = await addDoc(collection(db, 'quotes'), {
+      if (total <= 0) throw new Error('Enter the negotiated project total.');
+
+      const quoteRef = doc(collection(db, 'invoices'));
+      const batch = writeBatch(db);
+      const normalizedItems = Array.isArray(data.items) && data.items.length > 0
+        ? data.items.map((item, index) => ({
+            desc: sanitizeText(item.desc || item.description || `Scope item ${index + 1}`),
+            notes: sanitizeText(item.notes || ''),
+            qty: Number(item.qty || 1),
+            rate: parseMoney(item.rate ?? item.amount),
+            unit: item.unit || 'item',
+            total: parseMoney(item.total ?? (Number(item.qty || 1) * parseMoney(item.rate ?? item.amount))),
+          }))
+        : [{
+            desc: sanitizeText(data.scopeSummary || data.title || project.title || 'Approved project scope'),
+            notes: sanitizeText(data.notes || ''),
+            qty: 1,
+            rate: total,
+            unit: 'project',
+            total,
+          }];
+      const title = sanitizeText(data.title || `${project.title || 'Project'} Quotation v${version}`);
+      const paymentSchedule = data.paymentSchedule || project.paymentSchedule || 'standard';
+      const negotiatedMilestones = buildDefaultMilestones(total, paymentSchedule);
+      batch.set(quoteRef, {
         projectId,
+        parentId: projectId,
         clientId: project.clientId,
+        clientName: project.clientName || '',
+        clientEmail: project.clientEmail || project.email || '',
+        clientPhone: project.clientPhone || project.phone || '',
         version,
-        title: sanitizeText(data.title || `${project.title || 'Project'} Quote v${version}`),
-        scopeItems: data.scopeItems || [],
+        title,
+        type: 'Quotation',
+        documentKind: 'quotation',
+        invoiceType: 'quotation',
+        items: normalizedItems,
+        scopeSummary: sanitizeText(data.scopeSummary || ''),
+        scopeItems: data.scopeItems || normalizedItems,
         exclusions: data.exclusions || [],
         optionalItems: data.optionalItems || [],
-        addOns: data.addOns || [],
         discounts: data.discounts || [],
+        paymentSchedule,
+        negotiationNote: sanitizeText(data.negotiationNote || data.notes || ''),
+        amount: total,
         total,
-        status: data.status || 'sent',
+        amountDue: total,
+        balanceDue: total,
+        amountPaid: 0,
+        paidAmount: 0,
+        currency: data.currency || 'GHS',
+        status: 'Sent',
+        date: new Date().toISOString().split('T')[0],
+        due: null,
         createdBy: user?.uid || user?.id || 'admin',
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
-      await updateDoc(doc(db, 'projects', projectId), {
+
+      existingQuotes.forEach(quote => {
+        if (!['approved', 'superseded', 'cancelled'].includes(String(quote.status || '').toLowerCase())) {
+          batch.update(quote.ref, {
+            status: 'Superseded',
+            supersededBy: quoteRef.id,
+            supersededAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          });
+        }
+      });
+
+      batch.update(doc(db, 'projects', projectId), {
+        stageId: Math.max(Number(project.stageId || 1), 3),
+        progress: Math.max(Number(project.progress || 0), 33),
         activeQuoteId: quoteRef.id,
         activeQuoteVersion: version,
         quoteStatus: 'sent',
+        quoteApproved: false,
+        approvedQuoteId: null,
+        quoteChangeRequested: false,
+        quoteChangeRequestPending: false,
+        quoteChangeRequestNote: '',
+        changeRequestPending: false,
         workflowStep: 'quote-negotiation',
         projectTotal: total,
-        budget: total ? String(total) : project.budget || '',
-        nextAction: 'Awaiting final quote approval',
+        budget: String(total),
+        paymentSchedule,
+        milestones: negotiatedMilestones,
+        nextAction: 'Client reviews the quotation and approves it or requests a revised version',
         updatedAt: serverTimestamp(),
       });
+      await batch.commit();
+
+      const projectChangeRequests = await getDocs(query(
+        collection(db, 'change_requests'),
+        where('projectId', '==', projectId)
+      ));
+      await Promise.all(projectChangeRequests.docs
+        .filter(requestDoc => {
+          const requestData = requestDoc.data();
+          return String(requestData.type || '').toLowerCase() === 'quotation' &&
+            String(requestData.status || '').toLowerCase() === 'pending';
+        })
+        .map(requestDoc =>
+          updateDoc(requestDoc.ref, {
+            status: 'resolved',
+            resolution: `Superseded by quotation v${version}`,
+            resolvedAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          })
+        ));
+      await addDoc(collection(db, 'notifications'), {
+        userId: project.clientId,
+        title: `Quotation v${version} ready`,
+        message: `${title} is ready for review. Approve the total or request changes with a clear note.`,
+        type: 'quotation_ready',
+        link: '/portal',
+        projectId,
+        clientId: project.clientId,
+        read: false,
+        createdAt: serverTimestamp(),
+      });
+      await addDoc(collection(db, 'clients', project.clientId, 'messages'), {
+        text: `Quotation v${version} is ready for review: ${title} — GHS ${total.toLocaleString()}. Approve it if the negotiated amount is correct, or request a revised version with your comments.`,
+        senderRole: 'system',
+        senderName: 'Project Workflow',
+        isInternal: false,
+        readByAdmin: true,
+        readByClient: false,
+        projectId,
+        createdAt: serverTimestamp(),
+      });
       await recordProjectActivity(projectId, `Quote v${version} created`, { quoteId: quoteRef.id, amount: total, clientId: project.clientId });
-      notify('success', `Quote v${version} created`);
+      notify('success', `Quotation v${version} sent to the client`);
       return quoteRef.id;
     } catch (e) {
       notify('error', 'Failed to create quote: ' + e.message);
@@ -2797,6 +2921,7 @@ export default function App() {
     jobs, createJob, updateJob,
     createClientProject, updateProjectStage, addClientMessage, addProjectMessage, assignWorkerToProject, deleteProject,
     approveQuote, approveSignoff, updateShippingDetails, addProjectDocument, createStaffAccount, deleteMember, updateMember,
+    createQuoteVersion,
     workOrders, containers,
     updateWorkOrder: (id, d) => db && updateDoc(doc(db, 'work_orders', id), { ...d, updatedAt: serverTimestamp() }),
     createWorkOrder,

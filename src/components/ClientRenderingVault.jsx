@@ -76,26 +76,14 @@ export default function ClientRenderingVault({
 
   const handleApprove = async (pkg) => {
     try {
-      // Mark the rendering package as approved
-      await updateDoc(doc(db, 'renderingPackages', pkg.id), {
-        status: 'Approved',
-        approvedAt: serverTimestamp(),
+      const submitRenderingDecision = httpsCallable(functions, 'submitRenderingDecision');
+      await submitRenderingDecision({
+        projectId: project.id,
+        packageId: pkg.id,
+        action: 'approve',
       });
-      // Set renderingApproved on the project — this is what the AdvanceModal
-      // gate checks before allowing progression to Stage 3 (Quote & Deposit).
-      // Also clear any pending change request.
-      await updateDoc(doc(db, 'projects', project.id), {
-        renderingApproved: true,
-        renderingApprovedAt: serverTimestamp(),
-        changeRequestPending: false,
-        workflowStep: 'quote-negotiation',
-        nextAction: 'Project manager prepares the quotation for cost negotiation',
-      });
-      await postSystemMessage(
-        `✅ ${project.clientName || 'Client'} approved the design rendering "${pkg.title}". The project is cleared to proceed to quotation.`
-      );
-    } catch (e) {
-      console.error(e);
+    } catch (err) {
+      console.error('[ClientRenderingVault] Rendering approval failed:', err);
     }
   };
 
@@ -105,32 +93,13 @@ export default function ClientRenderingVault({
     setChangeRequestBusy(true);
     try {
       const pkg = changeRequestPkg;
-      const newRevCount = (pkg.usedRevisions || 0) + 1;
-      const batch = writeBatch(db);
-      batch.update(doc(db, 'renderingPackages', pkg.id), {
-        status: 'Changes Requested',
-        usedRevisions: newRevCount,
-      });
-      batch.update(doc(db, 'projects', project.id), {
-        changeRequestPending: true,
-        renderingApproved: false,
-        workflowStep: 'rendering-review',
-        nextAction: 'Design team uploads the requested rendering revision',
-      });
-      await batch.commit();
-      await postSystemMessage(
-        `🔄 ${project.clientName || 'Client'} requested changes on "${pkg.title}": "${changeRequestNote.trim()}"`
-      );
-      // Notify admin
-      await addDoc(collection(db, 'notifications'), {
-        userId: 'admin',
-        message: `${project.clientName || 'Client'} requested changes on "${pkg.title}" in "${project.title}": ${changeRequestNote.trim()}`,
-        type: 'change_request',
-        link: '/admin',
+      const submitRenderingDecision = httpsCallable(functions, 'submitRenderingDecision');
+      await submitRenderingDecision({
         projectId: project.id,
-        read: false,
-        createdAt: new Date(),
-      }).catch(() => {});
+        packageId: pkg.id,
+        action: 'request_changes',
+        note: changeRequestNote.trim(),
+      });
       setChangeRequestPkg(null);
       setChangeRequestNote('');
     } catch (err) {
@@ -183,48 +152,17 @@ export default function ClientRenderingVault({
     if (!newPinText.trim() || submittingPin || !selectedCoords) return;
     setSubmittingPin(true);
     try {
-      const pkg = projectPackages.find(p => p.id === selectedCoords.packageId);
-      const newRevCount = (pkg?.usedRevisions || 0) + 1;
-
-      // Atomic batch: pin creation + package freeze + project freeze all succeed or all fail
-      const batch = writeBatch(db);
-      const pinRef = doc(collection(db, 'projects', project.id, 'markups'));
-      batch.set(pinRef, {
-        packageId: selectedCoords.packageId,
-        x: selectedCoords.x,
-        y: selectedCoords.y,
-        note: newPinText.trim(),
-        authorName: project.clientName || 'Client',
-        authorRole: 'client',
-        status: 'Open',
-        createdAt: serverTimestamp(),
-      });
-      if (pkg) {
-        batch.update(doc(db, 'renderingPackages', pkg.id), {
-          status: 'Changes Requested',
-          usedRevisions: newRevCount,
-        });
-      }
-      batch.update(doc(db, 'projects', project.id), {
-        changeRequestPending: true,
-      });
-      await batch.commit();
-
-      // System message visible in client + admin chat
-      await postSystemMessage(
-        `📌 ${project.clientName || 'Client'} requested changes on the rendering "${pkg?.title || 'design'}" — pin #${newRevCount} placed. Project is on hold pending revision.`
-      );
-
-      // Notify admin via notification document
-      await addDoc(collection(db, 'notifications'), {
-        userId: 'admin',
-        message: `${project.clientName || 'Client'} placed a feedback pin on "${pkg?.title || 'design'}" in "${project.title}" — project is now on hold.`,
-        type: 'change_request',
-        link: '/admin',
+      const submitRenderingDecision = httpsCallable(functions, 'submitRenderingDecision');
+      await submitRenderingDecision({
         projectId: project.id,
-        read: false,
-        createdAt: serverTimestamp(),
-      }).catch(() => {});
+        packageId: selectedCoords.packageId,
+        action: 'request_changes',
+        note: newPinText.trim(),
+        coordinates: {
+          x: selectedCoords.x,
+          y: selectedCoords.y,
+        },
+      });
 
       setShowPinModal(false);
       setSelectedCoords(null);

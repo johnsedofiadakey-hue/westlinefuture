@@ -34,7 +34,28 @@ service cloud.firestore {
     }
 
     function isStaff() {
-      return tokenHasRole("staff") || userHasRole("staff");
+      return isAuthenticated() && (
+        (
+          "role" in request.auth.token &&
+          request.auth.token.role in [
+            "staff",
+            "project manager",
+            "project_manager",
+            "finance manager",
+            "operations manager"
+          ]
+        ) ||
+        (
+          exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in [
+            "staff",
+            "project manager",
+            "project_manager",
+            "finance manager",
+            "operations manager"
+          ]
+        )
+      );
     }
 
     function isWorker() {

@@ -406,6 +406,8 @@ exports.completeProjectSiteVisit = onCall(async request => {
     },
     siteSurveyCompleted: true,
     siteSurveyCompletedAt: FieldValue.serverTimestamp(),
+    stageId: Math.max(Number(project.stageId || 1), 2),
+    progress: Math.max(Number(project.progress || 0), 20),
     workflowStep: 'rendering-review',
     nextAction: 'Design team prepares and uploads the 3D rendering for client review',
     updatedAt: FieldValue.serverTimestamp(),
@@ -1568,6 +1570,168 @@ exports.signProjectSpecification = onCall(async request => {
   };
 });
 
+exports.submitRenderingDecision = onCall(async request => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'Sign in before responding to the rendering.');
+  }
+
+  const projectId = String(request.data?.projectId || '').trim();
+  const packageId = String(request.data?.packageId || '').trim();
+  const action = String(request.data?.action || '').trim().toLowerCase().replace(/[\s-]+/g, '_');
+  const note = String(request.data?.note || '').trim().slice(0, 2000);
+  const coordinates = request.data?.coordinates;
+  if (!projectId || !packageId || !['approve', 'request_changes'].includes(action)) {
+    throw new HttpsError('invalid-argument', 'Project, rendering package, and a valid decision are required.');
+  }
+  if (action === 'request_changes' && note.length < 3) {
+    throw new HttpsError('invalid-argument', 'Describe the rendering changes you need.');
+  }
+
+  const db = getFirestore();
+  const projectRef = db.collection('projects').doc(projectId);
+  const packageRef = db.collection('renderingPackages').doc(packageId);
+  const [projectSnap, packageSnap] = await Promise.all([projectRef.get(), packageRef.get()]);
+  if (!projectSnap.exists || !packageSnap.exists) {
+    throw new HttpsError('not-found', 'Project or rendering package not found.');
+  }
+  const project = projectSnap.data();
+  const renderingPackage = packageSnap.data();
+  if (!userOwnsProject(request.auth, project)) {
+    throw new HttpsError('permission-denied', 'This project is not assigned to your account.');
+  }
+  if (renderingPackage.projectId !== projectId) {
+    throw new HttpsError('permission-denied', 'This rendering package does not belong to the selected project.');
+  }
+
+  const clientName = project.clientName || request.auth.token?.name || 'Client';
+  const batch = db.batch();
+  const activityRef = projectRef.collection('activityLogs').doc();
+  const notificationRef = db.collection('notifications').doc();
+  let changeRequestId = null;
+
+  if (action === 'approve') {
+    batch.set(packageRef, {
+      status: 'Approved',
+      approvedAt: FieldValue.serverTimestamp(),
+      approvedBy: request.auth.uid,
+      approvalComment: note,
+      updatedAt: FieldValue.serverTimestamp(),
+    }, { merge: true });
+    batch.set(projectRef, {
+      stageId: Math.max(Number(project.stageId || 1), 3),
+      progress: Math.max(Number(project.progress || 0), 33),
+      renderingApproved: true,
+      renderingApprovedAt: FieldValue.serverTimestamp(),
+      renderingStatus: 'approved',
+      changeRequestPending: false,
+      workflowStep: 'quote-negotiation',
+      nextAction: 'Project manager prepares and issues the negotiated quotation',
+      updatedAt: FieldValue.serverTimestamp(),
+    }, { merge: true });
+    batch.set(notificationRef, {
+      userId: 'admin',
+      title: '3D rendering approved',
+      message: `${clientName} approved "${renderingPackage.title || project.title || 'the project rendering'}". Prepare the quotation.`,
+      type: 'rendering_approved',
+      link: '/admin/client-hub',
+      projectId,
+      clientId: project.clientId,
+      read: false,
+      createdAt: FieldValue.serverTimestamp(),
+    });
+    batch.set(activityRef, {
+      actor: 'client',
+      actorId: request.auth.uid,
+      actorName: clientName,
+      actionType: 'rendering_approved',
+      actionDescription: `Approved "${renderingPackage.title || 'the 3D rendering'}".`,
+      renderingPackageId: packageId,
+      timestamp: FieldValue.serverTimestamp(),
+    });
+  } else {
+    const revisionNumber = Number(renderingPackage.usedRevisions || 0) + 1;
+    const changeRequestRef = db.collection('change_requests').doc();
+    changeRequestId = changeRequestRef.id;
+    batch.set(packageRef, {
+      status: 'Changes Requested',
+      usedRevisions: revisionNumber,
+      changeRequestedAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+    }, { merge: true });
+    batch.set(projectRef, {
+      stageId: Number(project.stageId || 1) <= 3 ? 2 : Number(project.stageId || 1),
+      progress: Number(project.stageId || 1) <= 3 ? 25 : Number(project.progress || 0),
+      renderingApproved: false,
+      renderingStatus: 'changes_requested',
+      changeRequestPending: true,
+      workflowStep: 'rendering-review',
+      nextAction: 'Design team reviews feedback and uploads a revised 3D rendering',
+      updatedAt: FieldValue.serverTimestamp(),
+    }, { merge: true });
+    batch.set(changeRequestRef, {
+      projectId,
+      clientId: project.clientId,
+      renderingPackageId: packageId,
+      type: 'rendering',
+      status: 'pending',
+      note,
+      revisionNumber,
+      requestedBy: request.auth.uid,
+      requestedByName: clientName,
+      createdAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+    if (
+      coordinates &&
+      Number.isFinite(Number(coordinates.x)) &&
+      Number.isFinite(Number(coordinates.y))
+    ) {
+      const markupRef = projectRef.collection('markups').doc();
+      batch.set(markupRef, {
+        packageId,
+        changeRequestId,
+        x: Math.max(0, Math.min(100, Number(coordinates.x))),
+        y: Math.max(0, Math.min(100, Number(coordinates.y))),
+        note,
+        authorName: clientName,
+        authorRole: 'client',
+        status: 'Open',
+        createdAt: FieldValue.serverTimestamp(),
+      });
+    }
+    batch.set(notificationRef, {
+      userId: 'admin',
+      title: '3D rendering changes requested',
+      message: `${clientName} requested revision ${revisionNumber}: ${note}`,
+      type: 'change_request',
+      link: '/admin/client-hub',
+      projectId,
+      clientId: project.clientId,
+      changeRequestId,
+      read: false,
+      createdAt: FieldValue.serverTimestamp(),
+    });
+    batch.set(activityRef, {
+      actor: 'client',
+      actorId: request.auth.uid,
+      actorName: clientName,
+      actionType: 'rendering_changes_requested',
+      actionDescription: `Requested changes to "${renderingPackage.title || 'the 3D rendering'}".`,
+      renderingPackageId: packageId,
+      changeRequestId,
+      note,
+      timestamp: FieldValue.serverTimestamp(),
+    });
+  }
+
+  await batch.commit();
+  return {
+    success: true,
+    status: action === 'approve' ? 'approved' : 'changes_requested',
+    changeRequestId,
+  };
+});
+
 exports.approveProjectQuote = onCall(async request => {
   if (!request.auth) {
     throw new HttpsError('unauthenticated', 'Sign in before approving the final quote.');
@@ -1628,12 +1792,23 @@ exports.approveProjectQuote = onCall(async request => {
   const approverName = String(request.data?.approverName || request.auth.token.name || project.clientName || 'Client').trim().slice(0, 120);
   const batch = db.batch();
   batch.set(projectRef, {
+    stageId: Math.max(Number(project.stageId || 1), 3),
+    progress: Math.max(Number(project.progress || 0), 38),
     quoteApproved: true,
     quoteApprovedAt: FieldValue.serverTimestamp(),
     quoteApprovedBy: request.auth.uid,
+    activeQuoteId: quote.id,
+    activeQuoteVersion: Number(quote.version || 1),
     approvedQuoteId: quote.id,
+    quoteStatus: 'approved',
+    quoteChangeRequested: false,
+    quoteChangeRequestPending: false,
+    quoteChangeRequestNote: '',
     workflowStep: 'contract-signing',
+    nextAction: 'Client reviews and signs the project contract and terms',
     quoteSentAt: project.quoteSentAt || quote.createdAt || approvedAt,
+    budget: String(Number(quote.total || quote.amount || project.budget || 0)),
+    projectTotal: Number(quote.total || quote.amount || project.projectTotal || 0),
     updatedAt: FieldValue.serverTimestamp(),
   }, { merge: true });
   batch.set(quote.ref, {
@@ -1723,6 +1898,7 @@ exports.requestProjectQuoteChanges = onCall(async request => {
   }
 
   const batch = db.batch();
+  const changeRequestRef = db.collection('change_requests').doc();
   batch.set(quoteRef, {
     status: 'Changes Requested',
     changeRequestNote: note,
@@ -1732,13 +1908,29 @@ exports.requestProjectQuoteChanges = onCall(async request => {
   }, { merge: true });
   batch.set(projectRef, {
     quoteApproved: false,
+    approvedQuoteId: FieldValue.delete(),
     quoteStatus: 'changes_requested',
+    quoteChangeRequested: true,
     quoteChangeRequestPending: true,
+    quoteChangeRequestNote: note,
     changeRequestPending: true,
     workflowStep: 'quote-negotiation',
     nextAction: 'Project manager revises the quotation and issues a new version',
     updatedAt: FieldValue.serverTimestamp(),
   }, { merge: true });
+  batch.set(changeRequestRef, {
+    projectId,
+    clientId: project.clientId,
+    quoteId,
+    type: 'quotation',
+    status: 'pending',
+    note,
+    quoteVersion: Number(quote.version || 1),
+    requestedBy: request.auth.uid,
+    requestedByName: project.clientName || request.auth.token?.name || 'Client',
+    createdAt: FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp(),
+  });
   const activityRef = projectRef.collection('activityLogs').doc();
   batch.set(activityRef, {
     actor: 'client',
@@ -1765,10 +1957,11 @@ exports.requestProjectQuoteChanges = onCall(async request => {
       link: '/admin/client-hub',
       projectId,
       quoteId,
+      changeRequestId: changeRequestRef.id,
       read: false,
       createdAt: FieldValue.serverTimestamp(),
     });
   });
   await batch.commit();
-  return { requested: true, quoteId };
+  return { requested: true, quoteId, changeRequestId: changeRequestRef.id };
 });

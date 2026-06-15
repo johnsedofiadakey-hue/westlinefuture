@@ -22,6 +22,7 @@ import { AC, STAGE_ICONS, SCHEDULE_CONFIGS, PREMIUM_CATALOG, BD_ITEMS_CONFIG } f
 import { printInvoiceOrReceipt, printSignedContractDoc } from './clienthub/print';
 import { ProjectInvoicesLedger } from './clienthub/ProjectInvoicesLedger';
 import { PaymentScheduleCard } from './clienthub/PaymentScheduleCard';
+import QuoteNegotiationCard from './clienthub/QuoteNegotiationCard';
 import { NewProjectModal } from './clienthub/NewProjectModal';
 import { AdvanceModal } from './clienthub/AdvanceModal';
 import { ShippingDetailsCard, ProjectEconomics, DocumentVault } from './clienthub/ProjectDetailCards';
@@ -35,11 +36,10 @@ import {
   WORKFLOW_STEP
 } from '../../lib/projectWorkflow';
 
-function getProjectWorkflowGuidance(project, invoices = [], approvals = [], renderingPackages = [], addOns = []) {
+function getProjectWorkflowGuidance(project, invoices = [], approvals = [], renderingPackages = [], addOns = [], changeRequests = []) {
   if (!project) return null;
 
   const projectInvoices = invoices.filter(i => i.projectId === project.id || i.parentId === project.id);
-  const projectApprovals = approvals.filter(a => a.projectId === project.id);
   const projectPackages = renderingPackages.filter(pkg => pkg.projectId === project.id);
   const projectAddOns = addOns.filter(item => item.projectId === project.id);
   const isPaid = value => ['paid', 'paid in full'].includes(String(value || '').toLowerCase());
@@ -60,13 +60,14 @@ function getProjectWorkflowGuidance(project, invoices = [], approvals = [], rend
     projectPackages.some(pkg => String(pkg.status || '').toLowerCase() === 'approved');
   const specUploaded = Boolean(project.specDoc?.url);
   const productionAuthorized = project.productionAuthorized === true || project.specDoc?.status === 'signed';
-  const quoteInvoice = projectInvoices.find(isQuote);
-  const quoteApproval = projectApprovals.find(a =>
-    ['quotation', 'quote'].includes(String(a.type || '').toLowerCase()) &&
-    String(a.status || '').toLowerCase() === 'sent'
-  );
+  const quoteInvoices = projectInvoices
+    .filter(isQuote)
+    .sort((a, b) => Number(b.version || 0) - Number(a.version || 0));
+  const quoteInvoice = quoteInvoices.find(invoice => invoice.id === project.activeQuoteId) || quoteInvoices[0];
   const quoteApproved = project.quoteApproved === true ||
     String(quoteInvoice?.status || '').toLowerCase() === 'approved';
+  const quoteChangesRequested = project.quoteChangeRequested === true ||
+    String(quoteInvoice?.status || '').toLowerCase() === 'changes requested';
   const verificationPending = projectInvoices.find(i =>
     i.awaitingConfirmation === true ||
     String(i.status || '').toLowerCase() === 'verification pending'
@@ -132,6 +133,23 @@ function getProjectWorkflowGuidance(project, invoices = [], approvals = [], rend
     );
   }
 
+  if (renderingFirst && project.changeRequestPending) {
+    const renderingRequest = changeRequests
+      .filter(request =>
+        request.projectId === project.id &&
+        String(request.type || '').toLowerCase() === 'rendering' &&
+        String(request.status || '').toLowerCase() === 'pending'
+      )
+      .sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0))[0];
+    return result(
+      'project manager',
+      'Client requested changes to the 3D rendering',
+      renderingRequest?.note || 'The design is on hold until a revised rendering is uploaded.',
+      { title: 'Revision requested', body: 'The client is waiting for the updated design package.', action: 'Waiting for Westline' },
+      { title: 'Upload the revised rendering', body: 'Open Designs, review the client note or pins, upload the corrected version, and return it for approval.', tab: 'renderings', action: 'Resolve Revision' }
+    );
+  }
+
   if (renderingFirst && !renderingApproved) {
     return result(
       'client',
@@ -148,17 +166,27 @@ function getProjectWorkflowGuidance(project, invoices = [], approvals = [], rend
       'Prepare the negotiated quotation',
       'The rendering is approved. Price the agreed scope and issue the quotation for client review.',
       { title: 'No action yet', body: 'The client is waiting for the project quotation.', action: 'Waiting for Westline' },
-      { title: 'Create the quotation', body: 'Open Payments, create the quote, check the total and payment schedule, then send it.', tab: 'financials', action: 'Open Payments' }
+      { title: 'Create quotation v1', body: 'Open the negotiation workspace, enter the agreed scope and total, choose the payment schedule, then send it.', tab: 'financials', action: 'Open Negotiation' }
     );
   }
 
-  if (!quoteApproved || quoteApproval) {
+  if (quoteChangesRequested) {
+    return result(
+      'project manager',
+      'Client requested a revised quotation',
+      project.quoteChangeRequestNote || quoteInvoice?.changeRequestNote || 'The client has requested changes to the commercial terms.',
+      { title: 'Revision submitted', body: 'The client is waiting for the project manager to issue a revised quotation.', action: 'Waiting for Westline' },
+      { title: 'Review feedback and issue the next version', body: 'Open the negotiation workspace, update the amount or scope, and send a revised quotation.', tab: 'financials', action: 'Revise Quotation' }
+    );
+  }
+
+  if (!quoteApproved) {
     return result(
       'client',
       'Quotation awaiting approval or change request',
       'This is the commercial negotiation step. The client can approve the cost or request a revised quotation.',
       { title: 'Review the quotation', body: 'Approve the total or request changes with clear comments.', action: 'Decision required' },
-      { title: 'Manage cost negotiation', body: 'Answer questions and issue a new quote version if the client requests changes.', tab: 'financials', action: 'Review Quote' }
+      { title: 'Monitor the negotiation', body: 'The quotation has been sent. Answer questions; if the client requests changes, issue a new version here.', tab: 'financials', action: 'Open Negotiation' }
     );
   }
 
@@ -913,7 +941,18 @@ export default function ClientHub({ clientId, dbClients = [], onBack, ...props }
       })
     : [];
 
-  const currentStageObj = applicableStages.find(s => s.id === selected?.stageId);
+  const selectedWorkflowProgress = selected
+    ? workflowProgress(selected, {
+        invoices: props.invoices || [],
+        renderingPackages: props.renderingPackages || [],
+      })
+    : null;
+  const effectiveStageId = Math.max(
+    Number(selected?.stageId || 1),
+    Number(selectedWorkflowProgress?.meta?.stageId || 1)
+  );
+  const actualStageObj = applicableStages.find(s => s.id === selected?.stageId);
+  const currentStageObj = applicableStages.find(s => s.id === effectiveStageId);
   const currentIdx = applicableStages.findIndex(s => s.id === selected?.stageId);
   const nextStage = applicableStages[currentIdx + 1];
 
@@ -950,13 +989,7 @@ export default function ClientHub({ clientId, dbClients = [], onBack, ...props }
     { id: 'messages',   label: 'Messages',   icon: <MessageSquare size={14} /> }
   ];
   const workflowGuidance = selected
-    ? getProjectWorkflowGuidance(selected, props.invoices || [], props.approvals || [], props.renderingPackages || [], props.addOns || [])
-    : null;
-  const selectedWorkflowProgress = selected
-    ? workflowProgress(selected, {
-        invoices: props.invoices || [],
-        renderingPackages: props.renderingPackages || [],
-      })
+    ? getProjectWorkflowGuidance(selected, props.invoices || [], props.approvals || [], props.renderingPackages || [], props.addOns || [], props.changeRequests || [])
     : null;
   const selectedWorkflowSteps = selected ? applicableWorkflowSteps(selected) : [];
   const selectedWorkflowPercent = selectedWorkflowProgress
@@ -1226,7 +1259,14 @@ export default function ClientHub({ clientId, dbClients = [], onBack, ...props }
 
                 {/* DESIGN VAULT (RENDERINGS) */}
                 {activeTab === 'renderings' && (
-                  <AdminRenderingManager project={selected} brand={brand} renderingPackages={props.renderingPackages} invoices={props.invoices} notify={props.notify} createInvoice={props.createInvoice} />
+                  <AdminRenderingManager
+                    project={selected}
+                    brand={brand}
+                    renderingPackages={props.renderingPackages}
+                    invoices={props.invoices}
+                    changeRequests={props.changeRequests}
+                    notify={props.notify}
+                  />
                 )}
 
                 {/* SPEC & BRIEF */}
@@ -1256,8 +1296,7 @@ export default function ClientHub({ clientId, dbClients = [], onBack, ...props }
                       const renderingApproved = selected.renderingApproved === true ||
                         selected.designApproved === true ||
                         projectPackages.some(pkg => String(pkg.status || '').toLowerCase() === 'approved');
-                      const needsContractSign = !selected.contractAccepted &&
-                        (selected.kickoffMode === 'rendering-first' ? renderingApproved : true);
+                      const needsContractSign = selected.quoteApproved === true && !selected.contractAccepted;
                       const lockedRendering = projectPackages.find(pkg => {
                         const linkedInv = projectInvoices.find(i => i.id === pkg.linkedInvoiceId);
                         return linkedInv && !isPaid(linkedInv.status) && !pkg.unlocked;
@@ -1266,10 +1305,11 @@ export default function ClientHub({ clientId, dbClients = [], onBack, ...props }
                         const linkedInv = projectInvoices.find(i => i.id === pkg.linkedInvoiceId);
                         return (pkg.unlocked || isPaid(linkedInv?.status)) && pkg.status !== 'Approved';
                       });
-                      const pendingQuote = projectInvoices.find(i =>
-                        ['Quotation', 'quote', 'quotation'].includes(i.type || i.documentKind) &&
-                        !['approved'].includes(String(i.status || '').toLowerCase()) && !isPaid(i.status)
-                      );
+                      const quoteRecords = projectInvoices
+                        .filter(i => ['Quotation', 'quote', 'quotation'].includes(i.type || i.documentKind))
+                        .sort((a, b) => Number(b.version || 0) - Number(a.version || 0));
+                      const pendingQuote = quoteRecords.find(quote => quote.id === selected.activeQuoteId) ||
+                        quoteRecords.find(quote => !['approved', 'superseded', 'cancelled'].includes(String(quote.status || '').toLowerCase()));
                       const pendingAddOn = projectAddOns.find(a => ['Pending', 'Pending Approval', 'Priced'].includes(a.status || a.approvalStatus));
                       const unpaidInvoice = projectInvoices.find(i =>
                         !isPaid(i.status) && i.type !== 'Quotation' && i.documentKind !== 'quotation' &&
@@ -1299,14 +1339,24 @@ export default function ClientHub({ clientId, dbClients = [], onBack, ...props }
                         clientAction = 'Pay invoice to unlock design package';
                         clientWaitingOn = 'Client';
                         urgency = '#D97706';
+                      } else if (selected.changeRequestPending) {
+                        clientSeeing = '🔄 Rendering Revision Requested';
+                        clientAction = 'Waiting for the design team to upload the revised 3D rendering';
+                        clientWaitingOn = 'Design Team';
+                        urgency = '#D97706';
                       } else if (reviewRendering) {
                         clientSeeing = '🎨 Review Rendering Package';
                         clientAction = 'Review, leave pins, approve or request changes';
                         clientWaitingOn = 'Client';
                         urgency = AC;
+                      } else if (pendingQuote && String(pendingQuote.status || '').toLowerCase() === 'changes requested') {
+                        clientSeeing = '🔄 Quotation Revision Requested';
+                        clientAction = 'Waiting for the project manager to issue the next quotation version';
+                        clientWaitingOn = 'Project Manager';
+                        urgency = '#D97706';
                       } else if (pendingQuote) {
-                        clientSeeing = '💰 Quote Awaiting Approval';
-                        clientAction = `Review quote: ${pendingQuote.title || pendingQuote.id}`;
+                        clientSeeing = '💰 Quotation Awaiting Decision';
+                        clientAction = `Approve or request changes: ${pendingQuote.title || pendingQuote.id}`;
                         clientWaitingOn = 'Client';
                         urgency = AC;
                       } else if (pendingAddOn) {
@@ -1320,7 +1370,7 @@ export default function ClientHub({ clientId, dbClients = [], onBack, ...props }
                         clientWaitingOn = 'Client';
                         urgency = '#16A34A';
                       } else {
-                        clientSeeing = `✅ Stage ${selected.stageId}: ${currentStageObj?.name || 'In Progress'}`;
+                        clientSeeing = `✅ Stage ${effectiveStageId}: ${currentStageObj?.name || 'In Progress'}`;
                         clientAction = currentStageObj?.clientMsg || 'Project moving forward — no action required';
                         clientWaitingOn = currentStageObj?.whoActs === 'client' ? 'Client' : currentStageObj?.whoActs === 'worker' ? 'Field Team' : 'Admin/Production';
                         urgency = '#16A34A';
@@ -1620,6 +1670,13 @@ export default function ClientHub({ clientId, dbClients = [], onBack, ...props }
                 {/* FINANCIALS */}
                 {activeTab === 'financials' && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                    <QuoteNegotiationCard
+                      project={selected}
+                      invoices={props.invoices}
+                      changeRequests={props.changeRequests}
+                      createQuoteVersion={props.createQuoteVersion}
+                      notify={props.notify}
+                    />
                     <PaymentScheduleCard project={selected} notify={props.notify} brand={brand} invoices={props.invoices} />
                     <ProjectInvoicesLedger project={selected} client={client} invoices={props.invoices} brand={brand} updateInvoice={props.updateInvoice} deleteInvoice={props.deleteInvoice} notify={props.notify} user={props.user} updateProjectStage={props.updateProjectStage} updateProject={props.updateProject} />
                     <ProjectEconomics project={selected} />
@@ -1774,7 +1831,7 @@ export default function ClientHub({ clientId, dbClients = [], onBack, ...props }
         <NewProjectModal client={client} teamMembers={teamMembers} onClose={() => setShowNewModal(false)} onCreate={props.createClientProject} />
       )}
       {showAdvanceModal && selected && nextStage && (
-        <AdvanceModal project={selected} stage={currentStageObj} nextStage={nextStage} invoices={props.invoices || []} onClose={() => setShowAdvanceModal(false)} onAdvance={props.updateProjectStage} />
+        <AdvanceModal project={selected} stage={actualStageObj} nextStage={nextStage} invoices={props.invoices || []} onClose={() => setShowAdvanceModal(false)} onAdvance={props.updateProjectStage} />
       )}
       {showRequestPaymentModal && selected && (
         <RequestPaymentModal

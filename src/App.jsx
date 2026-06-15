@@ -2188,10 +2188,16 @@ export default function App() {
       }
 
       // Payment invoices are activated by the event that makes them due:
-      // quote approval activates the initial deposit; confirmed Ghana arrival
-      // activates the final goods balance. A stage number alone is insufficient.
-      const MILESTONE_STAGE_TRIGGERS = {};
-      const MILESTONE_LABELS = {};
+      // stage 4 (Production) activates the 30% production balance;
+      // stage 5 (Shipping/Ghana arrival) activates the 10% final arrival balance.
+      const MILESTONE_STAGE_TRIGGERS = {
+        4: 'production-balance',
+        5: 'pre-installation-balance',
+      };
+      const MILESTONE_LABELS = {
+        'production-balance':       '30% Production Balance',
+        'pre-installation-balance': '10% Final Arrival Balance',
+      };
       const triggerKey = MILESTONE_STAGE_TRIGGERS[newStageId];
       if (triggerKey) {
         try {

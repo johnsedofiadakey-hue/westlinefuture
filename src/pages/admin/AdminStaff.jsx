@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, Trash2, ShieldCheck, Award, HardHat, Heart, UserPlus, Eye, EyeOff, Copy, Check, X, Users, UserCog, Search, KeyRound, MessageCircle, AlertTriangle, Loader2 } from 'lucide-react';
+import { Plus, Trash2, ShieldCheck, Award, HardHat, Heart, UserPlus, Eye, EyeOff, Copy, Check, X, Users, UserCog, Search, KeyRound, MessageCircle, AlertTriangle, Loader2, RefreshCw } from 'lucide-react';
 import { PAv, PSBadge, CountryPicker, COUNTRIES } from '../../components/Shared';
 import { db, firebaseConfig, functions } from '../../lib/firebase';
 import { initializeApp, deleteApp } from 'firebase/app';
@@ -89,10 +89,7 @@ const ROLE_PROFILES = {
   }
 };
 
-function genPassword() {
-  const chars = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789@#';
-  return Array.from({ length: 12 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
-}
+const DEFAULT_PASSWORD = 'unlockme';
 
 // ─── Assign Clients Modal ─────────────────────────────────────────────────────
 function AssignClientsModal({ member, clients, onClose, updateMember, notify }) {
@@ -255,7 +252,7 @@ export default function AdminStaff({ team = [], brand, createStaffAccount, clien
         const local    = email.split('@')[0];
         const name     = local.charAt(0).toUpperCase() + local.slice(1);
         const username = local.replace(/[^a-z0-9]/g, '');
-        return { name, email, username, role: 'Technician', password: genPassword(), status: 'pending', error: null };
+        return { name, email, username, role: 'Technician', password: DEFAULT_PASSWORD, status: 'pending', error: null };
       });
   };
 
@@ -383,7 +380,7 @@ export default function AdminStaff({ team = [], brand, createStaffAccount, clien
   const handleCreate = async () => {
     if (!form.name.trim() || !form.username.trim()) return;
     setCreating(true);
-    const tempPw = genPassword();
+    const tempPw = DEFAULT_PASSWORD;
     const cleanUsername = form.username.toLowerCase().replace(/\s+/g, '');
     const roleProfile = ROLE_PROFILES[form.role] || ROLE_PROFILES.Technician;
     const phoneDigits = String(form.phone || '').replace(/\D/g, '');
@@ -409,7 +406,7 @@ export default function AdminStaff({ team = [], brand, createStaffAccount, clien
   };
 
   const copyCredentials = () => {
-    const text = `Staff Portal Access\nName: ${created.name}\nUsername: ${created.username}\nTemporary Password: ${created.password}\nLogin at: ${window.location.origin}/login`;
+    const text = `Westline Future — Staff Portal Access\nName: ${created.name}\nUsername: ${created.username}\nDefault Password: unlockme\nLogin at: ${window.location.origin}/login\nYou will be prompted to set your own password on first login.`;
     navigator.clipboard.writeText(text);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
@@ -450,161 +447,227 @@ export default function AdminStaff({ team = [], brand, createStaffAccount, clien
     setRepairing(false);
   };
 
+  const filteredTeam = (team || []).filter(m => {
+    const systemRole = (ROLE_PROFILES[m.role || m.jobRole] || ROLE_PROFILES.Technician).systemRole;
+    if (directoryTab === 'managers') return systemRole === 'staff';
+    return systemRole === 'worker';
+  });
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      <style>{`
+        @keyframes asSpin { to { transform: rotate(360deg); } }
+        .as-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 12; }
+        .as-actions { display: flex; gap: 8; flex-wrap: wrap; }
+        .as-stats { display: grid; grid-template-columns: repeat(4,1fr); gap: 12; }
+        .as-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px,1fr)); gap: 14; }
+        .as-card-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8; padding-top: 14px; border-top: 1px solid var(--border-color); }
+        @media (max-width: 640px) {
+          .as-header { flex-direction: column; }
+          .as-actions { width: 100%; }
+          .as-actions button { flex: 1; min-width: 0; justify-content: center; }
+          .as-stats { grid-template-columns: 1fr 1fr; }
+          .as-grid { grid-template-columns: 1fr; }
+          .as-card-actions { grid-template-columns: 1fr 1fr; }
+        }
+      `}</style>
+
+      {/* Header */}
+      <div className="as-header">
         <div>
-          <h2 className="lxfh" style={{ fontSize: 32, fontWeight: 400, color: `var(--accent-secondary)` }}>Staff Governance</h2>
+          <h2 className="lxfh" style={{ fontSize: 28, fontWeight: 700, color: `var(--accent-secondary)` }}>Staff Governance</h2>
           <p className="lxf" style={{ color: `var(--text-secondary)`, fontSize: 13, marginTop: 4 }}>Manage team accounts, certifications, and client assignments.</p>
         </div>
-        <div style={{ display: 'flex', gap: 10 }}>
+        <div className="as-actions">
           <button
             onClick={() => { setShowRepair(true); setRepairResult(null); setRepairForm({ email: '', name: '', role: 'Field Installer' }); }}
-            style={{ padding: '10px 16px', fontSize: 13, gap: 8, display: 'flex', alignItems: 'center', borderRadius: 12, border: '1.5px solid var(--border-color)', background: `var(--bg-secondary)`, cursor: 'pointer', fontWeight: 700, color: `var(--text-secondary)`, fontFamily: 'inherit' }}
+            style={{ padding: '10px 14px', fontSize: 13, gap: 7, display: 'flex', alignItems: 'center', borderRadius: 12, border: '1.5px solid var(--border-color)', background: `var(--bg-secondary)`, cursor: 'pointer', fontWeight: 700, color: `var(--text-secondary)`, fontFamily: 'inherit' }}
           >
-            <Search size={14} /> Recover Account
+            <Search size={14} /> Recover
           </button>
-          <button onClick={() => { setForm(f => ({ ...f, role: 'Field Installer', department: 'Installations' })); setShowModal(true); setCreated(null); }} style={{ padding: '10px 20px', fontSize: 13, gap: 8, display: 'flex', alignItems: 'center', borderRadius: 12, border: '1px solid var(--border-color)', background: '#fff', cursor: 'pointer', fontWeight: 700, color: `var(--accent-secondary)`, fontFamily: 'inherit' }}>
-            <HardHat size={16} /> Add Technical Team
+          <button onClick={() => { setForm(f => ({ ...f, role: 'Field Installer', department: 'Installations' })); setShowModal(true); setCreated(null); }} style={{ padding: '10px 14px', fontSize: 13, gap: 7, display: 'flex', alignItems: 'center', borderRadius: 12, border: '1px solid var(--border-color)', background: '#fff', cursor: 'pointer', fontWeight: 700, color: `var(--accent-secondary)`, fontFamily: 'inherit' }}>
+            <HardHat size={15} /> Field Team
           </button>
-          <button onClick={openBulkImport} style={{ padding: '10px 18px', fontSize: 13, gap: 8, display: 'flex', alignItems: 'center', borderRadius: 12, border: '1.5px solid var(--border-color)', background: 'var(--bg-secondary)', cursor: 'pointer', fontWeight: 700, color: 'var(--text-secondary)', fontFamily: 'inherit' }}>
-            <Users size={15} /> Bulk Import
+          <button onClick={openBulkImport} style={{ padding: '10px 14px', fontSize: 13, gap: 7, display: 'flex', alignItems: 'center', borderRadius: 12, border: '1.5px solid var(--border-color)', background: 'var(--bg-secondary)', cursor: 'pointer', fontWeight: 700, color: 'var(--text-secondary)', fontFamily: 'inherit' }}>
+            <Users size={14} /> Bulk
           </button>
-          <button onClick={() => { setForm(f => ({ ...f, role: 'Project Manager', department: 'Operations' })); setShowModal(true); setCreated(null); }} className="p-btn-dark lxf" style={{ padding: '10px 20px', fontSize: 13, gap: 8, display: 'flex', alignItems: 'center' }}>
-            <UserPlus size={16} /> Create Staff Account
+          <button onClick={() => { setForm(f => ({ ...f, role: 'Project Manager', department: 'Operations' })); setShowModal(true); setCreated(null); }} className="p-btn-dark lxf" style={{ padding: '10px 18px', fontSize: 13, gap: 7, display: 'flex', alignItems: 'center' }}>
+            <UserPlus size={15} /> Create Account
           </button>
         </div>
       </div>
 
       {/* Stats */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16 }}>
+      <div className="as-stats">
         {[
           { label: 'Total Staff', value: team.length, color: `var(--accent-secondary)` },
           { label: 'Active', value: team.filter(m => m.status !== 'Inactive').length, color: '#16A34A' },
-          { label: 'Project Managers', value: team.filter(m => (m.jobRole || m.role) === 'Project Manager').length, color: 'var(--accent-primary)' },
-          { label: 'Assigned Clients', value: team.reduce((acc, m) => acc + (m.assignedClients?.length || 0), 0), color: ac },
+          { label: 'Managers', value: team.filter(m => (m.jobRole || m.role) === 'Project Manager').length, color: 'var(--accent-primary)' },
+          { label: 'Client Assignments', value: team.reduce((acc, m) => acc + (m.assignedClients?.length || 0), 0), color: ac },
         ].map(s => (
-          <div key={s.label} className="p-card" style={{ padding: 20, textAlign: 'center' }}>
-            <div className="lxfh" style={{ fontSize: 28, fontWeight: 900, color: s.color, marginBottom: 4 }}>{s.value}</div>
-            <div className="lxf" style={{ fontSize: 11, color: `var(--text-secondary)`, textTransform: 'uppercase', letterSpacing: '.08em' }}>{s.label}</div>
+          <div key={s.label} className="p-card" style={{ padding: '16px 20px', textAlign: 'center' }}>
+            <div className="lxfh" style={{ fontSize: 26, fontWeight: 900, color: s.color, marginBottom: 2 }}>{s.value}</div>
+            <div className="lxf" style={{ fontSize: 10, color: `var(--text-secondary)`, textTransform: 'uppercase', letterSpacing: '.08em' }}>{s.label}</div>
           </div>
         ))}
       </div>
 
       {/* Directory Tabs */}
-      <div style={{ display: 'flex', gap: 12, borderBottom: '2px solid var(--border-color)', marginBottom: -10 }}>
-        <button
-          onClick={() => setDirectoryTab('managers')}
-          style={{ padding: '12px 24px', background: 'none', border: 'none', borderBottom: directoryTab === 'managers' ? `3px solid ${ac}` : '3px solid transparent', color: directoryTab === 'managers' ? ac : `var(--text-secondary)`, fontSize: 14, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}
-        >
-          <UserCog size={16} /> Account Managers
-        </button>
-        <button
-          onClick={() => setDirectoryTab('technical')}
-          style={{ padding: '12px 24px', background: 'none', border: 'none', borderBottom: directoryTab === 'technical' ? `3px solid ${ac}` : '3px solid transparent', color: directoryTab === 'technical' ? ac : `var(--text-secondary)`, fontSize: 14, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}
-        >
-          <HardHat size={16} /> Technical / Field Team
-        </button>
+      <div style={{ display: 'flex', gap: 8, borderBottom: '2px solid var(--border-color)' }}>
+        {[
+          { id: 'managers', label: 'Account Managers', icon: <UserCog size={15} /> },
+          { id: 'technical', label: 'Field & Technical', icon: <HardHat size={15} /> },
+        ].map(t => (
+          <button
+            key={t.id}
+            onClick={() => setDirectoryTab(t.id)}
+            style={{
+              padding: '10px 20px', background: 'none', border: 'none',
+              borderBottom: directoryTab === t.id ? `3px solid ${ac}` : '3px solid transparent',
+              color: directoryTab === t.id ? ac : `var(--text-secondary)`,
+              fontSize: 13, fontWeight: 800, cursor: 'pointer',
+              display: 'flex', alignItems: 'center', gap: 7,
+            }}
+          >
+            {t.icon} {t.label}
+          </button>
+        ))}
       </div>
 
-      <div className="p-card" style={{ overflow: 'hidden' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <thead>
-            <tr>
-              {['Staff', 'Role', 'Certifications', 'Clients', 'Status', 'Actions'].map(h => <th key={h} className="t-head" style={{ padding: '16px' }}>{h}</th>)}
-            </tr>
-          </thead>
-          <tbody>
-            {(team || []).filter(m => {
-              const systemRole = (ROLE_PROFILES[m.role || m.jobRole] || ROLE_PROFILES.Technician).systemRole;
-              if (directoryTab === 'managers') return systemRole === 'staff';
-              return systemRole === 'worker';
-            }).map(m => (
-              <tr key={m.id} className="t-row">
-                <td style={{ padding: '16px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <PAv i={m.av || m.name?.charAt(0)} s={40} c={ac} />
-                    <div>
-                      <div className="lxf" style={{ fontSize: 14, fontWeight: 600, color: `var(--accent-secondary)` }}>{m.name}</div>
-                      <div className="lxf" style={{ fontSize: 11, color: `var(--text-secondary)` }}>{m.username || m.email || m.phone || '—'}</div>
-                    </div>
-                  </div>
-                </td>
-                <td style={{ padding: '16px' }}>
-                  <div className="lxf" style={{ fontSize: 13, color: `var(--accent-secondary)` }}>{m.role || m.jobRole || '—'}</div>
-                </td>
-                <td style={{ padding: '16px' }}>
-                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                    {BADGES.map(b => (
-                      <button key={b.id} onClick={() => toggleBadge(m, b.id)} style={{
-                        display: 'flex', alignItems: 'center', gap: 4, padding: '4px 10px', borderRadius: 20,
-                        border: `1.5px solid ${(m.certs || []).includes(b.id) ? b.color : `var(--border-color)`}`,
-                        background: (m.certs || []).includes(b.id) ? `${b.color}15` : 'none',
-                        color: (m.certs || []).includes(b.id) ? b.color : `var(--text-secondary)`,
-                        fontSize: 10, fontWeight: 700, cursor: 'pointer',
-                      }}>
-                        {b.icon} {b.label}
-                      </button>
-                    ))}
-                  </div>
-                </td>
-                <td style={{ padding: '16px' }}>
-                  <button
-                    onClick={() => setAssignTarget(m)}
-                    style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 8, background: `var(--bg-secondary)`, border: '1px solid var(--border-color)', fontSize: 12, fontWeight: 700, cursor: 'pointer', color: `var(--text-secondary)` }}
-                  >
-                    <UserCog size={13} />
-                    {(m.assignedClients?.length || 0)} assigned
-                  </button>
-                </td>
-                <td style={{ padding: '16px' }}>
-                  <select
-                    value={m.status || 'Active'}
-                    onChange={e => updateM(m.id, { status: e.target.value })}
-                    style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid var(--border-color)', fontSize: 12, fontWeight: 700, background: '#fff', cursor: 'pointer' }}
-                  >
-                    {['Active', 'On Leave', 'Inactive'].map(s => <option key={s}>{s}</option>)}
-                  </select>
-                </td>
-                <td style={{ padding: '16px', maxWidth: 260 }}>
-                  <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-                    {/* Password manage button */}
+      {/* Staff Cards */}
+      {filteredTeam.length === 0 ? (
+        <div className="p-card" style={{ padding: 48, textAlign: 'center', color: `var(--text-secondary)` }}>
+          <Users size={40} color="var(--border-color)" style={{ marginBottom: 12, display: 'block', margin: '0 auto 12px' }} />
+          <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 4 }}>No {directoryTab === 'managers' ? 'account managers' : 'technical team members'} yet</div>
+          <div style={{ fontSize: 12 }}>Create an account to get started.</div>
+        </div>
+      ) : (
+        <div className="as-grid">
+          {filteredTeam.map(m => (
+            <div key={m.id} className="p-card" style={{ padding: 18, display: 'flex', flexDirection: 'column', gap: 14 }}>
+
+              {/* Identity row */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <PAv i={m.av || m.name?.charAt(0)} s={44} c={m.status === 'Inactive' ? '#94A3B8' : ac} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div className="lxf" style={{ fontSize: 14, fontWeight: 700, color: `var(--accent-secondary)`, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.name}</div>
+                  <div className="lxf" style={{ fontSize: 11, color: `var(--text-secondary)`, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.username || m.email || m.phone || '—'}</div>
+                </div>
+                <select
+                  value={m.status || 'Active'}
+                  onChange={e => updateM(m.id, { status: e.target.value })}
+                  style={{
+                    padding: '5px 8px', borderRadius: 8, border: '1px solid var(--border-color)',
+                    fontSize: 11, fontWeight: 700, background: '#fff', cursor: 'pointer', flexShrink: 0,
+                    color: m.status === 'Inactive' ? '#94A3B8' : m.status === 'On Leave' ? '#D97706' : '#16A34A',
+                  }}
+                >
+                  {['Active', 'On Leave', 'Inactive'].map(s => <option key={s}>{s}</option>)}
+                </select>
+              </div>
+
+              {/* Role badge */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: 11, fontWeight: 800, padding: '4px 10px', borderRadius: 8, background: `${ac}12`, color: ac }}>
+                  {m.role || m.jobRole || 'Staff'}
+                </span>
+                {m.department && (
+                  <span style={{ fontSize: 10, fontWeight: 700, color: `var(--text-secondary)` }}>{m.department}</span>
+                )}
+              </div>
+
+              {/* Certifications */}
+              <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+                {BADGES.map(b => {
+                  const active = (m.certs || []).includes(b.id);
+                  return (
                     <button
-                      onClick={() => setPwPanel(pwPanel === m.id ? null : m.id)}
-                      title="Set or reset password"
+                      key={b.id}
+                      onClick={() => toggleBadge(m, b.id)}
                       style={{
-                        display: 'flex', alignItems: 'center', gap: 5, padding: '6px 10px', borderRadius: 8,
-                        background: pwPanel === m.id ? `${ac}15` : `var(--bg-secondary)`,
-                        border: `1px solid ${pwPanel === m.id ? ac : `var(--border-color)`}`,
-                        fontSize: 11, fontWeight: 700, cursor: 'pointer',
-                        color: pwPanel === m.id ? ac : `var(--text-secondary)`,
+                        display: 'flex', alignItems: 'center', gap: 4, padding: '4px 9px', borderRadius: 20,
+                        border: `1.5px solid ${active ? b.color : `var(--border-color)`}`,
+                        background: active ? `${b.color}15` : 'none',
+                        color: active ? b.color : `var(--text-secondary)`,
+                        fontSize: 10, fontWeight: 700, cursor: 'pointer',
                       }}
                     >
-                      <KeyRound size={12} />
-                      Set Password
+                      {b.icon} {b.label}
                     </button>
-                    {/* Delete */}
-                    <button onClick={() => deleteM(m)} title="Deactivate staff account" style={{ background: 'none', border: 'none', cursor: 'pointer', color: `var(--text-secondary)`, padding: 6 }}>
-                      <Trash2 size={16} />
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-            {team.filter(m => {
-              const systemRole = (ROLE_PROFILES[m.role || m.jobRole] || ROLE_PROFILES.Technician).systemRole;
-              if (directoryTab === 'managers') return systemRole === 'staff';
-              return systemRole === 'worker';
-            }).length === 0 && (
-              <tr><td colSpan={6} style={{ padding: 48, textAlign: 'center', color: `var(--text-secondary)` }}>
-                <Users size={40} color="var(--border-color)" style={{ marginBottom: 12 }} />
-                <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 4 }}>No {directoryTab === 'managers' ? 'account managers' : 'technical team members'} found</div>
-                <div style={{ fontSize: 12 }}>Create an account to get started.</div>
-              </td></tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+                  );
+                })}
+              </div>
+
+              {/* Action grid */}
+              <div className="as-card-actions">
+                <button
+                  onClick={() => setAssignTarget(m)}
+                  style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                    padding: '9px 12px', borderRadius: 10, background: `var(--bg-secondary)`,
+                    border: '1px solid var(--border-color)', fontSize: 12, fontWeight: 700,
+                    cursor: 'pointer', color: `var(--text-secondary)`,
+                  }}
+                >
+                  <UserCog size={13} /> {(m.assignedClients?.length || 0)} Clients
+                </button>
+                <button
+                  onClick={() => setPwPanel(m.id)}
+                  style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                    padding: '9px 12px', borderRadius: 10,
+                    background: `${ac}12`, border: `1.5px solid ${ac}30`,
+                    fontSize: 12, fontWeight: 700, cursor: 'pointer', color: ac,
+                  }}
+                >
+                  <KeyRound size={13} /> Set Password
+                </button>
+                <button
+                  onClick={async () => {
+                    setResetStates(s => ({ ...s, [m.id]: 'loading' }));
+                    try {
+                      const fn = httpsCallable(functions, 'setStaffPassword');
+                      await fn({ uid: m.id, resetToDefault: true });
+                      notify?.('success', `${m.name}'s password reset to default.`);
+                      setResetStates(s => ({ ...s, [m.id]: 'done' }));
+                      setTimeout(() => setResetStates(s => ({ ...s, [m.id]: null })), 2500);
+                    } catch (e) {
+                      notify?.('error', e.message || 'Failed to reset password');
+                      setResetStates(s => ({ ...s, [m.id]: null }));
+                    }
+                  }}
+                  style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                    padding: '9px 12px', borderRadius: 10,
+                    background: resetStates[m.id] === 'done' ? '#DCFCE7' : '#FFF7ED',
+                    border: `1px solid ${resetStates[m.id] === 'done' ? '#BBF7D0' : '#FED7AA'}`,
+                    fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                    color: resetStates[m.id] === 'done' ? '#16A34A' : '#C2410C',
+                  }}
+                >
+                  {resetStates[m.id] === 'loading'
+                    ? <Loader2 size={13} style={{ animation: 'asSpin 1s linear infinite' }} />
+                    : resetStates[m.id] === 'done'
+                    ? <><Check size={13} /> Reset Done</>
+                    : <><RefreshCw size={13} /> Reset PW</>
+                  }
+                </button>
+                <button
+                  onClick={() => deleteM(m)}
+                  style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                    padding: '9px 12px', borderRadius: 10, background: '#FEF2F2',
+                    border: '1px solid #FECACA', fontSize: 12, fontWeight: 700,
+                    cursor: 'pointer', color: '#DC2626',
+                  }}
+                >
+                  <Trash2 size={13} /> Remove
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* ASSIGN CLIENTS MODAL */}
       {assignTarget && (
@@ -1012,15 +1075,10 @@ export default function AdminStaff({ team = [], brand, createStaffAccount, clien
                     </div>
                   ))}
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span className="lxf" style={{ fontSize: 12, color: `var(--text-secondary)`, fontWeight: 700 }}>Temp Password</span>
-                    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                      <span className="lxf" style={{ fontSize: 13, fontWeight: 800, color: `var(--accent-secondary)`, fontFamily: 'monospace', letterSpacing: 1 }}>
-                        {showPw ? created.password : '●'.repeat(created.password.length)}
-                      </span>
-                      <button onClick={() => setShowPw(p => !p)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: `var(--text-secondary)`, padding: 0 }}>
-                        {showPw ? <EyeOff size={14} /> : <Eye size={14} />}
-                      </button>
-                    </div>
+                    <span className="lxf" style={{ fontSize: 12, color: `var(--text-secondary)`, fontWeight: 700 }}>Default Password</span>
+                    <span className="lxf" style={{ fontSize: 14, fontWeight: 900, color: `var(--accent-secondary)`, fontFamily: 'monospace', letterSpacing: 2, background: '#F4EFE6', padding: '4px 10px', borderRadius: 6 }}>
+                      unlockme
+                    </span>
                   </div>
                 </div>
                 <div style={{ background: '#F8FAFC', border: '1px solid var(--border-color)', borderRadius: 14, padding: 16, marginBottom: 20 }}>
@@ -1039,7 +1097,7 @@ export default function AdminStaff({ team = [], brand, createStaffAccount, clien
                     <button
                       onClick={() => {
                         const msg = encodeURIComponent(
-                          `*Westline Future — Staff Portal Access*\n\nName: ${created.name}\nUsername: ${created.username}\nTemp Password: ${created.password}\nLogin: ${window.location.origin}/login\n\n_Change your password after first login._`
+                          `*Westline Future — Staff Portal Access*\n\nHi ${created.name}, your account is ready.\n\nUsername: ${created.username}\nDefault Password: unlockme\nLogin: ${window.location.origin}/login\n\n_You will be asked to set your own password when you first log in._`
                         );
                         const phone = (created.phone || '').replace(/\D/g, '');
                         window.open(phone ? `https://wa.me/${phone}?text=${msg}` : `https://wa.me/?text=${msg}`, '_blank');
@@ -1089,7 +1147,7 @@ function StaffPasswordModal({ member, ac, onClose, handleSetPassword, notify, pw
   const pwReady = currentPw.length >= 6;
 
   const doGenerate = () => {
-    const pw = genPassword();
+    const pw = DEFAULT_PASSWORD;
     setNewPwInputs(s => ({ ...s, [member.id]: pw }));
     setShowPw(true); // reveal so admin can see + share
     setSaved(false);

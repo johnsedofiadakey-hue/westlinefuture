@@ -13,6 +13,7 @@ const CORS_OPTS = {
     'https://westlinefuture.web.app',
     'https://westlinefuture.firebaseapp.com',
   ],
+  invoker: 'public',
 };
 
 const normalizePhone = value => String(value || '').replace(/\D/g, '');
@@ -1763,10 +1764,28 @@ exports.approveProjectQuote = onCall(CORS_OPTS, async request => {
   if (!userOwnsProject(request.auth, project)) {
     throw new HttpsError('permission-denied', 'This project is not assigned to your account.');
   }
-  const renderingApproved = project.kickoffMode === 'direct-kickoff' ||
+  let renderingApproved = project.kickoffMode === 'direct-kickoff' ||
     project.renderingApproved === true ||
     project.designApproved === true ||
     String(project.renderingStatus || '').toLowerCase() === 'approved';
+
+  // Fallback: check if any rendering package for this project is approved
+  if (!renderingApproved) {
+    const pkgSnap = await db.collection('renderingPackages')
+      .where('projectId', '==', projectId).get();
+    renderingApproved = pkgSnap.docs.some(d =>
+      String(d.data().status || '').toLowerCase() === 'approved'
+    );
+    // If a package is approved, sync the flag back to the project doc
+    if (renderingApproved) {
+      db.collection('projects').doc(projectId).update({
+        renderingApproved: true,
+        renderingStatus: 'approved',
+        updatedAt: FieldValue.serverTimestamp(),
+      }).catch(() => {});
+    }
+  }
+
   if (!renderingApproved) {
     throw new HttpsError('failed-precondition', 'Approve the final rendering before approving the quotation.');
   }

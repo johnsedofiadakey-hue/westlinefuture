@@ -26,6 +26,7 @@ import InvoiceDocument from '../components/InvoiceDocument';
 import ClientUploadsTab from '../components/ClientUploadsTab';
 import SecureVault from '../components/SecureVault';
 import { clientPortalGateState, deriveWorkflowStep, workflowProgress, WORKFLOW_STEP } from '../lib/projectWorkflow';
+import PortalRefreshButton from '../components/PortalRefreshButton';
 
 const AC = `var(--accent-secondary)`;
 
@@ -1220,7 +1221,7 @@ function isImageType(fileType) {
 }
 
 // ─── Stage Action Card ────────────────────────────────────────────────────────
-function StageActionCard({ project, user, approveQuote, approveSignoff, payInvoice, updateProjectStage }) {
+function StageActionCard({ project, user, approveQuote, approveSignoff, payInvoice, updateProjectStage, setActiveTab }) {
   const applicableStages = CLIENT_PROJECT_STAGES.filter(s => {
     const typeStages = PROJECT_TYPES[project.projectType]?.stages || CLIENT_PROJECT_STAGES.map(x => x.id);
     return typeStages.includes(s.id);
@@ -1267,7 +1268,7 @@ function StageActionCard({ project, user, approveQuote, approveSignoff, payInvoi
     return () => { u1(); u2(); };
   }, [project?.id, currentStage?.requiresPayment]);
 
-  if (!currentStage || (currentStage.whoActs !== 'client' && currentStage.whoActs !== 'both')) return null;
+  if (!currentStage || (currentStage.whoActs !== 'client' && currentStage.whoActs !== 'both' && currentStage.id !== 8)) return null;
 
   const email = user?.proxyEmail || (user?.phone ? user.phone + '@clients.westlinefuture.com' : 'client@clients.westlinefuture.com');
   const budget = parseFloat(String(project.budget || '0').replace(/[^0-9.]/g, '')) || 0;
@@ -1431,6 +1432,84 @@ function StageActionCard({ project, user, approveQuote, approveSignoff, payInvoi
     );
   }
 
+  // Stage-specific action cards for stages that need direction but no inline form
+  if (currentStage.id === 1) {
+    return (
+      <div style={{ padding: '20px 24px', borderRadius: 20, background: 'linear-gradient(135deg, #FDFAF6, #F4EFE6)', border: '1.5px solid rgba(200,169,110,0.35)', marginBottom: 4 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+          <AlertCircle size={18} color="var(--accent-primary)" />
+          <span style={{ fontSize: 12, fontWeight: 800, color: 'var(--accent-primary)', textTransform: 'uppercase', letterSpacing: '.06em' }}>Action Required</span>
+        </div>
+        <div style={{ fontSize: 18, fontWeight: 900, color: 'var(--accent-secondary)', marginBottom: 6 }}>Complete Your Onboarding</div>
+        <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6, marginBottom: 18 }}>
+          Pay the rendering fee to unlock your 3D design, then confirm your site survey appointment so our technical team can take precise measurements.
+        </div>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          <button onClick={() => setActiveTab?.('financials')} style={{ padding: '11px 20px', borderRadius: 12, border: 'none', background: 'var(--accent-secondary)', color: '#fff', fontSize: 13, fontWeight: 800, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+            <CreditCard size={15} /> Pay Rendering Fee
+          </button>
+          <button onClick={() => setActiveTab?.('messages')} style={{ padding: '11px 20px', borderRadius: 12, border: '1.5px solid var(--border-color)', background: '#fff', color: 'var(--accent-secondary)', fontSize: 13, fontWeight: 800, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+            <MessageSquare size={15} /> Message Project Manager
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (currentStage.id === 2) {
+    return (
+      <div style={{ padding: '20px 24px', borderRadius: 20, background: 'linear-gradient(135deg, #FAF5FF, #F3E8FF)', border: '1.5px solid #D8B4FE50', marginBottom: 4 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+          <AlertCircle size={18} color="#9333EA" />
+          <span style={{ fontSize: 12, fontWeight: 800, color: '#9333EA', textTransform: 'uppercase', letterSpacing: '.06em' }}>Review Required</span>
+        </div>
+        <div style={{ fontSize: 18, fontWeight: 900, color: 'var(--accent-secondary)', marginBottom: 6 }}>Your 3D Design Is Ready</div>
+        <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6, marginBottom: 18 }}>
+          Our designers have prepared your 3D rendering. Review it carefully, request any revisions, and approve the final version to unlock the commercial stage.
+        </div>
+        <button onClick={() => setActiveTab?.('designs')} style={{ padding: '11px 22px', borderRadius: 12, border: 'none', background: '#9333EA', color: '#fff', fontSize: 13, fontWeight: 800, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+          <Search size={15} /> Open 3D Design Review
+        </button>
+      </div>
+    );
+  }
+
+  if (currentStage.id === 7) {
+    return (
+      <div style={{ padding: '20px 24px', borderRadius: 20, background: 'linear-gradient(135deg, #FDFAF6, #F4EFE6)', border: '1.5px solid rgba(200,169,110,0.35)', marginBottom: 4 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+          <AlertCircle size={18} color="var(--accent-primary)" />
+          <span style={{ fontSize: 12, fontWeight: 800, color: 'var(--accent-primary)', textTransform: 'uppercase', letterSpacing: '.06em' }}>Sign-off Required</span>
+        </div>
+        <div style={{ fontSize: 18, fontWeight: 900, color: 'var(--accent-secondary)', marginBottom: 6 }}>Final Inspection Awaiting</div>
+        <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6, marginBottom: 18 }}>
+          Installation is complete. Please go through the inspection checklist, confirm everything meets your expectations, and sign off to move to handover.
+        </div>
+        <button onClick={() => setActiveTab?.('vault')} style={{ padding: '11px 22px', borderRadius: 12, border: 'none', background: 'var(--accent-secondary)', color: '#fff', fontSize: 13, fontWeight: 800, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+          <CheckCircle2 size={15} /> Open Inspection Checklist
+        </button>
+      </div>
+    );
+  }
+
+  if (currentStage.id === 8) {
+    return (
+      <div style={{ padding: '20px 24px', borderRadius: 20, background: 'linear-gradient(135deg, #F0F9FF, #E0F2FE)', border: '1.5px solid #BAE6FD', marginBottom: 4 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+          <Star size={18} color="#0284C7" />
+          <span style={{ fontSize: 12, fontWeight: 800, color: '#0284C7', textTransform: 'uppercase', letterSpacing: '.06em' }}>Almost Done</span>
+        </div>
+        <div style={{ fontSize: 18, fontWeight: 900, color: 'var(--accent-secondary)', marginBottom: 6 }}>Share Your Feedback</div>
+        <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6, marginBottom: 18 }}>
+          Your project is complete — congratulations! Please take a moment to rate your experience and leave a short review to officially conclude the project.
+        </div>
+        <button onClick={() => setActiveTab?.('vault')} style={{ padding: '11px 22px', borderRadius: 12, border: 'none', background: '#0284C7', color: '#fff', fontSize: 13, fontWeight: 800, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+          <Star size={15} /> Complete Handover & Feedback
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div style={{
       padding: '20px 24px', borderRadius: 20,
@@ -1443,7 +1522,7 @@ function StageActionCard({ project, user, approveQuote, approveSignoff, payInvoi
       <div>
         <div style={{ fontSize: 13, fontWeight: 800, color: '#D97706', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 4 }}>Your attention is needed</div>
         <div style={{ fontSize: 14, color: '#374151', lineHeight: 1.5 }}>
-          Please confirm receipt or contact your account manager to proceed.
+          {currentStage.clientMsg || 'Please contact your account manager to proceed.'}
         </div>
       </div>
     </div>
@@ -1578,6 +1657,7 @@ function ClientSiteVisitScheduler({ project, isMobile }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [confirmation, setConfirmation] = useState('');
+  const [rescheduling, setRescheduling] = useState(false);
   const workflowStep = deriveWorkflowStep(project);
   if (![WORKFLOW_STEP.SITE_VISIT_SCHEDULING, WORKFLOW_STEP.SITE_SURVEY].includes(workflowStep)) return null;
 
@@ -1613,18 +1693,23 @@ function ClientSiteVisitScheduler({ project, isMobile }) {
 
   return (
     <div style={{ padding: isMobile ? 20 : 24, borderRadius: 20, background: '#fff', border: '1px solid var(--border-color)', boxShadow: '0 4px 18px rgba(0,0,0,.04)' }}>
-      <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', marginBottom: scheduled ? 0 : 18 }}>
-        <div style={{ width: 42, height: 42, borderRadius: 12, background: '#EFF6FF', color: '#2563EB', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Calendar size={19} /></div>
-        <div>
-          <div style={{ fontSize: 16, fontWeight: 900, color: 'var(--accent-secondary)' }}>{scheduled ? 'Technical site visit confirmed' : 'Schedule your technical site visit'}</div>
-          <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.5, marginTop: 3 }}>
-            {scheduled
-              ? new Date(project.siteVisit.startAt).toLocaleString('en-GB', { dateStyle: 'full', timeStyle: 'short' })
-              : 'Choose a date and time when our team can take measurements and site photos.'}
+      <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', marginBottom: (scheduled && !rescheduling) ? 0 : 18, justifyContent: 'space-between' }}>
+        <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+          <div style={{ width: 42, height: 42, borderRadius: 12, background: '#EFF6FF', color: '#2563EB', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Calendar size={19} /></div>
+          <div>
+            <div style={{ fontSize: 16, fontWeight: 900, color: 'var(--accent-secondary)' }}>{scheduled ? 'Technical site visit confirmed' : 'Schedule your technical site visit'}</div>
+            <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.5, marginTop: 3 }}>
+              {scheduled
+                ? new Date(project.siteVisit.startAt).toLocaleString('en-GB', { dateStyle: 'full', timeStyle: 'short' })
+                : 'Choose a date and time when our team can take measurements and site photos.'}
+            </div>
           </div>
         </div>
+        {scheduled && !rescheduling && (
+          <button onClick={() => { setRescheduling(true); setError(''); setConfirmation(''); }} style={{ padding: '8px 14px', borderRadius: 10, border: '1.5px solid var(--border-color)', background: 'transparent', fontSize: 12, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}>Change Date</button>
+        )}
       </div>
-      {!scheduled && (
+      {(!scheduled || rescheduling) && (
         <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'minmax(220px, .8fr) 1.2fr auto', gap: 10 }}>
           <input type="datetime-local" value={startAt} min={minimumAppointmentDateTime()} onChange={e => { setStartAt(e.target.value); setError(''); setConfirmation(''); }} style={{ padding: '12px 14px', borderRadius: 12, border: '1.5px solid var(--border-color)', fontFamily: 'inherit' }} />
           <input value={notes} onChange={e => setNotes(e.target.value)} placeholder="Access instructions or preferred contact" style={{ padding: '12px 14px', borderRadius: 12, border: '1.5px solid var(--border-color)', fontFamily: 'inherit' }} />
@@ -1640,6 +1725,13 @@ function ClientSiteVisitScheduler({ project, isMobile }) {
 function ClientApprovalsTab({ project, invoices = [], approvals = [], approveQuote, approveSignoff, brand, user, isMobile, setActiveTab, updateProjectStage, updateApproval }) {
   const [signOffBusy, setSignOffBusy] = useState(false);
   const [signOffDone, setSignOffDone] = useState(false);
+  const [inspectionChecks, setInspectionChecks] = useState({});
+  const [inspectionNote, setInspectionNote] = useState('');
+  const [handoverRating, setHandoverRating] = useState(0);
+  const [handoverFeedback, setHandoverFeedback] = useState('');
+  const [handoverConsent, setHandoverConsent] = useState(false);
+  const [handoverBusy, setHandoverBusy] = useState(false);
+  const [handoverDone, setHandoverDone] = useState(false);
   const [showContract, setShowContract] = useState(false);
   const [contractJustSigned, setContractJustSigned] = useState(false);
   const [approvalNotes, setApprovalNotes] = useState({});
@@ -1972,8 +2064,11 @@ function ClientApprovalsTab({ project, invoices = [], approvals = [], approveQuo
                 <button onClick={() => downloadInvoicePDF(activeQuote, project, user, brand)} style={{ padding: '8px 13px', borderRadius: 9, border: '1px solid var(--border-color)', background: '#fff', fontSize: 11, fontWeight: 800, cursor: 'pointer', color: 'var(--text-secondary)' }}>
                   Download PDF
                 </button>
-                <a href={pmWA} target="_blank" rel="noreferrer" style={{ padding: '8px 13px', borderRadius: 9, border: '1px solid #25D36640', background: '#F0FDF4', fontSize: 11, fontWeight: 800, cursor: 'pointer', color: '#16A34A', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                <button onClick={() => setActiveTab?.('messages')} style={{ padding: '8px 13px', borderRadius: 9, border: '1px solid #25D36640', background: '#F0FDF4', fontSize: 11, fontWeight: 800, cursor: 'pointer', color: '#16A34A', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
                   💬 Message Project Manager
+                </button>
+                <a href={pmWA} target="_blank" rel="noreferrer" style={{ padding: '8px 6px', fontSize: 10, fontWeight: 700, color: 'var(--text-secondary)', textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}>
+                  or WhatsApp
                 </a>
               </div>
             </div>
@@ -2113,30 +2208,211 @@ function ClientApprovalsTab({ project, invoices = [], approvals = [], approveQuo
         />
       )}
 
-      {/* ── SECTION 3: Final Sign-off (Stage 7 only) ───────────── */}
+      {/* ── SECTION 3: Inspection & Sign-off (Stage 7) ───────────── */}
       {project.stageId === 7 && (
         <div style={{ ...sectionStyle, borderBottom: 'none' }}>
-          <div style={sectionTitleStyle}>③ Final Sign-off</div>
-          {signOffDone || project.stageId > 7 ? (
+          <div style={sectionTitleStyle}>③ Site Inspection & Sign-off</div>
+          {signOffDone ? (
             <div style={{ padding: 14, borderRadius: 14, background: '#F0FDF4', color: '#16A34A', fontSize: 12, fontWeight: 800, display: 'flex', alignItems: 'center', gap: 8 }}>
-              <CheckCircle2 size={15} /> You have signed off on the site inspection. Project is moving to completion.
+              <CheckCircle2 size={15} /> Inspection signed off — project is moving to handover.
+            </div>
+          ) : (() => {
+            const INSPECTION_ITEMS = [
+              { key: 'workmanship', label: 'Workmanship quality meets expectations' },
+              { key: 'scope_match', label: 'All items match the agreed scope and specifications' },
+              { key: 'surfaces', label: 'All surfaces are clean, finished, and undamaged' },
+              { key: 'hardware', label: 'Hardware, fittings, and mechanisms are functional' },
+              { key: 'dimensions', label: 'Dimensions and placement are as agreed' },
+              { key: 'no_defects', label: 'No visible defects, scratches, or damage observed' },
+              { key: 'site_clear', label: 'Site is clear and free of installation debris' },
+            ];
+            const allChecked = INSPECTION_ITEMS.every(item => inspectionChecks[item.key]);
+            return (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                <div style={{ padding: '14px 16px', borderRadius: 14, background: '#FFF7ED', border: '1px solid #FED7AA', color: '#92400E', fontSize: 12, lineHeight: 1.6 }}>
+                  Our team has completed work and the project is ready for your inspection. Please go through each item below carefully, then sign off to confirm acceptance.
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 1, borderRadius: 14, border: '1px solid var(--border-color)', overflow: 'hidden' }}>
+                  {INSPECTION_ITEMS.map((item, idx) => (
+                    <label
+                      key={item.key}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 12, padding: '13px 16px',
+                        background: inspectionChecks[item.key] ? '#F0FDF4' : (idx % 2 === 0 ? '#FAFAFA' : '#fff'),
+                        borderBottom: idx < INSPECTION_ITEMS.length - 1 ? '1px solid var(--border-color)' : 'none',
+                        cursor: 'pointer', transition: 'background .15s',
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={!!inspectionChecks[item.key]}
+                        onChange={e => setInspectionChecks(prev => ({ ...prev, [item.key]: e.target.checked }))}
+                        style={{ width: 17, height: 17, accentColor: '#16A34A', flexShrink: 0, cursor: 'pointer' }}
+                      />
+                      <span style={{ fontSize: 13, color: inspectionChecks[item.key] ? '#15803D' : 'var(--text-primary)', fontWeight: inspectionChecks[item.key] ? 700 : 400, lineHeight: 1.5 }}>
+                        {item.label}
+                      </span>
+                      {inspectionChecks[item.key] && <CheckCircle2 size={14} color="#16A34A" style={{ marginLeft: 'auto', flexShrink: 0 }} />}
+                    </label>
+                  ))}
+                </div>
+                <div>
+                  <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--text-secondary)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '.06em' }}>Additional notes (optional)</div>
+                  <textarea
+                    value={inspectionNote}
+                    onChange={e => setInspectionNote(e.target.value)}
+                    placeholder="Any observations or minor snags to record before sign-off…"
+                    rows={3}
+                    style={{ width: '100%', padding: '12px 14px', borderRadius: 12, border: '1.5px solid var(--border-color)', fontSize: 13, outline: 'none', resize: 'none', boxSizing: 'border-box', fontFamily: 'inherit', lineHeight: 1.6 }}
+                  />
+                </div>
+                {!allChecked && (
+                  <div style={{ padding: '10px 14px', borderRadius: 10, background: '#FFF7ED', border: '1px solid #FED7AA', color: '#92400E', fontSize: 12 }}>
+                    Please tick all inspection items before signing off.
+                  </div>
+                )}
+                <button
+                  onClick={async () => {
+                    if (!allChecked || signOffBusy) return;
+                    setSignOffBusy(true);
+                    try {
+                      await updateDoc(doc(db, 'projects', project.id), {
+                        inspectionChecks,
+                        inspectionNote: inspectionNote.trim(),
+                        inspectionSignedOffAt: new Date().toISOString(),
+                      });
+                      if (approveSignoff) await approveSignoff(project.id);
+                      else if (updateProjectStage) await updateProjectStage(project.id, 8, 'Client signed off on site inspection.');
+                      setSignOffDone(true);
+                    } finally {
+                      setSignOffBusy(false);
+                    }
+                  }}
+                  disabled={!allChecked || signOffBusy}
+                  style={{
+                    padding: '13px 18px', borderRadius: 12, border: 'none',
+                    background: (!allChecked || signOffBusy) ? '#9CA3AF' : '#16A34A',
+                    color: '#fff', fontSize: 13, fontWeight: 900,
+                    cursor: (!allChecked || signOffBusy) ? 'not-allowed' : 'pointer',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                  }}
+                >
+                  {signOffBusy
+                    ? <><Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> Submitting…</>
+                    : <><CheckCircle2 size={14} /> Sign Off — I Accept the Completed Work</>}
+                </button>
+                <div style={{ fontSize: 10, color: '#9CA3AF', textAlign: 'center' }}>This action is permanent and advances the project to handover.</div>
+              </div>
+            );
+          })()}
+        </div>
+      )}
+
+      {/* ── SECTION 4: Handover & Feedback (Stage 8) ───────────── */}
+      {project.stageId === 8 && (
+        <div style={{ ...sectionStyle, borderBottom: 'none' }}>
+          <div style={sectionTitleStyle}>④ Project Handover & Feedback</div>
+          {handoverDone || project.handoverSubmittedAt ? (
+            <div style={{ padding: 16, borderRadius: 14, background: '#F0FDF4', border: '1px solid #BBF7D0', display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#15803D', fontSize: 13, fontWeight: 900 }}>
+                <CheckCircle2 size={16} /> Thank you — your feedback has been submitted!
+              </div>
+              <div style={{ fontSize: 12, color: '#166534', lineHeight: 1.6 }}>
+                We're glad to have delivered your project. Your review helps us serve future clients better. Welcome to the Westline Future family!
+              </div>
             </div>
           ) : (
-            <div style={{ padding: 16, borderRadius: 16, background: 'linear-gradient(135deg, #FFF7ED, #FFFBF5)', border: '1.5px solid #F59E0B40', display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div style={{ padding: '14px 16px', borderRadius: 14, background: 'linear-gradient(135deg, #F0F9FF, #E0F2FE)', border: '1px solid #BAE6FD', color: '#0C4A6E', fontSize: 12, lineHeight: 1.6 }}>
+                Your project is complete. We'd love to hear about your experience — your feedback takes less than a minute and means a lot to us.
+              </div>
+
+              {/* Star rating */}
               <div>
-                <div style={{ fontSize: 13, fontWeight: 900, color: '#92400E' }}>Final Site Inspection</div>
-                <div style={{ fontSize: 12, color: '#78350F', marginTop: 4, lineHeight: 1.6 }}>
-                  Our team has completed installation and the site is ready for your inspection. By clicking below, you confirm that you have inspected the work and accept it as complete.
+                <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--text-secondary)', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '.06em' }}>Overall experience</div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  {[1, 2, 3, 4, 5].map(star => (
+                    <button
+                      key={star}
+                      onClick={() => setHandoverRating(star)}
+                      style={{
+                        width: 44, height: 44, borderRadius: 12, border: '1.5px solid',
+                        borderColor: handoverRating >= star ? '#F59E0B' : 'var(--border-color)',
+                        background: handoverRating >= star ? '#FEF3C7' : '#fff',
+                        fontSize: 22, cursor: 'pointer', display: 'grid', placeItems: 'center',
+                        transition: 'all .15s',
+                      }}
+                    >
+                      {handoverRating >= star ? '★' : '☆'}
+                    </button>
+                  ))}
+                  {handoverRating > 0 && (
+                    <span style={{ alignSelf: 'center', fontSize: 12, color: '#92400E', fontWeight: 700, marginLeft: 4 }}>
+                      {['', 'Poor', 'Fair', 'Good', 'Great', 'Excellent!'][handoverRating]}
+                    </span>
+                  )}
                 </div>
               </div>
+
+              {/* Feedback */}
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--text-secondary)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '.06em' }}>Your review</div>
+                <textarea
+                  value={handoverFeedback}
+                  onChange={e => setHandoverFeedback(e.target.value)}
+                  placeholder="Tell us about the quality of the furniture, delivery experience, communication, and anything else that stood out…"
+                  rows={4}
+                  style={{ width: '100%', padding: '12px 14px', borderRadius: 12, border: '1.5px solid var(--border-color)', fontSize: 13, outline: 'none', resize: 'none', boxSizing: 'border-box', fontFamily: 'inherit', lineHeight: 1.6 }}
+                />
+              </div>
+
+              {/* Testimonial consent */}
+              <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={handoverConsent}
+                  onChange={e => setHandoverConsent(e.target.checked)}
+                  style={{ width: 17, height: 17, marginTop: 2, accentColor: 'var(--accent-secondary)', flexShrink: 0, cursor: 'pointer' }}
+                />
+                <span style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+                  I'm happy for Westline Future to share my review as a testimonial on their website and marketing materials.
+                </span>
+              </label>
+
               <button
-                onClick={handleInspectionSignOff}
-                disabled={signOffBusy}
-                style={{ padding: '12px 18px', borderRadius: 12, border: 'none', background: signOffBusy ? '#9CA3AF' : '#16A34A', color: '#fff', fontSize: 13, fontWeight: 900, cursor: signOffBusy ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+                onClick={async () => {
+                  if (!handoverRating || !handoverFeedback.trim() || handoverBusy) return;
+                  setHandoverBusy(true);
+                  try {
+                    await updateDoc(doc(db, 'projects', project.id), {
+                      handoverRating,
+                      handoverFeedback: handoverFeedback.trim(),
+                      handoverTestimonialConsent: handoverConsent,
+                      handoverSubmittedAt: new Date().toISOString(),
+                      projectLifecycleStatus: 'Completed',
+                      status: 'Completed',
+                    });
+                    setHandoverDone(true);
+                  } finally {
+                    setHandoverBusy(false);
+                  }
+                }}
+                disabled={!handoverRating || !handoverFeedback.trim() || handoverBusy}
+                style={{
+                  padding: '13px 18px', borderRadius: 12, border: 'none',
+                  background: (!handoverRating || !handoverFeedback.trim() || handoverBusy) ? '#9CA3AF' : 'var(--accent-secondary)',
+                  color: '#fff', fontSize: 13, fontWeight: 900,
+                  cursor: (!handoverRating || !handoverFeedback.trim() || handoverBusy) ? 'not-allowed' : 'pointer',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                }}
               >
-                {signOffBusy ? <><Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> Submitting…</> : <><CheckCircle2 size={14} /> Confirm Site Inspection — I Accept the Work</>}
+                {handoverBusy
+                  ? <><Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> Submitting…</>
+                  : <><CheckCircle2 size={14} /> Submit Feedback & Complete Project</>}
               </button>
-              <div style={{ fontSize: 10, color: '#9CA3AF', textAlign: 'center' }}>This action is permanent and triggers the final payment milestone.</div>
+              {(!handoverRating || !handoverFeedback.trim()) && (
+                <div style={{ fontSize: 11, color: '#9CA3AF', textAlign: 'center' }}>A star rating and written review are required to submit.</div>
+              )}
             </div>
           )}
         </div>
@@ -2188,6 +2464,7 @@ function ClientAddOnsTab({ project, addOns: propAddOns = [], invoices: propInvoi
   const [liveAddOns, setLiveAddOns] = useState(null);
   const [liveInvoices, setLiveInvoices] = useState(null);
   const [respondingTo, setRespondingTo] = useState(null);
+  const [respondedAddOns, setRespondedAddOns] = useState({});
 
   useEffect(() => {
     if (!db || !project?.id) return;
@@ -2215,6 +2492,7 @@ function ClientAddOnsTab({ project, addOns: propAddOns = [], invoices: propInvoi
     try {
       const respond = httpsCallable(functions, 'respondToProjectAddOn');
       await respond({ addOnId, decision, note });
+      setRespondedAddOns(prev => ({ ...prev, [addOnId]: decision }));
     } catch (error) {
       console.error('[ClientAddOnsTab] Failed to respond to add-on:', error);
       alert(error?.message || 'The add-on response could not be recorded.');
@@ -2266,24 +2544,34 @@ function ClientAddOnsTab({ project, addOns: propAddOns = [], invoices: propInvoi
                 {isPaid && <span style={{ fontSize: 11, fontWeight: 700, marginLeft: 6 }}>✓ Settled</span>}
               </div>
               {awaitingApproval && (
-                <div style={{ display: 'flex', gap: 8, width: isMobile ? '100%' : 'auto' }}>
-                  <button
-                    type="button"
-                    disabled={respondingTo === addOn.id}
-                    onClick={() => respondToAddOn(addOn.id, 'reject')}
-                    style={{ flex: 1, minHeight: 42, padding: '0 14px', borderRadius: 10, border: '1px solid #DC2626', background: '#fff', color: '#B91C1C', fontWeight: 800, cursor: 'pointer' }}
-                  >
-                    Request changes
-                  </button>
-                  <button
-                    type="button"
-                    disabled={respondingTo === addOn.id}
-                    onClick={() => respondToAddOn(addOn.id, 'approve')}
-                    style={{ flex: 1, minHeight: 42, padding: '0 18px', borderRadius: 10, border: 'none', background: '#166534', color: '#fff', fontWeight: 800, cursor: 'pointer' }}
-                  >
-                    {respondingTo === addOn.id ? 'Saving...' : 'Approve add-on'}
-                  </button>
-                </div>
+                respondedAddOns[addOn.id] === 'approve' ? (
+                  <div style={{ fontSize: 12, color: '#15803D', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 5 }}>
+                    <CheckCircle2 size={14} color="#15803D" /> Approved — invoice being prepared
+                  </div>
+                ) : respondedAddOns[addOn.id] === 'reject' ? (
+                  <div style={{ fontSize: 12, color: '#D97706', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 5 }}>
+                    <Clock size={14} color="#D97706" /> Change request sent — PM will follow up
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', gap: 8, width: isMobile ? '100%' : 'auto' }}>
+                    <button
+                      type="button"
+                      disabled={respondingTo === addOn.id}
+                      onClick={() => respondToAddOn(addOn.id, 'reject')}
+                      style={{ flex: 1, minHeight: 42, padding: '0 14px', borderRadius: 10, border: '1px solid #DC2626', background: '#fff', color: '#B91C1C', fontWeight: 800, cursor: 'pointer' }}
+                    >
+                      Request changes
+                    </button>
+                    <button
+                      type="button"
+                      disabled={respondingTo === addOn.id}
+                      onClick={() => respondToAddOn(addOn.id, 'approve')}
+                      style={{ flex: 1, minHeight: 42, padding: '0 18px', borderRadius: 10, border: 'none', background: '#166534', color: '#fff', fontWeight: 800, cursor: 'pointer' }}
+                    >
+                      {respondingTo === addOn.id ? 'Saving...' : 'Approve add-on'}
+                    </button>
+                  </div>
+                )
               )}
               {unpaid && amount > 0 && (
                 <div style={{ width: isMobile ? '100%' : 260, maxWidth: '100%' }}>
@@ -3049,7 +3337,8 @@ function PaymentsTab({ project, user, transactions: propTxns, invoices: propInvs
   };
   const currentDueMilestone = activeMilestones.find(m => getMilestoneStatus(m) === 'due');
   const currentDueMilestoneInv = currentDueMilestone
-    ? allInvoices.find(i => i.milestoneKey === currentDueMilestone.key)
+    ? (allInvoices.find(i => i.milestoneKey === currentDueMilestone.key)
+        || rawInvoices.find(i => i.milestoneKey === currentDueMilestone.key))
     : null;
   const email = user?.proxyEmail || (user?.phone ? user.phone + '@clients.westlinefuture.com' : 'client@clients.westlinefuture.com');
 
@@ -3065,32 +3354,11 @@ function PaymentsTab({ project, user, transactions: propTxns, invoices: propInvs
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: isMobile ? 14 : 20 }}>
 
-      {/* Currency toggle */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: isMobile ? '0 2px' : 0 }}>
-        <div style={{ fontSize: 12, color: `var(--text-secondary)`, fontWeight: 600 }}>
-          Base currency: <strong style={{ color: `var(--accent-secondary)` }}>GHS</strong>
-        </div>
-        <button
-          onClick={() => setShowUSD(p => !p)}
-          style={{
-            display: 'flex', alignItems: 'center', gap: 7,
-            padding: '8px 16px', borderRadius: 22,
-            background: showUSD ? `var(--accent-secondary)` : `var(--bg-secondary)`,
-            border: `2px solid ${showUSD ? `var(--accent-secondary)` : `var(--border-color)`}`,
-            color: showUSD ? `var(--accent-secondary)` : `var(--text-secondary)`,
-            fontSize: 12, fontWeight: 800, cursor: 'pointer',
-            minHeight: 40, touchAction: 'manipulation', transition: 'all .2s',
-          }}
-        >
-          {showUSD ? '🇬🇭 GHS' : '🇺🇸 USD'}
-        </button>
-      </div>
-
       {/* ── Cost breakdown (if set by admin) ── */}
       <CostBreakdownCard project={project} fmt={fmt} card={card} pad={pad} isMobile={isMobile} />
 
       {/* ── A. Payment schedule ── */}
-      <div style={{ ...card, padding: pad }}>
+      <div style={{ ...card, padding: pad, overflow: 'hidden' }}>
         {/* Header row */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
           <div>
@@ -3099,12 +3367,20 @@ function PaymentsTab({ project, user, transactions: propTxns, invoices: propInvs
               {scheduleConfig.label}
             </div>
           </div>
-          {budget > 0 && (
-            <div style={{ textAlign: 'right', flexShrink: 0 }}>
-              <div style={{ fontSize: 13, fontWeight: 900, color: '#16A34A' }}>{fmt(totalPaid)}</div>
-              <div style={{ fontSize: 10, color: `var(--text-secondary)`, fontWeight: 600 }}>paid so far</div>
-            </div>
-          )}
+          <button
+            onClick={() => setShowUSD(p => !p)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              padding: '7px 13px', borderRadius: 20,
+              background: showUSD ? `var(--accent-secondary)` : `var(--bg-secondary)`,
+              border: `1.5px solid ${showUSD ? `var(--accent-secondary)` : `var(--border-color)`}`,
+              color: showUSD ? '#fff' : `var(--text-secondary)`,
+              fontSize: 11, fontWeight: 800, cursor: 'pointer',
+              touchAction: 'manipulation', transition: 'all .2s', flexShrink: 0,
+            }}
+          >
+            {showUSD ? '🇬🇭 GHS' : '🇺🇸 USD'}
+          </button>
         </div>
 
         {/* Progress bar */}
@@ -3159,8 +3435,8 @@ function PaymentsTab({ project, user, transactions: propTxns, invoices: propInvs
               return (
                 <div key={m.key} style={{
                   borderRadius: 16,
-                  background: isDue ? 'linear-gradient(135deg,#F0FDF4,#FAFFF8)' : isPaid ? '#FAFAF9' : '#FAFAF9',
-                  border: `1.5px solid ${isDue ? '#16A34A50' : isPaid ? '#16A34A20' : `var(--border-color)`}`,
+                  background: '#FAFAF9',
+                  border: '1.5px solid var(--border-color)',
                   overflow: 'hidden',
                 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 12 : 14, padding: isMobile ? '13px 14px' : '15px 18px' }}>
@@ -3202,7 +3478,7 @@ function PaymentsTab({ project, user, transactions: propTxns, invoices: propInvs
             })}
 
             {currentDueMilestone && budget > 0 && (
-              <div style={{ marginTop: 10, padding: '18px 20px', borderRadius: 16, background: 'linear-gradient(135deg,#F0FDF4,#FAFFF8)', border: '1.5px solid #16A34A30' }}>
+              <div style={{ marginTop: 10, padding: '18px 20px', borderRadius: 16, background: '#FAFAF9', border: '1.5px solid var(--border-color)' }}>
                 {paySuccess ? (
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, padding: '16px 0', textAlign: 'center' }}>
                     <div style={{ width: 56, height: 56, borderRadius: '50%', background: '#D1FAE5', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -3280,22 +3556,24 @@ function PaymentsTab({ project, user, transactions: propTxns, invoices: propInvs
                           </div>
                         )}
                         <button
+                          disabled={offlineSubmitting}
                           onClick={async () => {
-                            if (!currentDueMilestoneInv?.id || offlineSubmitting) return;
+                            if (offlineSubmitting) return;
                             setOfflineSubmitting(true);
                             try {
                               const submitOfflinePayment = httpsCallable(functions, 'submitOfflinePayment');
                               await submitOfflinePayment({
                                 projectId: project.id,
-                                invoiceId: currentDueMilestoneInv.id,
-                                amount: parseAmount(currentDueMilestoneInv.amount || currentDueMilestoneInv.total),
+                                invoiceId: currentDueMilestoneInv?.id || null,
+                                amount: currentDueMilestoneInv
+                                  ? parseAmount(currentDueMilestoneInv.amount || currentDueMilestoneInv.total)
+                                  : budget * currentDueMilestone.pct,
                                 method: offlineMethod === 'bank' ? 'bank' : 'cash',
                                 reference: '',
                               });
                               setOfflineSubmitted(true);
                             } catch (e) { console.error(e); } finally { setOfflineSubmitting(false); }
                           }}
-                          disabled={offlineSubmitting}
                           style={{ width: '100%', padding: '13px 18px', borderRadius: 12, border: 'none', background: offlineMethod === 'bank' ? '#16A34A' : '#7C3AED', color: '#fff', fontSize: 13, fontWeight: 800, cursor: offlineSubmitting ? 'default' : 'pointer', opacity: offlineSubmitting ? 0.7 : 1 }}
                         >
                           {offlineSubmitting ? 'Submitting…' : offlineMethod === 'bank' ? "I've Made the Transfer" : "Notify Team — Paying In Person"}
@@ -3402,23 +3680,7 @@ function PaymentsTab({ project, user, transactions: propTxns, invoices: propInvs
                     </div>
                   </div>
                 </div>
-                <div style={{ borderTop: '1px solid var(--border-color)', padding: isMobile ? '9px 14px' : '9px 18px', display: 'flex', justifyContent: 'flex-end', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-                  {!isPaidStatus(inv.status) && parseAmount(inv.amount || inv.total) > 0 && (
-                    <div style={{ width: 160 }}>
-                      <UnifiedPaymentGateway
-                        label="Pay Now"
-                        amountGHS={parseAmount(inv.amount || inv.total)}
-                        email={email}
-                        projectId={project.id}
-                        invoiceId={inv.id}
-                        paymentType={inv.documentKind === 'receipt' ? 'receipt' : (
-                          isInitialProjectDepositInvoice(inv) ? 'deposit' : 'invoice'
-                        )}
-                        onSuccess={() => window.location.reload()}
-                        onError={(err) => alert("Verification Error: " + err)}
-                      />
-                    </div>
-                  )}
+                <div style={{ borderTop: '1px solid var(--border-color)', padding: isMobile ? '9px 14px' : '9px 18px', display: 'flex', justifyContent: 'flex-end' }}>
                   <button
                     onClick={() => setViewInvoice(inv)}
                     style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 16px', borderRadius: 10, background: `var(--accent-secondary)`, border: 'none', fontSize: 11, fontWeight: 700, color: '#fff', cursor: 'pointer', touchAction: 'manipulation', minHeight: 34 }}
@@ -3517,9 +3779,6 @@ function PaymentsTab({ project, user, transactions: propTxns, invoices: propInvs
   );
 }
 
-// ProjectChat is replaced by WorldClassChat — see import above
-
-// ─── Stage Timeline (enhanced) ────────────────────────────────────────────────
 function StageTimeline({ project, onRequestChange, isMobile, onStageClick }) {
   const applicableStages = CLIENT_PROJECT_STAGES.filter(s => {
     const typeStages = PROJECT_TYPES[project.projectType]?.stages || CLIENT_PROJECT_STAGES.map(s => s.id);
@@ -5582,7 +5841,7 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
   const tabs = [
     { id: 'overview',  label: 'Overview',  icon: <Home size={14} /> },
     ...(selected?.kickoffMode !== 'direct-kickoff' || photosAvailable
-      ? [{ id: 'designs', label: 'Designs', icon: <Palette size={14} />, locked: !kickoffComplete, lockReason: 'Sign your contract first' }]
+      ? [{ id: 'designs', label: 'Designs', icon: <Palette size={14} />, locked: !kickoffComplete, lockReason: stageId <= 1 ? 'Available after your rendering fee payment and site visit' : 'Sign your contract to unlock' }]
       : []),
     { id: 'financials', label: 'Financials', icon: <CreditCard size={14} /> },
     { id: 'vault', label: 'Vault', icon: <ShieldCheck size={14} /> },
@@ -6042,7 +6301,10 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
                                     </button>
                                   )}
                                   {s.waiting && !s.done && (
-                                    <span style={{ fontSize: 10, color: '#94A3B8', fontWeight: 700, whiteSpace: 'nowrap' }}>Waiting on team</span>
+                                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 1 }}>
+                                      <span style={{ fontSize: 10, color: '#94A3B8', fontWeight: 700, whiteSpace: 'nowrap' }}>Waiting on team</span>
+                                      <span style={{ fontSize: 9, color: '#CBD5E1', fontWeight: 600, whiteSpace: 'nowrap' }}>~2–3 business days</span>
+                                    </div>
                                   )}
                                 </div>
                               ))}
@@ -6271,7 +6533,6 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
                         </button>
                       </div>
                     )}
-                    <SpecApprovalCard project={selected} user={user} brand={props.brand} isMobile={isMobile} invoices={props.invoices || []} />
                     {(selected.stageId || 0) >= 8 ? (
                       <div style={{ padding: '24px 28px', borderRadius: 20, background: 'linear-gradient(135deg, #F0FDF4, #DCFCE7)', border: '1.5px solid #86EFAC', marginBottom: 4 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
@@ -6296,6 +6557,7 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
                         approveSignoff={props.approveSignoff}
                         payInvoice={props.payInvoice}
                         updateProjectStage={props.updateProjectStage}
+                        setActiveTab={setActiveTab}
                       />
                     )}
                     <InstallationStatusCard project={selected} />
@@ -6516,6 +6778,7 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
         html { scroll-behavior: smooth; }
         body { overscroll-behavior: contain; }
       `}</style>
+      <PortalRefreshButton bottomOffset={isMobile ? 100 : 24} align={isMobile ? 'left' : 'right'} />
     </div>
   );
 }

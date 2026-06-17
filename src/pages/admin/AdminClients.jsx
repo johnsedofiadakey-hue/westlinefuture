@@ -104,7 +104,21 @@ export default function AdminClients({ dbClients, createClient, updateClient, de
     setSelectedIds([]);
   };
 
-  const allClients = dbClients || [];
+  // Merge dbClients (portal accounts) with project-only clients who have no portal account yet
+  const dbClientIdSet = new Set((dbClients || []).map(c => c.id));
+  const projectOnlyClients = projects.reduce((acc, p) => {
+    if (!p.clientId || dbClientIdSet.has(p.clientId)) return acc;
+    if (acc.find(c => c.id === p.clientId)) return acc;
+    acc.push({
+      id: p.clientId,
+      name: p.clientName || p.name || 'Client',
+      phone: p.clientPhone || p.phone || '',
+      email: p.clientEmail || p.email || '',
+      company: p.clientCompany || p.company || '',
+    });
+    return acc;
+  }, []);
+  const allClients = [...(dbClients || []), ...projectOnlyClients];
   const activeClients = allClients.filter(c => !getClientStatus(c));
   const completedClients = allClients.filter(c => getClientStatus(c));
   const sourceList = directoryTab === 'completed' ? completedClients : activeClients;

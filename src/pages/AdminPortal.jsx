@@ -20,6 +20,7 @@ import AdminAnalytics from './admin/AdminAnalytics';
 import ProjectKanban from './admin/ProjectKanban';
 import AdminInstallations from './admin/AdminInstallations';
 import AdminProductSync from './admin/AdminProductSync';
+import PortalRefreshButton from '../components/PortalRefreshButton';
 
 export default function AdminPortal({ user, onLogout, onPreview, content, setContent, staffMode = false, ...props }) {
   const location = useLocation();
@@ -64,6 +65,12 @@ export default function AdminPortal({ user, onLogout, onPreview, content, setCon
     const staffUid  = user?.uid  || user?.id;
     const staffPhone = user?.phone;
     const staffEmail = user?.email;
+    // IDs stored on the staff user doc via "Assign Clients" modal.
+    // Use live teamMembers snapshot so the filter reflects assignments made after login
+    // without requiring the staff user to re-authenticate.
+    const liveStaffDoc = (props.teamMembers || []).find(m => m.id === staffUid || m.uid === staffUid);
+    const staffAssignedClientIds = new Set(liveStaffDoc?.assignedClients || user?.assignedClients || []);
+
     const staffFilteredClients = staffMode
       ? allClients.filter(c => {
           const workers = c.assignedWorkers || [];
@@ -73,10 +80,18 @@ export default function AdminPortal({ user, onLogout, onPreview, content, setCon
             c.assignedTo === staffUid ||
             combined.includes(staffUid) ||
             (staffPhone && combined.includes(staffPhone)) ||
-            (staffEmail && combined.includes(staffEmail))
+            (staffEmail && combined.includes(staffEmail)) ||
+            // client explicitly assigned via Assign Clients modal
+            (c.clientId && staffAssignedClientIds.has(c.clientId)) ||
+            (c.clientIds?.some(id => staffAssignedClientIds.has(id)))
           );
         })
       : allClients;
+
+    // Filter dbClients (user account records) to match staff's assigned clients
+    const staffFilteredDbClients = staffMode
+      ? (props.dbClients || []).filter(c => staffAssignedClientIds.has(c.id))
+      : props.dbClients;
 
     const filteredClients = searchQuery.trim()
       ? staffFilteredClients.filter(c => {
@@ -92,9 +107,10 @@ export default function AdminPortal({ user, onLogout, onPreview, content, setCon
       setAI: (ctx = {}) => { setAiContext(ctx); setShowAI(true); },
       setMod,
       onSelectClient: (id) => {
-        // Staff can only open clients they are assigned to
+        // Staff can only open clients they are explicitly assigned to
         if (staffMode) {
-          const allowed = staffFilteredClients.some(c => c.clientId === id || c.id === id);
+          const allowed = staffFilteredClients.some(c => c.clientId === id || c.id === id)
+            || staffAssignedClientIds.has(id);
           if (!allowed) return;
         }
         handleSelectClient(id);
@@ -106,6 +122,7 @@ export default function AdminPortal({ user, onLogout, onPreview, content, setCon
       sendWhatsAppUpdate: props.sendWhatsAppUpdate,
       ...props,
       clients: filteredClients,
+      dbClients: staffFilteredDbClients,
     };
     switch (view) {
       case 'dash': return <AdminDashboard {...common} clients={staffMode ? staffFilteredClients : props.clients} />;
@@ -142,6 +159,7 @@ export default function AdminPortal({ user, onLogout, onPreview, content, setCon
       {...props}
     >
       {renderView()}
+      <PortalRefreshButton />
       <AIProposalGenerator 
         open={showAI} 
         onClose={() => setShowAI(false)} 

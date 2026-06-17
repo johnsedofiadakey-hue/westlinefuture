@@ -599,6 +599,7 @@ export default function PublicSite({ brand, setPage, page, onPortal, user, conte
   const [searchParams] = useSearchParams();
   const urlPage = searchParams.get('page');
   const rawPage = urlPage || page || 'home';
+  void 0; // build:20260616
   const p = rawPage === 'showroom' ? 'showcase' : rawPage;
   const [menuOpen, setMenuOpen] = useState(false);
   const winW = useWindowWidth();
@@ -730,7 +731,7 @@ export default function PublicSite({ brand, setPage, page, onPortal, user, conte
   };
 
   return (
-    <div style={{ background: LIGHT_BG }}>
+    <div style={{ background: LIGHT_BG }} data-b="20260616">
       <PubNav brand={brand} setPage={setPage} activePage={p} onPortal={onPortal} user={user} menuOpen={menuOpen} setMenuOpen={setMenuOpen} navigate={navigate} />
       {render()}
       
@@ -759,4 +760,4 @@ export default function PublicSite({ brand, setPage, page, onPortal, user, conte
 
     </div>
   );
-}
+} // v2026.06.16

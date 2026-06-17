@@ -127,7 +127,7 @@ async function sendHubtelSMS(to, body) {
  * Body: { reference, projectId, invoiceId?, type? }
  */
 exports.verifyPaystackPayment = onCall(
-  { cors: true, secrets: [PAYSTACK_SECRET_KEY] },
+  { cors: true, invoker: "public", secrets: [PAYSTACK_SECRET_KEY] },
   async (request) => {
     if (!request.auth) throw new Error("Authentication required");
 
@@ -661,7 +661,7 @@ exports.verifyPaystackPayment = onCall(
 );
 
 exports.translateProjectMessage = onCall(
-  { secrets: [OPENAI_API_KEY] },
+  { cors: true, invoker: "public", secrets: [OPENAI_API_KEY] },
   async (request) => {
     if (!request.auth) throw new Error("Authentication required");
 
@@ -783,7 +783,7 @@ async function loadGatewaySettings(db, includeSecrets = true) {
 }
 
 exports.getPublicPaymentSettings = onCall(
-  { cors: true },
+  { cors: true, invoker: "public" },
   async () => {
     const settings = await loadGatewaySettings(getFirestore(), false);
     return {
@@ -798,7 +798,7 @@ exports.getPublicPaymentSettings = onCall(
 
 // ── Hubtel Connection Test (admin only) ─────────────────────────────────────
 exports.testHubtelConnection = onCall(
-  { cors: true, secrets: [HUBTEL_PAYMENT_CLIENT_ID, HUBTEL_PAYMENT_CLIENT_SECRET, HUBTEL_PAYMENT_MERCHANT_ID] },
+  { cors: true, invoker: "public", secrets: [HUBTEL_PAYMENT_CLIENT_ID, HUBTEL_PAYMENT_CLIENT_SECRET, HUBTEL_PAYMENT_MERCHANT_ID] },
   async (request) => {
     if (!request.auth) throw new HttpsError("unauthenticated", "Authentication required");
 
@@ -886,7 +886,7 @@ exports.testHubtelConnection = onCall(
 );
 
 exports.initializeHubtelPayment = onCall(
-  { cors: true, secrets: [HUBTEL_PAYMENT_CLIENT_ID, HUBTEL_PAYMENT_CLIENT_SECRET, HUBTEL_PAYMENT_MERCHANT_ID] },
+  { cors: true, invoker: "public", secrets: [HUBTEL_PAYMENT_CLIENT_ID, HUBTEL_PAYMENT_CLIENT_SECRET, HUBTEL_PAYMENT_MERCHANT_ID] },
   async (request) => {
     if (!request.auth) throw new HttpsError("unauthenticated", "Authentication required");
 
@@ -967,7 +967,7 @@ exports.initializeHubtelPayment = onCall(
 );
 
 exports.verifyHubtelPayment = onCall(
-  { cors: true, secrets: [HUBTEL_PAYMENT_CLIENT_ID, HUBTEL_PAYMENT_CLIENT_SECRET, HUBTEL_PAYMENT_MERCHANT_ID] },
+  { cors: true, invoker: "public", secrets: [HUBTEL_PAYMENT_CLIENT_ID, HUBTEL_PAYMENT_CLIENT_SECRET, HUBTEL_PAYMENT_MERCHANT_ID] },
   async (request) => {
     if (!request.auth) throw new HttpsError("unauthenticated", "Authentication required");
 
@@ -1225,7 +1225,7 @@ async function assertAdmin(request) {
   }
 }
 
-exports.createStaffAccount = onCall(async (request) => {
+exports.createStaffAccount = onCall({ cors: true, invoker: "public" }, async (request) => {
   await assertAdmin(request);
 
   const { name, email, password, jobRole } = request.data || {};
@@ -1280,7 +1280,7 @@ exports.createStaffAccount = onCall(async (request) => {
  * Callable: httpsCallable(functions, 'createClientRecord')
  * Body: { name, phone, email?, address?, notes?, ... }
  */
-exports.createClientRecord = onCall(async (request) => {
+exports.createClientRecord = onCall({ cors: true, invoker: "public" }, async (request) => {
   await assertAdmin(request);
 
   const data = request.data || {};
@@ -1333,7 +1333,7 @@ exports.createClientRecord = onCall(async (request) => {
  * SEND SMS — callable by admin to send a manual SMS to any phone number
  * Body: { to, message }
  */
-exports.sendSMS = onCall(async (request) => {
+exports.sendSMS = onCall({ cors: true, invoker: "public" }, async (request) => {
   await assertAdmin(request);
   const { to, message } = request.data || {};
   if (!to || !message) throw new HttpsError('invalid-argument', 'to and message are required');
@@ -1359,7 +1359,7 @@ exports.sendSMS = onCall(async (request) => {
  * Callable: httpsCallable(functions, 'deleteStaffAccount')
  * Body: { uid, deleteAuth? }
  */
-exports.deleteStaffAccount = onCall(async (request) => {
+exports.deleteStaffAccount = onCall({ cors: true, invoker: "public" }, async (request) => {
   if (!request.auth) throw new HttpsError("unauthenticated", "Authentication required");
 
   const { uid, deleteAuth = true } = request.data || {};
@@ -1391,6 +1391,294 @@ exports.deleteStaffAccount = onCall(async (request) => {
 });
 
 /**
+ * CREATE PROJECT QUOTATION
+ * Ghost function called by old cached bundle. Mirrors createQuoteVersion in App.jsx.
+ * Body: { projectId, total, title, scopeSummary, negotiationNote, paymentSchedule }
+ */
+exports.createProjectQuotation = onCall({ cors: true, invoker: "public" }, async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Authentication required");
+
+  const { projectId, total: rawTotal, title: rawTitle, scopeSummary, negotiationNote, paymentSchedule } = request.data || {};
+  if (!projectId) throw new HttpsError("invalid-argument", "projectId is required");
+
+  const total = Number(String(rawTotal || '').replace(/[^0-9.-]/g, ''));
+  if (!total || total <= 0) throw new HttpsError("invalid-argument", "Enter the negotiated project total.");
+
+  const db = getFirestore();
+  const projectRef = db.collection("projects").doc(projectId);
+  const projectSnap = await projectRef.get();
+  if (!projectSnap.exists) throw new HttpsError("not-found", "Project not found.");
+  const project = projectSnap.data();
+
+  // Find existing quotation invoices to supersede
+  const [byProjectId, byParentId] = await Promise.all([
+    db.collection("invoices").where("projectId", "==", projectId).get(),
+    db.collection("invoices").where("parentId", "==", projectId).get(),
+  ]);
+  const existingQuotes = new Map();
+  [...byProjectId.docs, ...byParentId.docs].forEach(snap => {
+    const inv = snap.data();
+    const descriptor = `${inv.type || ""} ${inv.documentKind || ""}`.toLowerCase();
+    if (descriptor.includes("quotation") || descriptor.includes("quote")) {
+      existingQuotes.set(snap.id, { id: snap.id, ref: snap.ref, ...inv });
+    }
+  });
+
+  const version = Math.max(0, ...[...existingQuotes.values()].map(q => Number(q.version || 0))) + 1;
+  const schedule = paymentSchedule || project.paymentSchedule || "standard";
+  const title = (rawTitle || `${project.title || "Project"} Quotation v${version}`).trim();
+
+  // Build milestones: 60/30/10
+  const milestones = [
+    { key: "initial-deposit",            label: "Initial Deposit",            pct: 0.60, amount: Math.round(total * 0.60 * 100) / 100 },
+    { key: "pre-installation-balance",   label: "Pre-Installation Balance",   pct: 0.30, amount: Math.round(total * 0.30 * 100) / 100 },
+    { key: "post-installation-balance",  label: "Post-Installation Balance",  pct: 0.10, amount: Math.round(total * 0.10 * 100) / 100 },
+  ];
+
+  const scopeItem = {
+    desc: (scopeSummary || title || project.title || "Approved project scope").trim(),
+    notes: "",
+    qty: 1,
+    rate: total,
+    unit: "project",
+    total,
+  };
+
+  const quoteRef = db.collection("invoices").doc();
+  const batch = db.batch();
+
+  batch.set(quoteRef, {
+    projectId,
+    parentId: projectId,
+    clientId: project.clientId || null,
+    clientName: project.clientName || "",
+    version,
+    title,
+    type: "Quotation",
+    documentKind: "quotation",
+    invoiceType: "quotation",
+    items: [scopeItem],
+    scopeSummary: (scopeSummary || "").trim(),
+    scopeItems: [scopeItem],
+    exclusions: [],
+    optionalItems: [],
+    discounts: [],
+    paymentSchedule: schedule,
+    negotiationNote: (negotiationNote || "").trim(),
+    amount: total,
+    total,
+    amountDue: total,
+    balanceDue: total,
+    amountPaid: 0,
+    paidAmount: 0,
+    currency: "GHS",
+    status: "Sent",
+    date: new Date().toISOString().split("T")[0],
+    due: null,
+    createdBy: request.auth.uid,
+    createdAt: FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp(),
+  });
+
+  existingQuotes.forEach(q => {
+    if (!["approved", "superseded", "cancelled"].includes(String(q.status || "").toLowerCase())) {
+      batch.update(q.ref, {
+        status: "Superseded",
+        supersededBy: quoteRef.id,
+        supersededAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+    }
+  });
+
+  batch.update(projectRef, {
+    stageId: Math.max(Number(project.stageId || 1), 3),
+    progress: Math.max(Number(project.progress || 0), 33),
+    activeQuoteId: quoteRef.id,
+    activeQuoteVersion: version,
+    quoteStatus: "sent",
+    quoteApproved: false,
+    approvedQuoteId: null,
+    quoteChangeRequested: false,
+    quoteChangeRequestPending: false,
+    quoteChangeRequestNote: "",
+    changeRequestPending: false,
+    workflowStep: "quote-negotiation",
+    projectTotal: total,
+    budget: String(total),
+    paymentSchedule: schedule,
+    milestones,
+    nextAction: "Client reviews the quotation and approves it or requests a revised version",
+    updatedAt: FieldValue.serverTimestamp(),
+  });
+
+  await batch.commit();
+
+  logger.info(`createProjectQuotation: v${version} created for project ${projectId} — GHS ${total}`);
+  return { success: true, quoteId: quoteRef.id, version };
+});
+
+/**
+ * CONFIRM OFFLINE INVOICE PAYMENT
+ * Admin verifies and records an offline payment against an invoice.
+ * Updates invoice status, project financials, records a transaction, and notifies client.
+ *
+ * Callable: httpsCallable(functions, 'confirmOfflineInvoicePayment')
+ * Body: { invoiceId, projectId, amount, date, note, exchangeRate? }
+ */
+exports.confirmOfflineInvoicePayment = onCall({ cors: true, invoker: "public" }, async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Authentication required");
+
+  const { invoiceId, projectId: rawProjectId, amount: rawAmount, date, note, exchangeRate } = request.data || {};
+  if (!invoiceId) throw new HttpsError("invalid-argument", "invoiceId is required");
+
+  const amount = Number(rawAmount);
+  if (!amount || amount <= 0) throw new HttpsError("invalid-argument", "amount must be positive");
+
+  const db = getFirestore();
+  const fxRate = Number(exchangeRate) || 15.5;
+
+  const invoiceRef = db.collection("invoices").doc(invoiceId);
+
+  // Resolve projectId — old bundle may not send it, so fall back to invoice.parentId / invoice.projectId
+  let projectId = rawProjectId;
+  if (!projectId) {
+    const invLookup = await invoiceRef.get();
+    if (!invLookup.exists) throw new HttpsError("not-found", "Invoice not found.");
+    const invData = invLookup.data();
+    projectId = invData.parentId || invData.projectId;
+    if (!projectId) throw new HttpsError("invalid-argument", "Cannot resolve projectId from invoice.");
+  }
+
+  const projectRef = db.collection("projects").doc(projectId);
+  const txRef      = db.collection("projects").doc(projectId).collection("transactions").doc();
+  const globalTx   = db.collection("transactions").doc(txRef.id);
+
+  const result = await db.runTransaction(async tx => {
+    const [invSnap, projSnap] = await Promise.all([tx.get(invoiceRef), tx.get(projectRef)]);
+    if (!invSnap.exists) throw new HttpsError("not-found", "Invoice no longer exists.");
+    if (!projSnap.exists) throw new HttpsError("not-found", "Project no longer exists.");
+
+    const inv  = invSnap.data();
+    const proj = projSnap.data();
+    const amountInGhs = inv.currency === "USD" ? amount * fxRate : amount;
+    const currentPaid = Number(inv.amountPaid || inv.paidAmount || 0);
+    const invoiceTotal = Number(inv.amount || inv.total || 0);
+    const outstanding  = Math.max(0, invoiceTotal - currentPaid);
+
+    if (invoiceTotal > 0 && amount > outstanding + 0.01) {
+      throw new HttpsError("invalid-argument", `Payment exceeds remaining balance of ${outstanding.toFixed(2)}.`);
+    }
+
+    const newPaid   = currentPaid + amount;
+    const newStatus = invoiceTotal <= 0 || newPaid >= invoiceTotal - 0.01 ? "Paid" : "Partially Paid";
+    const desc      = `${inv.milestoneKey || ""} ${inv.title || ""} ${inv.type || ""}`.toLowerCase();
+
+    const projectFlags = {};
+    if (newStatus === "Paid") {
+      if (proj.renderingFeeInvoiceId === invoiceId || desc.includes("rendering") || desc.includes("design")) {
+        projectFlags.renderingFeePaid = true;
+        projectFlags.renderingFeePaidAt = FieldValue.serverTimestamp();
+        projectFlags.workflowStep = "site-visit-scheduling";
+        projectFlags.nextAction = "Client or project manager schedules the technical site visit";
+      } else if (desc.includes("initial-deposit") || desc.includes("post-rendering") || desc.includes("deposit") || desc.includes("first instal")) {
+        projectFlags.depositPaid = true;
+        projectFlags.initialDepositPaid = true;
+        projectFlags.depositPaidAt = FieldValue.serverTimestamp();
+        projectFlags.initialDepositInvoiceId = invoiceId;
+        projectFlags.workflowStep = "deliverables-approval";
+        projectFlags.nextAction = "Upload the final project deliverables document for client review and signature";
+      } else if (desc.includes("pre-installation-balance") || desc.includes("goods balance") || desc.includes("ghana arrival") || desc.includes("post-production") || desc.includes("second instal")) {
+        projectFlags.postProductionPaid = true;
+        projectFlags.goodsBalancePaid = true;
+        projectFlags.postProductionPaidAt = FieldValue.serverTimestamp();
+      } else if (desc.includes("post-shipping") || desc.includes("completion") || desc.includes("final") || desc.includes("settlement")) {
+        projectFlags.finalSettlementPaid = true;
+        projectFlags.finalSettlementPaidAt = FieldValue.serverTimestamp();
+      }
+      if (inv.isInstallationInvoice === true || inv.paymentPurpose === "installation" || desc.includes("installation service") || desc.includes("installation add-on")) {
+        projectFlags.installationFeePaid = true;
+        projectFlags.installationFeePaidAt = FieldValue.serverTimestamp();
+      }
+    }
+
+    const txData = {
+      amount: amountInGhs,
+      description: (note || "").trim() || "Payment received",
+      date: date || new Date().toISOString().split("T")[0],
+      projectId,
+      parentId: projectId,
+      clientId: proj.clientId || null,
+      projectManagerId: proj.projectManagerId || null,
+      invoiceId,
+      method: inv.paymentMethodSubmitted || "Offline",
+      status: "verified",
+      type: "payment",
+      verifiedBy: request.auth.uid,
+      createdAt: FieldValue.serverTimestamp(),
+    };
+
+    tx.set(txRef, txData);
+    tx.set(globalTx, { ...txData, projectTransactionId: txRef.id });
+    tx.update(invoiceRef, {
+      amountPaid: newPaid,
+      paidAmount: newPaid,
+      status: newStatus,
+      awaitingConfirmation: false,
+      paymentConfirmedAt: FieldValue.serverTimestamp(),
+      paymentConfirmedBy: request.auth.uid,
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+    tx.update(projectRef, {
+      paidAmount: Number(proj.paidAmount || 0) + amountInGhs,
+      ...projectFlags,
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+
+    return { newStatus, projectFlags, amountInGhs, clientId: proj.clientId, projectTitle: proj.title };
+  });
+
+  // Notify client
+  const { amountInGhs, clientId, projectTitle } = result;
+  const invoiceSuffix = invoiceId.slice(-8).toUpperCase();
+  const notifRef = db.collection("notifications");
+  const promises = [
+    notifRef.add({
+      userId: clientId,
+      title: "Payment Received",
+      message: `We've successfully recorded your payment of GHS ${amountInGhs.toLocaleString()} against Invoice WF-${invoiceSuffix}.`,
+      type: "payment_received",
+      link: "/portal",
+      read: false,
+      createdAt: FieldValue.serverTimestamp(),
+    }),
+    db.collection("clients").doc(clientId).collection("messages").add({
+      text: `💰 **Payment Received**\nWe have recorded your payment of **GHS ${amountInGhs.toLocaleString()}** against Invoice WF-${invoiceSuffix}. Thank you!`,
+      senderRole: "system",
+      senderName: "Billing System",
+      isInternal: false,
+      createdAt: FieldValue.serverTimestamp(),
+      projectId,
+      projectTitle: projectTitle || "",
+    }),
+  ];
+  const noteText = (note || "").trim();
+  promises.push(notifRef.add({
+    userId: "admin",
+    title: "Payment Recorded",
+    message: `GHS ${amountInGhs.toLocaleString()} recorded for ${projectTitle}${noteText ? ` — ${noteText}` : ''}`,
+    type: "payment_received",
+    link: `/admin/clients?id=${clientId}`,
+    read: false,
+    createdAt: FieldValue.serverTimestamp(),
+  }));
+  await Promise.allSettled(promises);
+
+  logger.info(`confirmOfflineInvoicePayment: GHS ${amountInGhs} recorded for invoice ${invoiceId}`);
+  return { success: true, newStatus: result.newStatus };
+});
+
+/**
  * STAFF PASSWORD RESET
  * Admin sets a new password directly via setStaffPassword.
  */
@@ -1403,20 +1691,39 @@ exports.deleteStaffAccount = onCall(async (request) => {
  * Callable: httpsCallable(functions, 'setStaffPassword')
  * Body: { uid, newPassword }
  */
-exports.setStaffPassword = onCall({ cors: true }, async (request) => {
+exports.setStaffPassword = onCall({ cors: true, invoker: "public" }, async (request) => {
   if (!request.auth) throw new Error("Authentication required");
 
-  const { uid, newPassword } = request.data || {};
+  const { uid, newPassword, resetToDefault } = request.data || {};
   if (!uid) throw new Error("uid is required");
 
-  // ⚠ Enforce strong password requirements
+  const adminAuth = getAdminAuth();
+  const db = getFirestore();
+
+  if (resetToDefault) {
+    // Admin resetting a staff account back to the default password.
+    // Bypasses strength validation — staff will be forced to change on next login.
+    try {
+      await adminAuth.updateUser(uid, { password: 'unlockme' });
+    } catch (err) {
+      logger.error("setStaffPassword/reset: updateUser failed", err.message);
+      throw new Error("Could not reset password: " + err.message);
+    }
+    const resetFields = {
+      requiresPasswordReset: true,
+      passwordResetAt: FieldValue.serverTimestamp(),
+    };
+    await db.collection('users').doc(uid).update(resetFields).catch(() => {});
+    await db.collection('team').doc(uid).update(resetFields).catch(() => {});
+    logger.info(`setStaffPassword: reset to default for uid ${uid} by admin ${request.auth.uid}`);
+    return { success: true };
+  }
+
+  // Normal path — admin sets a specific password, enforce strength.
   const pwValidation = validatePasswordStrength(newPassword);
   if (!pwValidation.valid) {
     throw new Error(pwValidation.reason);
   }
-
-  const adminAuth = getAdminAuth();
-  const db = getFirestore();
 
   try {
     await adminAuth.updateUser(uid, { password: newPassword });
@@ -1425,18 +1732,17 @@ exports.setStaffPassword = onCall({ cors: true }, async (request) => {
     throw new Error("Could not update password: " + err.message);
   }
 
-  // Password never stored in Firestore — delivered via SMS only.
-  // Only log the timestamp of the update for audit trail.
   try {
     await db.collection("users").doc(uid).update({
       passwordUpdatedAt: FieldValue.serverTimestamp(),
+      requiresPasswordReset: false,
     });
     await db.collection("team").doc(uid).update({
       passwordUpdatedAt: FieldValue.serverTimestamp(),
-    }).catch(() => {}); // team doc may not exist, ignore
+      requiresPasswordReset: false,
+    }).catch(() => {});
   } catch (err) {
-    logger.warn("setStaffPassword: could not update timestamp in Firestore", err.message);
-    // Not fatal — Auth password was updated successfully
+    logger.warn("setStaffPassword: could not update Firestore timestamp", err.message);
   }
 
   logger.info(`setStaffPassword: password updated for uid ${uid} by admin ${request.auth.uid}`);
@@ -1445,7 +1751,7 @@ exports.setStaffPassword = onCall({ cors: true }, async (request) => {
 
 // All notifications go via Meta WhatsApp Cloud API (sendWA helper below).
 
-exports.repairStaffAccount = onCall(async (request) => {
+exports.repairStaffAccount = onCall({ cors: true, invoker: "public" }, async (request) => {
   await assertAdmin(request);
 
   const { email, name, jobRole } = request.data || {};
@@ -2149,7 +2455,7 @@ exports.sendOverdueReminders = onSchedule(
  * No auth required — translation is not sensitive.
  */
 exports.translateText = onCall(
-  { cors: true },
+  { cors: true, invoker: "public" },
   async (request) => {
     // Require authentication — prevents anonymous abuse / quota exhaustion
     if (!request.auth) throw new HttpsError('unauthenticated', 'Authentication required');

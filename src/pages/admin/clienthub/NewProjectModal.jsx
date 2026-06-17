@@ -101,14 +101,22 @@ export function NewProjectModal({ client, teamMembers = [], onClose, onCreate })
   const staffList  = [...staffOptions,  ...uncategorised];
 
   return createPortal(
-    <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20, overflowY: 'auto' }}>
-      <div style={{ background: '#fff', borderRadius: 24, width: '100%', maxWidth: 880, padding: 40, position: 'relative', boxShadow: '0 32px 80px rgba(0,0,0,.2)', margin: '20px auto' }}>
-        <button onClick={onClose} style={{ position: 'absolute', top: 20, right: 20, width: 36, height: 36, borderRadius: 10, border: '1px solid var(--border-color)', background: `var(--bg-secondary)`, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><X size={16} /></button>
-        <div style={{ fontSize: 11, fontWeight: 800, color: AC, textTransform: 'uppercase', letterSpacing: '.1em', marginBottom: 6 }}>New Project</div>
-        <div style={{ fontSize: 22, fontWeight: 900, color: `var(--accent-secondary)`, marginBottom: 28 }}>{client.name}</div>
+    <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px 20px' }}>
+      <div style={{ background: '#fff', borderRadius: 24, width: '100%', maxWidth: 860, maxHeight: 'calc(100vh - 48px)', display: 'flex', flexDirection: 'column', boxShadow: '0 40px 100px rgba(0,0,0,.25)', overflow: 'hidden' }}>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.2fr) 280px', gap: 24, alignItems: 'start' }}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+        {/* ── Fixed header ── */}
+        <div style={{ padding: '24px 32px 20px', borderBottom: '1.5px solid var(--border-color)', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div>
+            <div style={{ fontSize: 10, fontWeight: 800, color: AC, textTransform: 'uppercase', letterSpacing: '.12em', marginBottom: 3 }}>New Project</div>
+            <div style={{ fontSize: 20, fontWeight: 900, color: `var(--accent-secondary)` }}>{client.name}</div>
+          </div>
+          <button onClick={onClose} style={{ width: 36, height: 36, borderRadius: 10, border: '1.5px solid var(--border-color)', background: `var(--bg-secondary)`, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><X size={16} /></button>
+        </div>
+
+        {/* ── Scrollable body ── */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: '24px 32px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.2fr) 256px', gap: 24, alignItems: 'start' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
 
           {/* Title */}
           <div>
@@ -387,9 +395,10 @@ export function NewProjectModal({ client, teamMembers = [], onClose, onCreate })
           </div>
         </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        {/* ── Sticky checklist sidebar ── */}
+        <div style={{ position: 'sticky', top: 0 }}>
           <div style={{ padding: 18, borderRadius: 18, background: '#F8F8FD', border: '1.5px solid var(--border-color)' }}>
-            <div style={{ fontSize: 12, fontWeight: 900, color: `var(--accent-secondary)`, marginBottom: 12 }}>Launch Checklist</div>
+            <div style={{ fontSize: 11, fontWeight: 900, color: `var(--accent-secondary)`, textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 14 }}>Launch Checklist</div>
             {[
               { ok: !!form.title.trim(), label: 'Project title captured' },
               { ok: !!(showBreakdown ? bdTotal : form.budget), label: 'Project value entered' },
@@ -397,34 +406,37 @@ export function NewProjectModal({ client, teamMembers = [], onClose, onCreate })
               { ok: !!form.assignedStaff, label: 'Project manager assigned' },
               { ok: !!form.targetCompletionDate, label: 'Estimated completion date set' },
             ].map(item => (
-              <div key={item.label} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 9 }}>
-                <div style={{ width: 18, height: 18, borderRadius: '50%', background: item.ok ? '#16A34A' : 'var(--bg-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', flexShrink: 0 }}>
-                  {item.ok && <CheckCircle2 size={12} />}
+              <div key={item.label} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+                <div style={{ width: 20, height: 20, borderRadius: '50%', background: item.ok ? '#16A34A' : 'var(--border-color)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'background .2s' }}>
+                  {item.ok && <CheckCircle2 size={12} color="#fff" />}
                 </div>
-                <div style={{ fontSize: 12, color: item.ok ? `var(--accent-secondary)` : `var(--text-secondary)`, fontWeight: item.ok ? 800 : 600 }}>{item.label}</div>
+                <div style={{ fontSize: 12, color: item.ok ? `var(--accent-secondary)` : `var(--text-secondary)`, fontWeight: item.ok ? 700 : 500, lineHeight: 1.3 }}>{item.label}</div>
               </div>
             ))}
           </div>
-
-        </div>
         </div>
 
-        <div style={{ marginTop: 28, display: 'flex', gap: 12 }}>
+        </div>{/* end 2-col grid */}
+        </div>{/* end scrollable body */}
+
+        {/* ── Fixed footer ── */}
+        <div style={{ padding: '16px 32px 20px', borderTop: '1.5px solid var(--border-color)', flexShrink: 0, display: 'flex', gap: 10 }}>
           <button
             onClick={onClose}
             disabled={saving}
-            style={{ flex: '0 0 140px', height: 52, borderRadius: 14, border: '1.5px solid var(--border-color)', background: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer', color: 'var(--text-secondary)' }}
+            style={{ flex: '0 0 120px', height: 48, borderRadius: 12, border: '1.5px solid var(--border-color)', background: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer', color: 'var(--text-secondary)', fontFamily: 'inherit' }}
           >
             Cancel
           </button>
           <button
             onClick={submit}
             disabled={saving || !form.title.trim()}
-            style={{ flex: 1, height: 52, borderRadius: 14, background: form.title.trim() ? `var(--accent-secondary)` : `var(--border-color)`, color: '#fff', border: 'none', fontSize: 14, fontWeight: 800, cursor: form.title.trim() ? 'pointer' : 'default', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, transition: 'background .2s' }}
+            style={{ flex: 1, height: 48, borderRadius: 12, background: form.title.trim() ? `var(--accent-secondary)` : `var(--border-color)`, color: '#fff', border: 'none', fontSize: 14, fontWeight: 800, cursor: form.title.trim() ? 'pointer' : 'default', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, transition: 'background .2s', fontFamily: 'inherit' }}
           >
-            {saving ? <><Loader2 size={16} className="spin" /> Creating...</> : 'Create Project'}
+            {saving ? <><Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> Creating...</> : 'Create Project'}
           </button>
         </div>
+
       </div>
     </div>, document.body
   );

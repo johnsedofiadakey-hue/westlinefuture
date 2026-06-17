@@ -60,7 +60,7 @@ import { SCHEDULE_CONFIGS } from './pages/admin/clienthub/config.jsx';
 import { calculateTimeline } from './pages/sharedHelpers';
 import { auth, db, storage, functions, isFirebaseEnabled, firebaseConfig } from './lib/firebase';
 import { initializeApp, deleteApp } from 'firebase/app';
-import { onAuthStateChanged, signInWithEmailAndPassword, signOut, createUserWithEmailAndPassword, RecaptchaVerifier, signInWithPhoneNumber, getAuth } from 'firebase/auth';
+import { onAuthStateChanged, signInWithEmailAndPassword, signOut, createUserWithEmailAndPassword, RecaptchaVerifier, signInWithPhoneNumber, getAuth, updatePassword, EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
 import { httpsCallable } from 'firebase/functions';
 import { 
   collection, query, onSnapshot, getDocs, getDoc, doc, 
@@ -71,6 +71,110 @@ import { uploadFile } from './lib/firebase';
 import { MessengerService } from './lib/MessengerService';
 import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { X } from 'lucide-react';
+
+function ForcePasswordChange({ user, auth, db, onDone, onLogout }) {
+  const [newPw, setNewPw] = React.useState('');
+  const [confirmPw, setConfirmPw] = React.useState('');
+  const [busy, setBusy] = React.useState(false);
+  const [err, setErr] = React.useState('');
+  const [done, setDone] = React.useState(false);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setErr('');
+    if (newPw.length < 6) return setErr('Password must be at least 6 characters.');
+    if (newPw === 'unlockme') return setErr('You must choose a new password — you cannot keep the default.');
+    if (newPw !== confirmPw) return setErr('Passwords do not match.');
+    setBusy(true);
+    try {
+      // Reauthenticate with the default password then update
+      const credential = EmailAuthProvider.credential(auth.currentUser.email, 'unlockme');
+      try {
+        await reauthenticateWithCredential(auth.currentUser, credential);
+      } catch {
+        // May already be reauthed from fresh login — continue
+      }
+      await updatePassword(auth.currentUser, newPw);
+      await updateDoc(doc(db, 'users', user.uid), { requiresPasswordReset: false });
+      try { await updateDoc(doc(db, 'team', user.uid), { requiresPasswordReset: false }); } catch {}
+      setDone(true);
+      setTimeout(() => onDone(), 1200);
+    } catch (e) {
+      setErr(e.message?.includes('requires-recent-login')
+        ? 'Session expired. Please sign out and log back in, then set your password.'
+        : (e.message || 'Failed to update password. Please try again.'));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', background: 'linear-gradient(135deg, #1A1410, #3E2414)', padding: 24, fontFamily: 'Inter, sans-serif' }}>
+      <div style={{ width: 'min(420px, 100%)', background: '#fff', borderRadius: 20, padding: '40px 36px', boxShadow: '0 32px 80px rgba(0,0,0,.35)' }}>
+        <div style={{ width: 52, height: 52, borderRadius: 16, background: '#F4EFE6', display: 'grid', placeItems: 'center', margin: '0 0 20px' }}>
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#C88F43" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        </div>
+        <div style={{ fontSize: 11, fontWeight: 800, color: '#C88F43', letterSpacing: '.12em', textTransform: 'uppercase', marginBottom: 6 }}>
+          Security Setup Required
+        </div>
+        <h2 style={{ fontSize: 22, fontWeight: 900, color: '#1A1410', margin: '0 0 8px' }}>Set Your Password</h2>
+        <p style={{ fontSize: 13, color: '#7A6355', lineHeight: 1.6, margin: '0 0 28px' }}>
+          Welcome, <strong>{user?.name}</strong>. Your account was created with a temporary default password. Please set your own password before continuing.
+        </p>
+        {done ? (
+          <div style={{ padding: '16px', borderRadius: 12, background: '#F0FDF4', color: '#15803D', fontSize: 13, fontWeight: 700, textAlign: 'center' }}>
+            ✓ Password set — opening your portal…
+          </div>
+        ) : (
+          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 5, fontSize: 11, fontWeight: 700, color: '#7A6355', textTransform: 'uppercase', letterSpacing: '.06em' }}>
+              New Password
+              <input
+                type="password"
+                value={newPw}
+                onChange={e => setNewPw(e.target.value)}
+                placeholder="Choose a strong password"
+                required
+                autoFocus
+                style={{ padding: '12px 14px', borderRadius: 10, border: '1.5px solid #E5DDD6', fontSize: 14, fontFamily: 'Inter, sans-serif', outline: 'none' }}
+              />
+            </label>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 5, fontSize: 11, fontWeight: 700, color: '#7A6355', textTransform: 'uppercase', letterSpacing: '.06em' }}>
+              Confirm Password
+              <input
+                type="password"
+                value={confirmPw}
+                onChange={e => setConfirmPw(e.target.value)}
+                placeholder="Re-enter your password"
+                required
+                style={{ padding: '12px 14px', borderRadius: 10, border: '1.5px solid #E5DDD6', fontSize: 14, fontFamily: 'Inter, sans-serif', outline: 'none' }}
+              />
+            </label>
+            {err && (
+              <div style={{ padding: '10px 14px', borderRadius: 10, background: '#FEF2F2', border: '1px solid #FECACA', color: '#DC2626', fontSize: 12 }}>
+                {err}
+              </div>
+            )}
+            <button
+              type="submit"
+              disabled={busy}
+              style={{ marginTop: 4, padding: '13px', borderRadius: 12, border: 'none', background: busy ? '#9CA3AF' : '#1A1410', color: '#fff', fontSize: 14, fontWeight: 800, cursor: busy ? 'not-allowed' : 'pointer' }}
+            >
+              {busy ? 'Saving…' : 'Set My Password & Continue'}
+            </button>
+            <button
+              type="button"
+              onClick={onLogout}
+              style={{ background: 'none', border: 'none', color: '#A69282', fontSize: 12, cursor: 'pointer', padding: '4px 0' }}
+            >
+              Sign out instead
+            </button>
+          </form>
+        )}
+      </div>
+    </div>
+  );
+}
 
 const RoleResolutionError = ({ onLogout, error }) => (
   <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', background: '#F8F6F3', padding: 24, fontFamily: 'Inter, sans-serif' }}>
@@ -131,6 +235,9 @@ export default function App() {
     if (type !== 'pending' && !isPersistent) {
       const effectiveDuration = duration === 'persistent' ? 8000 : duration;
       window._notifTimeout = setTimeout(() => setNotification(null), effectiveDuration);
+    } else if (type === 'pending') {
+      // Safety: pending notifications auto-dismiss after 12s so they never block the UI
+      window._notifTimeout = setTimeout(() => setNotification(null), 12000);
     }
   }, []);
 
@@ -700,11 +807,11 @@ export default function App() {
         await updateDoc(doc(db, 'users', uDoc.id), { onboarded: true });
       }
 
-      navigate(
+      const destination =
         fullUser.role === 'admin' || fullUser.role === 'staff' ? '/admin' :
         fullUser.role === 'worker' ? '/work' :
-        '/portal'
-      );
+        '/portal';
+      navigate(destination);
       notify('success', `Welcome back, ${uData.name}`);
       return fullUser;
     } catch (e) {
@@ -2782,7 +2889,7 @@ export default function App() {
         ? email.trim().toLowerCase()
         : `${username.trim().toLowerCase()}@westlinefuture.com`;
 
-      const userCredential = await createUserWithEmailAndPassword(secondaryAuth, loginEmail, password);
+      const userCredential = await createUserWithEmailAndPassword(secondaryAuth, loginEmail, 'unlockme');
       const uid = userCredential.user.uid;
 
       const staffRole = systemRole || (["Field Worker", "Technician", "Senior Technician", "Technical Team Lead", "Field Installer"].includes(role) ? "worker" : "staff");
@@ -2805,7 +2912,7 @@ export default function App() {
         assignedWorkers:      [],
         status:               "Active",
         certs:                [],
-        // Password never stored in Firestore — delivered manually only.
+        // Password never stored in Firestore — default is 'unlockme', staff sets own on first login.
         createdAt:            serverTimestamp(),
         createdBy:            user?.uid || "admin",
       };
@@ -2986,7 +3093,7 @@ export default function App() {
           if (!snap.exists()) {
             await setDoc(userRef, { email: e, role: 'admin', createdAt: new Date().toISOString() });
           }
-          // Removed clear rate limit
+          setNotification(null);
           return res;
         } catch (signInErr) {
           if ((signInErr.code === 'auth/user-not-found' || signInErr.code === 'auth/invalid-credential') && isAdminEmail) {
@@ -3064,19 +3171,34 @@ export default function App() {
           <Route path="/admin/*" element={
             <ProtectedRoute>
               {user?.role === 'admin' || user?.role === 'staff' ? (
-                <AdminPortal
-                  user={user}
-                  onLogout={handleLogout}
-                  onPreview={() => { setUser(null); if (auth) signOut(auth); navigate('/'); }}
-                  onLogoUpload={logoUpload}
-                  onThemeChange={async (t) => {
-                    setBrand(prev => ({ ...prev, theme: t }));
-                    if (db) await updateDoc(doc(db, 'settings', 'branding'), { theme: t });
-                  }}
-                  syncCatalog={syncCatalogOnly}
-                  staffMode={user?.role === 'staff'}
-                  {...commonProps}
-                />
+                user?.requiresPasswordReset ? (
+                  <ForcePasswordChange
+                    user={user}
+                    auth={auth}
+                    db={db}
+                    onDone={async () => {
+                      const snap = await getDoc(doc(db, 'users', user.uid));
+                      const updated = { ...snap.data(), id: user.id, uid: user.uid };
+                      localStorage.setItem('westline_user_cache', JSON.stringify(updated));
+                      setUser(updated);
+                    }}
+                    onLogout={handleLogout}
+                  />
+                ) : (
+                  <AdminPortal
+                    user={user}
+                    onLogout={handleLogout}
+                    onPreview={() => { setUser(null); if (auth) signOut(auth); navigate('/'); }}
+                    onLogoUpload={logoUpload}
+                    onThemeChange={async (t) => {
+                      setBrand(prev => ({ ...prev, theme: t }));
+                      if (db) await updateDoc(doc(db, 'settings', 'branding'), { theme: t });
+                    }}
+                    syncCatalog={syncCatalogOnly}
+                    staffMode={user?.role === 'staff'}
+                    {...commonProps}
+                  />
+                )
               ) : user?.role === 'client' ? (
                 <Navigate to="/portal" replace />
               ) : user?.role === 'worker' ? (
@@ -3111,7 +3233,22 @@ export default function App() {
           <Route path="/work" element={
             <ProtectedRoute>
               {user?.role === 'worker' || user?.role === 'staff' || user?.role === 'admin' ? (
-                <WorkerView user={user} onLogout={handleLogout} {...commonProps} />
+                user?.requiresPasswordReset ? (
+                  <ForcePasswordChange
+                    user={user}
+                    auth={auth}
+                    db={db}
+                    onDone={async () => {
+                      const snap = await getDoc(doc(db, 'users', user.uid));
+                      const updated = { ...snap.data(), id: user.id, uid: user.uid };
+                      localStorage.setItem('westline_user_cache', JSON.stringify(updated));
+                      setUser(updated);
+                    }}
+                    onLogout={handleLogout}
+                  />
+                ) : (
+                  <WorkerView user={user} onLogout={handleLogout} {...commonProps} />
+                )
               ) : user?.role === 'client' ? (
                 <Navigate to="/portal" replace />
               ) : (

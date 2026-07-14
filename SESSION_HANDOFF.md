@@ -106,3 +106,18 @@ User reported a large empty gap between the sidebar and page content on desktop,
 - **`CLAUDE.md`** (project root) — hard rules + the authoritative, numbered fix history. Always update it (new row in "THINGS THAT HAVE BEEN FIXED") after any change, and update *this* file too if the next session does substantial new work — don't let them drift apart silently.
 - Protected files (App.jsx, stage-functions/index.js, functions/index.js, data.jsx, ClientHub.jsx, ClientPortal.jsx, NewProjectModal.jsx) — touch only the reported issue, nothing else.
 - Deploy sequence used throughout this session: `npm run build` → `firebase deploy --only functions:<name>` (one at a time if quota errors appear on a bulk deploy — they're usually transient) → `firebase deploy --only hosting` → for any brand-new Cloud Function, apply the IAM invoker binding (`gcloud run services add-iam-policy-binding <fn-name> --region=us-central1 --member=allUsers --role=roles/run.invoker`).
+
+---
+
+# Session addendum — 2026-07-14 (security audit + hardening batch)
+
+Full read-only audit performed, then fixes shipped in phases (CLAUDE.md #65–#69):
+
+1. **Two client-reported bugs fixed & deployed** (#65 dead agreement sign button, #66 staff project visibility).
+2. **Repo pushed to GitHub** (was 37 commits ahead, single-machine risk) and a **staging preview channel** created: `firebase hosting:channel:deploy staging` → https://westlinefuture--staging-4q5ofvmy.web.app (expires 2026-08-13; redeploy to renew).
+3. **Critical escalation closed** (#67): pseudo-email domain match = full admin for all staff/workers. Exact `ADMIN_EMAILS` allow-list now in functions + both rules files. Staff role path in firestore `isAdmin()` intentionally untouched.
+4. **debugInvoice deleted, translatePublicPage rate-limited** (#68).
+5. **Deps updated** (#69): frontend at 0 vulnerabilities; functions at 0 high. ⚠️ Remaining functions pick up new deps only when redeployed — do a full `firebase deploy --only functions` in a low-traffic window (expect transient quota errors on bulk deploys; retry individual failures).
+6. **Post-deploy verification asks for the owner**: (a) log in as admin and reset a test staff password (confirms allow-list didn't lock the real admin out — role fallback should cover any email, but confirm); (b) have one staff member log in, open a client, send a chat attachment (confirms storage rules fallback); (c) have a worker upload a field photo.
+
+Audit findings NOT yet acted on (by explicit scope choice): full firestore.rules staff-permission lockdown; admin realtime listeners are unbounded (fine at current scale); persistent translation cache; error monitoring (Sentry or similar); reCAPTCHA Enterprise support in phone login; bundle code-splitting; ClientPortal.jsx monolith split.

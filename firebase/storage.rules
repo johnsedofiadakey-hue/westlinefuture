@@ -10,19 +10,39 @@ service firebase.storage {
       return isAuthenticated() && request.auth.token.email != null ? request.auth.token.email : "";
     }
 
+    // Role from the caller's users/{uid} Firestore doc — fallback for accounts
+    // created before setCustomUserClaims was added, whose tokens carry no role.
+    function userDocRole() {
+      return firestore.exists(/databases/(default)/documents/users/$(request.auth.uid))
+        ? firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role
+        : "";
+    }
+
     function isAdmin() {
+      // Exact admin emails only — staff/worker pseudo-emails share the same
+      // domain (username@westlinefuture.com), so a domain-wide match made every
+      // staff and worker a full storage admin. Never match on the domain.
       return isAuthenticated() && (
-        (request.auth.token.email != null && request.auth.token.email.matches(".*@westlinefuture\\.com")) ||
-        request.auth.token.email == "admin@westlinefuture.com"
+        (request.auth.token.email != null && (
+          request.auth.token.email == "admin@westlinefuture.com" ||
+          request.auth.token.email == "operations@westlinefuture.com"
+        )) ||
+        userDocRole() == "admin"
       );
     }
 
     function isStaff() {
-      return isAuthenticated() && request.auth.token.role == "staff";
+      return isAuthenticated() && (
+        ("role" in request.auth.token && request.auth.token.role == "staff") ||
+        userDocRole() == "staff"
+      );
     }
 
     function isWorker() {
-      return isAuthenticated() && request.auth.token.role == "worker";
+      return isAuthenticated() && (
+        ("role" in request.auth.token && request.auth.token.role == "worker") ||
+        userDocRole() == "worker"
+      );
     }
 
     function isAdminOrStaff() {

@@ -92,3 +92,24 @@ test('sanitized public gateway settings remain readable by client portals', () =
     /match \/cms_content\/\{docId\} \{[\s\S]*allow read: if true;/,
   );
 });
+
+const storageRules = await readFile(
+  new URL('../firebase/storage.rules', import.meta.url),
+  'utf8',
+);
+
+test('no domain-wide admin email match — staff/worker pseudo-emails share the domain', () => {
+  // Any .*@westlinefuture.com match or endsWith on the domain grants every
+  // staff and worker account (username@westlinefuture.com pseudo-emails) full
+  // admin. Only exact admin emails may appear.
+  assert.doesNotMatch(rules, /matches\(".*@westlinefuture/);
+  assert.doesNotMatch(storageRules, /matches\(".*@westlinefuture/);
+  assert.match(rules, /request\.auth\.token\.email == "admin@westlinefuture\.com"/);
+  assert.match(storageRules, /request\.auth\.token\.email == "admin@westlinefuture\.com"/);
+});
+
+test('storage staff/worker checks fall back to the users doc role for claim-less accounts', () => {
+  assert.match(storageRules, /function userDocRole\(\)[\s\S]*users\/\$\(request\.auth\.uid\)/);
+  assert.match(storageRules, /userDocRole\(\) == "staff"/);
+  assert.match(storageRules, /userDocRole\(\) == "worker"/);
+});

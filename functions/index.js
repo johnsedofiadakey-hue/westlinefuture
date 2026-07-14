@@ -1241,12 +1241,18 @@ exports.verifyHubtelPayment = onCall(
 );
 // ---------------------------------------------------------------------------
 
-// ── Helper: verify calling user is an admin (role == 'admin' or email domain) ──
+// Exact allow-list of real admin logins. Staff and worker accounts are created
+// with pseudo-emails on the SAME domain (username@westlinefuture.com, see
+// CLAUDE.md fix #57), so any endsWith("@westlinefuture.com") check silently
+// grants every staff/worker full admin — never match on the domain. Admins not
+// on this list still pass via the users/{uid}.role === 'admin' fallback below.
+const ADMIN_EMAILS = ["admin@westlinefuture.com", "operations@westlinefuture.com"];
+const isAdminEmail = (email) => ADMIN_EMAILS.includes(String(email || "").toLowerCase());
+
+// ── Helper: verify calling user is an admin (allow-listed email or role) ──
 async function assertAdmin(request) {
   if (!request.auth) throw new HttpsError("unauthenticated", "Authentication required");
-  const email = request.auth.token.email || "";
-  const isEmailAdmin = email.endsWith("@westlinefuture.com") || email === "admin@westlinefuture.com";
-  if (isEmailAdmin) return; // fast path
+  if (isAdminEmail(request.auth.token.email)) return; // fast path
   const db = getFirestore();
   const snap = await db.collection("users").doc(request.auth.uid).get();
   if (!snap.exists || !["admin", "staff"].includes(snap.data().role)) {
@@ -1401,9 +1407,7 @@ exports.deleteStaffAccount = onCall({ cors: true, invoker: "public" }, async (re
   // least as sensitive as resetting its password.
   if (!request.auth) throw new HttpsError("unauthenticated", "Authentication required");
   {
-    const email = request.auth.token.email || "";
-    const isEmailAdmin = email.endsWith("@westlinefuture.com") || email === "admin@westlinefuture.com";
-    if (!isEmailAdmin) {
+    if (!isAdminEmail(request.auth.token.email)) {
       const callerSnap = await getFirestore().collection("users").doc(request.auth.uid).get();
       if (!callerSnap.exists || callerSnap.data().role !== "admin") {
         throw new HttpsError("permission-denied", "Admin access required");
@@ -1745,9 +1749,7 @@ exports.setStaffPassword = onCall({ cors: true, invoker: "public" }, async (requ
   // available to regular staff (assertAdmin also passes role 'staff').
   if (!request.auth) throw new HttpsError("unauthenticated", "Authentication required");
   {
-    const email = request.auth.token.email || "";
-    const isEmailAdmin = email.endsWith("@westlinefuture.com") || email === "admin@westlinefuture.com";
-    if (!isEmailAdmin) {
+    if (!isAdminEmail(request.auth.token.email)) {
       const callerSnap = await getFirestore().collection("users").doc(request.auth.uid).get();
       if (!callerSnap.exists || callerSnap.data().role !== "admin") {
         throw new HttpsError("permission-denied", "Admin access required");
@@ -1992,7 +1994,7 @@ exports.validateEscrowRelease = onRequest(
       // Only admins may query escrow status
       const callerSnap = await getFirestore().collection("users").doc(decodedToken.uid).get();
       const callerRole = callerSnap.data()?.role;
-      if (!["admin", "staff"].includes(callerRole) && !decodedToken.email?.endsWith("@westlinefuture.com")) {
+      if (!["admin", "staff"].includes(callerRole) && !isAdminEmail(decodedToken.email)) {
         return res.status(403).json({ ok: false, error: "Admin access required" });
       }
 
@@ -2525,6 +2527,20 @@ exports.translatePublicPage = onCall(
     if (!ALLOWED_TARGETS.includes(target)) throw new HttpsError('invalid-argument', 'Unsupported target language');
     if (texts.length > 500) throw new HttpsError('invalid-argument', 'Too many strings in one request');
 
+    // Unauthenticated + paid Google API behind it = cost-abuse target. Keyed by
+    // uid when signed in, else caller IP. A real page visit makes 1-5 calls;
+    // the session cache in PubLayout means repeat pages cost zero. 60/hour is
+    // ~10x legitimate browsing, still caps a runaway script at pennies.
+    const rawFwd = request.rawRequest?.headers?.['x-forwarded-for'];
+    const callerIp = String(Array.isArray(rawFwd) ? rawFwd[0] : rawFwd || request.rawRequest?.ip || 'unknown')
+      .split(',')[0].trim();
+    const rateKey = request.auth?.uid ? `translate:uid:${request.auth.uid}` : `translate:ip:${callerIp}`;
+    try {
+      await enforceRateLimit(rateKey, 60, 3600);
+    } catch (err) {
+      throw new HttpsError('resource-exhausted', err.message || 'Too many translation requests. Please try again later.');
+    }
+
     const apiKey = process.env.GOOGLE_TRANSLATE_API_KEY;
     if (!apiKey) throw new HttpsError('internal', 'Translation API key not configured');
 
@@ -2574,79 +2590,6 @@ exports.translateText = onCall(
     } catch (err) {
       logger.error('translateText: failed', err.message);
       return { translated: null };
-    }
-  }
-);
-
-/**
- * DEBUG ENDPOINT: Check invoice data for troubleshooting payment issues
- * Call with: curl "https://us-central1-westlinefuture.cloudfunctions.net/debugInvoice?invoiceId=WF-XXXXX"
- */
-exports.debugInvoice = onRequest(
-  { cors: true },
-  async (request, response) => {
-    const invoiceId = request.query.invoiceId;
-    if (!invoiceId) {
-      return response.status(400).json({ error: 'invoiceId parameter required' });
-    }
-
-    try {
-      const db = getFirestore();
-      let invoiceSnap = await db.collection('invoices').doc(invoiceId).get();
-
-      // If not found by doc ID, search by reference number fields
-      if (!invoiceSnap.exists) {
-        const searches = [
-          db.collection('invoices').where('refNumber', '==', invoiceId).limit(1).get(),
-          db.collection('invoices').where('reference', '==', invoiceId).limit(1).get(),
-          db.collection('invoices').where('invoiceNumber', '==', invoiceId).limit(1).get(),
-          db.collection('invoices').where('title', '==', invoiceId).limit(1).get(),
-        ];
-        const results = await Promise.all(searches.map(p => p.catch(() => ({ empty: true }))));
-        const found = results.find(r => !r.empty && r.docs?.length > 0);
-        if (found) {
-          invoiceSnap = found.docs[0];
-        }
-      }
-
-      if (!invoiceSnap.exists) {
-        // List all invoices for debugging
-        const allSnap = await db.collection('invoices').limit(20).get();
-        const allIds = allSnap.docs.map(d => ({ id: d.id, type: d.data().type, status: d.data().status, projectId: d.data().projectId }));
-        return response.status(404).json({ error: 'Invoice not found', invoiceId, hint: 'Try using the Firestore document ID, not the display reference number', recentInvoices: allIds });
-      }
-
-      const data = invoiceSnap.data();
-      const invoiceTotal = Number(data.amount || data.total || 0);
-      const currentPaid = Number(data.amountPaid || 0);
-
-      return response.json({
-        invoiceId,
-        found: true,
-        data: {
-          status: data.status,
-          amount: data.amount,
-          total: data.total,
-          amountPaid: data.amountPaid,
-          type: data.type,
-          projectId: data.projectId,
-          method: data.method,
-        },
-        calculated: {
-          invoiceTotal,
-          currentPaid,
-          isFullyPaid: currentPaid >= invoiceTotal - (invoiceTotal * 0.02),
-          shouldBePaid: currentPaid > 0,
-        },
-        issues: [
-          !data.amount && !data.total ? 'Missing amount/total field' : null,
-          data.status !== 'Paid' && currentPaid >= invoiceTotal ? 'Status should be Paid but is ' + data.status : null,
-          !data.type ? 'Missing type field' : null,
-        ].filter(Boolean),
-      });
-    } catch (err) {
-      logger.error('debugInvoice failed', err.message);
-      return response.status(500).json({ error: err.message, invoiceId });
     }
   }
 );

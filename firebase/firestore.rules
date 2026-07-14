@@ -13,9 +13,13 @@ service cloud.firestore {
     }
 
     function isAdmin() {
+      // Exact admin emails only — staff/worker accounts use pseudo-emails on
+      // the same domain (username@westlinefuture.com), so a domain-wide match
+      // silently made every staff and worker a full admin. Never match on the
+      // domain. Admins with other emails pass via userHasRole("admin").
       let isEmailAdmin = isAuthenticated() && "email" in request.auth.token && request.auth.token.email != null && (
-        request.auth.token.email.matches(".*@westlinefuture.com") ||
-        request.auth.token.email == "admin@westlinefuture.com"
+        request.auth.token.email == "admin@westlinefuture.com" ||
+        request.auth.token.email == "operations@westlinefuture.com"
       );
       let isRoleAdmin = userHasRole("admin") || userHasRole("staff");
       return isEmailAdmin || isRoleAdmin;

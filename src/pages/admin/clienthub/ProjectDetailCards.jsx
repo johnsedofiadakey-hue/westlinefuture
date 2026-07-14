@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Anchor, Loader2, TrendingUp, Plus, X, FileText, Download, Upload, Camera } from 'lucide-react';
+import { Anchor, Loader2, TrendingUp, Plus, X, FileText, Download, Upload, Camera, Trash2 } from 'lucide-react';
 import { db, functions } from '../../../lib/firebase';
-import { collection, onSnapshot, query, orderBy, doc, updateDoc } from 'firebase/firestore';
+import { collection, onSnapshot, query, orderBy, doc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import { AC, BD_ITEMS_CONFIG } from './config.jsx';
 
@@ -249,6 +249,13 @@ export function ProjectEconomics({ project, notify: _notify }) {
   });
   const [saving, setSaving] = useState(false);
   const [saved,  setSaved]  = useState(false);
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+
+  useEffect(() => {
+    const h = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener('resize', h);
+    return () => window.removeEventListener('resize', h);
+  }, []);
 
   useEffect(() => {
     const c = project.costs || {};
@@ -349,7 +356,7 @@ export function ProjectEconomics({ project, notify: _notify }) {
         </button>
 
         {/* Summary strip */}
-        <div style={{ background: `var(--accent-secondary)`, borderRadius: 14, padding: '16px 20px', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
+        <div style={{ background: `var(--accent-secondary)`, borderRadius: 14, padding: '16px 20px', display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(4, 1fr)', gap: 12 }}>
           {[
             { label: 'Total COGS',   value: fmt(totalCOGS),   color: '#fff' },
             { label: 'Sale Price',   value: fmt(salePrice),   color: AC },
@@ -416,6 +423,11 @@ export function DocumentVault({ project, addProjectDocument, user }) {
     });
     setUploadingPhoto(false);
     if (photoInputRef.current) photoInputRef.current.value = '';
+  };
+
+  const handleDeleteDocument = async (docId) => {
+    if (!window.confirm('Delete this document? This cannot be undone.')) return;
+    await deleteDoc(doc(db, 'projects', project.id, 'documents', docId));
   };
 
   const formatSize = (bytes) => {
@@ -505,21 +517,34 @@ export function DocumentVault({ project, addProjectDocument, user }) {
                     {formatDate(doc.createdAt)}{doc.size ? ` · ${formatSize(doc.size)}` : ''}
                   </div>
                 </div>
-                {doc.url && (
-                  <a
-                    href={doc.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
+                <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                  {doc.url && (
+                    <a
+                      href={doc.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{
+                        width: 30, height: 30, borderRadius: 8, background: '#fff', border: '1px solid var(--border-color)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        color: `var(--text-secondary)`, textDecoration: 'none',
+                      }}
+                      title={isPhoto ? 'View photo' : 'Download'}
+                    >
+                      <Download size={13} />
+                    </a>
+                  )}
+                  <button
+                    onClick={() => handleDeleteDocument(doc.id)}
                     style={{
-                      width: 30, height: 30, borderRadius: 8, background: '#fff', border: '1px solid var(--border-color)',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-                      color: `var(--text-secondary)`, textDecoration: 'none', transition: 'background .15s',
+                      width: 30, height: 30, borderRadius: 8, background: '#FEF2F2', border: '1px solid #FECACA',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+                      color: '#DC2626',
                     }}
-                    title={isPhoto ? 'View photo' : 'Download'}
+                    title="Delete"
                   >
-                    <Download size={13} />
-                  </a>
-                )}
+                    <Trash2 size={12} />
+                  </button>
+                </div>
               </div>
             );
           })}

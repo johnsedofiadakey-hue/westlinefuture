@@ -4,6 +4,7 @@
 
 const { onDocumentUpdated } = require("firebase-functions/v2/firestore");
 const { onRequest, onCall, HttpsError } = require("firebase-functions/v2/https");
+const { setGlobalOptions } = require("firebase-functions/v2");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { defineSecret } = require("firebase-functions/params");
 const { logger } = require("firebase-functions");
@@ -14,6 +15,10 @@ const axios = require("axios");
 const crypto = require("crypto");
 
 initializeApp();
+
+// Cap instances per function — the region's total Cloud Run CPU quota is shared
+// across all ~45 services; the default (100) exceeds it and blocks deploys.
+setGlobalOptions({ maxInstances: 10 });
 
 // Secrets — set with: firebase functions:secrets:set SECRET_NAME
 const META_WA_TOKEN      = { value: () => process.env.META_WA_TOKEN };
@@ -26,6 +31,7 @@ const OPENAI_API_KEY = defineSecret('OPENAI_API_KEY');
 const HUBTEL_PAYMENT_CLIENT_ID = defineSecret('HUBTEL_PAYMENT_CLIENT_ID');
 const HUBTEL_PAYMENT_CLIENT_SECRET = defineSecret('HUBTEL_PAYMENT_CLIENT_SECRET');
 const HUBTEL_PAYMENT_MERCHANT_ID = defineSecret('HUBTEL_PAYMENT_MERCHANT_ID');
+const GOOGLE_TRANSLATE_API_KEY = defineSecret('GOOGLE_TRANSLATE_API_KEY');
 
 const HUBTEL_SMS_SENDER = 'WestlineFut'; // max 11 chars
 const normalizePhoneDigits = value => String(value || '').replace(/\D/g, '');
@@ -38,6 +44,29 @@ async function assertAdminOrStaff(auth) {
     throw new HttpsError('permission-denied', 'Admin or staff access is required.');
   }
   return role;
+}
+
+// Like assertAdminOrStaff, but additionally requires the caller's portal-tab
+// permissions array (users/{uid}.permissions, set in AdminStaff.jsx) to
+// include at least one of `allowedPermissions`. Admins always pass — the
+// permissions array only restricts staff. Use for functions whose UI
+// equivalent is gated behind a specific PORTAL_PERMISSIONS tab, so a staff
+// member without that tab can't bypass the gate by calling the function
+// directly (e.g. via devtools).
+async function assertHasPermission(auth, allowedPermissions) {
+  if (!auth?.uid) throw new HttpsError('unauthenticated', 'Authentication required.');
+  const snap = await getFirestore().collection('users').doc(auth.uid).get();
+  const data = snap.data() || {};
+  const role = String(data.role || auth.token?.role || '').toLowerCase();
+  if (!['admin', 'staff', 'project manager', 'project_manager', 'finance manager', 'operations manager'].includes(role)) {
+    throw new HttpsError('permission-denied', 'Admin or staff access is required.');
+  }
+  if (role === 'admin') return;
+  const perms = data.permissions || [];
+  const required = Array.isArray(allowedPermissions) ? allowedPermissions : [allowedPermissions];
+  if (!required.some(p => perms.includes(p))) {
+    throw new HttpsError('permission-denied', `This action requires portal access to: ${required.join(' or ')}.`);
+  }
 }
 
 async function assertProjectAccess(auth, projectId) {
@@ -628,7 +657,7 @@ exports.verifyPaystackPayment = onCall(
         const adminMsg = isRenderingPayment
           ? `Rendering fee of GHS ${amountGHS.toFixed(2)} received for "${projectTitle}". Help the client schedule the technical site visit. Ref: ${reference}`
           : `Payment of GHS ${amountGHS.toFixed(2)} received for "${projectTitle}" (${type}) via Paystack. Ref: ${reference}`;
-        const recipients = [...new Set(['admin', managerId, ...(paymentProject.assignedStaff || [])].filter(Boolean))];
+        const recipients = [...new Set(['admin', managerId, ...(paymentProject.projectManagerIds || []), ...(paymentProject.assignedStaff || [])].filter(Boolean))];
         await Promise.all(recipients.map(recipientId =>
           db.collection('notifications').add({
             userId: recipientId,
@@ -1194,7 +1223,7 @@ exports.verifyHubtelPayment = onCall(
     const paymentMessage = renderingPayment
       ? `Rendering fee of GHS ${amountGHS.toFixed(2)} received for "${paymentProject.title || 'project'}" via Hubtel. Upload the rendering package now. Ref: ${clientReference}`
       : `Payment of GHS ${amountGHS.toFixed(2)} received for "${paymentProject.title || 'project'}" (${type}) via Hubtel. Ref: ${clientReference}`;
-    const recipients = [...new Set(['admin', managerId, ...(paymentProject.assignedStaff || [])].filter(Boolean))];
+    const recipients = [...new Set(['admin', managerId, ...(paymentProject.projectManagerIds || []), ...(paymentProject.assignedStaff || [])].filter(Boolean))];
     await Promise.all(recipients.map(recipientId =>
       db.collection('notifications').add({
         userId: recipientId,
@@ -1225,10 +1254,17 @@ async function assertAdmin(request) {
   }
 }
 
-exports.createStaffAccount = onCall({ cors: true, invoker: "public" }, async (request) => {
-  await assertAdmin(request);
+// Random one-time password for new/reset staff accounts (unambiguous chars only).
+function generateTempPassword() {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
+  const pick = (n) => Array.from({ length: n }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
+  return `WF-${pick(4)}-${pick(4)}`;
+}
 
-  const { name, email, password, jobRole } = request.data || {};
+exports.createStaffAccount = onCall({ cors: true, invoker: "public" }, async (request) => {
+  await assertHasPermission(request.auth, 'staff');
+
+  const { name, email, password, jobRole, permissions } = request.data || {};
   if (!name || !email || !password) throw new Error("name, email, and password are required");
 
   const adminAuth = getAdminAuth();
@@ -1255,6 +1291,7 @@ exports.createStaffAccount = onCall({ cors: true, invoker: "public" }, async (re
     email: email.trim(),
     role,
     jobRole,
+    permissions: Array.isArray(permissions) ? permissions : [],
     assignedClients: [],
     status: "Active",
     certs: [],
@@ -1360,7 +1397,19 @@ exports.sendSMS = onCall({ cors: true, invoker: "public" }, async (request) => {
  * Body: { uid, deleteAuth? }
  */
 exports.deleteStaffAccount = onCall({ cors: true, invoker: "public" }, async (request) => {
+  // Strict admin-only, matching setStaffPassword — deleting an account is at
+  // least as sensitive as resetting its password.
   if (!request.auth) throw new HttpsError("unauthenticated", "Authentication required");
+  {
+    const email = request.auth.token.email || "";
+    const isEmailAdmin = email.endsWith("@westlinefuture.com") || email === "admin@westlinefuture.com";
+    if (!isEmailAdmin) {
+      const callerSnap = await getFirestore().collection("users").doc(request.auth.uid).get();
+      if (!callerSnap.exists || callerSnap.data().role !== "admin") {
+        throw new HttpsError("permission-denied", "Admin access required");
+      }
+    }
+  }
 
   const { uid, deleteAuth = true } = request.data || {};
   if (!uid) throw new HttpsError("invalid-argument", "uid is required");
@@ -1396,7 +1445,7 @@ exports.deleteStaffAccount = onCall({ cors: true, invoker: "public" }, async (re
  * Body: { projectId, total, title, scopeSummary, negotiationNote, paymentSchedule }
  */
 exports.createProjectQuotation = onCall({ cors: true, invoker: "public" }, async (request) => {
-  if (!request.auth) throw new HttpsError("unauthenticated", "Authentication required");
+  await assertHasPermission(request.auth, ['financials', 'projects']);
 
   const { projectId, total: rawTotal, title: rawTitle, scopeSummary, negotiationNote, paymentSchedule } = request.data || {};
   if (!projectId) throw new HttpsError("invalid-argument", "projectId is required");
@@ -1527,7 +1576,7 @@ exports.createProjectQuotation = onCall({ cors: true, invoker: "public" }, async
  * Body: { invoiceId, projectId, amount, date, note, exchangeRate? }
  */
 exports.confirmOfflineInvoicePayment = onCall({ cors: true, invoker: "public" }, async (request) => {
-  if (!request.auth) throw new HttpsError("unauthenticated", "Authentication required");
+  await assertHasPermission(request.auth, 'financials');
 
   const { invoiceId, projectId: rawProjectId, amount: rawAmount, date, note, exchangeRate } = request.data || {};
   if (!invoiceId) throw new HttpsError("invalid-argument", "invoiceId is required");
@@ -1692,7 +1741,19 @@ exports.confirmOfflineInvoicePayment = onCall({ cors: true, invoker: "public" },
  * Body: { uid, newPassword }
  */
 exports.setStaffPassword = onCall({ cors: true, invoker: "public" }, async (request) => {
-  if (!request.auth) throw new Error("Authentication required");
+  // Strict admin-only: password control over other accounts must not be
+  // available to regular staff (assertAdmin also passes role 'staff').
+  if (!request.auth) throw new HttpsError("unauthenticated", "Authentication required");
+  {
+    const email = request.auth.token.email || "";
+    const isEmailAdmin = email.endsWith("@westlinefuture.com") || email === "admin@westlinefuture.com";
+    if (!isEmailAdmin) {
+      const callerSnap = await getFirestore().collection("users").doc(request.auth.uid).get();
+      if (!callerSnap.exists || callerSnap.data().role !== "admin") {
+        throw new HttpsError("permission-denied", "Admin access required");
+      }
+    }
+  }
 
   const { uid, newPassword, resetToDefault } = request.data || {};
   if (!uid) throw new Error("uid is required");
@@ -1701,10 +1762,11 @@ exports.setStaffPassword = onCall({ cors: true, invoker: "public" }, async (requ
   const db = getFirestore();
 
   if (resetToDefault) {
-    // Admin resetting a staff account back to the default password.
-    // Bypasses strength validation — staff will be forced to change on next login.
+    // Admin resetting a staff account to a random one-time password.
+    // Returned once to the admin UI; staff forced to change on next login.
+    const tempPassword = generateTempPassword();
     try {
-      await adminAuth.updateUser(uid, { password: 'unlockme' });
+      await adminAuth.updateUser(uid, { password: tempPassword });
     } catch (err) {
       logger.error("setStaffPassword/reset: updateUser failed", err.message);
       throw new Error("Could not reset password: " + err.message);
@@ -1715,14 +1777,12 @@ exports.setStaffPassword = onCall({ cors: true, invoker: "public" }, async (requ
     };
     await db.collection('users').doc(uid).update(resetFields).catch(() => {});
     await db.collection('team').doc(uid).update(resetFields).catch(() => {});
-    logger.info(`setStaffPassword: reset to default for uid ${uid} by admin ${request.auth.uid}`);
-    return { success: true };
+    logger.info(`setStaffPassword: reset to temp password for uid ${uid} by admin ${request.auth.uid}`);
+    return { success: true, tempPassword };
   }
 
-  // Normal path — admin sets a specific password, enforce strength.
-  const pwValidation = validatePasswordStrength(newPassword);
-  if (!pwValidation.valid) {
-    throw new Error(pwValidation.reason);
+  if (!newPassword || newPassword.length < 8) {
+    throw new Error("Password must be at least 8 characters");
   }
 
   try {
@@ -1752,7 +1812,7 @@ exports.setStaffPassword = onCall({ cors: true, invoker: "public" }, async (requ
 // All notifications go via Meta WhatsApp Cloud API (sendWA helper below).
 
 exports.repairStaffAccount = onCall({ cors: true, invoker: "public" }, async (request) => {
-  await assertAdmin(request);
+  await assertHasPermission(request.auth, 'staff');
 
   const { email, name, jobRole } = request.data || {};
   if (!email) throw new Error("email is required");
@@ -2454,6 +2514,39 @@ exports.sendOverdueReminders = onSchedule(
  * Proxies Google Translate so the browser avoids CORS restrictions.
  * No auth required — translation is not sensitive.
  */
+// Batch-translate public page text via Google Cloud Translation API v2
+exports.translatePublicPage = onCall(
+  { cors: true, invoker: "public", secrets: [GOOGLE_TRANSLATE_API_KEY] },
+  async (request) => {
+    const { texts, target = 'zh-CN' } = request.data || {};
+    if (!Array.isArray(texts) || texts.length === 0) return { translations: [] };
+
+    const ALLOWED_TARGETS = ['zh-CN', 'en'];
+    if (!ALLOWED_TARGETS.includes(target)) throw new HttpsError('invalid-argument', 'Unsupported target language');
+    if (texts.length > 500) throw new HttpsError('invalid-argument', 'Too many strings in one request');
+
+    const apiKey = process.env.GOOGLE_TRANSLATE_API_KEY;
+    if (!apiKey) throw new HttpsError('internal', 'Translation API key not configured');
+
+    const BATCH_SIZE = 100;
+    const results = [];
+
+    for (let i = 0; i < texts.length; i += BATCH_SIZE) {
+      const batch = texts.slice(i, i + BATCH_SIZE);
+      const resp = await axios.post(
+        `https://translation.googleapis.com/language/translate/v2?key=${apiKey}`,
+        { q: batch, target, format: 'text' },
+        { headers: { 'Content-Type': 'application/json' } }
+      );
+      if (resp.data?.error) throw new HttpsError('internal', resp.data.error.message);
+      const translated = resp.data?.data?.translations?.map(t => t.translatedText) || [];
+      results.push(...translated);
+    }
+
+    return { translations: results };
+  }
+);
+
 exports.translateText = onCall(
   { cors: true, invoker: "public" },
   async (request) => {
@@ -2818,7 +2911,7 @@ exports.paystackWebhook = onRequest(
       webhookOwnsClaim = false;
 
       const managerMessage = `Payment of GHS ${amountGHS.toFixed(2)} received for "${webhookProject.title || projectId}" via Paystack. Ref: ${tx.reference}`;
-      const managerRecipients = [...new Set(['admin', webhookManagerId, ...(webhookProject.assignedStaff || [])].filter(Boolean))];
+      const managerRecipients = [...new Set(['admin', webhookManagerId, ...(webhookProject.projectManagerIds || []), ...(webhookProject.assignedStaff || [])].filter(Boolean))];
       await Promise.all(managerRecipients.map(userId =>
         db.collection('notifications').add({
           userId,
@@ -3016,6 +3109,140 @@ exports.notifyClientOnAdminAction = onDocumentCreated(
 
     } catch (err) {
       logger.error('notifyClientOnAdminAction Error:', err.message);
+    }
+  }
+);
+
+// ── Agora RTC Token Generation ────────────────────────────────────────────────
+// Set credentials once: firebase functions:secrets:set AGORA_APP_ID
+//                        firebase functions:secrets:set AGORA_APP_CERTIFICATE
+const AGORA_APP_ID_SECRET = defineSecret('AGORA_APP_ID');
+const AGORA_APP_CERTIFICATE_SECRET = defineSecret('AGORA_APP_CERTIFICATE');
+
+exports.scheduleProjectSiteVisit = onCall({ cors: true, invoker: 'public' }, async (request) => {
+  const { projectId, startAt, durationMinutes = 120, timezone = 'Africa/Accra', source = 'admin', actorName = 'Project Manager', notes = '' } = request.data || {};
+  if (!projectId || !startAt) throw new HttpsError('invalid-argument', 'projectId and startAt are required.');
+
+  const appt = new Date(startAt);
+  if (Number.isNaN(appt.getTime())) throw new HttpsError('invalid-argument', 'startAt is not a valid ISO date string.');
+
+  const projectRef = db.collection('clients').doc(projectId);
+  const projectSnap = await projectRef.get();
+  if (!projectSnap.exists) throw new HttpsError('not-found', 'Project not found.');
+
+  const project = projectSnap.data();
+  const siteVisit = {
+    status: 'scheduled',
+    startAt: appt.toISOString(),
+    endAt: new Date(appt.getTime() + durationMinutes * 60 * 1000).toISOString(),
+    durationMinutes,
+    timezone,
+    source,
+    notes,
+    scheduledByName: actorName,
+    scheduledAt: admin.firestore.FieldValue.serverTimestamp(),
+  };
+
+  await projectRef.update({ siteVisit });
+
+  const clientId = project.clientId;
+  if (clientId) {
+    const visitDate = appt.toLocaleString('en-GB', { dateStyle: 'full', timeStyle: 'short', timeZone: timezone });
+    try {
+      await db.collection('notifications').add({
+        userId: clientId,
+        message: `Your technical site visit is scheduled for ${visitDate}. Please ensure our team can access the project area.`,
+        type: 'site_visit',
+        read: false,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        projectId,
+      });
+    } catch (_) {}
+    try {
+      await db.collection('clients').doc(projectId).collection('messages').add({
+        text: `Your technical site visit has been scheduled for ${visitDate}. Our team will visit to take measurements and site photos. Please ensure access is available.`,
+        senderRole: 'admin',
+        senderName: actorName,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        readByAdmin: true,
+      });
+    } catch (_) {}
+  }
+
+  return { success: true, siteVisit };
+});
+
+exports.completeProjectSiteVisit = onCall({ cors: true, invoker: 'public' }, async (request) => {
+  const { projectId, notes = '', evidenceUrls = [] } = request.data || {};
+  if (!projectId) throw new HttpsError('invalid-argument', 'projectId is required.');
+
+  const projectRef = db.collection('clients').doc(projectId);
+  const projectSnap = await projectRef.get();
+  if (!projectSnap.exists) throw new HttpsError('not-found', 'Project not found.');
+
+  const project = projectSnap.data();
+  const updatedSiteVisit = {
+    ...(project.siteVisit || {}),
+    status: 'completed',
+    completedAt: admin.firestore.FieldValue.serverTimestamp(),
+    completionNotes: notes,
+    evidenceUrls,
+  };
+
+  await projectRef.update({
+    siteVisit: updatedSiteVisit,
+    siteSurveyCompleted: true,
+  });
+
+  const clientId = project.clientId;
+  if (clientId) {
+    try {
+      await db.collection('notifications').add({
+        userId: clientId,
+        message: 'Your technical site survey is complete. Our design team is now preparing your 3D rendering.',
+        type: 'site_visit',
+        read: false,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        projectId,
+      });
+    } catch (_) {}
+    try {
+      await db.collection('clients').doc(projectId).collection('messages').add({
+        text: 'Your technical site survey has been completed. Our design team has been prompted to prepare your 3D rendering package.',
+        senderRole: 'admin',
+        senderName: 'Westline Future',
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        readByAdmin: true,
+      });
+    } catch (_) {}
+  }
+
+  return { success: true };
+});
+
+exports.generateAgoraToken = onCall(
+  { cors: true, invoker: 'public', secrets: [AGORA_APP_ID_SECRET, AGORA_APP_CERTIFICATE_SECRET] },
+  async (request) => {
+    const { channelName, uid, role } = request.data || {};
+    if (!channelName) throw new HttpsError('invalid-argument', 'channelName is required.');
+
+    const appId = process.env.AGORA_APP_ID;
+    const appCertificate = process.env.AGORA_APP_CERTIFICATE;
+
+    if (!appId || !appCertificate) {
+      throw new HttpsError('failed-precondition', 'Agora credentials not configured. Run: firebase functions:secrets:set AGORA_APP_ID and AGORA_APP_CERTIFICATE');
+    }
+
+    try {
+      const { RtcTokenBuilder, RtcRole } = require('agora-access-token');
+      const agoraRole = role === 'publisher' ? RtcRole.PUBLISHER : RtcRole.SUBSCRIBER;
+      const numericUid = uid ? parseInt(String(uid).replace(/\D/g, '').slice(-9) || '0', 10) : 0;
+      const expireTime = Math.floor(Date.now() / 1000) + 86400; // 24 hours
+      const token = RtcTokenBuilder.buildTokenWithUid(appId, appCertificate, channelName, numericUid, agoraRole, expireTime);
+      return { token, appId, channelName, uid: numericUid };
+    } catch (err) {
+      logger.error('generateAgoraToken error:', err.message);
+      throw new HttpsError('internal', 'Failed to generate call token.');
     }
   }
 );

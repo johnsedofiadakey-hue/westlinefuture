@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { Lock, Download, X, Loader2, CheckCircle2, CreditCard, Trash2 } from 'lucide-react';
 import { db } from '../../../lib/firebase';
@@ -13,6 +13,12 @@ export function ProjectInvoicesLedger({ project, client, invoices, brand, update
   const [payNote, setPayNote] = useState('');
   const [savingPayment, setSavingPayment] = useState(false);
   const [confirmDeleteInvId, setConfirmDeleteInvId] = useState(null);
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+  useEffect(() => {
+    const h = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener('resize', h);
+    return () => window.removeEventListener('resize', h);
+  }, []);
 
   const projectInvoices = (invoices || []).filter(inv => inv.parentId === project.id || inv.projectId === project.id);
   const verificationPendingInvoices = projectInvoices.filter(inv =>
@@ -221,7 +227,7 @@ export function ProjectInvoicesLedger({ project, client, invoices, brand, update
   };
 
   return (
-    <div style={{ padding: '24px', background: '#fff', borderRadius: 18, border: '1px solid var(--border-color)', marginTop: 16 }}>
+    <div style={{ padding: isMobile ? 16 : 24, background: '#fff', borderRadius: 18, border: '1px solid var(--border-color)', marginTop: 16 }}>
 
       {project.quoteApproved && (
         <div style={{
@@ -295,6 +301,78 @@ export function ProjectInvoicesLedger({ project, client, invoices, brand, update
       })()}
 
       {projectInvoices.length > 0 ? (
+        isMobile ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {projectInvoices.map((inv) => {
+              const currency = inv.currency || 'GHS';
+              const symbol = currency === 'USD' ? '$' : 'GH₵';
+              const total = Number(inv.amount || inv.total || 0);
+              const paid = Number(inv.paidAmount || inv.amountPaid || 0);
+              const balance = Math.max(0, total - paid);
+              const status = (inv.awaitingConfirmation ? 'Verification Pending' : inv.status || 'Pending').toLowerCase();
+              const badgeStyle = status === 'paid'
+                ? { background: '#D1FAE5', color: '#065F46' }
+                : status === 'partially paid'
+                  ? { background: '#FEF3C7', color: '#92400E' }
+                : status === 'verification pending'
+                  ? { background: '#DBEAFE', color: '#1E3A8A', border: '1px solid #93C5FD' }
+                  : { background: '#F3F4F6', color: '#374151' };
+              return (
+                <div key={inv.id} style={{ padding: 14, borderRadius: 14, border: '1px solid var(--border-color)', background: '#fff' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8, marginBottom: 8 }}>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: 12, fontWeight: 800, color: 'var(--accent-secondary)' }}>WF-${(inv.id || '').slice(-8).toUpperCase()}</div>
+                      <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{inv.title}</div>
+                    </div>
+                    <span style={{ flexShrink: 0, fontSize: 9, fontWeight: 900, textTransform: 'uppercase', padding: '4px 10px', borderRadius: 20, ...badgeStyle }}>{status}</span>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 10, fontSize: 11, color: 'var(--text-secondary)' }}>
+                    <div>Issued {inv.date}</div>
+                    <div>Due {inv.due || '—'}</div>
+                    <div style={{ fontWeight: 800, color: 'var(--accent-secondary)' }}>{symbol} {total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                    <div style={{ fontWeight: 800, color: balance > 0 ? '#DC2626' : '#16A34A' }}>Bal: {symbol} {balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                  </div>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button
+                      onClick={() => printInvoiceOrReceipt({
+                        ...inv,
+                        clientName:    inv.clientName    || client?.name          || project.clientName || project.client,
+                        clientPhone:   inv.clientPhone   || client?.phone         || project.clientPhone   || '',
+                        clientEmail:   inv.clientEmail   || client?.email         || client?.proxyEmail || project.clientEmail || '',
+                        clientAddress: inv.clientAddress || client?.address       || client?.location   || project.clientAddress || '',
+                        clientCompany: inv.clientCompany || client?.company       || project.clientCompany || '',
+                        projectTitle:  inv.projectTitle  || project.title         || project.project,
+                        amount: total,
+                        total,
+                        paidAmount: paid,
+                        projectBudget:   projBudget,
+                        projectBilled:   projBilled,
+                        projectReceived: projReceived,
+                      }, brand)}
+                      style={{ flex: 1, border: 'none', background: 'var(--bg-secondary)', padding: '9px 0', borderRadius: 8, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)' }}
+                    >
+                      <Download size={13} /> PDF
+                    </button>
+                    {balance > 0 && (
+                      <button
+                        onClick={() => openPaymentModal(inv)}
+                        style={{ flex: 1, border: 'none', background: status === 'verification pending' ? '#2563EB' : '#D1FAE5', padding: '9px 0', borderRadius: 8, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontSize: 11, fontWeight: 700, color: status === 'verification pending' ? '#fff' : '#065F46' }}
+                      >
+                        {status === 'verification pending' ? <CheckCircle2 size={13} /> : <CreditCard size={13} />} {status === 'verification pending' ? 'Verify' : 'Settle'}
+                      </button>
+                    )}
+                    <button
+                      onClick={() => handleDelete(inv.id)}
+                      style={{ border: 'none', background: '#FEE2E2', padding: '9px 12px', borderRadius: 8, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                    >
+                      <Trash2 size={13} color="#DC2626" />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
             <thead>
@@ -409,6 +487,7 @@ export function ProjectInvoicesLedger({ project, client, invoices, brand, update
             </tbody>
           </table>
         </div>
+        )
       ) : (
         <div style={{ padding: '40px 0', textAlign: 'center', fontSize: 12, color: 'var(--text-secondary)', background: 'var(--bg-secondary)', borderRadius: 12 }}>
           No invoices or billing records have been generated for this project yet.

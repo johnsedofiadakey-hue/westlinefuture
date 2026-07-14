@@ -1,7 +1,10 @@
 // ─── Admin Portal — Chinese Translation Dictionary ────────────────────────────
-// DOM-walker approach: translates text nodes inside .lx-admin on language change.
-// Add any new UI string here and it auto-translates everywhere it appears.
+// Known strings are translated instantly from the dictionary.
+// Anything not in the dictionary is sent to Google Translate API automatically.
 // Sorted longest-first so partial matches don't override exact matches.
+
+import { functions } from './firebase';
+import { httpsCallable } from 'firebase/functions';
 
 const ADMIN_ZH = {
   // ── Navigation & Layout ───────────────────────────────────────────────────
@@ -996,11 +999,11 @@ function translateAdminText(value, lang) {
   return translated;
 }
 
-export function translateAdminDom(lang) {
-  if (typeof document === 'undefined') return;
-  const root = document.querySelector('.lx-admin');
-  if (!root) return;
+// Session-level cache: { [pathname]: { [enText]: zhText } }
+const _adminCache = {};
 
+function _collectAdminNodes(root) {
+  const textNodes = [];
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
     acceptNode(node) {
       const parent = node.parentElement;
@@ -1014,24 +1017,91 @@ export function translateAdminDom(lang) {
       return NodeFilter.FILTER_ACCEPT;
     }
   });
+  while (walker.nextNode()) textNodes.push(walker.currentNode);
+  const attrEls = Array.from(root.querySelectorAll('[placeholder], [aria-label], [title]'));
+  return { textNodes, attrEls };
+}
 
-  const nodes = [];
-  while (walker.nextNode()) nodes.push(walker.currentNode);
-  nodes.forEach(node => {
-    if (node.__adminOriginalText === undefined) {
-      node.__adminOriginalText = node.nodeValue;
-    }
-    const nextVal = translateAdminText(node.__adminOriginalText, lang);
-    if (node.nodeValue !== nextVal) node.nodeValue = nextVal;
+function _applyAdminCache(textNodes, attrEls, cache, lang) {
+  textNodes.forEach(node => {
+    if (node.__adminOrig === undefined) node.__adminOrig = node.nodeValue;
+    const target = lang === 'zh' ? (cache[node.__adminOrig] ?? node.__adminOrig) : node.__adminOrig;
+    if (node.nodeValue !== target) node.nodeValue = target;
   });
-
-  root.querySelectorAll('[placeholder], [aria-label], [title]').forEach(el => {
+  attrEls.forEach(el => {
     ['placeholder', 'aria-label', 'title'].forEach(attr => {
       if (!el.hasAttribute(attr)) return;
-      const key = `adminOriginal${attr.replace(/-([a-z])/g, (_, c) => c.toUpperCase())}`;
-      if (!el.dataset[key]) el.dataset[key] = el.getAttribute(attr);
-      const nextVal = translateAdminText(el.dataset[key], lang);
-      if (el.getAttribute(attr) !== nextVal) el.setAttribute(attr, nextVal);
+      if (!el.__adminOrigAttrs) el.__adminOrigAttrs = {};
+      if (el.__adminOrigAttrs[attr] === undefined) el.__adminOrigAttrs[attr] = el.getAttribute(attr);
+      const orig = el.__adminOrigAttrs[attr];
+      const target = lang === 'zh' ? (cache[orig] ?? orig) : orig;
+      if (el.getAttribute(attr) !== target) el.setAttribute(attr, target);
     });
   });
+}
+
+const _translateFn = () => httpsCallable(functions, 'translatePublicPage');
+
+export async function translateAdminDom(lang) {
+  if (typeof document === 'undefined') return;
+  const root = document.querySelector('.lx-admin');
+  if (!root) return;
+
+  if (lang !== 'zh') {
+    const { textNodes, attrEls } = _collectAdminNodes(root);
+    _applyAdminCache(textNodes, attrEls, {}, 'en');
+    return;
+  }
+
+  const { textNodes, attrEls } = _collectAdminNodes(root);
+
+  // Build cache starting from dictionary (instant for known strings)
+  const cacheKey = window.location.pathname;
+  if (!_adminCache[cacheKey]) _adminCache[cacheKey] = {};
+  const cache = _adminCache[cacheKey];
+
+  // Collect originals and pre-fill from dictionary
+  const originals = new Set();
+  textNodes.forEach(node => {
+    if (node.__adminOrig === undefined) node.__adminOrig = node.nodeValue;
+    const t = node.__adminOrig.trim();
+    if (t) {
+      originals.add(t);
+      if (!(t in cache)) {
+        const dict = translateAdminText(t, 'zh');
+        if (dict !== t) cache[t] = dict;
+      }
+    }
+  });
+  attrEls.forEach(el => {
+    ['placeholder', 'aria-label', 'title'].forEach(attr => {
+      if (!el.hasAttribute(attr)) return;
+      if (!el.__adminOrigAttrs) el.__adminOrigAttrs = {};
+      if (el.__adminOrigAttrs[attr] === undefined) el.__adminOrigAttrs[attr] = el.getAttribute(attr);
+      const t = el.__adminOrigAttrs[attr]?.trim();
+      if (t) {
+        originals.add(t);
+        if (!(t in cache)) {
+          const dict = translateAdminText(t, 'zh');
+          if (dict !== t) cache[t] = dict;
+        }
+      }
+    });
+  });
+
+  // Apply dictionary hits immediately so known strings flip instantly
+  _applyAdminCache(textNodes, attrEls, cache, 'zh');
+
+  // Send anything still untranslated to Google API
+  const missing = [...originals].filter(s => !(s in cache));
+  if (missing.length > 0) {
+    try {
+      const result = await _translateFn()({ texts: missing, target: 'zh-CN' });
+      const translations = result.data?.translations || [];
+      missing.forEach((orig, i) => { cache[orig] = translations[i] ?? orig; });
+      _applyAdminCache(textNodes, attrEls, cache, 'zh');
+    } catch (err) {
+      console.warn('Admin translation failed:', err.message);
+    }
+  }
 }

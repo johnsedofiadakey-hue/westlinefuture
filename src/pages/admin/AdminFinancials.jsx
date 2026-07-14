@@ -28,6 +28,12 @@ const PREVIEW_SCALE = 0.54;
 
 export default function AdminFinancials({ invoices = [], transactions = [], clients = [], dbClients = [], brand, deleteInvoice, deleteProposal, ...props }) {
   const [tab, setTab] = useState('overview');
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+  useEffect(() => {
+    const h = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener('resize', h);
+    return () => window.removeEventListener('resize', h);
+  }, []);
   const [showAdd, setShowAdd] = useState(null); // 'invoice' | 'quotation' | 'receipt'
   const [viewInvoice, setViewInvoice] = useState(null);
   const [confirmDeleteItem, setConfirmDeleteItem] = useState(null); // { id, type, label }
@@ -423,7 +429,7 @@ export default function AdminFinancials({ invoices = [], transactions = [], clie
 
       <div className="p-card" style={{ padding: 28, display: 'flex', flexDirection: 'column', gap: 16 }}>
         <SectionHead title="Document Numbering" sub="Prefix codes that appear before document reference numbers" />
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)', gap: 12 }}>
           <PFormField label="Invoice Prefix"><input className="p-inp" value={finSettings.invoicePrefix || 'INV-'} onChange={e => setFinSettings({ ...finSettings, invoicePrefix: e.target.value })} /></PFormField>
           <PFormField label="Quotation Prefix"><input className="p-inp" value={finSettings.quotePrefix || 'QUO-'} onChange={e => setFinSettings({ ...finSettings, quotePrefix: e.target.value })} /></PFormField>
           <PFormField label="Receipt Prefix"><input className="p-inp" value={finSettings.receiptPrefix || 'RCP-'} onChange={e => setFinSettings({ ...finSettings, receiptPrefix: e.target.value })} /></PFormField>
@@ -465,9 +471,34 @@ export default function AdminFinancials({ invoices = [], transactions = [], clie
         </div>
       </div>
 
+      <div className="p-card" style={{ padding: 28, display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <SectionHead title="Onboarding Service Agreement" sub="The design services cooperation agreement every client must read and sign before their project opens in the portal." />
+        <div style={{ padding: '10px 14px', borderRadius: 10, background: '#F0F9FF', border: '1px solid #BAE6FD', fontSize: 12, color: '#0369A1', lineHeight: 1.6, marginBottom: 4 }}>
+          <strong>Leave blank</strong> to use the built-in Design Services Cooperation Agreement (Party A/B details, contents of service, design costs, payment terms, delivery & modification, copyright, general provisions). Client and company details are auto-filled from their account and your brand settings.
+        </div>
+        <textarea
+          className="p-inp"
+          rows={12}
+          placeholder={`DESIGN SERVICES COOPERATION AGREEMENT\n\nParty A (the Client): {{clientName}}\nPhone: {{clientPhone}}\nAddress: {{clientAddress}}\n\nParty B (the Designer): {{companyName}}\n...\n\n— Paste your full agreement text here, or leave blank to use the built-in default. —`}
+          value={finSettings.onboardingAgreementTemplate || ''}
+          onChange={e => setFinSettings({ ...finSettings, onboardingAgreementTemplate: e.target.value })}
+          style={{ resize: 'vertical', fontFamily: 'monospace', fontSize: 12, lineHeight: 1.8 }}
+        />
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <PFormField label="Remittance Account Name"><input className="p-inp" placeholder="Westline Future Ltd." value={finSettings.remitAccountName || ''} onChange={e => setFinSettings({ ...finSettings, remitAccountName: e.target.value })} /></PFormField>
+          <PFormField label="Remittance Account Number"><input className="p-inp" placeholder="0123456789" value={finSettings.remitAccountNumber || ''} onChange={e => setFinSettings({ ...finSettings, remitAccountNumber: e.target.value })} /></PFormField>
+        </div>
+        <div style={{ fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.8 }}>
+          <strong>Supported variables</strong> — auto-replaced when the client views the agreement:{' '}
+          {['{{clientName}}', '{{clientPhone}}', '{{clientAddress}}', '{{companyName}}', '{{companyPhone}}', '{{companyAddress}}', '{{projectTitle}}', '{{budget}}', '{{remitAccountName}}', '{{remitAccountNumber}}', '{{date}}'].map(v => (
+            <code key={v} style={{ background: 'var(--bg-secondary)', padding: '2px 6px', borderRadius: 4, marginRight: 6 }}>{v}</code>
+          ))}
+        </div>
+      </div>
+
       <div className="p-card" style={{ padding: 28, display: 'flex', flexDirection: 'column', gap: 16 }}>
         <SectionHead title="Document Footer & Signature" sub="Text and signatory name shown at the bottom of all documents" />
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr 1fr', gap: 12 }}>
           <PFormField label="Footer Note"><input className="p-inp" placeholder="Thank you for your business." value={finSettings.footerNote || ''} onChange={e => setFinSettings({ ...finSettings, footerNote: e.target.value })} /></PFormField>
           <PFormField label="Signatory Name"><input className="p-inp" placeholder="Finance Director" value={finSettings.signatureName || ''} onChange={e => setFinSettings({ ...finSettings, signatureName: e.target.value })} /></PFormField>
           <PFormField label="Signatory Title / Company"><input className="p-inp" placeholder="Westline Future Ltd." value={finSettings.signatureTitle || ''} onChange={e => setFinSettings({ ...finSettings, signatureTitle: e.target.value })} /></PFormField>
@@ -476,7 +507,7 @@ export default function AdminFinancials({ invoices = [], transactions = [], clie
 
       <div className="p-card" style={{ padding: 28, display: 'flex', flexDirection: 'column', gap: 16 }}>
         <SectionHead title="Dashboard KPI Targets" sub="Benchmarks used for the financial overview pulse cards" />
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(4, 1fr)', gap: 12 }}>
           <PFormField label="Revenue Target"><input className="p-inp" type="number" value={finSettings.kpiTargets?.revenue ?? 500000} onChange={e => setFinSettings(s => ({ ...s, kpiTargets: { ...s.kpiTargets, revenue: parseFloat(e.target.value) } }))} /></PFormField>
           <PFormField label="Pending Ceiling"><input className="p-inp" type="number" value={finSettings.kpiTargets?.pending ?? 100000} onChange={e => setFinSettings(s => ({ ...s, kpiTargets: { ...s.kpiTargets, pending: parseFloat(e.target.value) } }))} /></PFormField>
           <PFormField label="Open Tenders Target"><input className="p-inp" type="number" value={finSettings.kpiTargets?.quotes ?? 20} onChange={e => setFinSettings(s => ({ ...s, kpiTargets: { ...s.kpiTargets, quotes: parseFloat(e.target.value) } }))} /></PFormField>
@@ -700,7 +731,7 @@ export default function AdminFinancials({ invoices = [], transactions = [], clie
 
     return (
       <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(4, 1fr)', gap: 14 }}>
           {[
             { label: 'Total Revenue',  value: fmt(totalRevenue), color: '#16A34A', bg: '#F0FDF4' },
             { label: 'Total COGS',     value: fmt(totalCOGSAll), color: '#DC2626', bg: '#FEF2F2' },
@@ -730,8 +761,8 @@ export default function AdminFinancials({ invoices = [], transactions = [], clie
               <div style={{ fontSize: 12, color: '#DFD9D1' }}>Open a project in the Operations tab and fill in the Project Economics panel.</div>
             </div>
           ) : (
-            <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+              <table style={{ width: '100%', minWidth: isMobile ? 760 : 'auto', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr style={{ background: 'var(--bg-secondary)' }}>
                     {['Project','Sale Price','Product Cost','Shipping','Installation','COGS','Gross Profit','Margin'].map(h => (
@@ -824,14 +855,14 @@ export default function AdminFinancials({ invoices = [], transactions = [], clie
       {tab === 'overview' && (
         <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
           {/* KPI Cards */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(4, 1fr)', gap: 14 }}>
             <PulseTargetCard label="VERIFIED CASH"     value={formatMoney(stats.revenue)}      target={finSettings.kpiTargets?.revenue ?? 500000}  icon={<TrendingUp size={20}/>} color="#16A34A"               trend={18} sub="Settled payments" />
             <PulseTargetCard label="UNSETTLED CAPITAL" value={formatMoney(stats.pending)}       target={finSettings.kpiTargets?.pending ?? 100000}  icon={<Wallet size={20}/>}     color={ac}                    trend={-5} sub="Active invoices" />
             <PulseTargetCard label="OPEN TENDERS"      value={stats.quotes}                     target={finSettings.kpiTargets?.quotes ?? 20}       icon={<FileText size={20}/>}   color="var(--accent-secondary)" trend={12} sub={`Value: ${formatMoney(quoteRows.filter(p => ['Pending','pending'].includes(p.status)).reduce((a,b) => a + (parseAmount(b.amount)||0), 0))}`} />
             <PulseTargetCard label="ONE-TIME SALES"    value={formatMoney(stats.oneTimeSales)}  target={finSettings.kpiTargets?.conversion ?? 90}   icon={<ShieldCheck size={20}/>} color={ac}                   trend={4}  sub={`${stats.receipts} receipts issued`} />
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 24 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '2fr 1fr', gap: 24 }}>
             {/* Audit Log */}
             <div className="p-card" style={{ padding: 24 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
@@ -921,6 +952,54 @@ export default function AdminFinancials({ invoices = [], transactions = [], clie
               <button onClick={() => startDocument(tab === 'sales' ? 'invoice' : 'quotation')} className="p-btn-dark" style={{ height: 38, padding: '0 18px', fontSize: 12 }}>+ Create New</button>
             </div>
           </div>
+          {isMobile ? (
+            /* MOBILE CARD LIST */
+            <div style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {(tab === 'sales' ? invoices : quoteRows).length === 0 && (
+                <EmptyState
+                  icon={<Receipt size={28}/>}
+                  title={tab === 'sales' ? 'No invoices yet' : 'No quotations yet'}
+                  description={tab === 'sales' ? 'Create your first invoice to start tracking revenue.' : 'Send a quotation to a client to begin a project.'}
+                  action={{ label: `+ Create ${tab === 'sales' ? 'Invoice' : 'Quotation'}`, onClick: () => startDocument(tab === 'sales' ? 'invoice' : 'quotation') }}
+                />
+              )}
+              {(tab === 'sales' ? invoices : quoteRows).map(item => (
+                <div key={item.id} style={{ background: 'var(--bg-secondary)', borderRadius: 14, padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 700 }}>
+                        {item.client || item.clientName}
+                        {item.version > 1 && <span style={{ fontSize: 10, background: ac, color: '#fff', padding: '2px 6px', borderRadius: 8, marginLeft: 6 }}>v{item.version}</span>}
+                      </div>
+                      <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 2 }}>{item.clientEmail || item.title || '—'}</div>
+                    </div>
+                    <SBadge s={item.status}/>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                      <div style={{ fontSize: 18, fontWeight: 900 }}>{item.amount}</div>
+                      <div style={{ fontSize: 10, color: 'var(--text-secondary)' }}>{item.currency || 'GHS'} · {item.date}</div>
+                    </div>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button onClick={() => setViewInvoice(item)} style={{ width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 10, background: '#fff', border: '1px solid var(--border-color)', cursor: 'pointer' }}><Eye size={15}/></button>
+                      {tab === 'sales' && props.updateInvoice && (
+                        <button onClick={() => { const curAmt = item.amountPaid || 0; const totalAmt = parseFloat(String(item.amount || '0').replace(/[^0-9.]/g, '')) || 0; setUpdatePaymentModal({ item, totalAmt, inputVal: String(curAmt) }); }}
+                          style={{ width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 10, background: '#ECFDF5', border: '1px solid #A7F3D0', cursor: 'pointer', color: '#059669' }}><DollarSign size={15}/></button>
+                      )}
+                      {tab !== 'sales' && (
+                        <button onClick={() => { const newDraft = { ...item, id: undefined, version: (item.version || 1) + 1, previousVersionId: item.id, date: new Date().toISOString().slice(0,10), status: 'pending' }; setDraft(newDraft); setShowAdd('quotation'); }}
+                          style={{ width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 10, background: '#fff', border: '1px solid var(--border-color)', cursor: 'pointer' }}><Layers size={14}/></button>
+                      )}
+                      <button onClick={() => setConfirmDeleteItem({ id: item.id, type: (tab === 'sales' || item._sourceCollection === 'invoices') ? 'invoice' : 'quotation', label: tab === 'sales' ? 'invoice' : 'quotation' })}
+                        style={{ width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 10, background: '#FEF2F2', border: '1px solid #FECACA', cursor: 'pointer', color: '#DC2626' }}><Trash2 size={14}/></button>
+                    </div>
+                  </div>
+                  <div style={{ fontSize: 10, fontFamily: 'monospace', color: 'var(--text-secondary)', fontWeight: 700 }}>{(item.id || '').slice(0, 16).toUpperCase()}</div>
+                </div>
+              ))}
+            </div>
+          ) : (
+          /* DESKTOP TABLE */
           <div className="p-scroll" style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
@@ -995,6 +1074,7 @@ export default function AdminFinancials({ invoices = [], transactions = [], clie
               </tbody>
             </table>
           </div>
+          )}
         </div>
       )}
 
@@ -1004,15 +1084,15 @@ export default function AdminFinancials({ invoices = [], transactions = [], clie
       {/* ── BANKING TAB ── */}
       {tab === 'banking' && (
         <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-          <div className="p-card" style={{ padding: '48px 60px', textAlign: 'center' }}>
+          <div className="p-card" style={{ padding: isMobile ? '32px 20px' : '48px 60px', textAlign: 'center' }}>
             <div style={{ width: 80, height: 80, borderRadius: '50%', background: `${ac}12`, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 24px' }}>
               <ShieldCheck size={40} color={ac} />
             </div>
-            <h3 className="lxfh" style={{ fontSize: 28, marginBottom: 12 }}>Official Audit Trail</h3>
+            <h3 className="lxfh" style={{ fontSize: isMobile ? 22 : 28, marginBottom: 12 }}>Official Audit Trail</h3>
             <p style={{ color: 'var(--text-secondary)', maxWidth: 540, margin: '0 auto 40px', fontSize: 14, lineHeight: 1.7 }}>
               Synchronize your corporate bank accounts for real-time reconciliation and automated financial reporting across dual currencies.
             </p>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 20, maxWidth: 800, margin: '0 auto' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)', gap: 20, maxWidth: 800, margin: '0 auto' }}>
               {[
                 { icon: <Landmark size={22} color={ac}/>, title: 'Settlement Accounts', sub: 'EcoBank, Zenith, & Stripe connected.' },
                 { icon: <CreditCard size={22} color="#16A34A"/>, title: 'VAT & Tax Compliance', sub: 'Real-time export to Tax Authority.' },
@@ -1057,16 +1137,16 @@ export default function AdminFinancials({ invoices = [], transactions = [], clie
             </div>
           </div>
 
-          {/* Studio Body: Editor (flex 1) + Preview (fixed 480px) */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 480px', flex: 1, overflow: 'hidden', minHeight: 0 }}>
+          {/* Studio Body: Editor (flex 1) + Preview (fixed 480px on desktop, stacked full-width on mobile) */}
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 480px', flex: 1, overflow: isMobile ? 'auto' : 'hidden', minHeight: 0 }}>
 
             {/* ── LEFT: FORM EDITOR ── */}
-            <div style={{ overflowY: 'auto', padding: '28px 36px', display: 'flex', flexDirection: 'column', gap: 24 }} className="no-scrollbar">
+            <div style={{ overflowY: isMobile ? 'visible' : 'auto', padding: isMobile ? '20px 16px' : '28px 36px', display: 'flex', flexDirection: 'column', gap: 24 }} className="no-scrollbar">
 
               {/* Document type selector — SINGLE merged row */}
               <div>
                 <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 10 }}>Document Type</div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(4, 1fr)', gap: 10 }}>
                   {DOC_TYPES.map(d => (
                     <button
                       key={d.id}
@@ -1088,7 +1168,7 @@ export default function AdminFinancials({ invoices = [], transactions = [], clie
               </div>
 
               {/* Client Details */}
-              <div style={{ display: 'grid', gridTemplateColumns: draft.invoiceType === 'project' ? '1fr 1fr' : '1fr', gap: 16 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: (!isMobile && draft.invoiceType === 'project') ? '1fr 1fr' : '1fr', gap: 16 }}>
                 {draft.invoiceType === 'project' ? (
                   <PFormField label="Select Project">
                     <select className="p-inp" value={draft.projectId} onChange={e => {
@@ -1119,14 +1199,14 @@ export default function AdminFinancials({ invoices = [], transactions = [], clie
                         <input className="p-inp" placeholder="Email (optional)" value={draft.clientEmail} onChange={e => setDraft({ ...draft, clientEmail: e.target.value })} />
                       </div>
                     </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr 1fr', gap: 8 }}>
                       <input className="p-inp" placeholder="Company (optional)" value={draft.clientCompany} onChange={e => setDraft({ ...draft, clientCompany: e.target.value })} />
                       <input className="p-inp" placeholder="Tax ID / VAT (optional)" value={draft.clientTaxId} onChange={e => setDraft({ ...draft, clientTaxId: e.target.value })} />
                       <input className="p-inp" placeholder="Billing address (optional)" value={draft.clientAddress} onChange={e => setDraft({ ...draft, clientAddress: e.target.value })} />
                     </div>
                   </div>
                 )}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr 1fr', gap: 10 }}>
                   <PFormField label="Currency">
                     <select className="p-inp" value={draft.currency} onChange={e => setDraft({ ...draft, currency: e.target.value })}>
                       <option value="GHS">GHS (GH₵)</option>
@@ -1184,42 +1264,46 @@ export default function AdminFinancials({ invoices = [], transactions = [], clie
                     </div>
                   )}
 
-                  {/* Modern Spreadsheet Column headers */}
-                  <div style={{ display: 'grid', gridTemplateColumns: itemCols, gap: 12, marginBottom: 8, padding: '10px 16px', background: '#F8FAFC', borderTop: '1px solid #E2E8F0', borderBottom: '1px solid #E2E8F0', alignItems: 'center' }}>
-                    <div style={{ fontSize: 10, fontWeight: 800, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '.06em' }}>Item Type & Description</div>
-                    <div style={{ fontSize: 10, fontWeight: 800, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '.06em', textAlign: 'center' }}>Qty</div>
-                    <div style={{ fontSize: 10, fontWeight: 800, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '.06em' }}>Unit</div>
-                    <div style={{ fontSize: 10, fontWeight: 800, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '.06em' }}>Rate</div>
-                    <div style={{ fontSize: 10, fontWeight: 800, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '.06em' }}>Discount</div>
-                    <div style={{ fontSize: 10, fontWeight: 800, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '.06em', textAlign: 'right' }}>Amount</div>
-                    <div></div>
-                  </div>
-
-                  {/* Item rows */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '8px 4px' }}>
-                    {draft.items.map((it, idx) => (
-                      <div key={it.id} style={{ display: 'grid', gridTemplateColumns: itemCols, gap: 12, alignItems: 'center', background: '#fff', border: '1px solid #E2E8F0', borderRadius: 8, padding: '8px 12px', transition: 'box-shadow 0.2s' }} className="hover-lift">
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                          <div style={{ display: 'flex', gap: 4, background: '#F1F5F9', padding: '4px', borderRadius: 6, width: 'fit-content' }}>
-                            <button onClick={() => { const ni = [...draft.items]; ni[idx].type = 'product'; setDraft({ ...draft, items: ni }); }} style={{ fontSize: 10, padding: '4px 8px', borderRadius: 4, border: 'none', background: it.type !== 'service' ? '#fff' : 'transparent', color: it.type !== 'service' ? ac : '#64748B', fontWeight: it.type !== 'service' ? 800 : 600, cursor: 'pointer', boxShadow: it.type !== 'service' ? '0 1px 2px rgba(0,0,0,0.1)' : 'none' }}>Product</button>
-                            <button onClick={() => { const ni = [...draft.items]; ni[idx].type = 'service'; setDraft({ ...draft, items: ni }); }} style={{ fontSize: 10, padding: '4px 8px', borderRadius: 4, border: 'none', background: it.type === 'service' ? '#fff' : 'transparent', color: it.type === 'service' ? ac : '#64748B', fontWeight: it.type === 'service' ? 800 : 600, cursor: 'pointer', boxShadow: it.type === 'service' ? '0 1px 2px rgba(0,0,0,0.1)' : 'none' }}>Service</button>
-                          </div>
-                          <textarea className="p-inp" rows={1} placeholder={it.type === 'service' ? "Describe the service..." : "Item description…"} value={it.desc} onChange={e => { const ni = [...draft.items]; ni[idx].desc = e.target.value; setDraft({ ...draft, items: ni }); }} style={{ resize: 'vertical', minHeight: 40, padding: '8px 12px', fontSize: 12, border: 'none', background: '#F8FAFC' }} />
-                        </div>
-                        <input className="p-inp" type="number" placeholder="1" value={it.qty} onChange={e => { const ni = [...draft.items]; ni[idx].qty = parseFloat(e.target.value); setDraft({ ...draft, items: ni }); }} style={{ padding: '0 8px', textAlign: 'center', height: 38 }} />
-                        <input className="p-inp" placeholder={it.type === 'service' ? "job" : "pcs"} value={it.unit} onChange={e => { const ni = [...draft.items]; ni[idx].unit = e.target.value; setDraft({ ...draft, items: ni }); }} style={{ padding: '0 8px', height: 38 }} />
-                        <input className="p-inp" type="number" placeholder="0.00" value={it.rate} onChange={e => { const ni = [...draft.items]; ni[idx].rate = parseFloat(e.target.value); setDraft({ ...draft, items: ni }); }} style={{ padding: '0 8px', height: 38 }} />
-                        <input className="p-inp" type="number" placeholder="0.00" value={it.discount || ''} onChange={e => { const ni = [...draft.items]; ni[idx].discount = parseFloat(e.target.value) || 0; setDraft({ ...draft, items: ni }); }} style={{ padding: '0 8px', height: 38 }} />
-                        <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--accent-secondary)', textAlign: 'right', paddingRight: 4 }}>{formatMoney(lineTotal(it), draft.currency)}</div>
-                        <button onClick={() => setDraft({ ...draft, items: draft.items.filter(x => x.id !== it.id) })} disabled={draft.items.length <= 1} style={{ background: 'none', border: 'none', color: '#EF4444', cursor: draft.items.length > 1 ? 'pointer' : 'default', opacity: draft.items.length > 1 ? 1 : 0.2, width: 34, height: 34, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                          <Trash2 size={15}/>
-                        </button>
+                  {/* Modern Spreadsheet Column headers + rows — scroll horizontally on mobile instead of squishing */}
+                  <div style={{ overflowX: isMobile ? 'auto' : 'visible', WebkitOverflowScrolling: 'touch' }}>
+                    <div style={{ minWidth: isMobile ? 620 : 'auto' }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: itemCols, gap: 12, marginBottom: 8, padding: '10px 16px', background: '#F8FAFC', borderTop: '1px solid #E2E8F0', borderBottom: '1px solid #E2E8F0', alignItems: 'center' }}>
+                        <div style={{ fontSize: 10, fontWeight: 800, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '.06em' }}>Item Type & Description</div>
+                        <div style={{ fontSize: 10, fontWeight: 800, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '.06em', textAlign: 'center' }}>Qty</div>
+                        <div style={{ fontSize: 10, fontWeight: 800, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '.06em' }}>Unit</div>
+                        <div style={{ fontSize: 10, fontWeight: 800, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '.06em' }}>Rate</div>
+                        <div style={{ fontSize: 10, fontWeight: 800, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '.06em' }}>Discount</div>
+                        <div style={{ fontSize: 10, fontWeight: 800, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '.06em', textAlign: 'right' }}>Amount</div>
+                        <div></div>
                       </div>
-                    ))}
+
+                      {/* Item rows */}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '8px 4px' }}>
+                        {draft.items.map((it, idx) => (
+                          <div key={it.id} style={{ display: 'grid', gridTemplateColumns: itemCols, gap: 12, alignItems: 'center', background: '#fff', border: '1px solid #E2E8F0', borderRadius: 8, padding: '8px 12px', transition: 'box-shadow 0.2s' }} className="hover-lift">
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                              <div style={{ display: 'flex', gap: 4, background: '#F1F5F9', padding: '4px', borderRadius: 6, width: 'fit-content' }}>
+                                <button onClick={() => { const ni = [...draft.items]; ni[idx].type = 'product'; setDraft({ ...draft, items: ni }); }} style={{ fontSize: 10, padding: '4px 8px', borderRadius: 4, border: 'none', background: it.type !== 'service' ? '#fff' : 'transparent', color: it.type !== 'service' ? ac : '#64748B', fontWeight: it.type !== 'service' ? 800 : 600, cursor: 'pointer', boxShadow: it.type !== 'service' ? '0 1px 2px rgba(0,0,0,0.1)' : 'none' }}>Product</button>
+                                <button onClick={() => { const ni = [...draft.items]; ni[idx].type = 'service'; setDraft({ ...draft, items: ni }); }} style={{ fontSize: 10, padding: '4px 8px', borderRadius: 4, border: 'none', background: it.type === 'service' ? '#fff' : 'transparent', color: it.type === 'service' ? ac : '#64748B', fontWeight: it.type === 'service' ? 800 : 600, cursor: 'pointer', boxShadow: it.type === 'service' ? '0 1px 2px rgba(0,0,0,0.1)' : 'none' }}>Service</button>
+                              </div>
+                              <textarea className="p-inp" rows={1} placeholder={it.type === 'service' ? "Describe the service..." : "Item description…"} value={it.desc} onChange={e => { const ni = [...draft.items]; ni[idx].desc = e.target.value; setDraft({ ...draft, items: ni }); }} style={{ resize: 'vertical', minHeight: 40, padding: '8px 12px', fontSize: 12, border: 'none', background: '#F8FAFC' }} />
+                            </div>
+                            <input className="p-inp" type="number" placeholder="1" value={it.qty} onChange={e => { const ni = [...draft.items]; ni[idx].qty = parseFloat(e.target.value); setDraft({ ...draft, items: ni }); }} style={{ padding: '0 8px', textAlign: 'center', height: 38 }} />
+                            <input className="p-inp" placeholder={it.type === 'service' ? "job" : "pcs"} value={it.unit} onChange={e => { const ni = [...draft.items]; ni[idx].unit = e.target.value; setDraft({ ...draft, items: ni }); }} style={{ padding: '0 8px', height: 38 }} />
+                            <input className="p-inp" type="number" placeholder="0.00" value={it.rate} onChange={e => { const ni = [...draft.items]; ni[idx].rate = parseFloat(e.target.value); setDraft({ ...draft, items: ni }); }} style={{ padding: '0 8px', height: 38 }} />
+                            <input className="p-inp" type="number" placeholder="0.00" value={it.discount || ''} onChange={e => { const ni = [...draft.items]; ni[idx].discount = parseFloat(e.target.value) || 0; setDraft({ ...draft, items: ni }); }} style={{ padding: '0 8px', height: 38 }} />
+                            <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--accent-secondary)', textAlign: 'right', paddingRight: 4 }}>{formatMoney(lineTotal(it), draft.currency)}</div>
+                            <button onClick={() => setDraft({ ...draft, items: draft.items.filter(x => x.id !== it.id) })} disabled={draft.items.length <= 1} style={{ background: 'none', border: 'none', color: '#EF4444', cursor: draft.items.length > 1 ? 'pointer' : 'default', opacity: draft.items.length > 1 ? 1 : 0.2, width: 34, height: 34, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                              <Trash2 size={15}/>
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
                   </div>
 
                   {/* Totals + Notes */}
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 280px', gap: 20, marginTop: 24, paddingTop: 20, borderTop: '1.5px solid var(--border-color)' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 280px', gap: 20, marginTop: 24, paddingTop: 20, borderTop: '1.5px solid var(--border-color)' }}>
                     <PFormField label="Customer Notes / Instructions">
                       <textarea className="p-inp" rows={3} placeholder="Thanks for your business!" value={draft.notes || ''} onChange={e => setDraft({ ...draft, notes: e.target.value })} style={{ resize: 'vertical', fontSize: 12 }} />
                     </PFormField>

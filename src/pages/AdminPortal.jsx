@@ -53,9 +53,14 @@ export default function AdminPortal({ user, onLogout, onPreview, content, setCon
   };
 
   const renderView = () => {
-    const STAFF_ALLOWED_VIEWS = ['client-hub', 'operations'];
-    if (staffMode && !STAFF_ALLOWED_VIEWS.includes(view)) {
+    const staffPermissions = user?.permissions || [];
+    const ADMIN_ONLY_VIEWS = ['staff', 'system'];
+    if (staffMode && ADMIN_ONLY_VIEWS.includes(view)) {
       setTimeout(() => handleSetView('operations'), 0);
+      return null;
+    }
+    if (staffMode && view !== 'client-hub' && staffPermissions.length > 0 && !staffPermissions.includes(view)) {
+      setTimeout(() => handleSetView(staffPermissions[0] || 'operations'), 0);
       return null;
     }
 
@@ -75,7 +80,8 @@ export default function AdminPortal({ user, onLogout, onPreview, content, setCon
       ? allClients.filter(c => {
           const workers = c.assignedWorkers || [];
           const staff   = c.assignedStaff   || [];
-          const combined = [...workers, ...staff];
+          const pms     = c.projectManagerIds || (c.projectManagerId ? [c.projectManagerId] : []);
+          const combined = [...workers, ...staff, ...pms];
           return (
             c.assignedTo === staffUid ||
             combined.includes(staffUid) ||

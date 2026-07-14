@@ -1,7 +1,8 @@
 import React, { useRef, useState, useEffect } from 'react';
-import { FileText, Download, PenTool, CheckCircle, X, ShieldCheck } from 'lucide-react';
+import { FileText, Download, PenTool, CheckCircle, X, ShieldCheck, Trash2 } from 'lucide-react';
 import { httpsCallable } from 'firebase/functions';
-import { functions } from '../lib/firebase';
+import { deleteDoc, doc } from 'firebase/firestore';
+import { functions, db } from '../lib/firebase';
 
 const formatDate = (ts, includeTime = false) => {
   if (!ts) return 'Unknown Date';
@@ -160,6 +161,11 @@ export default function SecureVault({ projectId, user, readOnly = false, onAdmin
   const pendingDocs = documents.filter(d => d.requiresSignature && !d.signatureData);
   const otherDocs = documents.filter(d => !d.requiresSignature || d.signatureData);
 
+  const handleDelete = async (docId) => {
+    if (!window.confirm('Delete this vault document? This cannot be undone.')) return;
+    await deleteDoc(doc(db, 'projects', projectId, 'vault', docId));
+  };
+
   const handleAdminUpload = async (e) => {
     const file = e.target.files?.[0];
     if (!file || !onAdminUploadVault) return;
@@ -238,7 +244,7 @@ export default function SecureVault({ projectId, user, readOnly = false, onAdmin
                     <div style={{ fontSize: 12, color: '#A16207' }}>Uploaded {formatDate(doc.uploadedAt)}</div>
                   </div>
                 </div>
-                <div style={{ display: 'flex', gap: 8 }}>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                   {doc.url && (
                     <a href={doc.url} target="_blank" rel="noopener noreferrer" style={{ padding: '8px 12px', background: '#fff', border: '1px solid #FDE047', borderRadius: 8, fontSize: 12, fontWeight: 700, color: '#A16207', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 6 }}>
                       <FileText size={14} /> Review
@@ -247,6 +253,11 @@ export default function SecureVault({ projectId, user, readOnly = false, onAdmin
                   {!readOnly && (
                     <button onClick={() => setSigningDoc(doc)} style={{ padding: '8px 16px', background: '#CA8A04', border: 'none', borderRadius: 8, fontSize: 12, fontWeight: 700, color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
                       <PenTool size={14} /> Sign Now
+                    </button>
+                  )}
+                  {onAdminUploadVault && (
+                    <button onClick={() => handleDelete(doc.id)} style={{ width: 32, height: 32, borderRadius: 8, background: '#FEF2F2', border: '1px solid #FECACA', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#DC2626', flexShrink: 0 }} title="Delete">
+                      <Trash2 size={14} />
                     </button>
                   )}
                 </div>
@@ -273,11 +284,18 @@ export default function SecureVault({ projectId, user, readOnly = false, onAdmin
                     </div>
                   </div>
                 </div>
-                {doc.url && (
-                  <a href={doc.url} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--text-secondary)', padding: 4 }}>
-                    <Download size={16} />
-                  </a>
-                )}
+                <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                  {doc.url && (
+                    <a href={doc.url} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--text-secondary)', padding: 4 }}>
+                      <Download size={16} />
+                    </a>
+                  )}
+                  {onAdminUploadVault && (
+                    <button onClick={() => handleDelete(doc.id)} style={{ width: 28, height: 28, borderRadius: 8, background: '#FEF2F2', border: '1px solid #FECACA', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#DC2626', flexShrink: 0 }} title="Delete">
+                      <Trash2 size={12} />
+                    </button>
+                  )}
+                </div>
               </div>
               {doc.requiresSignature && doc.signatureData && (
                 <div style={{ padding: 12, background: '#F0FDF4', borderRadius: 8, border: '1px dashed #BBF7D0', display: 'flex', flexDirection: 'column', gap: 8 }}>

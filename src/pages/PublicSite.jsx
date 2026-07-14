@@ -455,7 +455,7 @@ function StatsBarMobile({ brand, stats }) {
 const DEFAULT_WHY_US = [
   { Icon: ShieldCheck, title: 'Guaranteed Quality',    desc: 'Every installation backed by a 2-year workmanship warranty and certified materials from vetted manufacturers.' },
   { Icon: Clock,       title: 'On-Time Delivery',      desc: 'Our dedicated logistics team tracks every shipment. 94% of projects completed on or ahead of schedule.' },
-  { Icon: Globe2,      title: 'Direct China Sourcing', desc: 'We cut out middlemen. Factory-direct procurement means premium glass at 20–35% below market rates.' },
+  { Icon: Globe2,      title: 'Direct China Sourcing', desc: 'We cut out middlemen. Factory-direct procurement means premium materials at 20–35% below market rates.' },
   { Icon: Wrench,      title: 'Technical Expertise',   desc: 'CNC precision, sub-millimeter tolerances. Our engineers have handled façades, curtain walls, and interior systems for 12+ years.' },
 ];
 
@@ -515,7 +515,7 @@ function WhyWestline({ brand, navigate, reasons }) {
 
 // --- TESTIMONIALS ---
 const DEFAULT_TESTIMONIALS = [
-  { author: 'Kwame Asante',      text: 'Westline Future transformed our office with exceptional precision. The structural glazing exceeded every expectation — on time and on budget.',  projectTitle: 'Airport Hills Commercial Tower',  rating: 5 },
+  { author: 'Kwame Asante',      text: 'Westline Future transformed our office with exceptional precision. The interior finishing exceeded every expectation — on time and on budget.',  projectTitle: 'Airport Hills Commercial Tower',  rating: 5 },
   { author: 'Adwoa Mensah',      text: 'From site survey to final polish, the team was professional throughout. Sourcing directly from China kept costs reasonable without compromising on quality.', projectTitle: 'East Legon Residence',           rating: 5 },
   { author: 'Richard Osei-Bonsu', text: 'The bespoke kitchen installation is flawless. Their CAD team got every measurement right, and installation was completed in under a week.', projectTitle: 'Cantonments Luxury Kitchen',       rating: 5 },
 ];

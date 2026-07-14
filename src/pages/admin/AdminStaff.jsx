@@ -1,10 +1,10 @@
-import React, { useState } from 'react';
-import { Plus, Trash2, ShieldCheck, Award, HardHat, Heart, UserPlus, Eye, EyeOff, Copy, Check, X, Users, UserCog, Search, KeyRound, MessageCircle, AlertTriangle, Loader2, RefreshCw } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Plus, Trash2, ShieldCheck, Award, HardHat, Heart, UserPlus, Eye, EyeOff, Copy, Check, X, Users, UserCog, Search, KeyRound, MessageCircle, AlertTriangle, Loader2, RefreshCw, Shield, Settings } from 'lucide-react';
 import { PAv, PSBadge, CountryPicker, COUNTRIES } from '../../components/Shared';
 import { db, firebaseConfig, functions } from '../../lib/firebase';
 import { initializeApp, deleteApp } from 'firebase/app';
 import { getAuth, signInWithEmailAndPassword, updatePassword, sendPasswordResetEmail } from 'firebase/auth';
-import { doc, updateDoc } from 'firebase/firestore';
+import { doc, updateDoc, onSnapshot, setDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 
 const BADGES = [
@@ -14,7 +14,48 @@ const BADGES = [
   { id: 'firstaid', label: 'First Aid', icon: <Heart size={12} />, color: '#EF4444' }
 ];
 
-const STAFF_ROLES = ['Project Manager', 'Site Supervisor', 'Technical Team Lead', 'Field Installer', 'Finance Officer', 'Procurement Lead', 'Admin Assistant', 'Senior Technician', 'Technician', 'Field Worker'];
+const STAFF_ROLES = ['Project Manager', 'Site Supervisor', 'Technical Team Lead', 'Field Installer', 'Finance Officer', 'Procurement Lead', 'Admin Assistant', 'Senior Technician', 'Technician', 'Field Worker', 'Admin Specialist', 'General Manager', 'Customer Service', 'Site Surveyor', 'Design Director', 'Design Supervisor', 'Interior Designer', 'Deputy Manager', 'Purchasing Specialist', 'Cost Estimator', 'Foreman'];
+
+// To retire a role later: remove its name from STAFF_ROLES above only.
+// Never delete its entry in ROLE_PROFILES/ROLE_PERMISSION_PRESETS below —
+// staff already assigned that role still need it to resolve correctly.
+
+const PORTAL_PERMISSIONS = [
+  { id: 'dash',         label: 'Dashboard',         desc: 'Overview KPIs and system health' },
+  { id: 'analytics',   label: 'Analytics',          desc: 'Revenue, margin, and business data' },
+  { id: 'operations',  label: 'Client Directory',   desc: 'View and manage client accounts' },
+  { id: 'projects',    label: 'Project Board',      desc: 'Kanban and project tracking' },
+  { id: 'installations', label: 'Field Operations', desc: 'Installation jobs and site management' },
+  { id: 'logistics',   label: 'Supply Chain',       desc: 'Shipments, containers, logistics' },
+  { id: 'email',       label: 'Inquiry Queue',      desc: 'Incoming leads and inquiry management' },
+  { id: 'financials',  label: 'Payments',           desc: 'Invoices, receipts, and financial records' },
+  { id: 'cms',         label: 'Showcase & Website', desc: 'CMS, portfolio, and marketing content' },
+  { id: 'product-sync', label: 'Product Catalog',  desc: 'Product sync and catalog management' },
+];
+
+const ALL_PERMISSION_IDS = PORTAL_PERMISSIONS.map(p => p.id);
+const DEFAULT_PERMISSIONS = ['operations', 'projects'];
+
+// Default portal-tab permissions per role — pre-selected when a role is picked,
+// admin can still adjust before saving. Workers always end up with [].
+const ROLE_PERMISSION_PRESETS = {
+  'Project Manager':     ['operations', 'projects', 'installations', 'logistics', 'email'],
+  'Site Supervisor':     ['operations', 'projects', 'installations'],
+  'Finance Officer':     ['financials', 'analytics', 'operations'],
+  'Procurement Lead':    ['logistics', 'projects', 'product-sync'],
+  'Admin Assistant':     ['operations', 'email'],
+  'Admin Specialist':    ['operations', 'email', 'projects'],
+  'General Manager':     ['dash', 'analytics', 'operations', 'projects', 'installations', 'logistics', 'email', 'financials', 'cms', 'product-sync'],
+  'Customer Service':    ['operations', 'email'],
+  'Site Surveyor':       ['operations', 'projects', 'installations'],
+  'Design Director':     ['dash', 'cms', 'projects', 'operations'],
+  'Design Supervisor':   ['cms', 'projects'],
+  'Interior Designer':   ['cms', 'projects'],
+  'Deputy Manager':      ['dash', 'operations', 'projects', 'installations', 'logistics', 'financials'],
+  'Purchasing Specialist': ['logistics', 'product-sync', 'projects'],
+  'Cost Estimator':      ['financials', 'analytics', 'projects'],
+  'Foreman':             ['installations', 'projects'],
+};
 
 const ROLE_PROFILES = {
   'Project Manager': {
@@ -86,10 +127,92 @@ const ROLE_PROFILES = {
     modules: ['Clients', 'Documents', 'Messages', 'Activity Logs'],
     onboarding: ['Review intake checklist', 'Assign manager', 'Confirm client data rules'],
     systemRole: 'staff'
+  },
+  'Admin Specialist': {
+    description: 'Handles day-to-day admin operations, intake, and client record accuracy.',
+    accessScope: 'CRM and assigned admin tasks',
+    modules: ['Clients', 'Documents', 'Messages', 'Inquiries'],
+    onboarding: ['Review intake checklist', 'Assign manager', 'Confirm client data rules'],
+    systemRole: 'staff'
+  },
+  'General Manager': {
+    description: 'Senior oversight across projects, finances, and operations company-wide.',
+    accessScope: 'All clients and all projects',
+    modules: ['Dashboard', 'Analytics', 'Clients', 'Projects', 'Installations', 'Logistics', 'Financials', 'CMS', 'Product Catalog'],
+    onboarding: ['Review company KPIs', 'Confirm escalation authority', 'Review financial reporting access'],
+    systemRole: 'staff'
+  },
+  'Customer Service': {
+    description: 'Handles client inquiries, support requests, and first-line communication.',
+    accessScope: 'Client directory and inquiry queue',
+    modules: ['Clients', 'Inquiries', 'Messages'],
+    onboarding: ['Review support scripts', 'Confirm escalation contacts', 'Review response SLAs'],
+    systemRole: 'staff'
+  },
+  'Site Surveyor': {
+    description: 'Conducts technical site surveys and measurements ahead of design and installation.',
+    accessScope: 'Assigned projects and installation sites',
+    modules: ['Projects', 'Installations', 'Site Visits', 'Photos'],
+    onboarding: ['Assign survey schedule', 'Confirm measurement standards', 'Review upload flow'],
+    systemRole: 'staff'
+  },
+  'Design Director': {
+    description: 'Leads the design team, sets creative direction, and approves final design output.',
+    accessScope: 'All design projects and showcase content',
+    modules: ['Dashboard', 'Showcase & Website', 'Projects', 'Clients'],
+    onboarding: ['Review brand guidelines', 'Confirm approval authority', 'Review portfolio standards'],
+    systemRole: 'staff'
+  },
+  'Design Supervisor': {
+    description: 'Oversees design execution and quality across assigned projects.',
+    accessScope: 'Assigned design projects',
+    modules: ['Showcase & Website', 'Projects'],
+    onboarding: ['Assign design team', 'Review quality checklist', 'Confirm delivery timelines'],
+    systemRole: 'staff'
+  },
+  'Interior Designer': {
+    description: 'Produces design concepts, renderings, and specifications for client projects.',
+    accessScope: 'Assigned design projects',
+    modules: ['Showcase & Website', 'Projects'],
+    onboarding: ['Assign active projects', 'Review design software access', 'Confirm delivery format'],
+    systemRole: 'staff'
+  },
+  'Deputy Manager': {
+    description: 'Second-in-command across operations, deputizing for the General Manager as needed.',
+    accessScope: 'All clients and all projects',
+    modules: ['Dashboard', 'Clients', 'Projects', 'Installations', 'Logistics', 'Financials'],
+    onboarding: ['Review escalation authority', 'Confirm reporting lines', 'Review financial visibility'],
+    systemRole: 'staff'
+  },
+  'Purchasing Specialist': {
+    description: 'Manages supplier purchasing, product sourcing, and order tracking.',
+    accessScope: 'Procurement, logistics, and product catalog records',
+    modules: ['Supply Chain', 'Product Catalog', 'Projects'],
+    onboarding: ['Assign supplier list', 'Review purchasing approval limits', 'Confirm catalog access'],
+    systemRole: 'staff'
+  },
+  'Cost Estimator': {
+    description: 'Prepares project cost estimates, budgets, and pricing analysis.',
+    accessScope: 'Financial records and assigned project budgets',
+    modules: ['Payments', 'Analytics', 'Projects'],
+    onboarding: ['Review pricing model', 'Confirm estimate approval flow', 'Review margin targets'],
+    systemRole: 'staff'
+  },
+  'Foreman': {
+    description: 'Leads on-site installation crews and coordinates field execution.',
+    accessScope: 'Assigned installation projects',
+    modules: ['Field Operations', 'Projects'],
+    onboarding: ['Assign crew', 'Review site safety checklist', 'Confirm work order process'],
+    systemRole: 'staff'
   }
 };
 
-const DEFAULT_PASSWORD = 'unlockme';
+// Random one-time password for new/reset staff accounts — shown once, never stored.
+const generateTempPw = () => {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
+  const pick = (n) => Array.from({ length: n }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+  return `WF-${pick(4)}-${pick(4)}`;
+};
 
 // ─── Assign Clients Modal ─────────────────────────────────────────────────────
 function AssignClientsModal({ member, clients, onClose, updateMember, notify }) {
@@ -119,6 +242,8 @@ function AssignClientsModal({ member, clients, onClose, updateMember, notify }) 
       const arr = Array.from(selected);
       if (db && member.id) {
         await updateDoc(doc(db, 'users', member.id), { assignedClients: arr });
+        // Keep the team doc in sync — some staff may not have one, so tolerate failure
+        try { await updateDoc(doc(db, 'team', member.id), { assignedClients: arr }); } catch {}
         if (typeof updateMember === 'function') updateMember(member.id, { assignedClients: arr });
       }
       setSaved(true);
@@ -214,14 +339,18 @@ export default function AdminStaff({ team = [], brand, createStaffAccount, clien
     phone: '',
     department: 'Operations',
     accessScope: 'assigned',
-    notes: ''
+    notes: '',
+    permissions: ROLE_PERMISSION_PRESETS['Project Manager'] || DEFAULT_PERMISSIONS,
   });
+  const [permTarget, setPermTarget] = useState(null); // staff member being edited for permissions
+  const [permSaving, setPermSaving] = useState(false);
   const [creating, setCreating] = useState(false);
   const [created, setCreated] = useState(null);
   const [showPw, setShowPw] = useState(false);
   const [copied, setCopied] = useState(false);
   const [assignTarget, setAssignTarget] = useState(null);
   const [resetStates, setResetStates] = useState({});
+  const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [showRepair, setShowRepair] = useState(false);
   const [repairForm, setRepairForm] = useState({ email: '', name: '', role: 'Technician' });
   const [repairing, setRepairing] = useState(false);
@@ -235,6 +364,84 @@ export default function AdminStaff({ team = [], brand, createStaffAccount, clien
   // Delete / deactivate confirmation modal
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
+
+  // One-time temp password shown after a reset — never stored
+  const [resetResult, setResetResult] = useState(null);
+  const [resetPwCopied, setResetPwCopied] = useState(false);
+
+  // ── Self-service role management ────────────────────────────────────────
+  // Stored in settings/staffRoles so admin can hide/add roles without a redeploy.
+  // ROLE_PROFILES/ROLE_PERMISSION_PRESETS above stay the source of truth for
+  // built-in roles — hiding one only removes it from the picker, existing
+  // staff keep working via getRoleProfile's fallback chain.
+  const [roleConfig, setRoleConfig] = useState({ hidden: [], custom: [] });
+  const [showRoleManager, setShowRoleManager] = useState(false);
+  const [roleTab, setRoleTab] = useState('active'); // 'active' or 'hidden'
+  const [showAddRoleForm, setShowAddRoleForm] = useState(false);
+  const [newRoleName, setNewRoleName] = useState('');
+  const [newRolePerms, setNewRolePerms] = useState(DEFAULT_PERMISSIONS);
+  const [roleSaving, setRoleSaving] = useState(false);
+
+  useEffect(() => {
+    if (!db) return;
+    const unsub = onSnapshot(doc(db, 'settings', 'staffRoles'), snap => {
+      if (snap.exists()) {
+        const d = snap.data();
+        setRoleConfig({ hidden: d.hidden || [], custom: d.custom || [] });
+      }
+    });
+    return unsub;
+  }, []);
+
+  const visibleStaffRoles = useMemo(() => {
+    const all = [...STAFF_ROLES, ...roleConfig.custom.map(c => c.name)];
+    return all.filter(r => !roleConfig.hidden.includes(r));
+  }, [roleConfig]);
+
+  const getRoleProfile = (name) => {
+    if (ROLE_PROFILES[name]) return ROLE_PROFILES[name];
+    const custom = roleConfig.custom.find(c => c.name === name);
+    if (custom) {
+      return {
+        description: 'Custom role added by admin.',
+        accessScope: 'As assigned by admin',
+        modules: custom.permissions.map(id => PORTAL_PERMISSIONS.find(p => p.id === id)?.label || id),
+        onboarding: ['Confirm access with admin'],
+        systemRole: 'staff',
+      };
+    }
+    return ROLE_PROFILES.Technician;
+  };
+
+  const getPermissionPreset = (name) =>
+    ROLE_PERMISSION_PRESETS[name] || roleConfig.custom.find(c => c.name === name)?.permissions || DEFAULT_PERMISSIONS;
+
+  const staffCountForRole = (name) => (team || []).filter(m => (m.role || m.jobRole) === name).length;
+
+  const toggleRoleHidden = async (name) => {
+    if (!db) return;
+    const isHidden = roleConfig.hidden.includes(name);
+    await setDoc(doc(db, 'settings', 'staffRoles'), {
+      hidden: isHidden ? arrayRemove(name) : arrayUnion(name),
+    }, { merge: true });
+  };
+
+  const addCustomRole = async () => {
+    const name = newRoleName.trim();
+    if (!name || !db) return;
+    const exists = [...STAFF_ROLES, ...roleConfig.custom.map(c => c.name)].some(r => r.toLowerCase() === name.toLowerCase());
+    if (exists) { notify?.('error', 'A role with this name already exists.'); return; }
+    setRoleSaving(true);
+    try {
+      await setDoc(doc(db, 'settings', 'staffRoles'), {
+        custom: arrayUnion({ name, permissions: newRolePerms }),
+      }, { merge: true });
+      setNewRoleName('');
+      setNewRolePerms(DEFAULT_PERMISSIONS);
+    } finally {
+      setRoleSaving(false);
+    }
+  };
 
   // ── Bulk Import ───────────────────────────────────────────────────────────
   const [showBulkImport, setShowBulkImport]   = useState(false);
@@ -252,7 +459,7 @@ export default function AdminStaff({ team = [], brand, createStaffAccount, clien
         const local    = email.split('@')[0];
         const name     = local.charAt(0).toUpperCase() + local.slice(1);
         const username = local.replace(/[^a-z0-9]/g, '');
-        return { name, email, username, role: 'Technician', password: DEFAULT_PASSWORD, status: 'pending', error: null };
+        return { name, email, username, role: 'Technician', password: '', status: 'pending', error: null };
       });
   };
 
@@ -285,13 +492,12 @@ export default function AdminStaff({ team = [], brand, createStaffAccount, clien
       if (row.status === 'success') continue;
       setBulkRows(prev => prev.map((r, idx) => idx === i ? { ...r, status: 'creating' } : r));
       try {
-        const roleProfile = ROLE_PROFILES[row.role] || ROLE_PROFILES.Technician;
-        await createStaffAccount({
+        const roleProfile = getRoleProfile(row.role);
+        const result = await createStaffAccount({
           name:               row.name,
           email:              row.email,
           username:           row.username,
           role:               row.role,
-          password:           row.password,
           phone:              '',
           department:         'Operations',
           accessScope:        'assigned',
@@ -301,7 +507,7 @@ export default function AdminStaff({ team = [], brand, createStaffAccount, clien
           onboardingChecklist: roleProfile.onboarding.map(item => ({ item, done: false })),
           requiresPasswordReset: true,
         });
-        updated[i] = { ...row, status: 'success' };
+        updated[i] = { ...row, status: 'success', password: result?.tempPassword || '' };
         setBulkRows([...updated]);
       } catch (e) {
         const msg = e?.message || 'Failed';
@@ -380,25 +586,24 @@ export default function AdminStaff({ team = [], brand, createStaffAccount, clien
   const handleCreate = async () => {
     if (!form.name.trim() || !form.username.trim()) return;
     setCreating(true);
-    const tempPw = DEFAULT_PASSWORD;
     const cleanUsername = form.username.toLowerCase().replace(/\s+/g, '');
-    const roleProfile = ROLE_PROFILES[form.role] || ROLE_PROFILES.Technician;
+    const roleProfile = getRoleProfile(form.role);
     const phoneDigits = String(form.phone || '').replace(/\D/g, '');
     const normalizedPhone = phoneDigits ? `${form.countryCode}${phoneDigits}` : '';
     try {
-      await createStaffAccount?.({
+      const result = await createStaffAccount?.({
         ...form,
         username: cleanUsername,
         phone: normalizedPhone,
-        password: tempPw,
         systemRole: roleProfile.systemRole,
         accessModules: roleProfile.modules,
         onboardingChecklist: roleProfile.onboarding.map(item => ({ item, done: false })),
         requiresPasswordReset: true,
-        accessScope: form.accessScope
+        accessScope: form.accessScope,
+        permissions: roleProfile.systemRole === 'worker' ? [] : form.permissions,
       });
-      setCreated({ name: form.name, username: cleanUsername, password: tempPw, role: form.role, modules: roleProfile.modules, phone: normalizedPhone });
-      setForm({ name: '', username: '', role: 'Project Manager', countryCode: defaultCountry.code, phone: '', department: 'Operations', accessScope: 'assigned', notes: '' });
+      setCreated({ name: form.name, username: cleanUsername, email: result?.loginEmail || '', password: result?.tempPassword || '', role: form.role, modules: roleProfile.modules, phone: normalizedPhone });
+      setForm({ name: '', username: '', role: 'Project Manager', countryCode: defaultCountry.code, phone: '', department: 'Operations', accessScope: 'assigned', notes: '', permissions: ROLE_PERMISSION_PRESETS['Project Manager'] || DEFAULT_PERMISSIONS });
     } catch (e) {
       notify?.('error', e.message || 'Failed to create account');
     }
@@ -406,7 +611,7 @@ export default function AdminStaff({ team = [], brand, createStaffAccount, clien
   };
 
   const copyCredentials = () => {
-    const text = `Westline Future — Staff Portal Access\nName: ${created.name}\nUsername: ${created.username}\nDefault Password: unlockme\nLogin at: ${window.location.origin}/login\nYou will be prompted to set your own password on first login.`;
+    const text = `Westline Future — Staff Portal Access\nName: ${created.name}\nLogin Email: ${created.email || created.username}\nTemporary Password: ${created.password}\nLogin at: ${window.location.origin}/login\nYou will be prompted to set your own password on first login.`;
     navigator.clipboard.writeText(text);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
@@ -414,7 +619,7 @@ export default function AdminStaff({ team = [], brand, createStaffAccount, clien
 
   const handleSetPassword = async (m, newPw) => {
     if (!m.id) { notify?.('error', 'Cannot identify staff account.'); return; }
-    if (!newPw || newPw.trim().length < 6) { notify?.('error', 'Password must be at least 6 characters.'); return; }
+    if (!newPw || newPw.trim().length < 8) { notify?.('error', 'Password must be at least 8 characters.'); return; }
 
     setPwSaving(s => ({ ...s, [m.id]: true }));
     try {
@@ -448,7 +653,7 @@ export default function AdminStaff({ team = [], brand, createStaffAccount, clien
   };
 
   const filteredTeam = (team || []).filter(m => {
-    const systemRole = (ROLE_PROFILES[m.role || m.jobRole] || ROLE_PROFILES.Technician).systemRole;
+    const systemRole = getRoleProfile(m.role || m.jobRole).systemRole;
     if (directoryTab === 'managers') return systemRole === 'staff';
     return systemRole === 'worker';
   });
@@ -478,19 +683,35 @@ export default function AdminStaff({ team = [], brand, createStaffAccount, clien
           <h2 className="lxfh" style={{ fontSize: 28, fontWeight: 700, color: `var(--accent-secondary)` }}>Staff Governance</h2>
           <p className="lxf" style={{ color: `var(--text-secondary)`, fontSize: 13, marginTop: 4 }}>Manage team accounts, certifications, and client assignments.</p>
         </div>
-        <div className="as-actions">
-          <button
-            onClick={() => { setShowRepair(true); setRepairResult(null); setRepairForm({ email: '', name: '', role: 'Field Installer' }); }}
-            style={{ padding: '10px 14px', fontSize: 13, gap: 7, display: 'flex', alignItems: 'center', borderRadius: 12, border: '1.5px solid var(--border-color)', background: `var(--bg-secondary)`, cursor: 'pointer', fontWeight: 700, color: `var(--text-secondary)`, fontFamily: 'inherit' }}
-          >
-            <Search size={14} /> Recover
-          </button>
+        <div className="as-actions" style={{ position: 'relative' }}>
           <button onClick={() => { setForm(f => ({ ...f, role: 'Field Installer', department: 'Installations' })); setShowModal(true); setCreated(null); }} style={{ padding: '10px 14px', fontSize: 13, gap: 7, display: 'flex', alignItems: 'center', borderRadius: 12, border: '1px solid var(--border-color)', background: '#fff', cursor: 'pointer', fontWeight: 700, color: `var(--accent-secondary)`, fontFamily: 'inherit' }}>
             <HardHat size={15} /> Field Team
           </button>
-          <button onClick={openBulkImport} style={{ padding: '10px 14px', fontSize: 13, gap: 7, display: 'flex', alignItems: 'center', borderRadius: 12, border: '1.5px solid var(--border-color)', background: 'var(--bg-secondary)', cursor: 'pointer', fontWeight: 700, color: 'var(--text-secondary)', fontFamily: 'inherit' }}>
-            <Users size={14} /> Bulk
-          </button>
+          <div style={{ position: 'relative' }}>
+            <button onClick={() => setShowMoreMenu(v => !v)} style={{ padding: '10px 14px', fontSize: 13, gap: 7, display: 'flex', alignItems: 'center', borderRadius: 12, border: '1.5px solid var(--border-color)', background: showMoreMenu ? 'var(--bg-secondary)' : '#fff', cursor: 'pointer', fontWeight: 700, color: 'var(--text-secondary)', fontFamily: 'inherit' }}>
+              <Settings size={14} /> More
+            </button>
+            {showMoreMenu && (
+              <>
+                <div onClick={() => setShowMoreMenu(false)} style={{ position: 'fixed', inset: 0, zIndex: 900 }} />
+                <div style={{ position: 'absolute', top: '110%', right: 0, zIndex: 901, background: '#fff', border: '1px solid var(--border-color)', borderRadius: 12, boxShadow: '0 8px 24px rgba(0,0,0,.12)', minWidth: 190, overflow: 'hidden' }}>
+                  {[
+                    { icon: <Search size={14} />, label: 'Recover Account', onClick: () => { setShowRepair(true); setRepairResult(null); setRepairForm({ email: '', name: '', role: 'Field Installer' }); } },
+                    { icon: <Users size={14} />, label: 'Bulk Import', onClick: openBulkImport },
+                    { icon: <Settings size={14} />, label: 'Manage Roles', onClick: () => setShowRoleManager(true) },
+                  ].map(item => (
+                    <button
+                      key={item.label}
+                      onClick={() => { item.onClick(); setShowMoreMenu(false); }}
+                      style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 9, padding: '11px 14px', border: 'none', background: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 700, color: 'var(--accent-secondary)', fontFamily: 'inherit', textAlign: 'left' }}
+                    >
+                      {item.icon} {item.label}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
           <button onClick={() => { setForm(f => ({ ...f, role: 'Project Manager', department: 'Operations' })); setShowModal(true); setCreated(null); }} className="p-btn-dark lxf" style={{ padding: '10px 18px', fontSize: 13, gap: 7, display: 'flex', alignItems: 'center' }}>
             <UserPlus size={15} /> Create Account
           </button>
@@ -566,14 +787,25 @@ export default function AdminStaff({ team = [], brand, createStaffAccount, clien
                 </select>
               </div>
 
-              {/* Role badge */}
+              {/* Role — editable */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ fontSize: 11, fontWeight: 800, padding: '4px 10px', borderRadius: 8, background: `${ac}12`, color: ac }}>
-                  {m.role || m.jobRole || 'Staff'}
-                </span>
+                <select
+                  value={m.jobRole || m.role || ''}
+                  onChange={e => {
+                    const newRole = e.target.value;
+                    updateM(m.id, { jobRole: newRole, role: getRoleProfile(newRole).systemRole });
+                  }}
+                  style={{ fontSize: 11, fontWeight: 800, padding: '4px 8px', borderRadius: 8, background: `${ac}12`, color: ac, border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}
+                >
+                  {!visibleStaffRoles.includes(m.jobRole) && m.jobRole && <option value={m.jobRole}>{m.jobRole}</option>}
+                  {visibleStaffRoles.map(r => <option key={r} value={r}>{r}</option>)}
+                </select>
                 {m.department && (
                   <span style={{ fontSize: 10, fontWeight: 700, color: `var(--text-secondary)` }}>{m.department}</span>
                 )}
+                <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 10, fontWeight: 700, color: 'var(--text-secondary)', marginLeft: 'auto' }}>
+                  <Users size={11} /> {(m.assignedClients || []).length} client{(m.assignedClients || []).length === 1 ? '' : 's'}
+                </span>
               </div>
 
               {/* Certifications */}
@@ -623,12 +855,24 @@ export default function AdminStaff({ team = [], brand, createStaffAccount, clien
                   <KeyRound size={13} /> Set Password
                 </button>
                 <button
+                  onClick={() => setPermTarget({ ...m, editPermissions: m.permissions || DEFAULT_PERMISSIONS })}
+                  style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                    padding: '9px 12px', borderRadius: 10,
+                    background: '#EFF6FF', border: '1px solid #BFDBFE',
+                    fontSize: 12, fontWeight: 700, cursor: 'pointer', color: '#1D4ED8',
+                  }}
+                >
+                  <Shield size={13} /> Edit Access
+                </button>
+                <button
                   onClick={async () => {
                     setResetStates(s => ({ ...s, [m.id]: 'loading' }));
                     try {
                       const fn = httpsCallable(functions, 'setStaffPassword');
-                      await fn({ uid: m.id, resetToDefault: true });
-                      notify?.('success', `${m.name}'s password reset to default.`);
+                      const res = await fn({ uid: m.id, resetToDefault: true });
+                      notify?.('success', `${m.name}'s password was reset.`);
+                      if (res?.data?.tempPassword) setResetResult({ member: m, password: res.data.tempPassword });
                       setResetStates(s => ({ ...s, [m.id]: 'done' }));
                       setTimeout(() => setResetStates(s => ({ ...s, [m.id]: null })), 2500);
                     } catch (e) {
@@ -666,6 +910,64 @@ export default function AdminStaff({ team = [], brand, createStaffAccount, clien
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* EDIT ACCESS / PERMISSIONS MODAL */}
+      {permTarget && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+          <div style={{ background: '#fff', borderRadius: 20, padding: 28, width: '100%', maxWidth: 520, maxHeight: '90vh', overflowY: 'auto' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+              <div>
+                <h3 className="lxfh" style={{ fontSize: 18, fontWeight: 800, margin: 0 }}>Portal Access — {permTarget.name}</h3>
+                <p className="lxf" style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 4 }}>Select which sections this staff member can see.</p>
+              </div>
+              <button onClick={() => setPermTarget(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)' }}><X size={20} /></button>
+            </div>
+            <div style={{ display: 'flex', gap: 6, marginBottom: 16 }}>
+              <button onClick={() => setPermTarget(t => ({ ...t, editPermissions: ALL_PERMISSION_IDS }))} style={{ fontSize: 11, fontWeight: 700, padding: '5px 12px', borderRadius: 8, border: '1px solid var(--border-color)', background: 'var(--bg-secondary)', cursor: 'pointer', fontFamily: 'inherit' }}>Full Access</button>
+              <button onClick={() => setPermTarget(t => ({ ...t, editPermissions: DEFAULT_PERMISSIONS }))} style={{ fontSize: 11, fontWeight: 700, padding: '5px 12px', borderRadius: 8, border: '1px solid var(--border-color)', background: 'var(--bg-secondary)', cursor: 'pointer', fontFamily: 'inherit' }}>Operations Only</button>
+              <button onClick={() => setPermTarget(t => ({ ...t, editPermissions: [] }))} style={{ fontSize: 11, fontWeight: 700, padding: '5px 12px', borderRadius: 8, border: '1px solid var(--border-color)', background: 'var(--bg-secondary)', cursor: 'pointer', fontFamily: 'inherit' }}>None</button>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 24 }}>
+              {PORTAL_PERMISSIONS.map(p => {
+                const on = (permTarget.editPermissions || []).includes(p.id);
+                return (
+                  <label key={p.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 12px', borderRadius: 10, border: `1.5px solid ${on ? 'var(--accent-primary)' : 'var(--border-color)'}`, background: on ? 'var(--accent-primary)08' : '#fff', cursor: 'pointer' }}>
+                    <input type="checkbox" checked={on} onChange={() => setPermTarget(t => {
+                      const perms = t.editPermissions || [];
+                      return { ...t, editPermissions: on ? perms.filter(x => x !== p.id) : [...perms, p.id] };
+                    })} style={{ marginTop: 2, accentColor: 'var(--accent-primary)', flexShrink: 0 }} />
+                    <div>
+                      <div className="lxf" style={{ fontSize: 12, fontWeight: 700, color: 'var(--accent-secondary)' }}>{p.label}</div>
+                      <div style={{ fontSize: 10, color: 'var(--text-secondary)', marginTop: 2 }}>{p.desc}</div>
+                    </div>
+                  </label>
+                );
+              })}
+            </div>
+            <button
+              disabled={permSaving}
+              onClick={async () => {
+                setPermSaving(true);
+                try {
+                  const newPerms = permTarget.editPermissions || [];
+                  await updateDoc(doc(db, 'users', permTarget.id), { permissions: newPerms });
+                  await updateDoc(doc(db, 'team', permTarget.id), { permissions: newPerms });
+                  notify?.('success', `Access updated for ${permTarget.name}`);
+                  setPermTarget(null);
+                } catch (e) {
+                  notify?.('error', e.message || 'Failed to update access');
+                } finally {
+                  setPermSaving(false);
+                }
+              }}
+              className="p-btn-dark lxf"
+              style={{ width: '100%', padding: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: permSaving ? 0.6 : 1 }}
+            >
+              {permSaving ? 'Saving…' : <><Shield size={15} /> Save Access Permissions</>}
+            </button>
+          </div>
         </div>
       )}
 
@@ -730,7 +1032,7 @@ export default function AdminStaff({ team = [], brand, createStaffAccount, clien
                   <div>
                     <label className="lxf" style={{ fontSize: 11, fontWeight: 800, color: `var(--text-secondary)`, textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>Role</label>
                     <select className="p-inp" value={repairForm.role} onChange={e => setRepairForm(f => ({ ...f, role: e.target.value }))} style={{ width: '100%', boxSizing: 'border-box' }}>
-                      {STAFF_ROLES.map(r => <option key={r}>{r}</option>)}
+                      {visibleStaffRoles.map(r => <option key={r}>{r}</option>)}
                     </select>
                   </div>
                 </div>
@@ -805,7 +1107,7 @@ export default function AdminStaff({ team = [], brand, createStaffAccount, clien
                 </thead>
                 <tbody>
                   {bulkRows.map((row, i) => {
-                    const roleProfile = ROLE_PROFILES[row.role] || ROLE_PROFILES.Technician;
+                    const roleProfile = getRoleProfile(row.role);
                     const isWorkerRole = roleProfile.systemRole === 'worker';
                     return (
                       <tr key={row.email} style={{ borderBottom: '1px solid var(--border-color)', background: row.status === 'success' ? '#F0FDF4' : row.status === 'error' ? '#FFF8F0' : 'transparent' }}>
@@ -997,8 +1299,8 @@ export default function AdminStaff({ team = [], brand, createStaffAccount, clien
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                     <div>
                       <label className="lxf" style={{ fontSize: 11, fontWeight: 800, color: `var(--text-secondary)`, textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>Role</label>
-                      <select className="p-inp" value={form.role} onChange={e => setForm(f => ({ ...f, role: e.target.value }))} style={{ width: '100%', boxSizing: 'border-box' }}>
-                        {STAFF_ROLES.map(r => <option key={r}>{r}</option>)}
+                      <select className="p-inp" value={form.role} onChange={e => { const r = e.target.value; setForm(f => ({ ...f, role: r, permissions: getPermissionPreset(r) })); }} style={{ width: '100%', boxSizing: 'border-box' }}>
+                        {visibleStaffRoles.map(r => <option key={r}>{r}</option>)}
                       </select>
                     </div>
                     <div>
@@ -1027,7 +1329,7 @@ export default function AdminStaff({ team = [], brand, createStaffAccount, clien
                     </select>
                   </div>
                   {(() => {
-                    const profile = ROLE_PROFILES[form.role] || ROLE_PROFILES.Technician;
+                    const profile = getRoleProfile(form.role);
                     return (
                       <div style={{ padding: 16, background: `var(--bg-secondary)`, borderRadius: 14, border: '1px solid var(--border-color)' }}>
                         <div style={{ fontSize: 11, fontWeight: 900, color: `var(--accent-secondary)`, textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 8 }}>Permission Preview</div>
@@ -1044,6 +1346,32 @@ export default function AdminStaff({ team = [], brand, createStaffAccount, clien
                     <label className="lxf" style={{ fontSize: 11, fontWeight: 800, color: `var(--text-secondary)`, textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>Internal Notes</label>
                     <textarea className="p-inp" rows={3} value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} placeholder="Onboarding notes, supervisor, branch, or access constraints..." style={{ width: '100%', boxSizing: 'border-box', resize: 'vertical' }} />
                   </div>
+                  {(getRoleProfile(form.role).systemRole !== 'worker') && (
+                    <div style={{ border: '1.5px solid var(--border-color)', borderRadius: 14, padding: 16 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                        <label className="lxf" style={{ fontSize: 11, fontWeight: 800, color: `var(--text-secondary)`, textTransform: 'uppercase' }}>Portal Access</label>
+                        <div style={{ display: 'flex', gap: 6 }}>
+                          <button type="button" onClick={() => setForm(f => ({ ...f, permissions: ALL_PERMISSION_IDS }))} style={{ fontSize: 11, fontWeight: 700, padding: '4px 10px', borderRadius: 8, border: '1px solid var(--border-color)', background: 'var(--bg-secondary)', cursor: 'pointer', color: 'var(--text-secondary)', fontFamily: 'inherit' }}>Full Access</button>
+                          <button type="button" onClick={() => setForm(f => ({ ...f, permissions: DEFAULT_PERMISSIONS }))} style={{ fontSize: 11, fontWeight: 700, padding: '4px 10px', borderRadius: 8, border: '1px solid var(--border-color)', background: 'var(--bg-secondary)', cursor: 'pointer', color: 'var(--text-secondary)', fontFamily: 'inherit' }}>Operations Only</button>
+                          <button type="button" onClick={() => setForm(f => ({ ...f, permissions: [] }))} style={{ fontSize: 11, fontWeight: 700, padding: '4px 10px', borderRadius: 8, border: '1px solid var(--border-color)', background: 'var(--bg-secondary)', cursor: 'pointer', color: 'var(--text-secondary)', fontFamily: 'inherit' }}>None</button>
+                        </div>
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                        {PORTAL_PERMISSIONS.map(p => {
+                          const on = form.permissions.includes(p.id);
+                          return (
+                            <label key={p.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 12px', borderRadius: 10, border: `1.5px solid ${on ? 'var(--accent-primary)' : 'var(--border-color)'}`, background: on ? 'var(--accent-primary)08' : '#fff', cursor: 'pointer' }}>
+                              <input type="checkbox" checked={on} onChange={() => setForm(f => ({ ...f, permissions: on ? f.permissions.filter(x => x !== p.id) : [...f.permissions, p.id] }))} style={{ marginTop: 2, accentColor: 'var(--accent-primary)', flexShrink: 0 }} />
+                              <div>
+                                <div className="lxf" style={{ fontSize: 12, fontWeight: 700, color: 'var(--accent-secondary)' }}>{p.label}</div>
+                                <div style={{ fontSize: 10, color: 'var(--text-secondary)', marginTop: 2 }}>{p.desc}</div>
+                              </div>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
                 </div>
                 <button
                   onClick={handleCreate}
@@ -1066,7 +1394,7 @@ export default function AdminStaff({ team = [], brand, createStaffAccount, clien
                 <div style={{ background: `var(--bg-secondary)`, borderRadius: 14, padding: 20, marginBottom: 20 }}>
                   {[
                     { label: 'Name', value: created.name },
-                    { label: 'Username', value: created.username },
+                    { label: 'Login Email', value: created.email || created.username },
                     { label: 'Role', value: created.role },
                   ].map(row => (
                     <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: 10, marginBottom: 10, borderBottom: '1px solid var(--border-color)' }}>
@@ -1075,9 +1403,9 @@ export default function AdminStaff({ team = [], brand, createStaffAccount, clien
                     </div>
                   ))}
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span className="lxf" style={{ fontSize: 12, color: `var(--text-secondary)`, fontWeight: 700 }}>Default Password</span>
+                    <span className="lxf" style={{ fontSize: 12, color: `var(--text-secondary)`, fontWeight: 700 }}>Temporary Password</span>
                     <span className="lxf" style={{ fontSize: 14, fontWeight: 900, color: `var(--accent-secondary)`, fontFamily: 'monospace', letterSpacing: 2, background: '#F4EFE6', padding: '4px 10px', borderRadius: 6 }}>
-                      unlockme
+                      {created.password || '—'}
                     </span>
                   </div>
                 </div>
@@ -1097,7 +1425,7 @@ export default function AdminStaff({ team = [], brand, createStaffAccount, clien
                     <button
                       onClick={() => {
                         const msg = encodeURIComponent(
-                          `*Westline Future — Staff Portal Access*\n\nHi ${created.name}, your account is ready.\n\nUsername: ${created.username}\nDefault Password: unlockme\nLogin: ${window.location.origin}/login\n\n_You will be asked to set your own password when you first log in._`
+                          `*Westline Future — Staff Portal Access*\n\nHi ${created.name}, your account is ready.\n\nLogin Email: ${created.email || created.username}\nTemporary Password: ${created.password}\nLogin: ${window.location.origin}/login\n\n_You will be asked to set your own password when you first log in._`
                         );
                         const phone = (created.phone || '').replace(/\D/g, '');
                         window.open(phone ? `https://wa.me/${phone}?text=${msg}` : `https://wa.me/?text=${msg}`, '_blank');
@@ -1119,6 +1447,41 @@ export default function AdminStaff({ team = [], brand, createStaffAccount, clien
         </div>
       )}
 
+      {/* ── One-time Temp Password (after Reset) ── */}
+      {resetResult && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+          <div style={{ background: '#fff', borderRadius: 24, width: '100%', maxWidth: 420, boxShadow: '0 32px 80px rgba(0,0,0,.2)', padding: 28 }}>
+            <div style={{ fontSize: 11, fontWeight: 800, color: '#C2410C', textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 6 }}>Password Reset</div>
+            <div style={{ fontSize: 19, fontWeight: 900, color: 'var(--accent-secondary)', marginBottom: 8 }}>{resetResult.member.name}</div>
+            <p style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6, margin: '0 0 18px' }}>
+              Share this temporary password now — it is shown only once and cannot be retrieved later. They will be asked to set their own password on next login.
+            </p>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#F4EFE6', borderRadius: 12, padding: '14px 16px', marginBottom: 18 }}>
+              <span style={{ fontSize: 17, fontWeight: 900, fontFamily: 'monospace', letterSpacing: 2, color: 'var(--accent-secondary)' }}>{resetResult.password}</span>
+              <button
+                onClick={() => { navigator.clipboard.writeText(resetResult.password); setResetPwCopied(true); setTimeout(() => setResetPwCopied(false), 2000); }}
+                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 12px', borderRadius: 8, border: '1px solid var(--border-color)', background: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', color: 'var(--accent-secondary)' }}
+              >
+                {resetPwCopied ? <><Check size={13} /> Copied</> : <><Copy size={13} /> Copy</>}
+              </button>
+            </div>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button
+                onClick={() => {
+                  const msg = encodeURIComponent(`*Westline Future — Staff Portal Access*\n\nHi ${resetResult.member.name}, your password was reset.\n\nLogin Email: ${resetResult.member.email || resetResult.member.username || '—'}\nTemporary Password: ${resetResult.password}\nLogin: ${window.location.origin}/login\n\n_You will be asked to set your own password when you log in._`);
+                  const phone = (resetResult.member.phone || '').replace(/\D/g, '');
+                  window.open(phone ? `https://wa.me/${phone}?text=${msg}` : `https://wa.me/?text=${msg}`, '_blank');
+                }}
+                style={{ flex: 1, padding: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, borderRadius: 12, border: 'none', background: '#25D366', color: '#fff', fontSize: 13, fontWeight: 800, cursor: 'pointer', fontFamily: 'inherit' }}
+              >
+                <MessageCircle size={15} /> WhatsApp
+              </button>
+              <button onClick={() => setResetResult(null)} className="p-btn-dark lxf" style={{ flex: 1, padding: 12 }}>Done</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── Password Reset Modal ── */}
       {pwPanel && (
         <StaffPasswordModal
@@ -1134,6 +1497,123 @@ export default function AdminStaff({ team = [], brand, createStaffAccount, clien
           pwSaving={pwSaving}
         />
       )}
+
+      {/* ── Manage Roles Modal ── */}
+      {showRoleManager && (
+        <div className="overlay-modal" onClick={() => setShowRoleManager(false)} style={{ zIndex: 9999 }}>
+          <div className="modal-box lxf" style={{ maxWidth: 620, maxHeight: '85vh', display: 'flex', flexDirection: 'column', padding: 0, overflow: 'hidden' }} onClick={e => e.stopPropagation()}>
+
+            {/* Fixed header */}
+            <div style={{ padding: '20px 24px 14px', borderBottom: '1px solid var(--border-color)', flexShrink: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                <h3 className="lxfh" style={{ fontSize: 18, fontWeight: 800, margin: 0 }}>Manage Staff Roles</h3>
+                <button onClick={() => setShowRoleManager(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)' }}><X size={20} /></button>
+              </div>
+              <p className="lxf" style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 14 }}>
+                Delete a role to stop offering it to new hires — staff already holding it keep working unchanged.
+              </p>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <div style={{ display: 'flex', gap: 4, background: 'var(--bg-secondary)', padding: 3, borderRadius: 10 }}>
+                  {[{ id: 'active', label: `Active (${STAFF_ROLES.length + roleConfig.custom.length - roleConfig.hidden.length})` }, { id: 'hidden', label: `Deleted (${roleConfig.hidden.length})` }].map(t => (
+                    <button
+                      key={t.id}
+                      onClick={() => setRoleTab(t.id)}
+                      style={{ padding: '6px 12px', borderRadius: 7, border: 'none', cursor: 'pointer', fontSize: 11, fontWeight: 800, fontFamily: 'inherit', background: roleTab === t.id ? '#fff' : 'transparent', color: roleTab === t.id ? 'var(--accent-secondary)' : 'var(--text-secondary)', boxShadow: roleTab === t.id ? '0 1px 3px rgba(0,0,0,.08)' : 'none' }}
+                    >
+                      {t.label}
+                    </button>
+                  ))}
+                </div>
+                <button
+                  onClick={() => setShowAddRoleForm(v => !v)}
+                  style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 5, padding: '7px 12px', borderRadius: 8, border: '1px solid var(--border-color)', background: showAddRoleForm ? 'var(--bg-secondary)' : '#fff', cursor: 'pointer', fontSize: 11, fontWeight: 700, color: 'var(--accent-secondary)', fontFamily: 'inherit' }}
+                >
+                  <Plus size={12} /> Add Role
+                </button>
+              </div>
+            </div>
+
+            {/* Collapsible add-role form — sits right under the header, not buried below the list */}
+            {showAddRoleForm && (
+              <div style={{ padding: 16, margin: '14px 24px 0', borderRadius: 12, border: '1px solid var(--border-color)', background: 'var(--bg-secondary)', flexShrink: 0 }}>
+                <input
+                  className="p-inp"
+                  value={newRoleName}
+                  onChange={e => setNewRoleName(e.target.value)}
+                  placeholder="e.g. Warehouse Manager"
+                  style={{ width: '100%', boxSizing: 'border-box', marginBottom: 10, background: '#fff' }}
+                />
+                <div style={{ fontSize: 10, fontWeight: 800, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 6 }}>Default Portal Access</div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginBottom: 12 }}>
+                  {PORTAL_PERMISSIONS.map(p => {
+                    const on = newRolePerms.includes(p.id);
+                    return (
+                      <label key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, cursor: 'pointer' }}>
+                        <input
+                          type="checkbox"
+                          checked={on}
+                          onChange={() => setNewRolePerms(perms => on ? perms.filter(x => x !== p.id) : [...perms, p.id])}
+                          style={{ accentColor: 'var(--accent-primary)' }}
+                        />
+                        {p.label}
+                      </label>
+                    );
+                  })}
+                </div>
+                <button
+                  onClick={async () => { await addCustomRole(); setShowAddRoleForm(false); }}
+                  disabled={!newRoleName.trim() || roleSaving}
+                  className="p-btn-dark lxf"
+                  style={{ width: '100%', padding: 11, opacity: (!newRoleName.trim() || roleSaving) ? 0.6 : 1 }}
+                >
+                  {roleSaving ? 'Adding…' : 'Add Role'}
+                </button>
+              </div>
+            )}
+
+            {/* Scrollable role list — contained, so the modal itself never grows into a long page scroll */}
+            <div style={{ padding: '14px 24px 20px', overflowY: 'auto', flex: 1 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                {[...STAFF_ROLES.map(r => ({ name: r, custom: false })), ...roleConfig.custom.map(c => ({ name: c.name, custom: true, entry: c }))]
+                  .filter(r => roleTab === 'hidden' ? roleConfig.hidden.includes(r.name) : !roleConfig.hidden.includes(r.name))
+                  .map(r => {
+                    const inUse = staffCountForRole(r.name);
+                    return (
+                      <div key={r.name} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, padding: '9px 10px', borderRadius: 10, border: '1px solid var(--border-color)' }}>
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--accent-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.name}</div>
+                          <div style={{ fontSize: 9.5, color: 'var(--text-secondary)', marginTop: 1 }}>
+                            {r.custom ? 'Custom' : 'Standard'}{inUse > 0 ? ` · ${inUse} assigned` : ''}
+                          </div>
+                        </div>
+                        {roleTab === 'hidden' ? (
+                          <button
+                            onClick={() => toggleRoleHidden(r.name)}
+                            title="Restore role"
+                            style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 4, padding: '5px 9px', borderRadius: 8, border: '1px solid var(--border-color)', background: '#fff', cursor: 'pointer', fontSize: 10.5, fontWeight: 700, color: 'var(--accent-secondary)', fontFamily: 'inherit' }}
+                          >
+                            <Eye size={11} /> Restore
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => {
+                              if (inUse > 0 && !window.confirm(`${inUse} staff member(s) currently hold "${r.name}". Deleting it only stops it being offered to new hires — their account keeps working. Continue?`)) return;
+                              toggleRoleHidden(r.name);
+                            }}
+                            title="Delete role"
+                            style={{ flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', width: 26, height: 26, borderRadius: 8, border: '1px solid #FECACA', background: '#fff', cursor: 'pointer', color: '#DC2626' }}
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1144,10 +1624,10 @@ function StaffPasswordModal({ member, ac, onClose, handleSetPassword, notify, pw
   const [waCopied, setWaCopied] = useState(false);
 
   const currentPw = newPwInputs[member?.id] || '';
-  const pwReady = currentPw.length >= 6;
+  const pwReady = currentPw.length >= 8;
 
   const doGenerate = () => {
-    const pw = DEFAULT_PASSWORD;
+    const pw = generateTempPw();
     setNewPwInputs(s => ({ ...s, [member.id]: pw }));
     setShowPw(true); // reveal so admin can see + share
     setSaved(false);
@@ -1165,7 +1645,7 @@ function StaffPasswordModal({ member, ac, onClose, handleSetPassword, notify, pw
 
   const shareViaWhatsApp = () => {
     const msg = encodeURIComponent(
-      `*Westline Future — Staff Portal Access*\n\nName: ${member.name}\nUsername: ${member.username || member.email || '—'}\nNew Password: ${savedPw}\nLogin: ${window.location.origin}/login`
+      `*Westline Future — Staff Portal Access*\n\nName: ${member.name}\nLogin Email: ${member.email || member.username || '—'}\nNew Password: ${savedPw}\nLogin: ${window.location.origin}/login`
     );
     const phone = (member.phone || '').replace(/\D/g, '');
     window.open(phone ? `https://wa.me/${phone}?text=${msg}` : `https://wa.me/?text=${msg}`, '_blank');

@@ -153,9 +153,9 @@ export default function ServicesPage({ brand, navigate, content }) {
             Our installation teams operate across the country — wherever you are, we come to you.
           </p>
           <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 12 }}>
-            {['Accra', 'Kumasi', 'Takoradi', 'Cape Coast', 'Koforidua', 'Tarkwa', 'Ho', 'Sunyani', 'Tamale', 'Bolgatanga', 'Wa', 'Tema', 'Kasoa', 'Madina', 'Adenta'].map(city => (
-              <div key={city} style={{ padding: '10px 20px', background: 'rgba(255,255,255,0.06)', borderRadius: 100, fontSize: 13, fontWeight: 700, border: '1px solid rgba(255,255,255,0.1)', color: '#fff' }}>
-                📍 {city}
+            {['Greater Accra', 'Ashanti', 'Western', 'Central', 'Eastern', 'Volta', 'Oti', 'Bono', 'Bono East', 'Ahafo', 'Northern', 'Savannah', 'North East', 'Upper East', 'Upper West', 'Western North'].map(region => (
+              <div key={region} style={{ padding: '10px 20px', background: 'rgba(255,255,255,0.06)', borderRadius: 100, fontSize: 13, fontWeight: 700, border: '1px solid rgba(255,255,255,0.1)', color: '#fff' }}>
+                📍 {region}
               </div>
             ))}
           </div>

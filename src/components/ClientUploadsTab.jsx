@@ -1,8 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { UploadCloud, Image as ImageIcon, File as FileIcon, Loader } from 'lucide-react';
-import { db, functions, uploadFile } from '../lib/firebase';
-import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
-import { httpsCallable } from 'firebase/functions';
+import { UploadCloud, Image as ImageIcon, File as FileIcon, Loader, Trash2 } from 'lucide-react';
+import { db, uploadFile } from '../lib/firebase';
+import { collection, onSnapshot, query, orderBy, deleteDoc, doc, addDoc, serverTimestamp } from 'firebase/firestore';
 
 export default function ClientUploadsTab({ projectId, user, brand }) {
   const [uploads, setUploads] = useState([]);
@@ -42,18 +41,18 @@ export default function ClientUploadsTab({ projectId, user, brand }) {
       const path = `${projectId}/inspiration/${ts}_${safeName}`;
       
       const downloadUrl = await uploadFile('projects', path, file);
-      if (!downloadUrl?.startsWith('https://')) {
-        throw new Error('Cloud upload did not return a secure file URL.');
+      if (!downloadUrl?.startsWith('https://') && !downloadUrl?.startsWith('data:')) {
+        throw new Error('Upload did not return a valid file URL.');
       }
 
-      const registerUpload = httpsCallable(functions, 'registerProjectUpload');
-      await registerUpload({
-        projectId,
+      await addDoc(collection(db, 'projects', projectId, 'inspiration'), {
         fileName: file.name,
         fileUrl: downloadUrl,
-        fileType: file.type,
+        fileType: file.type || 'application/octet-stream',
         size: file.size,
         uploadedBy: user?.name || 'Client',
+        projectId,
+        createdAt: serverTimestamp(),
       });
       
     } catch (e) {
@@ -63,6 +62,11 @@ export default function ClientUploadsTab({ projectId, user, brand }) {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
+  };
+
+  const handleDelete = async (fileId) => {
+    if (!window.confirm('Remove this upload? This cannot be undone.')) return;
+    await deleteDoc(doc(db, 'projects', projectId, 'inspiration', fileId));
   };
 
   const handleDrop = (e) => {
@@ -129,30 +133,45 @@ export default function ClientUploadsTab({ projectId, user, brand }) {
           {uploads.map(file => {
             const isImage = file.fileType?.startsWith('image/');
             return (
-              <a 
-                key={file.id} href={file.fileUrl} target="_blank" rel="noreferrer"
-                style={{ 
-                  display: 'flex', flexDirection: 'column', textDecoration: 'none',
+              <div
+                key={file.id}
+                style={{
+                  position: 'relative', display: 'flex', flexDirection: 'column',
                   background: '#fff', borderRadius: 16, border: '1px solid var(--border-color)', overflow: 'hidden',
-                  transition: 'all .2s', boxShadow: '0 2px 8px rgba(0,0,0,0.02)'
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.02)'
                 }}
               >
-                <div style={{ height: 120, background: '#FAFAF9', display: 'flex', alignItems: 'center', justifyContent: 'center', borderBottom: '1px solid var(--border-color)', position: 'relative' }}>
-                  {isImage ? (
-                    <img src={file.fileUrl} alt={file.fileName} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                  ) : (
-                    <FileIcon size={32} color="var(--text-secondary)" />
-                  )}
-                </div>
-                <div style={{ padding: '10px 12px' }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--accent-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: 2 }}>
-                    {file.fileName}
+                <a href={file.fileUrl} target="_blank" rel="noreferrer" style={{ display: 'flex', flexDirection: 'column', textDecoration: 'none', flex: 1 }}>
+                  <div style={{ height: 120, background: '#FAFAF9', display: 'flex', alignItems: 'center', justifyContent: 'center', borderBottom: '1px solid var(--border-color)' }}>
+                    {isImage ? (
+                      <img src={file.fileUrl} alt={file.fileName} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    ) : (
+                      <FileIcon size={32} color="var(--text-secondary)" />
+                    )}
                   </div>
-                  <div style={{ fontSize: 9, color: 'var(--text-tertiary)' }}>
-                    {file.size ? (file.size / (1024*1024)).toFixed(1) + ' MB' : 'Uploaded File'}
+                  <div style={{ padding: '10px 12px' }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--accent-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: 2 }}>
+                      {file.fileName}
+                    </div>
+                    <div style={{ fontSize: 9, color: 'var(--text-tertiary)' }}>
+                      {file.size ? (file.size / (1024*1024)).toFixed(1) + ' MB' : 'Uploaded File'}
+                    </div>
                   </div>
-                </div>
-              </a>
+                </a>
+                <button
+                  onClick={() => handleDelete(file.id)}
+                  style={{
+                    position: 'absolute', top: 8, right: 8,
+                    width: 28, height: 28, borderRadius: 8,
+                    background: 'rgba(255,255,255,0.92)', border: '1px solid #FECACA',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    cursor: 'pointer', color: '#DC2626',
+                  }}
+                  title="Delete"
+                >
+                  <Trash2 size={12} />
+                </button>
+              </div>
             );
           })}
         </div>

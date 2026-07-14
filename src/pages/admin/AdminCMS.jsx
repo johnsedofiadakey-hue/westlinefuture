@@ -70,7 +70,19 @@ function CMSBranding({ brand, onSave, ac, notify }) {
             ))}
           </div>
         </PFormField>
-        <button onClick={() => onSave({ ...brand, ...f })} className="p-btn-dark lxf" style={{ alignSelf: 'flex-start', padding: '12px 32px', marginTop: 12 }}>Save Branding Identity</button>
+        <PFormField label="Typography">
+          <div style={{
+            padding: '16px 20px', borderRadius: 10, border: `2px solid ${ac}`,
+            background: `${ac}0D`, display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          }}>
+            <div>
+              <div className="lxfh" style={{ fontSize: 15, fontWeight: 800, color: `var(--accent-secondary)` }}>DM Sans · Professional</div>
+              <div className="lxf" style={{ fontSize: 11, color: `var(--text-secondary)`, marginTop: 3 }}>Single font · headings, body, buttons, labels — everything</div>
+            </div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: ac, background: `${ac}20`, padding: '4px 12px', borderRadius: 20 }}>Active</div>
+          </div>
+        </PFormField>
+        <button onClick={() => onSave({ ...brand, ...f, fontFamily: "'DM Sans', sans-serif" })} className="p-btn-dark lxf" style={{ alignSelf: 'flex-start', padding: '12px 32px', marginTop: 12 }}>Save Branding Identity</button>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
         <h3 className="lxfh" style={{ fontSize: 20 }}>Logo & Contact</h3>
@@ -651,11 +663,14 @@ function CMSAbout({ about, onSave, ac, notify }) {
     <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: 40 }}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
         <h3 className="lxfh" style={{ fontSize: 20 }}>Leadership & Story</h3>
-        <PFormField label="Managing Director"><input className="p-inp" value={f.founder || ''} onChange={e => setF({...f, founder: e.target.value})} /></PFormField>
-        <PFormField label="Role / Title"><input className="p-inp" value={f.role || 'Managing Director'} onChange={e => setF({...f, role: e.target.value})} /></PFormField>
+        <PFormField label="Managing Director — Name"><input className="p-inp" value={f.founder || ''} onChange={e => setF({...f, founder: e.target.value})} /></PFormField>
+        <PFormField label="Managing Director — Role / Title"><input className="p-inp" value={f.role || 'Managing Director'} onChange={e => setF({...f, role: e.target.value})} /></PFormField>
+        <PFormField label="Managing Director — Biography"><textarea className="p-inp" rows={5} value={f.bio || ''} onChange={e => setF({...f, bio: e.target.value})} /></PFormField>
+        <PFormField label="Founding Partner — Name"><input className="p-inp" value={f.coFounder || ''} onChange={e => setF({...f, coFounder: e.target.value})} /></PFormField>
+        <PFormField label="Founding Partner — Role / Title"><input className="p-inp" value={f.coFounderRole || 'Founding Partner'} onChange={e => setF({...f, coFounderRole: e.target.value})} /></PFormField>
+        <PFormField label="Founding Partner — Biography"><textarea className="p-inp" rows={5} value={f.coFounderBio || ''} onChange={e => setF({...f, coFounderBio: e.target.value})} /></PFormField>
         <PFormField label="Story Headline"><input className="p-inp" value={f.storyTitle || ''} onChange={e => setF({...f, storyTitle: e.target.value})} /></PFormField>
         <PFormField label="Mission Summary"><textarea className="p-inp" rows={3} value={f.story || ''} onChange={e => setF({...f, story: e.target.value})} /></PFormField>
-        <PFormField label="Full Biography"><textarea className="p-inp" rows={5} value={f.bio || ''} onChange={e => setF({...f, bio: e.target.value})} /></PFormField>
 
         <button onClick={() => onSave(f)} className="p-btn-dark lxf" style={{ alignSelf: 'flex-start', padding: '10px 24px' }}>Save About Page</button>
       </div>

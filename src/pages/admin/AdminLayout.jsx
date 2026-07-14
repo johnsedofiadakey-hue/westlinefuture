@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, Users, Settings, LogOut, Folder, FileCode,
   Eye, Calendar, Activity, Globe, Truck, Package, Mail, MessageSquare, Sparkles,
-  ChevronRight, ChevronDown, FolderOpen, FileText, Briefcase, TrendingUp, Kanban, HardHat, KeyRound, X, Check, Loader2
+  ChevronRight, ChevronDown, FolderOpen, FileText, Briefcase, TrendingUp, Kanban, HardHat, KeyRound, X, Check, Loader2, Grid3X3
 } from 'lucide-react';
 import { NotificationBell } from '../../components/Shared';
 import { getAuth, updatePassword } from 'firebase/auth';
@@ -118,7 +118,7 @@ export default function AdminLayout({ user, onLogout, onPreview, brand, view, se
     setExpandedFolders(prev => ({ ...prev, [id]: !prev[id] }));
   };
 
-  const STAFF_ALLOWED_IDS = ['operations', 'projects'];
+  const ADMIN_ONLY_IDS = ['staff', 'system'];
 
   const allMenuGroups = [
     {
@@ -170,13 +170,17 @@ export default function AdminLayout({ user, onLogout, onPreview, brand, view, se
     }
   ];
 
+  const staffPermissions = user?.permissions || [];
   const menuGroups = staffMode
     ? allMenuGroups
-        .map(g => ({ ...g, items: g.items.filter(item => STAFF_ALLOWED_IDS.includes(item.id)) }))
+        .map(g => ({ ...g, items: g.items.filter(item =>
+          !ADMIN_ONLY_IDS.includes(item.id) && staffPermissions.includes(item.id)
+        )}))
         .filter(g => g.items.length > 0)
     : allMenuGroups;
 
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+  const [showMoreMenu, setShowMoreMenu] = useState(false);
   useEffect(() => {
     const h = () => setIsMobile(window.innerWidth <= 768);
     window.addEventListener('resize', h);
@@ -186,28 +190,37 @@ export default function AdminLayout({ user, onLogout, onPreview, brand, view, se
   // Re-translate whenever lang changes or admin content mutates (tabs, Firestore data loads, etc.)
   useEffect(() => {
     const lang = props.lang === 'zh' ? 'zh' : 'en';
-    const apply = () => translateAdminDom(lang);
-    // Double-pass: immediate + short delay for async Firestore-driven content
+    let cancelled = false;
+    let debounceTimer = null;
+    const apply = async () => { if (!cancelled) await translateAdminDom(lang); };
     apply();
-    const t = setTimeout(apply, 150);
-    const observer = new MutationObserver(() => requestAnimationFrame(apply));
+    const t = setTimeout(apply, 500);
+    const observer = new MutationObserver(() => {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(apply, 600);
+    });
     const root = document.querySelector('.lx-admin');
-    if (root) observer.observe(root, { childList: true, subtree: true, characterData: true });
-    return () => { clearTimeout(t); observer.disconnect(); };
+    if (root) observer.observe(root, { childList: true, subtree: true });
+    return () => { cancelled = true; clearTimeout(t); clearTimeout(debounceTimer); observer.disconnect(); };
   }, [props.lang]);
 
   return (
     <div className="lx-admin" style={{ display: 'flex', minHeight: '100vh', background: 'var(--bg-primary, #FAF8F5)', '--ac': ac, fontFamily: 'var(--font-p)' }}>
       {/* NARROW COMMAND EXPLORER (Desktop Only) */}
       {!isMobile && (
-        <aside className="p-sidebar-narrow" style={{ 
-          width: 280, 
-          background: 'rgba(255, 255, 255, 0.7)', 
+        <aside className="p-sidebar-narrow" style={{
+          width: 280,
+          background: 'rgba(255, 255, 255, 0.7)',
           backdropFilter: 'blur(24px)',
           borderRight: '1px solid rgba(0, 0, 0, 0.05)',
           display: 'flex',
           flexDirection: 'column',
-          boxShadow: '1px 0 20px rgba(0,0,0,0.02)'
+          boxShadow: '1px 0 20px rgba(0,0,0,0.02)',
+          position: 'sticky',
+          top: 0,
+          height: '100vh',
+          overflowY: 'auto',
+          flexShrink: 0,
         }}>
           <div style={{ padding: '32px 24px 20px', borderBottom: '1px solid rgba(0,0,0,0.04)', marginBottom: 12 }}>
             {brand.logo ? (
@@ -293,8 +306,8 @@ export default function AdminLayout({ user, onLogout, onPreview, brand, view, se
       )}
 
       {/* MAIN CONTENT AREA */}
-      <main className="lx-main-admin" style={{ flex: 1, marginLeft: !isMobile ? 280 : 0 }}>
-        <div style={{ maxWidth: 1400, margin: '0 auto' }}>
+      <main className="lx-main-admin" style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ maxWidth: 1400, margin: 0, padding: isMobile ? 0 : '0 32px' }}>
           {/* RESPONSIVE HEADER */}
           <header className={`p-nav-float ${isMobile ? 'mobile-header' : ''}`} style={{
             marginTop: isMobile ? 0 : 24,
@@ -405,7 +418,7 @@ export default function AdminLayout({ user, onLogout, onPreview, brand, view, se
             </div>
           </header>
 
-          <div className="fade-in admin-content-wrap" style={{ padding: isMobile ? '20px 20px 120px' : '40px 60px' }}>
+          <div className="fade-in admin-content-wrap" style={{ padding: isMobile ? '20px 16px 100px' : '40px 60px' }}>
             {view === 'dash' && !localStorage.getItem('wl_admin_guide_dismissed') && (
               <div style={{ padding: 24, background: `var(--bg-primary)`, border: '1px solid var(--border-color)', borderRadius: 24, marginBottom: 28, position: 'relative' }}>
                  <button
@@ -486,31 +499,105 @@ export default function AdminLayout({ user, onLogout, onPreview, brand, view, se
         </div>
       )}
 
-      {/* MOBILE BOTTOM NAVIGATION (Premium Glass Dock) */}
-      {isMobile && (
-        <div className="glass-dock" style={{ 
-          position: 'fixed', bottom: 20, left: 20, right: 20, height: 72, 
-          background: 'rgba(92, 58, 33, 0.95)', backdropFilter: 'blur(20px)', 
-          borderRadius: 24, border: '1px solid rgba(255,255,255,0.1)', 
-          display: 'flex', justifyContent: 'space-around', alignItems: 'center', 
-          padding: '0 10px', zIndex: 1000, boxShadow: '0 20px 50px rgba(0,0,0,0.3)'
-        }}>
-          {menuGroups.flatMap(g => g.items).slice(0, 5).map(m => (
-            <button 
-              key={m.id} 
-              onClick={() => setView(m.id)} 
-              style={{ 
-                background: 'none', border: 'none', color: view === m.id ? ac : `var(--text-secondary)`, 
-                display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, cursor: 'pointer' 
-              }}
-            >
-              {m.icon}
-              <span className="lxf" style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase' }}>{m.label}</span>
-            </button>
-          ))}
-          <button onClick={onLogout} style={{ background: 'none', border: 'none', color: '#EF4444' }}><LogOut size={20} /></button>
-        </div>
-      )}
+      {/* MOBILE BOTTOM NAVIGATION */}
+      {isMobile && (() => {
+        const allItems = menuGroups.flatMap(g => g.items);
+        const pinned = [
+          allItems.find(m => m.id === 'dash'),
+          allItems.find(m => m.id === 'operations'),
+          allItems.find(m => m.id === 'financials'),
+          allItems.find(m => m.id === 'email'),
+        ].filter(Boolean);
+        const pinnedIds = new Set(pinned.map(m => m.id));
+        const moreItems = allItems.filter(m => !pinnedIds.has(m.id));
+        const NavBtn = ({ item, active, onClick }) => (
+          <button onClick={onClick} style={{
+            background: 'none', border: 'none', flex: 1,
+            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+            gap: 3, cursor: 'pointer', padding: '6px 0 4px',
+            color: active ? '#fff' : 'rgba(255,255,255,0.5)',
+          }}>
+            <span style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              width: 38, height: 26, borderRadius: 10,
+              background: active ? 'rgba(255,255,255,0.15)' : 'transparent',
+            }}>{item.icon}</span>
+            <span style={{ fontSize: 9, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.03em', lineHeight: 1, whiteSpace: 'nowrap' }}>
+              {item.label.split(' ')[0]}
+            </span>
+          </button>
+        );
+        return (
+          <>
+            {/* More drawer backdrop */}
+            {showMoreMenu && (
+              <div onClick={() => setShowMoreMenu(false)} style={{
+                position: 'fixed', inset: 0, zIndex: 1100, background: 'rgba(0,0,0,0.5)'
+              }} />
+            )}
+            {/* More drawer slide-up */}
+            {showMoreMenu && (
+              <div style={{
+                position: 'fixed', left: 0, right: 0, bottom: 64, zIndex: 1200,
+                background: 'rgba(28,18,10,0.98)', backdropFilter: 'blur(24px)',
+                borderRadius: '24px 24px 0 0', padding: '20px 16px 16px',
+                boxShadow: '0 -8px 40px rgba(0,0,0,0.4)',
+              }}>
+                <div style={{ width: 36, height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.2)', margin: '0 auto 20px' }} />
+                <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', margin: '0 0 12px 4px' }}>All Sections</p>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
+                  {moreItems.map(m => (
+                    <button key={m.id} onClick={() => { setView(m.id); setShowMoreMenu(false); }} style={{
+                      background: view === m.id ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.05)',
+                      border: '1px solid rgba(255,255,255,0.08)',
+                      borderRadius: 14, padding: '12px 4px 10px',
+                      display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6,
+                      cursor: 'pointer', color: view === m.id ? '#fff' : 'rgba(255,255,255,0.6)',
+                    }}>
+                      {m.icon}
+                      <span style={{ fontSize: 9, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.03em', lineHeight: 1, textAlign: 'center' }}>
+                        {m.label.split(' ')[0]}
+                      </span>
+                    </button>
+                  ))}
+                  <button onClick={() => { onLogout(); setShowMoreMenu(false); }} style={{
+                    background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)',
+                    borderRadius: 14, padding: '12px 4px 10px',
+                    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6,
+                    cursor: 'pointer', color: '#EF4444',
+                  }}>
+                    <LogOut size={18} />
+                    <span style={{ fontSize: 9, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.03em', lineHeight: 1 }}>Logout</span>
+                  </button>
+                </div>
+              </div>
+            )}
+            {/* Bottom bar */}
+            <div style={{
+              position: 'fixed', bottom: 0, left: 0, right: 0, height: 64,
+              background: 'rgba(28,18,10,0.97)', backdropFilter: 'blur(20px)',
+              borderTop: '1px solid rgba(255,255,255,0.07)',
+              display: 'flex', alignItems: 'stretch',
+              zIndex: 1000, paddingBottom: 'env(safe-area-inset-bottom)',
+            }}>
+              {pinned.map(m => <NavBtn key={m.id} item={m} active={view === m.id && !showMoreMenu} onClick={() => { setView(m.id); setShowMoreMenu(false); }} />)}
+              <button onClick={() => setShowMoreMenu(p => !p)} style={{
+                background: 'none', border: 'none', flex: 1,
+                display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                gap: 3, cursor: 'pointer', padding: '6px 0 4px',
+                color: showMoreMenu ? '#fff' : 'rgba(255,255,255,0.5)',
+              }}>
+                <span style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  width: 38, height: 26, borderRadius: 10,
+                  background: showMoreMenu ? 'rgba(255,255,255,0.15)' : 'transparent',
+                }}><Grid3X3 size={17} /></span>
+                <span style={{ fontSize: 9, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.03em', lineHeight: 1 }}>More</span>
+              </button>
+            </div>
+          </>
+        );
+      })()}
     </div>
   );
 }

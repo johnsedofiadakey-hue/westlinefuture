@@ -73,6 +73,7 @@ import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from
 import { X } from 'lucide-react';
 
 function ForcePasswordChange({ user, auth, db, onDone, onLogout }) {
+  const [currentPw, setCurrentPw] = React.useState('');
   const [newPw, setNewPw] = React.useState('');
   const [confirmPw, setConfirmPw] = React.useState('');
   const [busy, setBusy] = React.useState(false);
@@ -82,17 +83,19 @@ function ForcePasswordChange({ user, auth, db, onDone, onLogout }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setErr('');
-    if (newPw.length < 6) return setErr('Password must be at least 6 characters.');
-    if (newPw === 'unlockme') return setErr('You must choose a new password — you cannot keep the default.');
+    if (newPw.length < 8) return setErr('Password must be at least 8 characters.');
+    if (currentPw && newPw === currentPw) return setErr('You must choose a new password — you cannot keep the temporary one.');
     if (newPw !== confirmPw) return setErr('Passwords do not match.');
     setBusy(true);
     try {
-      // Reauthenticate with the default password then update
-      const credential = EmailAuthProvider.credential(auth.currentUser.email, 'unlockme');
-      try {
-        await reauthenticateWithCredential(auth.currentUser, credential);
-      } catch {
-        // May already be reauthed from fresh login — continue
+      // Reauthenticate with the temporary password then update
+      if (currentPw) {
+        const credential = EmailAuthProvider.credential(auth.currentUser.email, currentPw);
+        try {
+          await reauthenticateWithCredential(auth.currentUser, credential);
+        } catch {
+          // May already be reauthed from fresh login — continue
+        }
       }
       await updatePassword(auth.currentUser, newPw);
       await updateDoc(doc(db, 'users', user.uid), { requiresPasswordReset: false });
@@ -119,7 +122,7 @@ function ForcePasswordChange({ user, auth, db, onDone, onLogout }) {
         </div>
         <h2 style={{ fontSize: 22, fontWeight: 900, color: '#1A1410', margin: '0 0 8px' }}>Set Your Password</h2>
         <p style={{ fontSize: 13, color: '#7A6355', lineHeight: 1.6, margin: '0 0 28px' }}>
-          Welcome, <strong>{user?.name}</strong>. Your account was created with a temporary default password. Please set your own password before continuing.
+          Welcome, <strong>{user?.name}</strong>. Your account was created with a temporary password. Please set your own password before continuing.
         </p>
         {done ? (
           <div style={{ padding: '16px', borderRadius: 12, background: '#F0FDF4', color: '#15803D', fontSize: 13, fontWeight: 700, textAlign: 'center' }}>
@@ -128,14 +131,25 @@ function ForcePasswordChange({ user, auth, db, onDone, onLogout }) {
         ) : (
           <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             <label style={{ display: 'flex', flexDirection: 'column', gap: 5, fontSize: 11, fontWeight: 700, color: '#7A6355', textTransform: 'uppercase', letterSpacing: '.06em' }}>
+              Current (Temporary) Password
+              <input
+                type="password"
+                value={currentPw}
+                onChange={e => setCurrentPw(e.target.value)}
+                placeholder="The password you just logged in with"
+                required
+                autoFocus
+                style={{ padding: '12px 14px', borderRadius: 10, border: '1.5px solid #E5DDD6', fontSize: 14, fontFamily: 'Inter, sans-serif', outline: 'none' }}
+              />
+            </label>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 5, fontSize: 11, fontWeight: 700, color: '#7A6355', textTransform: 'uppercase', letterSpacing: '.06em' }}>
               New Password
               <input
                 type="password"
                 value={newPw}
                 onChange={e => setNewPw(e.target.value)}
-                placeholder="Choose a strong password"
+                placeholder="Choose a strong password (8+ characters)"
                 required
-                autoFocus
                 style={{ padding: '12px 14px', borderRadius: 10, border: '1.5px solid #E5DDD6', fontSize: 14, fontFamily: 'Inter, sans-serif', outline: 'none' }}
               />
             </label>
@@ -216,7 +230,7 @@ export default function App() {
   const loginAttempts = useRef({});
   const confirmationResultRef = useRef(null);
   const {
-    user, setUser, clients, proposals, invoices, bookings, emails, setEmails, dbClients, teamMembers, logs, shipments, messages, testimonials, tasks, transactions, changeRequests, userNotifications, procurements, jobs, notes, media, approvals, materials, assets, workOrders, containers, renderingPackages, addOns,
+    user, setUser, refreshUserProfile, clients, proposals, invoices, bookings, emails, setEmails, dbClients, teamMembers, logs, shipments, messages, testimonials, tasks, transactions, changeRequests, userNotifications, procurements, jobs, notes, media, approvals, materials, assets, workOrders, containers, renderingPackages, addOns,
     brand, content, currency, lang,
     setCurrency, setLang, setBrand, setContent,
     loadMoreMessages, hasMoreMessages,
@@ -308,7 +322,11 @@ export default function App() {
     root.style.setProperty('--bg',  brand.bgPrimary       || '#FDFCFB');
     root.style.setProperty('--fg',  brand.textPrimary     || '#1A1410');
     root.style.setProperty('--ac',  brand.accentSecondary || '#1A1410');
-    if (brand.fontFamily) root.style.setProperty('--font-primary', brand.fontFamily);
+    if (brand.fontFamily) {
+      root.style.setProperty('--font-primary', brand.fontFamily);
+      root.style.setProperty('--font-h', brand.fontFamily);
+      root.style.setProperty('--font-p', brand.fontFamily);
+    }
   }, [brand]);
   const fxRate = content?.finSettings?.exchangeRate || brand?.finSettings?.exchangeRate || 15.5;
   const rates = { USD: 1, GHS: fxRate, EUR: 0.93, CNY: 7.25, AED: 3.67 };
@@ -1619,7 +1637,7 @@ export default function App() {
         updatedAt: serverTimestamp(),
       });
 
-      const recipients = [...new Set(['admin', project?.projectManagerId, ...(project?.assignedStaff || [])].filter(Boolean))];
+      const recipients = [...new Set(['admin', project?.projectManagerId, ...(project?.projectManagerIds || []), ...(project?.assignedStaff || [])].filter(Boolean))];
       await Promise.all(recipients.map(recipientId =>
         createNotification(recipientId, `Payment received: GH₵${amount.toLocaleString()} for invoice ${id} via ${method}`, 'payment', `/admin/client-hub`)
           .catch(() => null)
@@ -1696,7 +1714,7 @@ export default function App() {
         const msg = `Payment of GH₵ ${Number(amount).toLocaleString()} confirmed for "${project.title || 'your project'}" via ${method}. Thank you!`;
         await createNotification(project.clientId, msg, 'payment', '/portal');
       }
-      const staffRecipients = [...new Set(['admin', managerId, ...(project?.assignedStaff || [])].filter(Boolean))];
+      const staffRecipients = [...new Set(['admin', managerId, ...(project?.projectManagerIds || []), ...(project?.assignedStaff || [])].filter(Boolean))];
       await Promise.all(staffRecipients.map(recipientId =>
         createNotification(recipientId, `Offline payment of GH₵${Number(amount).toLocaleString()} recorded for "${project?.title || pid}" via ${method}.`, 'payment_received', '/admin/client-hub')
           .catch(() => null)
@@ -2086,7 +2104,14 @@ export default function App() {
         clientVisibleNote: '',
         internalNote: '',
       }));
-      const docRef = await addDoc(collection(db, 'projects'), {
+      const cleanForFirestore = (v) => {
+        if (v === undefined) return null;
+        if (Array.isArray(v)) return v.map(cleanForFirestore);
+        if (v !== null && typeof v === 'object' && Object.getPrototypeOf(v) === Object.prototype)
+          return Object.fromEntries(Object.entries(v).map(([k, e]) => [k, cleanForFirestore(e)]));
+        return v;
+      };
+      const docRef = await addDoc(collection(db, 'projects'), cleanForFirestore({
         title: sanitizeText(data.title || 'New Project'),
         clientId,
         clientIds: buildClientIds(clientId, data.phone || data.clientPhone),
@@ -2127,6 +2152,7 @@ export default function App() {
         assignedWorkers: selectedWorkerIds,
         assignedStaff: selectedStaffIds,
         projectManagerId: data.assignedStaff || null,
+        projectManagerIds: data.assignedStaff ? [data.assignedStaff] : [],
         estimatedStartDate: data.estimatedStartDate || data.projectDate || null,
         targetCompletionDate: data.targetCompletionDate || null,
         stageTimelines,
@@ -2134,7 +2160,7 @@ export default function App() {
         stageHistory: [{ stageId: 1, note: data.projectDate ? `Project created (backdated to ${data.projectDate})` : 'Project created', timestamp: effectiveDate, byRole: 'admin' }],
         createdAt: data.projectDate ? effectiveDate : serverTimestamp(),
         updatedAt: serverTimestamp(),
-      });
+      }));
       await updateDoc(doc(db, 'users', clientId), {
         projectIds: arrayUnion(docRef.id),
         updatedAt: serverTimestamp(),
@@ -2889,7 +2915,12 @@ export default function App() {
         ? email.trim().toLowerCase()
         : `${username.trim().toLowerCase()}@westlinefuture.com`;
 
-      const userCredential = await createUserWithEmailAndPassword(secondaryAuth, loginEmail, 'unlockme');
+      // Random one-time password — shown once to the admin, never stored in Firestore.
+      const tempChars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
+      const tempPick = (n) => Array.from({ length: n }, () => tempChars[Math.floor(Math.random() * tempChars.length)]).join('');
+      const tempPassword = `WF-${tempPick(4)}-${tempPick(4)}`;
+
+      const userCredential = await createUserWithEmailAndPassword(secondaryAuth, loginEmail, tempPassword);
       const uid = userCredential.user.uid;
 
       const staffRole = systemRole || (["Field Worker", "Technician", "Senior Technician", "Technical Team Lead", "Field Installer"].includes(role) ? "worker" : "staff");
@@ -2912,7 +2943,7 @@ export default function App() {
         assignedWorkers:      [],
         status:               "Active",
         certs:                [],
-        // Password never stored in Firestore — default is 'unlockme', staff sets own on first login.
+        // Password never stored in Firestore — random temp password, staff sets own on first login.
         createdAt:            serverTimestamp(),
         createdBy:            user?.uid || "admin",
       };
@@ -2924,6 +2955,7 @@ export default function App() {
 
       notify('success', `Account created for ${name}`);
       logAction(null, 'Staff', `Created ${staffRole} account for ${name} (${role}) — login: ${loginEmail}`);
+      return { uid, loginEmail, tempPassword };
     } catch (err) {
       if (secondaryApp) await deleteApp(secondaryApp).catch(() => {});
       if (err.code === "auth/email-already-exists") throw new Error(`An account already exists for this email address`);
@@ -3096,20 +3128,7 @@ export default function App() {
           setNotification(null);
           return res;
         } catch (signInErr) {
-          if ((signInErr.code === 'auth/user-not-found' || signInErr.code === 'auth/invalid-credential') && isAdminEmail) {
-            notify('pending', 'Securing account access...');
-            try {
-              const res = await createUserWithEmailAndPassword(auth, e, p);
-              await setDoc(doc(db, 'users', res.user.uid), { email: e, role: 'admin', createdAt: new Date().toISOString() });
-              // Removed clear rate limit
-              return res;
-            } catch (createErr) {
-              if (createErr.code === 'auth/email-already-in-use') {
-                throw new Error("Account exists but password is incorrect. Please reset via Firebase Console.");
-              }
-              throw createErr;
-            }
-          }
+          // Admin accounts are pre-provisioned; never auto-create on a failed login.
           throw signInErr;
         }
       } else {
@@ -3176,12 +3195,7 @@ export default function App() {
                     user={user}
                     auth={auth}
                     db={db}
-                    onDone={async () => {
-                      const snap = await getDoc(doc(db, 'users', user.uid));
-                      const updated = { ...snap.data(), id: user.id, uid: user.uid };
-                      localStorage.setItem('westline_user_cache', JSON.stringify(updated));
-                      setUser(updated);
-                    }}
+                    onDone={refreshUserProfile}
                     onLogout={handleLogout}
                   />
                 ) : (
@@ -3238,12 +3252,7 @@ export default function App() {
                     user={user}
                     auth={auth}
                     db={db}
-                    onDone={async () => {
-                      const snap = await getDoc(doc(db, 'users', user.uid));
-                      const updated = { ...snap.data(), id: user.id, uid: user.uid };
-                      localStorage.setItem('westline_user_cache', JSON.stringify(updated));
-                      setUser(updated);
-                    }}
+                    onDone={refreshUserProfile}
                     onLogout={handleLogout}
                   />
                 ) : (
@@ -3261,12 +3270,17 @@ export default function App() {
       </ErrorBoundary>
 
       {notification && (
-        <div style={{ 
-          position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)', 
-          zIndex: 10000, padding: '12px 24px', borderRadius: 100, 
-          background: notification.type === 'error' ? '#EF4444' : `var(--accent-secondary)`, 
+        <div style={{
+          position: 'fixed',
+          ...(window.innerWidth <= 768
+            ? { top: 16, bottom: 'auto' }
+            : { bottom: 24, top: 'auto' }),
+          left: '50%', transform: 'translateX(-50%)',
+          zIndex: 10000, padding: '12px 24px', borderRadius: 100,
+          background: notification.type === 'error' ? '#EF4444' : `var(--accent-secondary)`,
           color: '#fff', fontSize: 13, boxShadow: '0 8px 32px rgba(0,0,0,.25)',
-          display: 'flex', alignItems: 'center', gap: 12
+          display: 'flex', alignItems: 'center', gap: 12, whiteSpace: 'nowrap',
+          maxWidth: 'calc(100vw - 32px)'
         }}>
            <span>{notification.msg}</span>
            {(notification.persistent || notification.type === 'persistent') && (

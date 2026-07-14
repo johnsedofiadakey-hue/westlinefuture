@@ -1,7 +1,7 @@
 import { createContext, useState, useEffect, useContext } from 'react';
 import { db, isFirebaseEnabled } from '../lib/firebase';
 import { AuthContext } from './AuthContext';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   collection, query, onSnapshot, getDocs, getDoc, doc,
   orderBy, limit, where, collectionGroup
@@ -37,6 +37,7 @@ const mergeScopedRecords = (primary, scoped) => {
 
 export const AppProvider = ({ children }) => {
   const { currentUser, loading: firebaseAuthLoading } = useContext(AuthContext);
+  const queryClient = useQueryClient();
   const [user, setUser] = useState(() => {
     try {
       const cached = localStorage.getItem('westline_user_cache');
@@ -158,6 +159,24 @@ export const AppProvider = ({ children }) => {
       localStorage.removeItem('westline_user_cache');
     }
   }, [userProfile, currentUser, firebaseAuthLoading]);
+
+  // Re-fetches the Firestore profile and writes it into BOTH the local `user`
+  // state and this query's own cache. Without updating the query cache too,
+  // a later refetch (tab refocus, route remount, next login within the 5min
+  // staleTime) would silently overwrite fresh state with the old cached
+  // profile — e.g. resurrecting `requiresPasswordReset: true` right after a
+  // staff member had just cleared it, forcing them through the password
+  // screen again with a temp password that no longer works.
+  const refreshUserProfile = async () => {
+    if (!currentUser) return null;
+    const fresh = await fetchUserProfile(currentUser);
+    if (fresh) {
+      queryClient.setQueryData(['userProfile', currentUser?.uid, currentUser?.email, currentUser?.phoneNumber], fresh);
+      setUser(fresh);
+      localStorage.setItem('westline_user_cache', JSON.stringify(fresh));
+    }
+    return fresh;
+  };
 
   useEffect(() => {
     if (!currentUser || !user) return;
@@ -504,7 +523,7 @@ export const AppProvider = ({ children }) => {
 
   return (
     <AppContext.Provider value={{
-      user, setUser, authProfileLoading, userProfileError,
+      user, setUser, refreshUserProfile, authProfileLoading, userProfileError,
       clients, proposals, invoices, bookings, emails, setEmails, dbClients, teamMembers, logs, shipments, messages, testimonials, tasks, transactions, renderingPackages, addOns, changeRequests, userNotifications, notifications, procurements, jobs, notes, media, approvals, materials, assets, workOrders, containers,
       brand, content, currency, lang,
       setCurrency, setLang, setBrand, setContent,

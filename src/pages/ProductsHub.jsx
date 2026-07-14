@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 import { PubNav, Footer, translatePublicDom } from '../components/PubLayout';
 import { db } from '../lib/firebase';
-import { doc, setDoc, addDoc, collection, onSnapshot, serverTimestamp } from 'firebase/firestore';
+import { doc, setDoc, addDoc, collection, onSnapshot, serverTimestamp, query, where } from 'firebase/firestore';
 import { AppContext } from '../context/AppContext';
 import UnifiedPaymentGateway from '../components/UnifiedPaymentGateway';
 
@@ -674,7 +674,7 @@ export default function ProductsHub({ brand, user, onPortal, setPage, content })
     
     let isMounted = true;
     
-    const unsubProducts = onSnapshot(collection(db, 'products'), (snap) => {
+    const unsubProducts = onSnapshot(query(collection(db, 'products'), where('published', '==', true)), (snap) => {
       if (isMounted) setDbProducts(snap.docs.map(d => ({ id: d.id, ...d.data() })));
       setLoading(false);
     });
@@ -708,10 +708,11 @@ export default function ProductsHub({ brand, user, onPortal, setPage, content })
   // ── Re-translate whenever language changes OR products finish loading ──────
   useEffect(() => {
     if (!lang) return;
-    const apply = () => translatePublicDom(lang === 'zh' ? 'zh' : 'en');
-    const raf = requestAnimationFrame(apply);
-    const t = setTimeout(apply, 120);
-    return () => { cancelAnimationFrame(raf); clearTimeout(t); };
+    let cancelled = false;
+    const apply = async () => { if (!cancelled) await translatePublicDom(lang === 'zh' ? 'zh' : 'en'); };
+    const raf = requestAnimationFrame(() => apply());
+    const t = setTimeout(() => apply(), 600);
+    return () => { cancelled = true; cancelAnimationFrame(raf); clearTimeout(t); };
   }, [lang, products, loading]);
 
   // Favorites logic (now safe since favorites, products are fully initialized)

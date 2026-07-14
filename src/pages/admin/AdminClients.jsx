@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Search, Plus, X, UserPlus, Trash2, Edit2, Mail, Phone,
   Info, ChevronRight, ShieldCheck, Building, Shield, Command,
@@ -27,6 +27,12 @@ export default function AdminClients({ dbClients, createClient, updateClient, de
 
   const ac = brand.color || `var(--accent-secondary)`;
   const { invoices = [], workOrders = [], clients: projects = [] } = props;
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+  useEffect(() => {
+    const h = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener('resize', h);
+    return () => window.removeEventListener('resize', h);
+  }, []);
 
   // Use actual project records (props.clients = Firestore projects with stageId)
   // falling back to workOrders for legacy data
@@ -196,6 +202,86 @@ export default function AdminClients({ dbClients, createClient, updateClient, de
          </select>
       </div>
 
+      {/* MOBILE CARD LIST */}
+      {isMobile ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {filtered.length === 0 && (
+            <EmptyState
+              icon={<UsersIcon size={28} />}
+              title={search ? 'No clients match your search' : 'No clients yet'}
+              description={search ? 'Try a different name or phone number.' : 'Register your first client to get started.'}
+              action={!search ? { label: 'Add Client', onClick: () => setShowAdd(true) } : undefined}
+            />
+          )}
+          {filtered.map(client => {
+            const latestProject = getLatestProject(client);
+            const clientInvoices = invoices.filter(inv => inv.clientId === client.id);
+            const stageId = latestProject?.stageId || 0;
+            const stageDef = CLIENT_PROJECT_STAGES.find(s => s.id === stageId);
+            const stageLabel = stageDef?.name || latestProject?.status || 'Active';
+            const stageColor = stageDef?.color || '#94A3B8';
+            const stagePct = Math.round(((stageId || 1) / 8) * 100);
+            const isCompleted = latestProject?.status === 'Completed' || stageId >= 8;
+            const totalOwed = clientInvoices.reduce((sum, inv) => {
+              if (isPaidStatus(inv.status)) return sum;
+              const isActuallyDue = inv.status === 'Overdue' || (inv.due != null && inv.due !== '');
+              if (!isActuallyDue) return sum;
+              return sum + ((inv.amount || 0) - (inv.amountPaid || 0));
+            }, 0);
+            const unpaidCount = clientInvoices.filter(i => !['Paid','paid'].includes(i.status) && (i.status === 'Overdue' || (i.due != null && i.due !== ''))).length;
+            let healthText = latestProject ? 'On Track' : 'Ready for Intake';
+            let healthColor = '#10B981';
+            if (isCompleted) { healthText = 'Completed'; healthColor = '#6366F1'; }
+            else if (unpaidCount > 0) { healthText = 'Awaiting Payment'; healthColor = '#F59E0B'; }
+            else if (totalOwed > 10000) { healthText = 'High Balance'; healthColor = '#EF4444'; }
+            const currSymbol = props.currency === 'USD' ? '$' : '₵';
+            return (
+              <div key={client.id} onClick={() => props.onSelectClient?.(client.id)}
+                style={{ background: '#fff', borderRadius: 16, padding: '16px', border: '1px solid var(--border-color)', cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <PAv i={client.name?.[0]} s={40} c={isCompleted ? '#6366F1' : ac} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div className="lxfh" style={{ fontSize: 14, fontWeight: 700, truncate: true }}>{client.name}</div>
+                    <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{client.phone}</div>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: `${healthColor}15`, color: healthColor, padding: '4px 8px', borderRadius: 10, fontSize: 10, fontWeight: 700 }}>
+                      <div style={{ width: 5, height: 5, borderRadius: '50%', background: healthColor }} />{healthText}
+                    </div>
+                    <ChevronRight size={16} color="var(--text-secondary)" />
+                  </div>
+                </div>
+                {latestProject && (
+                  <div style={{ background: 'var(--bg-secondary)', borderRadius: 10, padding: '10px 12px' }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 4 }}>{latestProject.title}</div>
+                    {isCompleted ? (
+                      <div style={{ fontSize: 11, color: '#6366F1', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 4 }}><CheckCircle2 size={11} /> Project complete</div>
+                    ) : (
+                      <div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                          <span style={{ fontSize: 10, fontWeight: 700, color: stageColor }}>Stage {stageId || 1} · {stageLabel}</span>
+                          <span style={{ fontSize: 10, color: 'var(--text-secondary)', fontWeight: 700 }}>{stagePct}%</span>
+                        </div>
+                        <div style={{ height: 3, borderRadius: 3, background: 'var(--border-color)', overflow: 'hidden' }}>
+                          <div style={{ height: '100%', borderRadius: 3, background: stageColor, width: `${stagePct}%` }} />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+                {totalOwed > 0 && (
+                  <div style={{ fontSize: 12, fontWeight: 700, color: '#EF4444' }}>Balance due: {currSymbol}{totalOwed.toLocaleString()}</div>
+                )}
+                <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }} onClick={e => e.stopPropagation()}>
+                  <button onClick={() => startEdit(client)} style={{ background: 'var(--bg-secondary)', border: 'none', padding: '6px 14px', borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: 'pointer', color: 'var(--accent-secondary)' }}>Edit</button>
+                  <button onClick={() => setConfirmDelete({ type: 'single', id: client.id })} style={{ background: '#FFF1F1', border: 'none', padding: '6px 14px', borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: 'pointer', color: '#EF4444' }}>Delete</button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+      /* DESKTOP TABLE */
       <div className="p-card" style={{ padding: 0, overflow: 'hidden', border: '1px solid var(--border-color)' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
           <thead style={{ background: `var(--bg-secondary)`, borderBottom: '1px solid var(--border-color)' }}>
@@ -331,6 +417,7 @@ export default function AdminClients({ dbClients, createClient, updateClient, de
           </tbody>
         </table>
       </div>
+      )}
 
       {/* CUSTOM DELETE CONFIRMATION MODAL */}
       {confirmDelete && (

@@ -4,6 +4,9 @@ const { getFirestore, FieldValue } = require('firebase-admin/firestore');
 const { TranslationServiceClient } = require('@google-cloud/translate').v3;
 
 initializeApp();
+const { setGlobalOptions } = require('firebase-functions/v2');
+// Cap instances per function — shared Cloud Run CPU quota across all services.
+setGlobalOptions({ maxInstances: 10 });
 const translationClient = new TranslationServiceClient();
 
 const CORS_OPTS = {
@@ -656,6 +659,137 @@ exports.signVaultDocument = onCall(CORS_OPTS, async request => {
   return { signed: true, signedAt };
 });
 
+// Onboarding design-services agreement — signed before the project becomes
+// accessible in the client portal. No quoteApproved precondition, no invoice
+// generation, no stage change (unlike signProjectAgreement above).
+exports.signOnboardingAgreement = onCall(CORS_OPTS, async request => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'Sign in before signing the service agreement.');
+  }
+
+  const projectId = String(request.data?.projectId || '').trim();
+  const typedName = String(request.data?.typedName || '').trim().replace(/\s+/g, ' ');
+  const signatureData = String(request.data?.signatureData || '');
+  const legalConsent = request.data?.legalConsent === true;
+  const userAgent = String(request.data?.userAgent || '').trim().slice(0, 500);
+  const agreementText = String(request.data?.agreementText || '').slice(0, 20000);
+
+  if (!projectId || typedName.length < 3 || typedName.length > 120) {
+    throw new HttpsError('invalid-argument', 'Project and full legal name are required.');
+  }
+  if (!legalConsent || !signatureData.startsWith('data:image/png;base64,') || signatureData.length > 350000) {
+    throw new HttpsError('invalid-argument', 'A valid signature and legal consent are required.');
+  }
+
+  const db = getFirestore();
+  const projectRef = db.collection('projects').doc(projectId);
+  const projectSnap = await projectRef.get();
+  if (!projectSnap.exists) {
+    throw new HttpsError('not-found', 'Project not found.');
+  }
+
+  const project = projectSnap.data();
+  if (!userOwnsProject(request.auth, project)) {
+    throw new HttpsError('permission-denied', 'This project is not assigned to your account.');
+  }
+  if (project.onboardingAgreement?.signed === true) {
+    return { signed: true, alreadySigned: true };
+  }
+
+  const signedAt = new Date().toISOString();
+  const signerPhone = request.auth.token.phone_number || '';
+  const signatureStamp = `onboarding:${projectId}:${request.auth.uid}:${signedAt}`;
+  const rawForwardedFor = request.rawRequest?.headers?.['x-forwarded-for'];
+  const ipAddress = String(Array.isArray(rawForwardedFor) ? rawForwardedFor[0] : rawForwardedFor || request.rawRequest?.ip || '')
+    .split(',')[0]
+    .trim()
+    .slice(0, 80);
+
+  const batch = db.batch();
+  batch.set(projectRef, {
+    onboardingAgreement: {
+      signed: true,
+      signedAt,
+      signerName: typedName,
+      signerUid: request.auth.uid,
+      signerPhone,
+      signatureData,
+      agreementText,
+      verificationStamp: {
+        ipAddress,
+        userAgent,
+        timestamp: signedAt,
+        signatureStamp,
+      },
+    },
+    updatedAt: FieldValue.serverTimestamp(),
+  }, { merge: true });
+
+  const signedDocumentRef = projectRef.collection('documents').doc('signed-onboarding-agreement');
+  batch.set(signedDocumentRef, {
+    name: 'Design Services Agreement',
+    type: 'signed_onboarding_agreement',
+    documentKind: 'onboarding_agreement',
+    status: 'signed',
+    immutable: true,
+    clientVisible: true,
+    projectId,
+    clientId: project.clientId || '',
+    projectTitle: project.title || '',
+    signedAt,
+    signedBy: typedName,
+    signedByUid: request.auth.uid,
+    signedByPhone: signerPhone,
+    signatureMethod: 'electronic-signature',
+    signatureData,
+    signatureStamp,
+    agreementText,
+    legalConsent: true,
+    verification: {
+      ipAddress,
+      userAgent,
+    },
+    createdAt: FieldValue.serverTimestamp(),
+  }, { merge: true });
+
+  const activityRef = projectRef.collection('activityLogs').doc();
+  batch.set(activityRef, {
+    actor: 'client',
+    actorId: request.auth.uid,
+    actorName: typedName,
+    actionType: 'onboarding_agreement_signed',
+    actionDescription: 'Signed the design services cooperation agreement.',
+    legalConsent: true,
+    signatureMethod: 'electronic-signature',
+    signatureStamp,
+    timestamp: FieldValue.serverTimestamp(),
+  });
+
+  const recipients = [...new Set([
+    'admin',
+    project.projectManagerId,
+    ...(Array.isArray(project.projectManagerIds) ? project.projectManagerIds : []),
+    ...(Array.isArray(project.assignedStaff) ? project.assignedStaff : []),
+  ].filter(Boolean))];
+  recipients.forEach(userId => {
+    const notificationRef = db.collection('notifications').doc();
+    batch.set(notificationRef, {
+      userId,
+      title: 'Service agreement signed',
+      message: `${typedName} signed the design services agreement for "${project.title || 'a project'}".`,
+      msg: `${typedName} signed the design services agreement for "${project.title || 'a project'}".`,
+      type: 'agreement_signed',
+      link: '/admin/client-hub',
+      projectId,
+      read: false,
+      createdAt: FieldValue.serverTimestamp(),
+    });
+  });
+
+  await batch.commit();
+  return { signed: true, signedAt };
+});
+
 exports.toggleProjectTeamAssignment = onCall(CORS_OPTS, async request => {
   if (!request.auth) {
     throw new HttpsError('unauthenticated', 'Sign in before changing project assignments.');
@@ -690,9 +824,14 @@ exports.toggleProjectTeamAssignment = onCall(CORS_OPTS, async request => {
     const isProjectManager = !isWorker && /project manager|account manager/.test(roleText);
     const currentWorkers = Array.isArray(project.assignedWorkers) ? project.assignedWorkers : [];
     const currentStaff = Array.isArray(project.assignedStaff) ? project.assignedStaff : [];
+    // projectManagerIds supports multiple PMs; scalar projectManagerId kept in
+    // sync (= first PM) for back-compat with older read sites.
+    const currentPmIds = Array.isArray(project.projectManagerIds)
+      ? project.projectManagerIds
+      : (project.projectManagerId ? [project.projectManagerId] : []);
     const isAssigned = currentWorkers.includes(memberId)
       || currentStaff.includes(memberId)
-      || project.projectManagerId === memberId;
+      || currentPmIds.includes(memberId);
 
     const assignedWorkers = currentWorkers.filter(id => id !== memberId);
     const assignedStaff = currentStaff.filter(id => id !== memberId);
@@ -706,10 +845,12 @@ exports.toggleProjectTeamAssignment = onCall(CORS_OPTS, async request => {
       updatedAt: FieldValue.serverTimestamp(),
       lastAssignmentUpdatedBy: request.auth.uid,
     };
-    if (isProjectManager && !isAssigned) {
-      projectUpdate.projectManagerId = memberId;
-    } else if (project.projectManagerId === memberId && isAssigned) {
-      projectUpdate.projectManagerId = null;
+    if (isProjectManager || currentPmIds.includes(memberId)) {
+      const projectManagerIds = isAssigned
+        ? currentPmIds.filter(id => id !== memberId)
+        : [...new Set([...currentPmIds, memberId])];
+      projectUpdate.projectManagerIds = projectManagerIds;
+      projectUpdate.projectManagerId = projectManagerIds[0] || null;
     }
     transaction.set(projectRef, projectUpdate, { merge: true });
 

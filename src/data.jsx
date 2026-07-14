@@ -780,9 +780,9 @@ export const INITIAL_CONTENT = {
     ...ABOUT_DATA,
     founder: 'John Dakey',
     role: 'Managing Director',
-    storyTitle: 'Crafting the Future of Structural Glass & Interiors',
-    story: "Under the leadership of John Dakey, Managing Director, Westline Future has evolved from a structural glass specialist into Ghana's premier hub for complete interior finishing. Our mission is to bridge the gap between industrial engineering and luxury design.",
-    bio: 'The leadership of Westline Future brings together deep expertise in structural glass, aluminum systems, and international procurement. Our mission: deliver a world-class finish on every project through China-sourced precision materials and expert installation.'
+    storyTitle: 'Crafting the Future of Interior Design & Decoration',
+    story: "Under the leadership of our Managing Director, Westline Future has evolved into Ghana's premier hub for complete interior finishing. Our mission is to bridge the gap between industrial engineering and luxury design.",
+    bio: 'The leadership of Westline Future brings together deep expertise in interior decoration, international procurement, and precision installation. Our mission: deliver a world-class finish on every project through China-sourced premium materials and expert craftsmanship.'
   },
   services:      SERVICES_DATA,
   homeServices:  DEFAULT_HOME_SERVICES,

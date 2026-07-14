@@ -1,0 +1,688 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Your Project Journey — Westline Future</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400;1,600&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --brown: #1A1410;
+    --gold: #C88F43;
+    --gold-light: #F4EFE6;
+    --gold-mid: #E8D5B0;
+    --cream: #FDFAF6;
+    --warm-grey: #A69282;
+    --text: #2C1F14;
+    --muted: #7A6355;
+    --border: rgba(200,143,67,0.2);
+  }
+
+  body {
+    font-family: 'Inter', sans-serif;
+    background: #fff;
+    color: var(--text);
+    font-size: 13px;
+    line-height: 1.6;
+    width: 860px;
+    margin: 0 auto;
+  }
+
+  @media print {
+    body { width: 100%; margin: 0; }
+    .no-print { display: none !important; }
+    .stage-block { page-break-inside: avoid; }
+    .section { page-break-inside: avoid; }
+  }
+
+  /* ── COVER ─────────────────────────────────────── */
+  .cover {
+    background: #1A1410;
+    min-height: 420px;
+    padding: 60px 64px 56px;
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+  }
+  .cover-pattern {
+    position: absolute; inset: 0; opacity: 0.06;
+    background-image: repeating-linear-gradient(45deg, #C88F43 0px, #C88F43 1px, transparent 1px, transparent 28px);
+  }
+  .cover-top { display: flex; justify-content: space-between; align-items: flex-start; position: relative; z-index: 2; }
+  .logo-mark { display: flex; align-items: center; gap: 10px; }
+  .logo-diamond { width: 36px; height: 36px; background: #C88F43; transform: rotate(45deg); border-radius: 4px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .logo-diamond-inner { width: 16px; height: 16px; background: #1A1410; border-radius: 2px; }
+  .logo-text { color: #fff; font-family: 'Cormorant Garamond', Georgia, serif; font-size: 17px; font-weight: 600; letter-spacing: 0.04em; line-height: 1.3; }
+  .logo-sub { color: #C88F43; font-size: 9px; font-weight: 500; letter-spacing: 0.18em; text-transform: uppercase; margin-top: 2px; }
+  .doc-badge { background: rgba(200,143,67,0.15); border: 1px solid rgba(200,143,67,0.35); color: #C88F43; padding: 6px 14px; border-radius: 20px; font-size: 10px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; }
+  .cover-mid { position: relative; z-index: 2; margin-top: 48px; }
+  .cover-eyebrow { color: #C88F43; font-size: 10px; font-weight: 600; letter-spacing: 0.2em; text-transform: uppercase; margin-bottom: 16px; }
+  .cover-title { font-family: 'Cormorant Garamond', Georgia, serif; font-size: 52px; font-weight: 600; color: #fff; line-height: 1.1; margin-bottom: 6px; }
+  .cover-title em { color: #C88F43; font-style: italic; }
+  .cover-sub { color: rgba(255,255,255,0.55); font-size: 14px; font-weight: 300; margin-top: 12px; letter-spacing: 0.01em; }
+  .cover-bottom { position: relative; z-index: 2; display: flex; justify-content: space-between; align-items: flex-end; }
+  .cover-stats { display: flex; gap: 40px; }
+  .stat-num { font-family: 'Cormorant Garamond', Georgia, serif; font-size: 32px; font-weight: 600; color: #C88F43; line-height: 1; }
+  .stat-label { color: rgba(255,255,255,0.45); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; margin-top: 4px; }
+  .cover-url { color: rgba(255,255,255,0.3); font-size: 11px; letter-spacing: 0.06em; }
+
+  .gold-rule { height: 3px; background: linear-gradient(90deg, #C88F43, #E8D5B0, transparent); }
+
+  /* ── INTRO ──────────────────────────────────────── */
+  .intro-band { background: #FDFAF6; padding: 36px 64px; border-bottom: 1px solid rgba(200,143,67,0.2); }
+  .intro-band p { color: #7A6355; font-size: 13.5px; max-width: 640px; line-height: 1.75; }
+
+  /* ── SECTIONS ───────────────────────────────────── */
+  .section { padding: 40px 64px; }
+  .section + .section { border-top: 1px solid rgba(200,143,67,0.2); }
+  .section-header { display: flex; align-items: center; gap: 12px; margin-bottom: 24px; }
+  .section-icon { width: 38px; height: 38px; border-radius: 10px; background: #F4EFE6; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .section-title { font-family: 'Cormorant Garamond', Georgia, serif; font-size: 24px; font-weight: 600; color: #1A1410; }
+  .section-sub { color: #7A6355; font-size: 12px; margin-top: 1px; }
+
+  /* ── PORTAL TABS ────────────────────────────────── */
+  .portal-tabs { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-top: 20px; }
+  .portal-tab { background: #fff; border: 1px solid rgba(200,143,67,0.2); border-radius: 12px; padding: 16px 12px; text-align: center; }
+  .portal-tab-icon { font-size: 20px; margin-bottom: 8px; }
+  .portal-tab-name { font-weight: 700; font-size: 12px; color: #1A1410; margin-bottom: 4px; }
+  .portal-tab-desc { font-size: 10px; color: #7A6355; line-height: 1.4; }
+
+  /* ── PAYMENT ARC ────────────────────────────────── */
+  .payment-arc { display: flex; gap: 0; margin-top: 20px; }
+  .payment-milestone { flex: 1; padding: 20px 16px; position: relative; }
+  .payment-milestone:not(:last-child)::after { content: '→'; position: absolute; right: -10px; top: 50%; transform: translateY(-50%); color: #C88F43; font-size: 18px; z-index: 2; }
+  .pm-pct { font-family: 'Cormorant Garamond', Georgia, serif; font-size: 42px; font-weight: 600; color: #C88F43; line-height: 1; }
+  .pm-label { font-weight: 700; font-size: 12px; color: #1A1410; margin-top: 6px; }
+  .pm-when { font-size: 11px; color: #7A6355; margin-top: 4px; line-height: 1.4; }
+  .pm-stage-badge { display: inline-block; background: #F4EFE6; color: #C88F43; font-size: 9px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; padding: 3px 8px; border-radius: 20px; margin-top: 8px; }
+
+  /* ── STAGES ─────────────────────────────────────── */
+  .stages-header { padding: 32px 64px 16px; }
+  .pipeline-label { font-size: 10px; font-weight: 700; color: #C88F43; letter-spacing: 0.18em; text-transform: uppercase; margin-bottom: 8px; }
+  .pipeline-title { font-family: 'Cormorant Garamond', Georgia, serif; font-size: 28px; font-weight: 600; color: #1A1410; }
+
+  .stage-block { margin: 0 64px 16px; border: 1px solid rgba(200,143,67,0.2); border-radius: 16px; overflow: hidden; }
+  .stage-head { display: flex; align-items: center; gap: 16px; padding: 18px 24px; }
+  .stage-num { width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-family: 'Cormorant Garamond', Georgia, serif; font-size: 18px; font-weight: 600; flex-shrink: 0; }
+  .stage-meta { flex: 1; }
+  .stage-name { font-weight: 700; font-size: 14px; color: #1A1410; }
+  .stage-tagline { font-size: 11px; color: #7A6355; margin-top: 2px; }
+  .stage-pills { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .pill { font-size: 10px; font-weight: 600; padding: 4px 10px; border-radius: 20px; letter-spacing: 0.04em; white-space: nowrap; }
+  .stage-body { padding: 0 24px 20px; display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .stage-col-label { font-size: 9px; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; color: #A69282; margin-bottom: 8px; }
+  .stage-tasks { list-style: none; display: flex; flex-direction: column; gap: 6px; }
+  .stage-tasks li { display: flex; gap: 8px; align-items: flex-start; font-size: 12px; color: #2C1F14; line-height: 1.45; }
+  .stage-tasks li::before { content: '·'; color: #C88F43; font-size: 18px; line-height: 1; margin-top: -1px; flex-shrink: 0; }
+  .stage-client-tasks { list-style: none; display: flex; flex-direction: column; gap: 6px; }
+  .stage-client-tasks li { display: flex; gap: 8px; align-items: flex-start; font-size: 12px; color: #2C1F14; line-height: 1.45; }
+  .stage-client-tasks li::before { content: '✓'; color: #C88F43; font-weight: 700; font-size: 11px; flex-shrink: 0; }
+  .stage-docs-row { padding: 10px 24px 16px; display: flex; gap: 8px; flex-wrap: wrap; border-top: 1px solid rgba(200,143,67,0.15); }
+  .doc-chip { display: inline-flex; align-items: center; gap: 5px; background: #FDFAF6; border: 1px solid rgba(200,143,67,0.2); border-radius: 6px; padding: 5px 10px; font-size: 10px; font-weight: 600; color: #1A1410; }
+  .stage-payment-row { padding: 10px 24px 16px; border-top: 1px solid rgba(200,143,67,0.15); background: #FFFDF9; }
+  .stage-payment-inner { display: flex; align-items: center; gap: 12px; }
+  .payment-icon-circle { width: 32px; height: 32px; border-radius: 50%; background: #F4EFE6; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .stage-payment-text { font-size: 12px; color: #1A1410; font-weight: 600; }
+  .stage-payment-sub { font-size: 11px; color: #7A6355; }
+
+  /* ── INSPECTION CHECKLIST ───────────────────────── */
+  .checklist-block { background: #FDFAF6; border: 1px solid rgba(200,143,67,0.2); border-radius: 14px; padding: 20px 24px; }
+  .checklist-title { font-weight: 700; font-size: 13px; color: #1A1410; margin-bottom: 14px; }
+  .checklist-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .check-item { display: flex; align-items: flex-start; gap: 9px; font-size: 12px; color: #2C1F14; padding: 6px 0; }
+  .check-box { width: 17px; height: 17px; border: 1.5px solid #C88F43; border-radius: 4px; flex-shrink: 0; margin-top: 1px; }
+
+  /* ── SUMMARY TABLE ──────────────────────────────── */
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th { background: #1A1410; color: #fff; padding: 11px 14px; text-align: left; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; font-weight: 600; }
+  td { padding: 11px 14px; border-bottom: 1px solid rgba(200,143,67,0.15); vertical-align: top; line-height: 1.5; }
+  tr:last-child td { border-bottom: none; }
+  tr:nth-child(even) td { background: #FDFAF6; }
+  .td-stage { font-weight: 700; color: #1A1410; white-space: nowrap; }
+  .td-who-client { color: #1D4ED8; font-weight: 600; }
+  .td-who-westline { color: #15803D; font-weight: 600; }
+  .td-who-both { color: #9333EA; font-weight: 600; }
+  .td-who-done { color: #C88F43; font-weight: 600; }
+  .td-days { color: #7A6355; }
+
+  /* ── FAQ ─────────────────────────────────────────── */
+  .faq-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .faq-item { background: #fff; border: 1px solid rgba(200,143,67,0.2); border-radius: 12px; padding: 16px 18px; }
+  .faq-q { font-weight: 700; font-size: 12px; color: #1A1410; margin-bottom: 6px; }
+  .faq-a { font-size: 12px; color: #7A6355; line-height: 1.6; }
+
+  /* ── FOOTER ─────────────────────────────────────── */
+  .footer { background: #1A1410; padding: 32px 64px; display: flex; justify-content: space-between; align-items: center; margin-top: 8px; }
+  .footer-logo { font-family: 'Cormorant Garamond', Georgia, serif; font-size: 18px; color: #fff; font-weight: 600; }
+  .footer-logo span { color: #C88F43; }
+</style>
+</head>
+<body>
+
+<!-- COVER -->
+<div class="cover">
+  <div class="cover-pattern"></div>
+  <div class="cover-top">
+    <div class="logo-mark">
+      <div class="logo-diamond"><div class="logo-diamond-inner"></div></div>
+      <div>
+        <div class="logo-text">Westline Future</div>
+        <div class="logo-sub">Premium Interiors</div>
+      </div>
+    </div>
+    <div class="doc-badge">Client Project Guide</div>
+  </div>
+  <div class="cover-mid">
+    <div class="cover-eyebrow">Your Complete Project Journey</div>
+    <div class="cover-title">From First <em>Vision</em><br>to Final <em>Handover</em></div>
+    <div class="cover-sub">Everything you need to know — what happens at each stage,<br>what we do, what you do, and what to expect next.</div>
+  </div>
+  <div class="cover-bottom">
+    <div class="cover-stats">
+      <div class="stat-item"><div class="stat-num">8</div><div class="stat-label">Project Stages</div></div>
+      <div class="stat-item"><div class="stat-num">~16</div><div class="stat-label">Weeks Typical</div></div>
+      <div class="stat-item"><div class="stat-num">60·30·10</div><div class="stat-label">Payment Split %</div></div>
+    </div>
+    <div class="cover-url">westlinedecor.com</div>
+  </div>
+</div>
+<div class="gold-rule"></div>
+
+<!-- INTRO -->
+<div class="intro-band">
+  <p>This document is your reference for every step of your Westline Future project. We have designed a clear, structured process so you always know exactly where things stand, what is coming next, and what — if anything — needs your attention. Keep it alongside your client portal.</p>
+</div>
+
+<!-- PORTAL -->
+<div class="section">
+  <div class="section-header">
+    <div class="section-icon">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#C88F43" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M3 9h18M9 21V9"/></svg>
+    </div>
+    <div>
+      <div class="section-title">Your Client Portal</div>
+      <div class="section-sub">Log in with your phone number — an SMS code is sent each time. No password needed.</div>
+    </div>
+  </div>
+  <div class="portal-tabs">
+    <div class="portal-tab"><div class="portal-tab-icon">🗺️</div><div class="portal-tab-name">Overview</div><div class="portal-tab-desc">Your roadmap, active stage &amp; next actions</div></div>
+    <div class="portal-tab"><div class="portal-tab-icon">💳</div><div class="portal-tab-name">Financials</div><div class="portal-tab-desc">View invoices and pay securely online</div></div>
+    <div class="portal-tab"><div class="portal-tab-icon">🎨</div><div class="portal-tab-name">Designs</div><div class="portal-tab-desc">Review and approve your 3D renderings</div></div>
+    <div class="portal-tab"><div class="portal-tab-icon">📄</div><div class="portal-tab-name">Documents</div><div class="portal-tab-desc">Contract, scope, certificates &amp; more</div></div>
+    <div class="portal-tab"><div class="portal-tab-icon">💬</div><div class="portal-tab-name">Messages</div><div class="portal-tab-desc">Direct line to your project manager</div></div>
+  </div>
+</div>
+
+<!-- PAYMENT -->
+<div class="section" style="background:#FDFAF6;">
+  <div class="section-header">
+    <div class="section-icon">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#C88F43" stroke-width="2"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+    </div>
+    <div>
+      <div class="section-title">How Your Payments Work</div>
+      <div class="section-sub">Three milestones tied to project progress — all paid through your portal</div>
+    </div>
+  </div>
+  <div class="payment-arc">
+    <div class="payment-milestone" style="background:#fff;border-radius:14px 0 0 14px;border:1px solid rgba(200,143,67,0.2);border-right:none;">
+      <div class="pm-pct">60%</div><div class="pm-label">Initial Deposit</div>
+      <div class="pm-when">Due when you sign the contract and approve the quotation</div>
+      <div class="pm-stage-badge">Stage 3</div>
+    </div>
+    <div class="payment-milestone" style="background:#fff;border-top:1px solid rgba(200,143,67,0.2);border-bottom:1px solid rgba(200,143,67,0.2);">
+      <div class="pm-pct">30%</div><div class="pm-label">Production Balance</div>
+      <div class="pm-when">Due when production is complete and goods arrive in Ghana</div>
+      <div class="pm-stage-badge">Stage 5</div>
+    </div>
+    <div class="payment-milestone" style="background:#fff;border-radius:0 14px 14px 0;border:1px solid rgba(200,143,67,0.2);border-left:none;">
+      <div class="pm-pct">10%</div><div class="pm-label">Final Arrival Balance</div>
+      <div class="pm-when">Due simultaneously with the production balance on goods arrival</div>
+      <div class="pm-stage-badge">Stage 5</div>
+    </div>
+  </div>
+  <p style="margin-top:16px;font-size:11.5px;color:#7A6355;padding:12px 16px;background:#fff;border-radius:10px;border:1px solid rgba(200,143,67,0.2);">
+    <strong style="color:#1A1410;">Included in your price:</strong> All materials, production, quality control, international shipping, customs clearance, and port charges. &nbsp;|&nbsp; <strong style="color:#1A1410;">Excluded:</strong> On-site installation (billed separately as an add-on if requested).
+  </p>
+</div>
+
+<!-- STAGES HEADER -->
+<div class="stages-header">
+  <div class="pipeline-label">The 8 Project Stages</div>
+  <div class="pipeline-title">What happens, when, and who does it</div>
+</div>
+
+<!-- STAGE 1 -->
+<div class="stage-block">
+  <div class="stage-head" style="background:linear-gradient(90deg,#FDFAF6,#fff);">
+    <div class="stage-num" style="background:#F4EFE6;color:#C88F43;">1</div>
+    <div class="stage-meta">
+      <div class="stage-name">📋 &nbsp;Onboarding, Payment &amp; Site Survey</div>
+      <div class="stage-tagline">Your project begins — we meet your space, you meet your portal</div>
+    </div>
+    <div class="stage-pills">
+      <span class="pill" style="background:#EFF6FF;color:#1D4ED8;">Client + Westline</span>
+      <span class="pill" style="background:#F4EFE6;color:#C88F43;">~10 days</span>
+    </div>
+  </div>
+  <div class="stage-body">
+    <div>
+      <div class="stage-col-label">Westline does</div>
+      <ul class="stage-tasks">
+        <li><span>Creates your project account and client portal</span></li>
+        <li><span>Assigns your dedicated project manager</span></li>
+        <li><span>Schedules and dispatches the technical survey team</span></li>
+        <li><span>Takes precise measurements, photos, and structural notes</span></li>
+        <li><span>Records electrical points, plumbing, and any site constraints</span></li>
+      </ul>
+    </div>
+    <div>
+      <div class="stage-col-label">You need to</div>
+      <ul class="stage-client-tasks">
+        <li>Log in to your portal using the link sent by your PM</li>
+        <li>Pay the <strong>rendering fee</strong> in the Financials tab</li>
+        <li>Confirm your site survey date and time with your PM</li>
+        <li>Ensure the full space is accessible on the survey day</li>
+        <li>Share existing floor plans if you have them (optional)</li>
+      </ul>
+    </div>
+  </div>
+  <div class="stage-docs-row">
+    <div class="doc-chip">📋 &nbsp;Rendering fee invoice — Financials tab</div>
+    <div class="doc-chip" style="color:#A69282;">No other documents required from you</div>
+  </div>
+</div>
+
+<!-- STAGE 2 -->
+<div class="stage-block">
+  <div class="stage-head" style="background:linear-gradient(90deg,#FAF5FF,#fff);">
+    <div class="stage-num" style="background:#F3E8FF;color:#9333EA;">2</div>
+    <div class="stage-meta">
+      <div class="stage-name">🎨 &nbsp;3D Rendering Review</div>
+      <div class="stage-tagline">See your space before anything is built — review, revise, and approve</div>
+    </div>
+    <div class="stage-pills">
+      <span class="pill" style="background:#EFF6FF;color:#1D4ED8;">Client action</span>
+      <span class="pill" style="background:#F4EFE6;color:#C88F43;">~10 days</span>
+    </div>
+  </div>
+  <div class="stage-body">
+    <div>
+      <div class="stage-col-label">Westline does</div>
+      <ul class="stage-tasks">
+        <li><span>Builds detailed 3D model from verified site measurements</span></li>
+        <li><span>Applies finishes, materials, and colours per your project brief</span></li>
+        <li><span>Uploads the rendering to your Designs tab and notifies you</span></li>
+        <li><span>Revises based on your feedback until you are fully satisfied</span></li>
+      </ul>
+    </div>
+    <div>
+      <div class="stage-col-label">You need to</div>
+      <ul class="stage-client-tasks">
+        <li>Open the <strong>Designs tab</strong> in your portal when notified</li>
+        <li>Review layout, dimensions, materials, and colours carefully</li>
+        <li>Click <strong>Request Changes</strong> if anything needs adjusting — be specific</li>
+        <li>Click <strong>Approve Design</strong> when you are satisfied</li>
+      </ul>
+    </div>
+  </div>
+  <div class="stage-docs-row">
+    <div class="doc-chip">🎨 &nbsp;3D Rendering — Designs tab (uploaded by Westline)</div>
+  </div>
+</div>
+
+<!-- STAGE 3 -->
+<div class="stage-block">
+  <div class="stage-head" style="background:linear-gradient(90deg,#FFFBEB,#fff);">
+    <div class="stage-num" style="background:#FEF3C7;color:#D97706;">3</div>
+    <div class="stage-meta">
+      <div class="stage-name">💳 &nbsp;Commercial Approval &amp; Production Authority</div>
+      <div class="stage-tagline">Four sequential steps — agree cost, sign contract, pay deposit, authorise production</div>
+    </div>
+    <div class="stage-pills">
+      <span class="pill" style="background:#EFF6FF;color:#1D4ED8;">Client action</span>
+      <span class="pill" style="background:#F4EFE6;color:#C88F43;">~14 days</span>
+      <span class="pill" style="background:#FEF3C7;color:#D97706;">60% payment</span>
+    </div>
+  </div>
+  <div class="stage-body">
+    <div>
+      <div class="stage-col-label">Westline does</div>
+      <ul class="stage-tasks">
+        <li><span>Prepares versioned quotation from approved design</span></li>
+        <li><span>Issues quotation to your portal for review</span></li>
+        <li><span>Prepares contract once quotation is agreed</span></li>
+        <li><span>Prepares Final Scope &amp; Deliverables document after payment</span></li>
+      </ul>
+    </div>
+    <div>
+      <div class="stage-col-label">You need to — in this order</div>
+      <ul class="stage-client-tasks">
+        <li><strong>Step 1:</strong> Review and approve the <strong>Quotation</strong> (or request changes / counter offer) in the Documents tab</li>
+        <li><strong>Step 2:</strong> Read and electronically <strong>sign the Contract</strong> via SMS code</li>
+        <li><strong>Step 3:</strong> Pay the <strong>60% Initial Deposit</strong> in the Financials tab</li>
+        <li><strong>Step 4:</strong> Authorise the <strong>Final Scope &amp; Deliverables</strong> document</li>
+      </ul>
+    </div>
+  </div>
+  <div class="stage-docs-row">
+    <div class="doc-chip">📄 &nbsp;Quotation</div>
+    <div class="doc-chip">📄 &nbsp;Signed Contract</div>
+    <div class="doc-chip">📄 &nbsp;Final Scope &amp; Deliverables</div>
+    <div class="doc-chip" style="color:#A69282;">All available in Documents tab</div>
+  </div>
+  <div class="stage-payment-row">
+    <div class="stage-payment-inner">
+      <div class="payment-icon-circle">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#C88F43" stroke-width="2.5"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+      </div>
+      <div>
+        <div class="stage-payment-text">💰 &nbsp;60% Initial Deposit due at this stage</div>
+        <div class="stage-payment-sub">Paid via Financials tab (mobile money or card) before production begins</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- STAGE 4 -->
+<div class="stage-block">
+  <div class="stage-head" style="background:linear-gradient(90deg,#F8F5F2,#fff);">
+    <div class="stage-num" style="background:#F4EDE8;color:#7A4F3A;">4</div>
+    <div class="stage-meta">
+      <div class="stage-name">🏭 &nbsp;Procurement &amp; Production</div>
+      <div class="stage-tagline">Your furniture is being custom-built at our manufacturing facility</div>
+    </div>
+    <div class="stage-pills">
+      <span class="pill" style="background:#F0FDF4;color:#15803D;">Westline working</span>
+      <span class="pill" style="background:#F4EFE6;color:#C88F43;">~30 days</span>
+    </div>
+  </div>
+  <div class="stage-body">
+    <div>
+      <div class="stage-col-label">Westline does</div>
+      <ul class="stage-tasks">
+        <li><span>Sources and procures all materials, hardware, and finishes</span></li>
+        <li><span>Custom cuts, processes, and fabricates every component</span></li>
+        <li><span>Runs full quality control inspection against your specification</span></li>
+        <li><span>Packs components securely for international shipment</span></li>
+      </ul>
+    </div>
+    <div>
+      <div class="stage-col-label">You need to</div>
+      <ul class="stage-client-tasks">
+        <li><strong>Nothing is required from you</strong> at this stage</li>
+        <li>Your portal shows production is active</li>
+        <li>Your PM may share progress photos via WhatsApp</li>
+        <li>Use the Messages tab for any questions</li>
+      </ul>
+    </div>
+  </div>
+  <div class="stage-docs-row">
+    <div class="doc-chip" style="color:#A69282;">No documents required from you at this stage</div>
+  </div>
+</div>
+
+<!-- STAGE 5 -->
+<div class="stage-block">
+  <div class="stage-head" style="background:linear-gradient(90deg,#F0F9FF,#fff);">
+    <div class="stage-num" style="background:#E0F2FE;color:#0284C7;">5</div>
+    <div class="stage-meta">
+      <div class="stage-name">🚛 &nbsp;Shipping &amp; Delivery</div>
+      <div class="stage-tagline">Your goods are on their way — track the shipment and settle balances on arrival</div>
+    </div>
+    <div class="stage-pills">
+      <span class="pill" style="background:#F0FDF4;color:#15803D;">Westline manages</span>
+      <span class="pill" style="background:#F4EFE6;color:#C88F43;">~35 days</span>
+      <span class="pill" style="background:#FEF3C7;color:#D97706;">30% + 10% payment</span>
+    </div>
+  </div>
+  <div class="stage-body">
+    <div>
+      <div class="stage-col-label">Westline does</div>
+      <ul class="stage-tasks">
+        <li><span>Arranges international freight from production facility</span></li>
+        <li><span>Publishes vessel name, container number, and ETA to your portal</span></li>
+        <li><span>Manages customs clearance and port handling (included in price)</span></li>
+        <li><span>Confirms goods arrival in Ghana</span></li>
+        <li><span>Activates 30% and 10% balance invoices in your portal</span></li>
+        <li><span>Prepares installation invoice if you have requested it</span></li>
+      </ul>
+    </div>
+    <div>
+      <div class="stage-col-label">You need to</div>
+      <ul class="stage-client-tasks">
+        <li>Track your shipment live in the Overview tab (vessel + ETA shown)</li>
+        <li>Pay the <strong>30% Production Balance</strong> when goods arrive in Ghana</li>
+        <li>Pay the <strong>10% Final Arrival Balance</strong> at the same time</li>
+        <li>Pay the <strong>Installation Invoice</strong> if you have requested installation</li>
+      </ul>
+    </div>
+  </div>
+  <div class="stage-docs-row">
+    <div class="doc-chip">🚢 &nbsp;Shipping Manifest — Documents tab (uploaded by Westline)</div>
+    <div class="doc-chip" style="color:#A69282;">No documents required from you</div>
+  </div>
+  <div class="stage-payment-row">
+    <div class="stage-payment-inner">
+      <div class="payment-icon-circle">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#C88F43" stroke-width="2.5"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+      </div>
+      <div>
+        <div class="stage-payment-text">💰 &nbsp;30% + 10% balances due when goods arrive in Ghana</div>
+        <div class="stage-payment-sub">Both invoices appear in your Financials tab simultaneously — pay via mobile money or card</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- STAGE 6 -->
+<div class="stage-block">
+  <div class="stage-head" style="background:linear-gradient(90deg,#FFF8F5,#fff);">
+    <div class="stage-num" style="background:#FEECE3;color:#C2410C;">6</div>
+    <div class="stage-meta">
+      <div class="stage-name">🔧 &nbsp;Installation</div>
+      <div class="stage-tagline">Our technical crew fits and finishes every piece on-site — full-service projects only</div>
+    </div>
+    <div class="stage-pills">
+      <span class="pill" style="background:#F0FDF4;color:#15803D;">Crew on-site</span>
+      <span class="pill" style="background:#F4EFE6;color:#C88F43;">~7 days</span>
+    </div>
+  </div>
+  <div class="stage-body">
+    <div>
+      <div class="stage-col-label">Westline does</div>
+      <ul class="stage-tasks">
+        <li><span>Assigns and dispatches the installation crew to your site</span></li>
+        <li><span>Prepares and secures the site before work begins</span></li>
+        <li><span>Assembles and fits all components per the approved 3D design</span></li>
+        <li><span>Installs all hardware, finishes surfaces, aligns every component</span></li>
+        <li><span>Uploads daily progress photos to your portal Documents tab</span></li>
+        <li><span>Runs an internal completion check before handover inspection</span></li>
+      </ul>
+    </div>
+    <div>
+      <div class="stage-col-label">You need to</div>
+      <ul class="stage-client-tasks">
+        <li>Keep the site clear and accessible on each scheduled day</li>
+        <li>Do not move or alter work in progress between sessions</li>
+        <li>Raise any concerns directly with the crew lead while on-site — much easier to resolve during installation than after</li>
+        <li>Check daily photos in your Documents tab</li>
+      </ul>
+    </div>
+  </div>
+  <div class="stage-docs-row">
+    <div class="doc-chip">📸 &nbsp;Daily installation photos — Documents tab (uploaded by crew)</div>
+    <div class="doc-chip" style="color:#A69282;">Site access / gate pass if required by your estate</div>
+  </div>
+</div>
+
+<!-- STAGE 7 -->
+<div class="stage-block">
+  <div class="stage-head" style="background:linear-gradient(90deg,#FDFAF6,#fff);">
+    <div class="stage-num" style="background:#F4EFE6;color:#C88F43;">7</div>
+    <div class="stage-meta">
+      <div class="stage-name">🔎 &nbsp;Inspection &amp; Sign-off</div>
+      <div class="stage-tagline">Walk through the completed work and formally accept it via the portal checklist</div>
+    </div>
+    <div class="stage-pills">
+      <span class="pill" style="background:#EFF6FF;color:#1D4ED8;">Client + Westline</span>
+      <span class="pill" style="background:#F4EFE6;color:#C88F43;">~3 days</span>
+    </div>
+  </div>
+  <div class="stage-body">
+    <div>
+      <div class="stage-col-label">Westline does</div>
+      <ul class="stage-tasks">
+        <li><span>Notifies you that installation is complete and ready for inspection</span></li>
+        <li><span>Your PM may walk through the space with you in person</span></li>
+        <li><span>Resolves any minor snags raised before sign-off is requested</span></li>
+      </ul>
+    </div>
+    <div>
+      <div class="stage-col-label">You need to</div>
+      <ul class="stage-client-tasks">
+        <li>Open the <strong>Approvals tab</strong> in your portal</li>
+        <li>Tick all 7 items on the inspection checklist (see below)</li>
+        <li>Add optional notes for any observations</li>
+        <li>Click <strong>"Sign Off — I Accept the Completed Work"</strong></li>
+        <li><em>Do not sign off until any issues are fully resolved</em></li>
+      </ul>
+    </div>
+  </div>
+  <div style="padding:0 24px 20px;">
+    <div class="checklist-block">
+      <div class="checklist-title">Inspection Checklist — all 7 items must be ticked before sign-off</div>
+      <div class="checklist-grid">
+        <div class="check-item"><div class="check-box"></div><span>Workmanship quality meets expectations</span></div>
+        <div class="check-item"><div class="check-box"></div><span>All items match the agreed scope and specifications</span></div>
+        <div class="check-item"><div class="check-box"></div><span>All surfaces are clean, finished, and undamaged</span></div>
+        <div class="check-item"><div class="check-box"></div><span>Hardware, fittings, and mechanisms are functional</span></div>
+        <div class="check-item"><div class="check-box"></div><span>Dimensions and placement are as agreed</span></div>
+        <div class="check-item"><div class="check-box"></div><span>No visible defects, scratches, or damage observed</span></div>
+        <div class="check-item"><div class="check-box"></div><span>Site is clear and free of installation debris</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- STAGE 8 -->
+<div class="stage-block" style="margin-bottom:40px;">
+  <div class="stage-head" style="background:linear-gradient(90deg,#FDFAF3,#fff);">
+    <div class="stage-num" style="background:#FEF9EC;color:#B45309;">8</div>
+    <div class="stage-meta">
+      <div class="stage-name">🌟 &nbsp;Handover &amp; Closeout</div>
+      <div class="stage-tagline">Your project is complete — collect your certificate and share your experience</div>
+    </div>
+    <div class="stage-pills">
+      <span class="pill" style="background:#FEFCE8;color:#A16207;">Project complete</span>
+      <span class="pill" style="background:#F4EFE6;color:#C88F43;">~1 day</span>
+    </div>
+  </div>
+  <div class="stage-body">
+    <div>
+      <div class="stage-col-label">Westline does</div>
+      <ul class="stage-tasks">
+        <li><span>Issues your Handover Certificate to the Documents tab</span></li>
+        <li><span>Activates your warranty per the terms in your contract</span></li>
+        <li><span>Formally closes your project file</span></li>
+      </ul>
+    </div>
+    <div>
+      <div class="stage-col-label">You need to</div>
+      <ul class="stage-client-tasks">
+        <li>Open the <strong>Approvals tab</strong> in your portal</li>
+        <li>Rate your overall experience (1–5 stars)</li>
+        <li>Write a short review of your project journey</li>
+        <li>Optionally consent to us sharing your review as a testimonial</li>
+        <li>Click <strong>"Submit Feedback &amp; Complete Project"</strong></li>
+      </ul>
+    </div>
+  </div>
+  <div class="stage-docs-row">
+    <div class="doc-chip">🏆 &nbsp;Handover Certificate — Documents tab</div>
+    <div class="doc-chip">📋 &nbsp;Warranty terms in your signed contract</div>
+  </div>
+</div>
+
+<!-- SUMMARY TABLE -->
+<div class="section">
+  <div class="section-header">
+    <div class="section-icon">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#C88F43" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+    </div>
+    <div>
+      <div class="section-title">Project at a Glance</div>
+      <div class="section-sub">Approximate total: ~16 weeks — varies by complexity and revision rounds</div>
+    </div>
+  </div>
+  <table>
+    <thead>
+      <tr><th>Stage</th><th>Who Acts</th><th>Time</th><th>Key Client Action</th><th>Payment</th></tr>
+    </thead>
+    <tbody>
+      <tr><td class="td-stage">1 — Onboarding</td><td class="td-who-both">Both</td><td class="td-days">~10 days</td><td>Pay rendering fee · confirm site survey</td><td>Rendering fee</td></tr>
+      <tr><td class="td-stage">2 — 3D Rendering</td><td class="td-who-client">Client</td><td class="td-days">~10 days</td><td>Review design · request revisions · approve</td><td>—</td></tr>
+      <tr><td class="td-stage">3 — Commercial</td><td class="td-who-client">Client</td><td class="td-days">~14 days</td><td>Approve quote → sign contract → pay deposit → authorise production</td><td><strong>60% Deposit</strong></td></tr>
+      <tr><td class="td-stage">4 — Production</td><td class="td-who-westline">Westline</td><td class="td-days">~30 days</td><td>Nothing required from you</td><td>—</td></tr>
+      <tr><td class="td-stage">5 — Shipping</td><td class="td-who-westline">Westline</td><td class="td-days">~35 days</td><td>Track shipment · pay balances on goods arrival</td><td><strong>30% + 10%</strong></td></tr>
+      <tr><td class="td-stage">6 — Installation</td><td class="td-who-westline">Crew on-site</td><td class="td-days">~7 days</td><td>Keep site accessible · raise issues with crew lead on-site</td><td>Install invoice</td></tr>
+      <tr><td class="td-stage">7 — Inspection</td><td class="td-who-both">Both</td><td class="td-days">~3 days</td><td>Complete inspection checklist → sign off</td><td>—</td></tr>
+      <tr><td class="td-stage">8 — Handover</td><td class="td-who-done">Complete</td><td class="td-days">~1 day</td><td>Submit feedback · receive handover certificate</td><td>—</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- FAQ -->
+<div class="section" style="background:#FDFAF6;">
+  <div class="section-header">
+    <div class="section-icon">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#C88F43" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+    </div>
+    <div><div class="section-title">Common Questions</div></div>
+  </div>
+  <div class="faq-grid">
+    <div class="faq-item">
+      <div class="faq-q">Can I make changes after approving the quotation?</div>
+      <div class="faq-a">Yes, but changes after approval are treated as separate add-on invoices and may affect production timelines. Raise changes as early as possible.</div>
+    </div>
+    <div class="faq-item">
+      <div class="faq-q">What is included in the project price?</div>
+      <div class="faq-a">All materials, sourcing, production, quality control, international shipping, customs clearance, and port charges. Installation is a separate add-on.</div>
+    </div>
+    <div class="faq-item">
+      <div class="faq-q">What if I'm not satisfied with the 3D rendering?</div>
+      <div class="faq-a">Request as many revisions as needed before approving. You are never obligated to approve a rendering that does not match your vision.</div>
+    </div>
+    <div class="faq-item">
+      <div class="faq-q">What if goods are damaged during shipping?</div>
+      <div class="faq-a">Westline manages all logistics including insurance. If goods arrive damaged, we handle the claim and replacement at no extra cost to you.</div>
+    </div>
+    <div class="faq-item">
+      <div class="faq-q">When exactly is the 10% final balance due?</div>
+      <div class="faq-a">When goods arrive in Ghana — at the same time as the 30% balance. Both invoices appear in your Financials tab simultaneously.</div>
+    </div>
+    <div class="faq-item">
+      <div class="faq-q">How do I get support during my project?</div>
+      <div class="faq-a">Use the Messages tab in your portal for a tracked record. Your PM responds within 24 hours on business days. For urgent matters, WhatsApp directly.</div>
+    </div>
+  </div>
+</div>
+
+<!-- FOOTER -->
+<div class="footer">
+  <div>
+    <div class="footer-logo">Westline <span>Future</span></div>
+    <div style="color:rgba(255,255,255,0.3);font-size:10px;margin-top:6px;">Premium Custom Interiors · Ghana &amp; China</div>
+  </div>
+  <div style="text-align:right;">
+    <div style="color:rgba(255,255,255,0.45);font-size:11px;">westlinedecor.com</div>
+    <div style="color:rgba(255,255,255,0.25);font-size:10px;margin-top:6px;">All project communications managed through your client portal.</div>
+  </div>
+</div>
+
+</body>
+</html>

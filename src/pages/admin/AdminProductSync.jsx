@@ -1,12 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   Activity, AlertCircle, CheckCircle2, Database, ExternalLink, Globe2,
-  Loader2, PackageSearch, PauseCircle, PlayCircle, Plus, Save, Trash2
+  Loader2, PackageSearch, PauseCircle, PlayCircle, Plus, Save, Trash2, Package, X
 } from 'lucide-react';
 import { db } from '../../lib/firebase';
 import {
-  addDoc, collection, deleteDoc, doc, getDoc, limit, onSnapshot,
-  orderBy, query, serverTimestamp, setDoc
+  addDoc, collection, deleteDoc, doc, getDoc, getDocs, limit, onSnapshot,
+  orderBy, query, serverTimestamp, setDoc, updateDoc, writeBatch
 } from 'firebase/firestore';
 
 const DEFAULT_SETTINGS = {
@@ -16,6 +16,7 @@ const DEFAULT_SETTINGS = {
   publishMode: 'draft',
   allowedDomains: ['meijiavip.com', 'www.meijiavip.com'],
   workerUrl: '',
+  scrapingEnabled: true,
 };
 
 const FURNITURE_CATEGORIES = [
@@ -66,6 +67,10 @@ export default function AdminProductSync({ brand, notify, user }) {
   const [saving, setSaving] = useState(false);
   const [running, setRunning] = useState(false);
   const [confirmRemoveSource, setConfirmRemoveSource] = useState(null);
+  const [showAddProduct, setShowAddProduct] = useState(false);
+  const [addingProduct, setAddingProduct] = useState(false);
+  const [hidingScraped, setHidingScraped] = useState(false);
+  const [newProduct, setNewProduct] = useState({ name: '', category: '', price: '', description: '', status: 'Available' });
   const [newSource, setNewSource] = useState({
     name: 'Meijia VIP Furniture',
     url: 'https://www.meijiavip.com/',
@@ -164,6 +169,45 @@ export default function AdminProductSync({ brand, notify, user }) {
     }
   };
 
+  const saveManualProduct = async () => {
+    if (!newProduct.name.trim()) return notify?.('error', 'Product name is required.');
+    setAddingProduct(true);
+    try {
+      await addDoc(collection(db, 'products'), {
+        name: newProduct.name.trim(),
+        category: newProduct.category.trim() || 'General',
+        retailPrice: newProduct.price ? Number(newProduct.price) : null,
+        desc: newProduct.description.trim(),
+        status: newProduct.status,
+        source: 'manual',
+        published: true,
+        createdAt: serverTimestamp(),
+        createdBy: user?.uid || user?.id || 'admin',
+      });
+      notify?.('success', 'Product added to catalog.');
+      setNewProduct({ name: '', category: '', price: '', description: '', status: 'Available' });
+      setShowAddProduct(false);
+    } catch (err) {
+      notify?.('error', `Failed to add product: ${err.message}`);
+    }
+    setAddingProduct(false);
+  };
+
+  const hideAllScrapedProducts = async () => {
+    setHidingScraped(true);
+    try {
+      const snap = await getDocs(collection(db, 'products'));
+      const scraped = snap.docs.filter(d => d.data().source !== 'manual');
+      const batch = writeBatch(db);
+      scraped.forEach(d => batch.update(d.ref, { published: false }));
+      await batch.commit();
+      notify?.('success', `${scraped.length} scraped product(s) hidden from public site.`);
+    } catch (err) {
+      notify?.('error', `Failed to hide products: ${err.message}`);
+    }
+    setHidingScraped(false);
+  };
+
   const runSyncNow = async () => {
     if (!settings.workerUrl) return notify?.('error', 'Add the Cloud Run worker URL before running sync.');
     setRunning(true);
@@ -192,9 +236,109 @@ export default function AdminProductSync({ brand, notify, user }) {
             Add supplier links, assign Westline categories, translate Chinese furniture data, and price products with a global forex and margin rule.
           </p>
         </div>
-        <button onClick={runSyncNow} disabled={running} className="p-btn-gold lxf" style={{ padding: '13px 20px', display: 'flex', alignItems: 'center', gap: 10, borderRadius: 14 }}>
-          {running ? <Loader2 size={16} className="spin" /> : <PlayCircle size={16} />} Run Sync Now
-        </button>
+        <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+          {/* Scraping master toggle */}
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 12, padding: '12px 18px',
+            background: settings.scrapingEnabled ? '#F0FDF4' : '#FEF2F2',
+            border: `1.5px solid ${settings.scrapingEnabled ? '#BBF7D0' : '#FECACA'}`,
+            borderRadius: 14,
+          }}>
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 800, color: settings.scrapingEnabled ? '#15803D' : '#DC2626' }}>
+                Auto-Scraping {settings.scrapingEnabled ? 'On' : 'Off'}
+              </div>
+              <div style={{ fontSize: 10, color: 'var(--text-secondary)', marginTop: 1 }}>
+                {settings.scrapingEnabled ? 'Worker will run on schedule' : 'Worker is paused globally'}
+              </div>
+            </div>
+            <button
+              onClick={async () => {
+                const next = { ...settings, scrapingEnabled: !settings.scrapingEnabled };
+                setSettings(next);
+                try {
+                  await setDoc(doc(db, 'system_settings', 'product_sync'), { scrapingEnabled: next.scrapingEnabled }, { merge: true });
+                  notify?.('success', `Auto-scraping ${next.scrapingEnabled ? 'enabled' : 'disabled'}.`);
+                } catch (err) { notify?.('error', err.message); }
+              }}
+              style={{
+                width: 48, height: 28, borderRadius: 14, border: 'none', cursor: 'pointer',
+                background: settings.scrapingEnabled ? '#15803D' : '#e5e7eb',
+                position: 'relative', transition: 'background .2s', flexShrink: 0,
+              }}
+            >
+              <div style={{
+                position: 'absolute', top: 3,
+                left: settings.scrapingEnabled ? 23 : 3,
+                width: 22, height: 22, borderRadius: '50%', background: '#fff',
+                boxShadow: '0 1px 4px rgba(0,0,0,.2)', transition: 'left .2s',
+              }} />
+            </button>
+          </div>
+          <button onClick={runSyncNow} disabled={running || !settings.scrapingEnabled} className="p-btn-gold lxf" style={{ padding: '13px 20px', display: 'flex', alignItems: 'center', gap: 10, borderRadius: 14, opacity: !settings.scrapingEnabled ? 0.4 : 1 }}>
+            {running ? <Loader2 size={16} className="spin" /> : <PlayCircle size={16} />} Run Sync Now
+          </button>
+        </div>
+      </div>
+
+      {/* ── MANUAL PRODUCT ENTRY ── */}
+      <div style={{ padding: '20px 24px', background: '#fff', borderRadius: 18, border: '1.5px solid var(--border-color)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: showAddProduct ? 20 : 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <Package size={18} color={ac} />
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--accent-secondary)' }}>Add Product Manually</div>
+              <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Add a product directly — no scraping needed</div>
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button
+              onClick={hideAllScrapedProducts}
+              disabled={hidingScraped}
+              style={{ padding: '8px 16px', borderRadius: 10, border: '1.5px solid #FECACA', background: '#FEF2F2', color: '#DC2626', fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
+            >
+              {hidingScraped ? <Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} /> : null}
+              Hide All Scraped Products
+            </button>
+            <button
+              onClick={() => setShowAddProduct(v => !v)}
+              style={{ padding: '8px 18px', borderRadius: 10, background: showAddProduct ? '#F3F4F6' : ac, color: showAddProduct ? 'var(--accent-secondary)' : '#fff', fontSize: 12, fontWeight: 700, border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
+            >
+              {showAddProduct ? <><X size={13} /> Cancel</> : <><Plus size={13} /> Add Product</>}
+            </button>
+          </div>
+        </div>
+        {showAddProduct && (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 14 }}>
+            <Field label="Product Name *">
+              <input className="p-inp" placeholder="e.g. Italian Marble Tiles" value={newProduct.name} onChange={e => setNewProduct(p => ({ ...p, name: e.target.value }))} />
+            </Field>
+            <Field label="Category">
+              <input className="p-inp" placeholder="e.g. Tiles & Flooring" value={newProduct.category} onChange={e => setNewProduct(p => ({ ...p, category: e.target.value }))} />
+            </Field>
+            <Field label="Retail Price (GHS)">
+              <input className="p-inp" type="number" placeholder="0.00" value={newProduct.price} onChange={e => setNewProduct(p => ({ ...p, price: e.target.value }))} />
+            </Field>
+            <Field label="Status">
+              <select className="p-inp" value={newProduct.status} onChange={e => setNewProduct(p => ({ ...p, status: e.target.value }))}>
+                <option>Available</option>
+                <option>Pre-order</option>
+                <option>Sold Out</option>
+              </select>
+            </Field>
+            <div style={{ gridColumn: '1 / -1' }}>
+              <Field label="Description">
+                <textarea className="p-inp" rows={3} placeholder="Brief product description..." value={newProduct.description} onChange={e => setNewProduct(p => ({ ...p, description: e.target.value }))} style={{ resize: 'vertical' }} />
+              </Field>
+            </div>
+            <div style={{ gridColumn: '1 / -1', display: 'flex', justifyContent: 'flex-end' }}>
+              <button onClick={saveManualProduct} disabled={addingProduct || !newProduct.name.trim()} style={{ padding: '10px 24px', borderRadius: 10, background: !newProduct.name.trim() ? '#e5e7eb' : '#15803D', color: !newProduct.name.trim() ? '#9CA3AF' : '#fff', fontSize: 13, fontWeight: 800, border: 'none', cursor: !newProduct.name.trim() ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}>
+                {addingProduct ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> : <Save size={14} />}
+                Save to Catalog
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16 }}>

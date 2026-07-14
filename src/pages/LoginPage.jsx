@@ -6,6 +6,8 @@ import {
 } from 'lucide-react';
 import { mapFirebaseError } from '../lib/firebaseErrors';
 import { CountryPicker, COUNTRIES } from '../components/Shared';
+import { auth } from '../lib/firebase';
+import { sendPasswordResetEmail } from 'firebase/auth';
 const _dev = import.meta.env.DEV;
 const devLog = (...a) => { if (_dev) console.log(...a); };
 const devErr = (...a) => { if (_dev) console.error(...a); };
@@ -195,6 +197,20 @@ export default function LoginPage({ onLogin, onBack, brand, type = 'client', ...
       setAdminErr(mapFirebaseError(e));
       setAdminLoading(false);
     }
+  };
+
+  const [resetMsg, setResetMsg] = useState('');
+  const forgotPassword = async () => {
+    const trimmed = adminId.trim();
+    if (!trimmed) return setAdminErr('Enter your username or email first, then tap "Forgot password?".');
+    const resetEmail = trimmed.includes('@')
+      ? trimmed.toLowerCase()
+      : `${trimmed.toLowerCase().replace(/\s+/g, '')}@westlinefuture.com`;
+    setAdminErr('');
+    try {
+      if (auth) await sendPasswordResetEmail(auth, resetEmail);
+    } catch { /* Same neutral message either way — don't reveal which accounts exist */ }
+    setResetMsg(`If an account exists for ${resetEmail}, a password reset link has been sent to that inbox.`);
   };
 
   const isAdmin = mode === 'admin';
@@ -428,6 +444,17 @@ export default function LoginPage({ onLogin, onBack, brand, type = 'client', ...
               style={{ height: 56, borderRadius: 16, background: ac, color: `var(--bg-primary)`, border: 'none', fontSize: 16, fontWeight: 900, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, marginTop: 4, touchAction: 'manipulation' }}>
               {adminLoading ? <><Loader2 size={18} className="lp-spin" /> Authenticating…</> : <><Shield size={18} /> Authorize</>}
             </button>
+
+            {resetMsg ? (
+              <div style={{ padding: '10px 14px', borderRadius: 12, background: 'rgba(34,197,94,.1)', border: '1px solid rgba(34,197,94,.25)', color: '#4ADE80', fontSize: 12, lineHeight: 1.5, textAlign: 'center' }}>
+                {resetMsg}
+              </div>
+            ) : (
+              <button onClick={forgotPassword}
+                style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,.4)', fontSize: 13, fontWeight: 600, cursor: 'pointer', padding: '8px 0', touchAction: 'manipulation' }}>
+                Forgot password?
+              </button>
+            )}
           </div>
         )}
 

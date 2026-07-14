@@ -260,7 +260,7 @@ function ProjectCard({ project, ac, onOpen, onDragStart, invoices = [], compact 
             {project.project || project.title}
           </div>
           <div style={{ fontSize: 11, color: `var(--text-secondary)`, display: 'flex', alignItems: 'center', gap: 5 }}>
-            <User size={10} /> {project.name || 'Unknown Client'}
+            <User size={10} /> {project.clientName || project.name || 'Unknown Client'}
           </div>
         </div>
       </div>
@@ -399,7 +399,7 @@ function ProjectDrawer({ project, ac, onClose, updateProjectStage, updateProject
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 10, fontWeight: 800, color: ptype.color, textTransform: 'uppercase', letterSpacing: '.1em', marginBottom: 4 }}>{ptype.label}</div>
               <h2 style={{ fontSize: 20, fontWeight: 700, color: '#fff', margin: 0, lineHeight: 1.2 }}>{project.project || project.title}</h2>
-              <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', marginTop: 4 }}>{project.name} · {project.budget || '—'}</div>
+              <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', marginTop: 4 }}>{project.clientName || project.name || 'Unknown Client'} · {project.budget || '—'}</div>
             </div>
             <div style={{ display: 'flex', gap: 8, flexShrink: 0, marginLeft: 12 }}>
               <button onClick={() => setConfirmDelete(true)} style={{ background: 'rgba(239,68,68,0.15)', border: 'none', color: '#FCA5A5', width: 36, height: 36, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }} title="Archive project">
@@ -675,6 +675,7 @@ function ProjectDrawer({ project, ac, onClose, updateProjectStage, updateProject
                   const assignedTeam = [
                     ...(project.assignedWorkers || []),
                     ...(project.assignedStaff || []),
+                    ...(project.projectManagerIds || []),
                     ...(project.projectManagerId ? [project.projectManagerId] : []),
                   ];
                   const isAssigned = assignedTeam.includes(m.id) || assignedTeam.includes(m.uid);
@@ -898,7 +899,7 @@ export default function ProjectKanban({ clients = [], brand, updateProjectStage,
                 return (
                   <tr key={project.id} onClick={() => setOpenProject(project)} style={{ borderBottom: '1px solid var(--bg-secondary)', cursor: 'pointer' }}>
                     <td style={{ padding: '14px 18px', fontSize: 13, fontWeight: 800, color: `var(--accent-secondary)` }}>{project.project || project.title || 'Untitled'}</td>
-                    <td style={{ padding: '14px 18px', fontSize: 12, color: `var(--text-secondary)` }}>{project.name || project.clientName || '—'}</td>
+                    <td style={{ padding: '14px 18px', fontSize: 12, color: `var(--text-secondary)` }}>{project.clientName || project.name || '—'}</td>
                     <td style={{ padding: '14px 18px', fontSize: 12, fontWeight: 800, color: stage.color }}>{stage.short}</td>
                     <td style={{ padding: '14px 18px' }}><span style={{ fontSize: 10, fontWeight: 900, color: health.color, background: health.bg, padding: '4px 9px', borderRadius: 999 }}>{health.label}</span></td>
                     <td style={{ padding: '14px 18px', fontSize: 12, fontWeight: 800 }}>{project.budget || project.projectTotal || '—'}</td>

@@ -3,14 +3,15 @@ import {
   ArrowLeft, Plus, MessageSquare, AlertCircle, Briefcase,
   User, DollarSign, Phone, Calendar, Loader2,
   Users, UserCheck, ChevronRight, CheckCircle2, RefreshCw, PenTool,
-  FileText, Upload, ExternalLink, Trash2, ShieldCheck, X, Camera, Truck
+  FileText, Upload, ExternalLink, Trash2, ShieldCheck, X, Camera, Truck, Award,
+  Video, Clock, CheckCheck
 } from 'lucide-react';
 import { PAv, PSBadge } from '../../components/Shared';
 import { CLIENT_PROJECT_STAGES, PROJECT_TYPES, GLASS_CATALOG_DATA } from '../../data';
 import { db, storage, functions } from '../../lib/firebase';
 import { httpsCallable } from 'firebase/functions';
 import {
-  collection, onSnapshot, query, orderBy, addDoc, serverTimestamp, doc, updateDoc, arrayUnion
+  collection, onSnapshot, query, orderBy, where, addDoc, serverTimestamp, doc, updateDoc, arrayUnion, deleteDoc, setDoc
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import AdminRenderingManager from '../../components/AdminRenderingManager';
@@ -18,6 +19,7 @@ import AdminAddOnManager from '../../components/AdminAddOnManager';
 import WorldClassChat from '../../components/WorldClassChat';
 import { calculateTimeline, minimumAppointmentDateTime } from '../sharedHelpers';
 
+import VideoCallModal from '../../components/VideoCallModal';
 import { AC, STAGE_ICONS, SCHEDULE_CONFIGS, PREMIUM_CATALOG, BD_ITEMS_CONFIG } from './clienthub/config.jsx';
 import { printInvoiceOrReceipt, printSignedContractDoc } from './clienthub/print';
 import { ProjectInvoicesLedger } from './clienthub/ProjectInvoicesLedger';
@@ -79,85 +81,93 @@ function getProjectWorkflowGuidance(project, invoices = [], approvals = [], rend
     waitingOn, title, summary, client, manager, paymentInvoice,
   });
 
-  if (renderingFirst && !renderingInvoice) {
-    return result(
-      'project manager',
-      'Issue the rendering fee invoice',
-      'The paid design journey cannot begin until a rendering fee invoice is issued.',
-      { title: 'No action yet', body: 'The client is waiting for the rendering fee invoice.', action: 'Waiting for Westline' },
-      { title: 'Create the rendering fee invoice', body: 'Open Payments, issue the rendering/design fee invoice, and notify the client.', tab: 'financials', action: 'Open Payments' }
-    );
+  const stageId = Number(project.stageId || 1);
+
+  // Rendering fee + site visit — only relevant while project is still in Stage 1
+  if (renderingFirst && stageId < 2) {
+    if (!renderingInvoice) {
+      return result(
+        'project manager',
+        'Issue the rendering fee invoice',
+        'The paid design journey cannot begin until a rendering fee invoice is issued.',
+        { title: 'No action yet', body: 'The client is waiting for the rendering fee invoice.', action: 'Waiting for Westline' },
+        { title: 'Create the rendering fee invoice', body: 'Open Payments, issue the rendering/design fee invoice, and notify the client.', tab: 'financials', action: 'Open Payments' }
+      );
+    }
+
+    if (!renderingPaid) {
+      return result(
+        'client',
+        'Rendering fee awaiting payment',
+        'The design package remains locked until this invoice is paid and verified.',
+        { title: 'Pay the rendering fee', body: 'Open Financials and pay online or submit an offline payment notice.', action: 'Payment required' },
+        { title: 'Monitor or verify payment', body: 'Do not unlock the rendering manually. If offline payment is submitted, verify it in Payments.', tab: 'financials', action: 'Review Payments' }
+      );
+    }
+
+    if (project.siteVisit?.status !== 'scheduled' && project.siteVisit?.status !== 'completed') {
+      return result(
+        'client or project manager',
+        'Schedule the technical site visit',
+        'Rendering payment is complete. Measurements and site photos must be captured before the design team prepares the 3D rendering.',
+        { title: 'Choose an appointment', body: 'Select a suitable date and time for the technical visit.', action: 'Schedule visit' },
+        { title: 'Help schedule the visit', body: 'If the client arranged it by phone, record the confirmed date below so the project is not blocked.', tab: 'overview', action: 'Schedule Visit' }
+      );
+    }
+
+    if (project.siteVisit?.status === 'scheduled') {
+      const appointment = project.siteVisit.startAt
+        ? new Date(project.siteVisit.startAt).toLocaleString('en-GB', { dateStyle: 'full', timeStyle: 'short' })
+        : 'the confirmed appointment time';
+      const visitNote = project.siteVisit.notes ? ` Client note: ${project.siteVisit.notes}` : '';
+      return result(
+        'technical team',
+        'Complete the scheduled site survey',
+        `The visit is confirmed for ${appointment}.${visitNote}`,
+        { title: 'Site visit confirmed', body: `The appointment is set for ${appointment}.`, action: 'Appointment confirmed' },
+        { title: 'Coordinate the technical team', body: `Confirm worker assignment and site access.${visitNote} After the visit, mark it complete and record measurements and evidence.`, tab: 'overview', action: 'View Appointment' }
+      );
+    }
   }
 
-  if (renderingFirst && !renderingPaid) {
-    return result(
-      'client',
-      'Rendering fee awaiting payment',
-      'The design package remains locked until this invoice is paid and verified.',
-      { title: 'Pay the rendering fee', body: 'Open Financials and pay online or submit an offline payment notice.', action: 'Payment required' },
-      { title: 'Monitor or verify payment', body: 'Do not unlock the rendering manually. If offline payment is submitted, verify it in Payments.', tab: 'financials', action: 'Review Payments' }
-    );
-  }
+  // Rendering review — only relevant while project is still in Stage 2
+  if (renderingFirst && stageId < 3) {
+    if (project.siteVisit?.status === 'completed' && projectPackages.length === 0) {
+      return result(
+        'project manager',
+        'Prepare and upload the 3D rendering',
+        'The survey is complete. The design team can now produce the rendering from verified site measurements.',
+        { title: 'Rendering in preparation', body: 'The client will be notified when the design is ready for review.', action: 'Waiting for Westline' },
+        { title: 'Upload the rendering package', body: 'Open Designs, upload the correct version, and publish it for client review.', tab: 'renderings', action: 'Open Designs' }
+      );
+    }
 
-  if (renderingFirst && project.siteVisit?.status !== 'scheduled' && project.siteVisit?.status !== 'completed') {
-    return result(
-      'client or project manager',
-      'Schedule the technical site visit',
-      'Rendering payment is complete. Measurements and site photos must be captured before the design team prepares the 3D rendering.',
-      { title: 'Choose an appointment', body: 'Select a suitable date and time for the technical visit.', action: 'Schedule visit' },
-      { title: 'Help schedule the visit', body: 'If the client arranged it by phone, record the confirmed date below so the project is not blocked.', tab: 'overview', action: 'Schedule Visit' }
-    );
-  }
+    if (project.changeRequestPending) {
+      const renderingRequest = changeRequests
+        .filter(request =>
+          request.projectId === project.id &&
+          String(request.type || '').toLowerCase() === 'rendering' &&
+          String(request.status || '').toLowerCase() === 'pending'
+        )
+        .sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0))[0];
+      return result(
+        'project manager',
+        'Client requested changes to the 3D rendering',
+        renderingRequest?.note || 'The design is on hold until a revised rendering is uploaded.',
+        { title: 'Revision requested', body: 'The client is waiting for the updated design package.', action: 'Waiting for Westline' },
+        { title: 'Upload the revised rendering', body: 'Open Designs, review the client note or pins, upload the corrected version, and return it for approval.', tab: 'renderings', action: 'Resolve Revision' }
+      );
+    }
 
-  if (renderingFirst && project.siteVisit?.status === 'scheduled') {
-    const appointment = project.siteVisit.startAt
-      ? new Date(project.siteVisit.startAt).toLocaleString('en-GB', { dateStyle: 'full', timeStyle: 'short' })
-      : 'the confirmed appointment time';
-    const visitNote = project.siteVisit.notes ? ` Client note: ${project.siteVisit.notes}` : '';
-    return result(
-      'technical team',
-      'Complete the scheduled site survey',
-      `The visit is confirmed for ${appointment}.${visitNote}`,
-      { title: 'Site visit confirmed', body: `The appointment is set for ${appointment}.`, action: 'Appointment confirmed' },
-      { title: 'Coordinate the technical team', body: `Confirm worker assignment and site access.${visitNote} After the visit, mark it complete and record measurements and evidence.`, tab: 'overview', action: 'View Appointment' }
-    );
-  }
-
-  if (renderingFirst && project.siteVisit?.status === 'completed' && projectPackages.length === 0) {
-    return result(
-      'project manager',
-      'Prepare and upload the 3D rendering',
-      'The survey is complete. The design team can now produce the rendering from verified site measurements.',
-      { title: 'Rendering in preparation', body: 'The client will be notified when the design is ready for review.', action: 'Waiting for Westline' },
-      { title: 'Upload the rendering package', body: 'Open Designs, upload the correct version, and publish it for client review.', tab: 'renderings', action: 'Open Designs' }
-    );
-  }
-
-  if (renderingFirst && project.changeRequestPending) {
-    const renderingRequest = changeRequests
-      .filter(request =>
-        request.projectId === project.id &&
-        String(request.type || '').toLowerCase() === 'rendering' &&
-        String(request.status || '').toLowerCase() === 'pending'
-      )
-      .sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0))[0];
-    return result(
-      'project manager',
-      'Client requested changes to the 3D rendering',
-      renderingRequest?.note || 'The design is on hold until a revised rendering is uploaded.',
-      { title: 'Revision requested', body: 'The client is waiting for the updated design package.', action: 'Waiting for Westline' },
-      { title: 'Upload the revised rendering', body: 'Open Designs, review the client note or pins, upload the corrected version, and return it for approval.', tab: 'renderings', action: 'Resolve Revision' }
-    );
-  }
-
-  if (renderingFirst && !renderingApproved) {
-    return result(
-      'client',
-      'Rendering awaiting client approval',
-      'The client must approve the final design or request revisions before the legal specification is finalized.',
-      { title: 'Review the rendering', body: 'Approve the final design or place clear revision comments.', action: 'Design review required' },
-      { title: 'Monitor design feedback', body: 'Respond to comments, upload revisions, and keep the approved version clearly identified.', tab: 'renderings', action: 'Open Designs' }
-    );
+    if (!renderingApproved) {
+      return result(
+        'client',
+        'Rendering awaiting client approval',
+        'The client must approve the final design or request revisions before the legal specification is finalized.',
+        { title: 'Review the rendering', body: 'Approve the final design or place clear revision comments.', action: 'Design review required' },
+        { title: 'Monitor design feedback', body: 'Respond to comments, upload revisions, and keep the approved version clearly identified.', tab: 'renderings', action: 'Open Designs' }
+      );
+    }
   }
 
   if (!quoteInvoice) {
@@ -879,7 +889,11 @@ export default function ClientHub({ clientId, dbClients = [], onBack, ...props }
   const brand = props.brand || {};
   const ac = brand.color || AC;
 
-  const client = dbClients.find(c => c.id === clientId) || dbClients.find(c => c.phone === clientId);
+  const client = dbClients.find(c => c.id === clientId) || dbClients.find(c => c.phone === clientId) || (() => {
+    const p = (props.clients || []).find(p => p.clientId === clientId);
+    if (!p) return undefined;
+    return { id: clientId, name: p.clientName || p.name || 'Client', phone: p.clientPhone || p.phone || '', email: p.clientEmail || p.email || '', company: p.clientCompany || p.company || '' };
+  })();
   const teamMembers = props.teamMembers || [];
 
   const [projects, setProjects] = useState([]);
@@ -892,6 +906,16 @@ export default function ClientHub({ clientId, dbClients = [], onBack, ...props }
   const [estDate, setEstDate] = useState('');
   const [showClientPreview, setShowClientPreview] = useState(false);
   const [showRequestPaymentModal, setShowRequestPaymentModal] = useState(false);
+  const [handoverNotes, setHandoverNotes] = useState('');
+  const [meetings, setMeetings] = useState([]);
+  const [meetingForm, setMeetingForm] = useState({ title: '', scheduledAt: '', durationMinutes: 30, notes: '' });
+  const [savingMeeting, setSavingMeeting] = useState(false);
+  const [showScheduleForm, setShowScheduleForm] = useState(false);
+  const [showScheduleModal, setShowScheduleModal] = useState(false);
+  const [showTabMore, setShowTabMore] = useState(false);
+  const [activeCallMeeting, setActiveCallMeeting] = useState(null);
+  const [unreadMsgCount, setUnreadMsgCount] = useState(0);
+  const [handoverIssuing, setHandoverIssuing] = useState(false);
 
   useEffect(() => {
     if (!db || !client) { setLoadingProjects(false); return; }
@@ -915,6 +939,46 @@ export default function ClientHub({ clientId, dbClients = [], onBack, ...props }
   }, [client?.id]);
 
   const selected = projects.find(p => p.id === selectedId);
+
+  // Load meetings for selected project
+  useEffect(() => {
+    if (!selected?.id) { setMeetings([]); return; }
+    const q = query(collection(db, 'projects', selected.id, 'meetings'), orderBy('scheduledAt', 'desc'));
+    const unsub = onSnapshot(q, snap => setMeetings(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+    return unsub;
+  }, [selected?.id]);
+
+  // Unread message count for PM (messages from client not yet read by admin)
+  useEffect(() => {
+    if (!client?.id) { setUnreadMsgCount(0); return; }
+    const unsub = onSnapshot(collection(db, 'clients', client.id, 'messages'), snap => {
+      const count = snap.docs.filter(d => {
+        const m = d.data();
+        return !m.isInternal && m.senderRole !== 'admin' && !m.readByAdmin;
+      }).length;
+      setUnreadMsgCount(count);
+    });
+    return unsub;
+  }, [client?.id]);
+
+  // Incoming call listener — fires when client initiates a call
+  const [incomingCall, setIncomingCall] = useState(null);
+  useEffect(() => {
+    if (!selected?.id) { setIncomingCall(null); return; }
+    const q = query(collection(db, 'projects', selected.id, 'meetings'), where('status', '==', 'live'));
+    const unsub = onSnapshot(q, snap => {
+      const twoMinutesAgo = new Date(Date.now() - 2 * 60 * 1000);
+      const call = snap.docs.map(d => ({ id: d.id, ...d.data() })).find(m => {
+        const created = m.createdAt?.toDate ? m.createdAt.toDate() : new Date(m.createdAt || 0);
+        // Only surface calls NOT created by this admin (i.e. client-initiated)
+        return created > twoMinutesAgo && m.createdBy !== props.user?.uid;
+      });
+      if (call && !activeCallMeeting) setIncomingCall(c => c ? c : call);
+      else if (!call) setIncomingCall(null);
+    });
+    return unsub;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected?.id]);
 
   useEffect(() => {
     if (selected?.estimatedCompletion) {
@@ -976,18 +1040,21 @@ export default function ClientHub({ clientId, dbClients = [], onBack, ...props }
   // Tab names aligned with client portal for consistency:
   // Client sees: Progress, Design Vault, Approvals, Photos, Payments, Add-ons, Documents
   // Admin manages: Overview, Spec, Timeline, Payments, Design Vault, Documents, Team
-  const TABS = [
-    { id: 'overview',   label: 'Overview',   icon: <Briefcase size={14} /> },
-    { id: 'spec',       label: 'Project Brief', icon: <FileText size={14} /> },
-    { id: 'timeline',   label: 'Timeline',   icon: <Calendar size={14} /> },
-    { id: 'financials', label: 'Payments',   icon: <DollarSign size={14} /> },
-    { id: 'shipping',   label: 'Shipping',   icon: <Truck size={14} /> },
-    { id: 'renderings', label: 'Designs',    icon: <PenTool size={14} /> },
-    { id: 'vault',      label: 'Vault',      icon: <ShieldCheck size={14} /> },
-    { id: 'uploads',    label: 'Uploads',    icon: <Camera size={14} /> },
-    { id: 'team',       label: 'Team',       icon: <Users size={14} /> },
-    { id: 'messages',   label: 'Messages',   icon: <MessageSquare size={14} /> }
+  const PRIMARY_TABS = [
+    { id: 'overview',   label: 'Overview',  icon: <Briefcase size={14} /> },
+    { id: 'financials', label: 'Payments',  icon: <DollarSign size={14} /> },
+    { id: 'renderings', label: 'Designs',   icon: <PenTool size={14} /> },
+    { id: 'messages',   label: 'Messages',  icon: <MessageSquare size={14} /> },
+    { id: 'timeline',   label: 'Timeline',  icon: <Calendar size={14} /> },
   ];
+  const MORE_TABS = [
+    { id: 'spec',      label: 'Project Brief', icon: <FileText size={14} /> },
+    { id: 'shipping',  label: 'Shipping',      icon: <Truck size={14} /> },
+    { id: 'vault',     label: 'Vault',         icon: <ShieldCheck size={14} /> },
+    { id: 'uploads',   label: 'Uploads',       icon: <Camera size={14} /> },
+    { id: 'team',      label: 'Team',          icon: <Users size={14} /> },
+  ];
+  const TABS = [...PRIMARY_TABS, ...MORE_TABS];
   const workflowGuidance = selected
     ? getProjectWorkflowGuidance(selected, props.invoices || [], props.approvals || [], props.renderingPackages || [], props.addOns || [], props.changeRequests || [])
     : null;
@@ -1171,6 +1238,36 @@ export default function ClientHub({ clientId, dbClients = [], onBack, ...props }
                       <div style={{ fontSize: 10, fontWeight: 800, color: currentStageObj?.color || ac, background: `${currentStageObj?.color || ac}15`, padding: '5px 12px', borderRadius: 20 }}>
                         {selectedWorkflowPercent}% complete
                       </div>
+                      <button onClick={async () => {
+                        const now2 = new Date();
+                        const mtgRef = doc(collection(db, 'projects', selected.id, 'meetings'));
+                        await setDoc(mtgRef, {
+                          title: 'Instant Video Call', scheduledAt: now2, durationMinutes: 60,
+                          notes: '', status: 'live', channelName: `meeting_${mtgRef.id}`,
+                          createdBy: props.user?.uid || 'admin', createdAt: serverTimestamp(),
+                          projectId: selected.id, clientId: selected.clientId,
+                        });
+                        await addDoc(collection(db, 'clients', selected.clientId, 'messages'), {
+                          text: '📞 Your project manager is calling — open your portal to join the video call.',
+                          senderRole: 'admin', senderId: props.user?.uid || 'admin',
+                          senderName: props.user?.name || 'Project Manager',
+                          isInternal: false, createdAt: serverTimestamp(),
+                          projectId: selected.id, projectTitle: selected.project || selected.title || '',
+                          readByAdmin: true, readByClient: false,
+                        });
+                        await addDoc(collection(db, 'notifications'), {
+                          userId: selected.clientId, title: 'Incoming Video Call',
+                          message: 'Your project manager is calling. Open your portal to answer.',
+                          type: 'incoming_call', read: false, createdAt: serverTimestamp(),
+                          clientId: selected.clientId, projectId: selected.id,
+                        });
+                        setActiveCallMeeting({ id: mtgRef.id, title: 'Instant Video Call', channelName: `meeting_${mtgRef.id}`, status: 'live' });
+                      }} style={{ height: 34, padding: '0 14px', borderRadius: 10, background: '#22c55e', color: '#fff', border: 'none', fontSize: 12, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}>
+                        <Video size={13} /> Call
+                      </button>
+                      <button onClick={() => setShowScheduleModal(true)} style={{ height: 34, padding: '0 14px', borderRadius: 10, background: ac, color: '#fff', border: 'none', fontSize: 12, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}>
+                        <Calendar size={13} /> Schedule
+                      </button>
                       {nextStage && (
                         <button onClick={() => setShowAdvanceModal(true)}
                           style={{ height: 34, padding: '0 14px', borderRadius: 10, background: currentStageObj?.color || ac, color: '#fff', border: 'none', fontSize: 12, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}>
@@ -1208,50 +1305,36 @@ export default function ClientHub({ clientId, dbClients = [], onBack, ...props }
                 </div>
               </div>
 
-              {workflowGuidance && (
-                <div style={{ marginBottom: 16, padding: 16, borderRadius: 16, background: workflowGuidance.paymentInvoice ? '#EFF6FF' : '#FFFBEB', border: `1.5px solid ${workflowGuidance.paymentInvoice ? '#93C5FD' : '#FDE68A'}` }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 14, alignItems: 'flex-start', marginBottom: 14 }}>
-                    <div>
-                      <div style={{ fontSize: 10, fontWeight: 900, color: workflowGuidance.paymentInvoice ? '#1D4ED8' : '#B45309', textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 4 }}>
-                        Workflow Guidance · Waiting on {workflowGuidance.waitingOn}
-                      </div>
-                      <div style={{ fontSize: 16, fontWeight: 900, color: 'var(--accent-secondary)', marginBottom: 4 }}>{workflowGuidance.title}</div>
-                      <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.55 }}>{workflowGuidance.summary}</div>
-                    </div>
-                    {workflowGuidance.paymentInvoice && (
-                      <button onClick={() => setActiveTab('financials')} style={{ flexShrink: 0, padding: '9px 14px', borderRadius: 10, background: '#1D4ED8', color: '#fff', border: 'none', fontSize: 11, fontWeight: 900, cursor: 'pointer' }}>
-                        Verify Payment
-                      </button>
-                    )}
-                  </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: 10 }}>
-                    {[
-                      { label: 'Client should', data: workflowGuidance.client, color: '#B45309' },
-                      { label: 'Project manager should', data: workflowGuidance.manager, color: '#1D4ED8' },
-                    ].map(item => (
-                      <div key={item.label} style={{ padding: 13, borderRadius: 12, background: '#fff', border: '1px solid rgba(0,0,0,.07)' }}>
-                        <div style={{ fontSize: 9, fontWeight: 900, color: item.color, textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 5 }}>{item.label}</div>
-                        <div style={{ fontSize: 13, fontWeight: 900, color: 'var(--accent-secondary)', marginBottom: 3 }}>{item.data.title}</div>
-                        <div style={{ fontSize: 11, lineHeight: 1.5, color: 'var(--text-secondary)', minHeight: 33 }}>{item.data.body}</div>
-                        {item.label === 'Project manager should' && (
-                          <button onClick={() => setActiveTab(item.data.tab)} style={{ marginTop: 9, border: 'none', background: 'transparent', color: item.color, fontSize: 11, fontWeight: 900, cursor: 'pointer', padding: 0 }}>
-                            {item.data.action} <ChevronRight size={11} style={{ verticalAlign: 'middle' }} />
-                          </button>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
               {/* Tab Bar */}
-              <div style={{ position: 'sticky', top: -16, zIndex: 10, display: 'flex', gap: 4, marginBottom: 14, flexShrink: 0, background: 'rgba(250, 250, 249, 0.85)', backdropFilter: 'blur(12px)', padding: 6, borderRadius: 14, border: '1px solid var(--border-color)', margin: '0 -4px 14px -4px' }}>
-                {TABS.map(tab => (
-                  <button key={tab.id} onClick={() => setActiveTab(tab.id)}
-                    style={{ flex: 1, height: 34, borderRadius: 10, background: activeTab === tab.id ? '#fff' : 'transparent', color: activeTab === tab.id ? `var(--accent-secondary)` : `var(--text-secondary)`, border: activeTab === tab.id ? '1px solid var(--border-color)' : '1px solid transparent', fontSize: 11, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, transition: 'all .18s', boxShadow: activeTab === tab.id ? '0 1px 4px rgba(0,0,0,.07)' : 'none' }}>
+              <div style={{ position: 'sticky', top: -16, zIndex: 10, display: 'flex', gap: 4, flexShrink: 0, background: 'rgba(250, 250, 249, 0.95)', backdropFilter: 'blur(12px)', padding: 6, borderRadius: 14, border: '1px solid var(--border-color)', margin: '0 -4px 14px -4px' }}>
+                {PRIMARY_TABS.map(tab => (
+                  <button key={tab.id} onClick={() => { setActiveTab(tab.id); setShowTabMore(false); }}
+                    style={{ flex: 1, height: 34, borderRadius: 10, background: activeTab === tab.id ? '#fff' : 'transparent', color: activeTab === tab.id ? `var(--accent-secondary)` : `var(--text-secondary)`, border: activeTab === tab.id ? '1px solid var(--border-color)' : '1px solid transparent', fontSize: 11, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, transition: 'all .18s', boxShadow: activeTab === tab.id ? '0 1px 4px rgba(0,0,0,.07)' : 'none', padding: '0 10px', whiteSpace: 'nowrap', minWidth: 0 }}>
                     {tab.icon}{tab.label}
+                    {tab.id === 'messages' && unreadMsgCount > 0 && (
+                      <span style={{ background: '#EF4444', color: '#fff', fontSize: 9, fontWeight: 800, height: 16, minWidth: 16, borderRadius: 8, padding: '0 3px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        {unreadMsgCount > 9 ? '9+' : unreadMsgCount}
+                      </span>
+                    )}
                   </button>
                 ))}
+                {/* More dropdown */}
+                <div style={{ position: 'relative', flexShrink: 0 }}>
+                  <button onClick={() => setShowTabMore(v => !v)}
+                    style={{ height: 34, padding: '0 12px', borderRadius: 10, background: MORE_TABS.some(t => t.id === activeTab) ? '#fff' : 'transparent', color: MORE_TABS.some(t => t.id === activeTab) ? `var(--accent-secondary)` : `var(--text-secondary)`, border: MORE_TABS.some(t => t.id === activeTab) ? '1px solid var(--border-color)' : '1px solid transparent', fontSize: 11, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5, whiteSpace: 'nowrap' }}>
+                    {MORE_TABS.find(t => t.id === activeTab)?.label || 'More'} <ChevronRight size={12} style={{ transform: showTabMore ? 'rotate(90deg)' : 'none', transition: 'transform .18s' }} />
+                  </button>
+                  {showTabMore && (
+                    <div style={{ position: 'absolute', top: 'calc(100% + 6px)', right: 0, background: '#fff', border: '1px solid var(--border-color)', borderRadius: 14, padding: 6, boxShadow: '0 8px 24px rgba(0,0,0,0.12)', zIndex: 100, minWidth: 160 }}>
+                      {MORE_TABS.map(tab => (
+                        <button key={tab.id} onClick={() => { setActiveTab(tab.id); setShowTabMore(false); }}
+                          style={{ width: '100%', height: 36, borderRadius: 9, background: activeTab === tab.id ? `var(--bg-secondary)` : 'transparent', color: activeTab === tab.id ? `var(--accent-secondary)` : `var(--text-secondary)`, border: 'none', fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, padding: '0 12px', textAlign: 'left' }}>
+                          {tab.icon}{tab.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
 
               {/* Tab Content */}
@@ -1277,6 +1360,41 @@ export default function ClientHub({ clientId, dbClients = [], onBack, ...props }
                 {/* OVERVIEW */}
                 {activeTab === 'overview' && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                    {workflowGuidance && (
+                      <div style={{ padding: 16, borderRadius: 16, background: workflowGuidance.paymentInvoice ? '#EFF6FF' : '#FFFBEB', border: `1.5px solid ${workflowGuidance.paymentInvoice ? '#93C5FD' : '#FDE68A'}` }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 14, alignItems: 'flex-start', marginBottom: 14 }}>
+                          <div>
+                            <div style={{ fontSize: 10, fontWeight: 900, color: workflowGuidance.paymentInvoice ? '#1D4ED8' : '#B45309', textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 4 }}>
+                              Workflow Guidance · Waiting on {workflowGuidance.waitingOn}
+                            </div>
+                            <div style={{ fontSize: 16, fontWeight: 900, color: 'var(--accent-secondary)', marginBottom: 4 }}>{workflowGuidance.title}</div>
+                            <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.55 }}>{workflowGuidance.summary}</div>
+                          </div>
+                          {workflowGuidance.paymentInvoice && (
+                            <button onClick={() => setActiveTab('financials')} style={{ flexShrink: 0, padding: '9px 14px', borderRadius: 10, background: '#1D4ED8', color: '#fff', border: 'none', fontSize: 11, fontWeight: 900, cursor: 'pointer' }}>
+                              Verify Payment
+                            </button>
+                          )}
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: 10 }}>
+                          {[
+                            { label: 'Client should', data: workflowGuidance.client, color: '#B45309' },
+                            { label: 'Project manager should', data: workflowGuidance.manager, color: '#1D4ED8' },
+                          ].map(item => (
+                            <div key={item.label} style={{ padding: 13, borderRadius: 12, background: '#fff', border: '1px solid rgba(0,0,0,.07)' }}>
+                              <div style={{ fontSize: 9, fontWeight: 900, color: item.color, textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 5 }}>{item.label}</div>
+                              <div style={{ fontSize: 13, fontWeight: 900, color: 'var(--accent-secondary)', marginBottom: 3 }}>{item.data.title}</div>
+                              <div style={{ fontSize: 11, lineHeight: 1.5, color: 'var(--text-secondary)', minHeight: 33 }}>{item.data.body}</div>
+                              {item.label === 'Project manager should' && (
+                                <button onClick={() => setActiveTab(item.data.tab)} style={{ marginTop: 9, border: 'none', background: 'transparent', color: item.color, fontSize: 11, fontWeight: 900, cursor: 'pointer', padding: 0 }}>
+                                  {item.data.action} <ChevronRight size={11} style={{ verticalAlign: 'middle' }} />
+                                </button>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                     <AdminSiteVisitCard project={selected} notify={props.notify} />
 
                     {/* ── CLIENT VIEW MIRROR — what the client sees right now ── */}
@@ -1453,7 +1571,7 @@ export default function ClientHub({ clientId, dbClients = [], onBack, ...props }
                       {[
                         { label: 'Project Type', value: PROJECT_TYPES[selected.projectType]?.label || 'Full Service', icon: '📋' },
                         { label: 'Quote Status', value: selected.quoteApproved ? '✅ Approved' : '⏳ Pending', icon: '💳' },
-                        { label: 'Team', value: `${new Set([...(selected.assignedWorkers || []), ...(selected.assignedStaff || []), ...(selected.projectManagerId ? [selected.projectManagerId] : [])]).size} assigned`, icon: '👥' },
+                        { label: 'Team', value: `${new Set([...(selected.assignedWorkers || []), ...(selected.assignedStaff || []), ...(selected.projectManagerIds || []), ...(selected.projectManagerId ? [selected.projectManagerId] : [])]).size} assigned`, icon: '👥' },
                         { label: 'Spec Document', value: !selected.specDoc?.url ? 'Not uploaded' : selected.specDoc.status === 'signed' ? '✅ Signed' : selected.specDoc.status === 'rejected' ? '🔴 Changes Req.' : '⏳ Signature Required', icon: '📄' },
                         { label: 'Contract', value: selected.contractAccepted ? '✅ Signed' : '⏳ Not signed', icon: '📝' },
                         { label: 'Change Req.', value: selected.changeRequestPending ? '⚠️ Pending' : 'None', icon: '🔄' },
@@ -1592,6 +1710,97 @@ export default function ClientHub({ clientId, dbClients = [], onBack, ...props }
                         )}
                       </div>
                     </div>
+
+                    {/* ── HANDOVER CERTIFICATE ── */}
+                    {(selected.stageId === 8 || selected.status === 'Completed') && (() => {
+                      const cert = selected.handoverCertificate;
+                      if (cert) {
+                        return (
+                          <div style={{ padding: '20px 24px', background: '#F0FDF4', borderRadius: 14, border: '1.5px solid #BBF7D0' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+                              <Award size={18} color="#15803D" />
+                              <div style={{ fontSize: 13, fontWeight: 800, color: '#15803D' }}>Handover Certificate Issued</div>
+                            </div>
+                            <div style={{ fontSize: 12, color: '#166534', lineHeight: 1.6, marginBottom: 4 }}>
+                              Issued on {cert.issuedAt?.toDate ? cert.issuedAt.toDate().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : '—'}
+                              {cert.issuedBy ? ` by ${cert.issuedBy}` : ''}
+                            </div>
+                            {cert.acknowledgedAt && (
+                              <div style={{ fontSize: 12, color: '#166534' }}>
+                                ✓ Acknowledged by client on {cert.acknowledgedAt.toDate ? cert.acknowledgedAt.toDate().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : '—'}
+                              </div>
+                            )}
+                            {!cert.acknowledgedAt && (
+                              <div style={{ fontSize: 12, color: '#92400E', marginTop: 4 }}>⏳ Awaiting client acknowledgement</div>
+                            )}
+                          </div>
+                        );
+                      }
+                      return (
+                        <div style={{ padding: '20px 24px', background: '#fff', borderRadius: 14, border: '1.5px solid var(--border-color)' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                            <Award size={18} color={`var(--accent-secondary)`} />
+                            <div style={{ fontSize: 13, fontWeight: 800, color: `var(--accent-secondary)` }}>Issue Handover Certificate</div>
+                          </div>
+                          <div style={{ fontSize: 12, color: `var(--text-secondary)`, marginBottom: 14 }}>
+                            Generates a Certificate of Completion visible to the client in their Documents tab. The client will acknowledge receipt.
+                          </div>
+                          <textarea
+                            placeholder="Describe what was delivered — e.g. full aluminium glass partition system, 3 sliding doors, powder-coated frames in matte black, installed and signed off."
+                            value={handoverNotes}
+                            onChange={e => setHandoverNotes(e.target.value)}
+                            rows={3}
+                            style={{ width: '100%', padding: '10px 14px', borderRadius: 10, border: '1.5px solid var(--border-color)', fontSize: 12, fontFamily: 'inherit', resize: 'vertical', boxSizing: 'border-box', outline: 'none', color: `var(--accent-secondary)` }}
+                          />
+                          <button
+                            disabled={!handoverNotes.trim() || handoverIssuing}
+                            onClick={async () => {
+                              if (!handoverNotes.trim() || handoverIssuing) return;
+                              setHandoverIssuing(true);
+                              try {
+                                const certData = {
+                                  issuedAt: serverTimestamp(),
+                                  issuedBy: props.user?.displayName || props.user?.email || 'Project Manager',
+                                  issuedByUid: props.user?.uid || null,
+                                  deliveryNotes: handoverNotes.trim(),
+                                  status: 'issued',
+                                };
+                                await Promise.all([
+                                  updateDoc(doc(db, 'projects', selected.id), { handoverCertificate: certData }),
+                                  addDoc(collection(db, 'projects', selected.id, 'documents'), {
+                                    type: 'handover',
+                                    name: 'Certificate of Completion',
+                                    clientVisible: true,
+                                    projectTitle: selected.title || 'Interior Design Project',
+                                    clientName: client?.name || client?.displayName || '',
+                                    projectType: PROJECT_TYPES[selected.projectType]?.label || 'Interior Design & Installation',
+                                    handoverDate: new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }),
+                                    deliveryNotes: handoverNotes.trim(),
+                                    issuedBy: props.user?.displayName || props.user?.email || 'Project Manager',
+                                    createdAt: serverTimestamp(),
+                                  }),
+                                ]);
+                                setHandoverNotes('');
+                              } catch (e) {
+                                console.error(e);
+                              } finally {
+                                setHandoverIssuing(false);
+                              }
+                            }}
+                            style={{
+                              marginTop: 10, padding: '10px 20px', borderRadius: 10,
+                              background: !handoverNotes.trim() || handoverIssuing ? '#e5e7eb' : '#15803D',
+                              color: !handoverNotes.trim() || handoverIssuing ? '#9CA3AF' : '#fff',
+                              fontSize: 12, fontWeight: 800, border: 'none',
+                              cursor: !handoverNotes.trim() || handoverIssuing ? 'not-allowed' : 'pointer',
+                              display: 'flex', alignItems: 'center', gap: 6,
+                            }}
+                          >
+                            {handoverIssuing ? <><Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> Issuing…</> : <><Award size={13} /> Issue Certificate</>}
+                          </button>
+                        </div>
+                      );
+                    })()}
 
                   </div>
                 )}
@@ -1740,14 +1949,18 @@ export default function ClientHub({ clientId, dbClients = [], onBack, ...props }
                   const assignedIds = new Set([
                     ...(selected.assignedWorkers || []),
                     ...(selected.assignedStaff || []),
+                    ...(selected.projectManagerIds || []),
                     ...(selected.projectManagerId ? [selected.projectManagerId] : []),
                   ]);
+                  const pmIds = selected.projectManagerIds?.length
+                    ? selected.projectManagerIds
+                    : (selected.projectManagerId ? [selected.projectManagerId] : []);
                   const assignedList = teamMembers.filter(m => assignedIds.has(m.uid || m.id?.toString()) || assignedIds.has(m.email));
                   const availList    = teamMembers.filter(m => !assignedIds.has(m.uid || m.id?.toString()) && !assignedIds.has(m.email));
                   const MemberCard = ({ m }) => {
                     const assigned = assignedIds.has(m.uid || m.id?.toString()) || assignedIds.has(m.email);
                     const isWorker = m.role === 'worker' || /worker|installer|field|technician|technical team lead/i.test(m.jobRole || '');
-                    const isManager = selected.projectManagerId === (m.uid || m.id);
+                    const isManager = pmIds.includes(m.uid) || pmIds.includes(m.id);
                     const initials = (m.name || m.email || '?').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
                     return (
                       <button onClick={() => props.assignWorkerToProject?.(selected.id, m.uid || m.id?.toString() || m.email)}
@@ -1809,18 +2022,116 @@ export default function ClientHub({ clientId, dbClients = [], onBack, ...props }
                 })()}
 
                 {/* MESSAGES */}
-                {activeTab === 'messages' && (
-                  <div style={{ background: '#fff', borderRadius: 16, border: '1px solid var(--border-color)', overflow: 'hidden', height: 600, display: 'flex', flexDirection: 'column' }}>
-                    <WorldClassChat 
-                      clientId={selected.clientId} 
-                      user={props.user} 
-                      isAdmin={true} 
-                      accentColor={brand.color || 'var(--accent-secondary)'} 
-                      projects={projects.filter(w => w.clientId === selected.clientId)} 
-                      viewerLanguage={props.lang || 'en'}
-                    />
-                  </div>
-                )}
+                {activeTab === 'messages' && (() => {
+                  const now = new Date();
+                  const fmtMtg = (ts) => {
+                    if (!ts) return '';
+                    const d = ts.toDate ? ts.toDate() : new Date(ts);
+                    return d.toLocaleString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+                  };
+                  const upcomingMtgs = meetings.filter(m => {
+                    if (m.status === 'cancelled' || m.status === 'completed') return false;
+                    const d = m.scheduledAt?.toDate ? m.scheduledAt.toDate() : new Date(m.scheduledAt || 0);
+                    return d > now;
+                  });
+                  const pastMtgs = meetings.filter(m => {
+                    const d = m.scheduledAt?.toDate ? m.scheduledAt.toDate() : new Date(m.scheduledAt || 0);
+                    return m.status === 'completed' || m.status === 'cancelled' || d <= now;
+                  });
+                  async function scheduleMeeting() {
+                    if (!meetingForm.title.trim() || !meetingForm.scheduledAt) return;
+                    setSavingMeeting(true);
+                    try {
+                      const scheduledAt = new Date(meetingForm.scheduledAt);
+                      const mtgRef = doc(collection(db, 'projects', selected.id, 'meetings'));
+                      await setDoc(mtgRef, {
+                        title: meetingForm.title.trim(),
+                        scheduledAt,
+                        durationMinutes: meetingForm.durationMinutes,
+                        notes: meetingForm.notes.trim(),
+                        status: 'scheduled',
+                        channelName: `meeting_${mtgRef.id}`,
+                        createdBy: props.user?.uid || 'admin',
+                        createdAt: serverTimestamp(),
+                        projectId: selected.id,
+                        clientId: selected.clientId,
+                      });
+                      const dateStr = scheduledAt.toLocaleString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' });
+                      await addDoc(collection(db, 'clients', selected.clientId, 'messages'), {
+                        text: `📅 Video call scheduled: "${meetingForm.title.trim()}" on ${dateStr} (${meetingForm.durationMinutes} min). Open your client portal to join.`,
+                        senderRole: 'admin', senderId: props.user?.uid || 'admin',
+                        senderName: props.user?.name || 'Project Manager',
+                        isInternal: false, createdAt: serverTimestamp(),
+                        projectId: selected.id, projectTitle: selected.project || selected.title || '',
+                        readByAdmin: true, readByClient: false,
+                      });
+                      await addDoc(collection(db, 'notifications'), {
+                        userId: selected.clientId, title: 'Video Call Scheduled',
+                        message: `${meetingForm.title.trim()} — ${dateStr}`,
+                        type: 'meeting_scheduled', read: false, createdAt: serverTimestamp(),
+                        clientId: selected.clientId, projectId: selected.id,
+                      });
+                      setMeetingForm({ title: '', scheduledAt: '', durationMinutes: 30, notes: '' });
+                      setShowScheduleForm(false);
+                    } catch (err) { console.error('Schedule meeting error:', err); }
+                    setSavingMeeting(false);
+                  }
+
+                  const statusBadge = (s) => {
+                    const map = { scheduled: ['#DBEAFE','#1D4ED8','Scheduled'], live: ['#DCFCE7','#15803D','Live'], completed: ['#F0FDF4','#166534','Done'], cancelled: ['#FEF2F2','#991B1B','Cancelled'] };
+                    const [bg, color, label] = map[s] || ['#F3F4F6','#374151', s];
+                    return <span style={{ fontSize: 10, fontWeight: 800, padding: '3px 8px', borderRadius: 20, background: bg, color }}>{label}</span>;
+                  };
+
+                  return (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                      {upcomingMtgs.length > 0 && (
+                        <div style={{ background: '#fff', borderRadius: 16, border: '1px solid var(--border-color)', padding: '14px 18px' }}>
+                          <div style={{ fontSize: 12, fontWeight: 800, color: 'var(--accent-secondary)', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
+                            <Video size={13} /> Upcoming Calls
+                            <span style={{ fontSize: 10, fontWeight: 800, padding: '2px 7px', borderRadius: 20, background: '#DBEAFE', color: '#1D4ED8' }}>{upcomingMtgs.length}</span>
+                          </div>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                            {upcomingMtgs.map(mtg => (
+                              <div key={mtg.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', borderRadius: 11, border: '1px solid var(--border-color)', background: '#FAFAFA' }}>
+                                <div>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 3 }}>
+                                    <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--accent-secondary)' }}>{mtg.title}</span>
+                                    {statusBadge(mtg.status)}
+                                  </div>
+                                  <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                                    <span style={{ fontSize: 11, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: 3 }}><Calendar size={10} />{fmtMtg(mtg.scheduledAt)}</span>
+                                    <span style={{ fontSize: 11, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: 3 }}><Clock size={10} />{mtg.durationMinutes} min</span>
+                                  </div>
+                                </div>
+                                <div style={{ display: 'flex', gap: 6 }}>
+                                  <button onClick={() => setActiveCallMeeting(mtg)} style={{ height: 32, padding: '0 12px', borderRadius: 9, background: ac, color: '#fff', border: 'none', fontSize: 11, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}>
+                                    <Video size={12} /> Start
+                                  </button>
+                                  <button onClick={() => { if (window.confirm(`Cancel "${mtg.title}"?`)) updateDoc(doc(db, 'projects', selected.id, 'meetings', mtg.id), { status: 'cancelled' }); }} style={{ height: 32, width: 32, borderRadius: 9, background: '#FEF2F2', border: '1px solid #FECACA', color: '#DC2626', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                    <X size={13} />
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Chat */}
+                      <div style={{ background: '#fff', borderRadius: 16, border: '1px solid var(--border-color)', overflow: 'hidden', height: 550, display: 'flex', flexDirection: 'column' }}>
+                        <WorldClassChat
+                          clientId={selected.clientId}
+                          user={props.user}
+                          isAdmin={true}
+                          accentColor={brand.color || 'var(--accent-secondary)'}
+                          projects={projects.filter(w => w.clientId === selected.clientId)}
+                          viewerLanguage={props.lang || 'en'}
+                        />
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
             </>
           )}
@@ -1852,6 +2163,99 @@ export default function ClientHub({ clientId, dbClients = [], onBack, ...props }
           addOns={props.addOns || []}
           brand={brand}
           onClose={() => setShowClientPreview(false)}
+        />
+      )}
+      {showScheduleModal && selected && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }} onClick={e => { if (e.target === e.currentTarget) setShowScheduleModal(false); }}>
+          <div style={{ background: '#fff', borderRadius: 20, width: '100%', maxWidth: 480, padding: 28, boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+              <div style={{ fontSize: 16, fontWeight: 900, color: 'var(--accent-secondary)', display: 'flex', alignItems: 'center', gap: 8 }}><Calendar size={16} /> Schedule Video Call</div>
+              <button onClick={() => setShowScheduleModal(false)} style={{ width: 32, height: 32, borderRadius: 9, border: '1px solid var(--border-color)', background: 'var(--bg-secondary)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><X size={15} /></button>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div>
+                <label style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-secondary)', display: 'block', marginBottom: 5 }}>TITLE</label>
+                <input value={meetingForm.title} onChange={e => setMeetingForm(f => ({ ...f, title: e.target.value }))} placeholder="e.g. Project Review, Design Walkthrough" style={{ width: '100%', padding: '10px 14px', borderRadius: 10, border: '1px solid var(--border-color)', fontSize: 13, outline: 'none', boxSizing: 'border-box' }} />
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div>
+                  <label style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-secondary)', display: 'block', marginBottom: 5 }}>DATE & TIME</label>
+                  <input type="datetime-local" value={meetingForm.scheduledAt} onChange={e => setMeetingForm(f => ({ ...f, scheduledAt: e.target.value }))} style={{ width: '100%', padding: '10px 14px', borderRadius: 10, border: '1px solid var(--border-color)', fontSize: 13, outline: 'none', boxSizing: 'border-box' }} />
+                </div>
+                <div>
+                  <label style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-secondary)', display: 'block', marginBottom: 5 }}>DURATION</label>
+                  <select value={meetingForm.durationMinutes} onChange={e => setMeetingForm(f => ({ ...f, durationMinutes: Number(e.target.value) }))} style={{ width: '100%', padding: '10px 14px', borderRadius: 10, border: '1px solid var(--border-color)', fontSize: 13, outline: 'none', background: '#fff', boxSizing: 'border-box' }}>
+                    <option value={15}>15 min</option>
+                    <option value={30}>30 min</option>
+                    <option value={45}>45 min</option>
+                    <option value={60}>60 min</option>
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-secondary)', display: 'block', marginBottom: 5 }}>NOTES (optional)</label>
+                <textarea value={meetingForm.notes} onChange={e => setMeetingForm(f => ({ ...f, notes: e.target.value }))} placeholder="Topics to cover..." rows={3} style={{ width: '100%', padding: '10px 14px', borderRadius: 10, border: '1px solid var(--border-color)', fontSize: 13, outline: 'none', resize: 'none', boxSizing: 'border-box' }} />
+              </div>
+              <button onClick={async () => {
+                if (!meetingForm.title.trim() || !meetingForm.scheduledAt) return;
+                setSavingMeeting(true);
+                try {
+                  const scheduledAt = new Date(meetingForm.scheduledAt);
+                  const mtgRef = doc(collection(db, 'projects', selected.id, 'meetings'));
+                  await setDoc(mtgRef, {
+                    title: meetingForm.title.trim(), scheduledAt, durationMinutes: meetingForm.durationMinutes,
+                    notes: meetingForm.notes.trim(), status: 'scheduled', channelName: `meeting_${mtgRef.id}`,
+                    createdBy: props.user?.uid || 'admin', createdAt: serverTimestamp(),
+                    projectId: selected.id, clientId: selected.clientId,
+                  });
+                  const dateStr = scheduledAt.toLocaleString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' });
+                  await addDoc(collection(db, 'clients', selected.clientId, 'messages'), {
+                    text: `📅 Video call scheduled: "${meetingForm.title.trim()}" on ${dateStr} (${meetingForm.durationMinutes} min). Open your client portal to join.`,
+                    senderRole: 'admin', senderId: props.user?.uid || 'admin', senderName: props.user?.name || 'Project Manager',
+                    isInternal: false, createdAt: serverTimestamp(), projectId: selected.id,
+                    projectTitle: selected.project || selected.title || '', readByAdmin: true, readByClient: false,
+                  });
+                  await addDoc(collection(db, 'notifications'), {
+                    userId: selected.clientId, title: 'Video Call Scheduled',
+                    message: `${meetingForm.title.trim()} — ${dateStr}`, type: 'meeting_scheduled',
+                    read: false, createdAt: serverTimestamp(), clientId: selected.clientId, projectId: selected.id,
+                  });
+                  setMeetingForm({ title: '', scheduledAt: '', durationMinutes: 30, notes: '' });
+                  setShowScheduleModal(false);
+                } catch (err) { console.error('Schedule meeting error:', err); }
+                setSavingMeeting(false);
+              }} disabled={savingMeeting || !meetingForm.title.trim() || !meetingForm.scheduledAt}
+                style={{ height: 42, borderRadius: 11, background: ac, color: '#fff', border: 'none', fontSize: 13, fontWeight: 800, cursor: 'pointer', opacity: (!meetingForm.title.trim() || !meetingForm.scheduledAt) ? 0.5 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                {savingMeeting ? <Loader2 size={15} style={{ animation: 'spin 1s linear infinite' }} /> : <Calendar size={15} />}
+                Schedule & Notify Client
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {incomingCall && !activeCallMeeting && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 99998, display: 'flex', justifyContent: 'center', padding: '16px 20px' }}>
+          <div style={{ background: '#111', border: '1.5px solid rgba(255,255,255,0.12)', borderRadius: 18, padding: '14px 20px', display: 'flex', alignItems: 'center', gap: 16, boxShadow: '0 8px 32px rgba(0,0,0,0.5)', animation: 'ringPulse 1.4s ease-in-out infinite', maxWidth: 420, width: '100%' }}>
+            <div style={{ width: 44, height: 44, borderRadius: '50%', background: 'linear-gradient(135deg, #22c55e, #16a34a)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: '#fff', lineHeight: 1.2 }}>Incoming Video Call</div>
+              <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{incomingCall.title || 'Client is calling…'}</div>
+            </div>
+            <button onClick={() => { setActiveCallMeeting(incomingCall); setIncomingCall(null); }} style={{ height: 36, padding: '0 16px', borderRadius: 10, background: '#22c55e', border: 'none', color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', flexShrink: 0 }}>Answer</button>
+            <button onClick={() => setIncomingCall(null)} style={{ height: 36, padding: '0 14px', borderRadius: 10, background: 'rgba(255,255,255,0.08)', border: 'none', color: 'rgba(255,255,255,0.6)', fontSize: 12, fontWeight: 600, cursor: 'pointer', flexShrink: 0 }}>Dismiss</button>
+          </div>
+          <style>{`@keyframes ringPulse { 0%,100%{box-shadow:0 8px 32px rgba(0,0,0,0.5),0 0 0 0 rgba(34,197,94,0.4)} 50%{box-shadow:0 8px 32px rgba(0,0,0,0.5),0 0 0 10px rgba(34,197,94,0)} }`}</style>
+        </div>
+      )}
+      {activeCallMeeting && (
+        <VideoCallModal
+          meeting={activeCallMeeting}
+          user={props.user}
+          brand={brand}
+          onClose={() => setActiveCallMeeting(null)}
         />
       )}
     </div>

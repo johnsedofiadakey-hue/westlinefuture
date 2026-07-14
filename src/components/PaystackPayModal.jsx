@@ -18,39 +18,54 @@ export default function PaystackPayModal({ invoice, brand, onClose, onSuccess })
   const rawAmount = parseFloat(String(invoice.amount || 0).replace(/[$,]/g, '')) || 0;
   const amountInKobo = Math.round(rawAmount * 100);
 
+  const paymentReference = `WL-${Date.now()}-${Math.random().toString(36).slice(2, 7).toUpperCase()}`;
+
   const config = {
-    reference: (new Date()).getTime().toString(),
-    email: invoice.clientEmail || 'client@westlinefuture.com', // Fallback if missing
-    amount: amountInKobo, 
+    reference: paymentReference,
+    email: invoice.clientEmail || 'client@westlinefuture.com',
+    amount: amountInKobo,
     publicKey: import.meta.env.VITE_PAYSTACK_PUBLIC_KEY,
-    currency: "GHS", // Defaulting to GHS as per common Paystack usage in Ghana, can be USD
+    currency: "GHS",
     metadata: {
       invoiceId: invoice.id,
-      projectTitle: invoice.title
+      projectTitle: invoice.title,
+      expectedAmountGHS: rawAmount,
     }
   };
 
   const initializePayment = createPaystackPayment(config);
 
-  const handlePaystackSuccess = async (reference) => {
-    const ref = reference?.reference || reference?.trxref || String(reference);
+  const handlePaystackSuccess = async (response) => {
+    const ref = response?.reference || response?.trxref || paymentReference;
     setVerifyRef(ref);
     setStatus('verifying');
-    // Server-side verification
-    if (functions && invoice?.projectId) {
+    try { localStorage.setItem(`wl_pending_ref_${invoice.id || Date.now()}`, JSON.stringify({ ref, invoiceId: invoice.id, projectId: invoice.projectId, ts: Date.now() })); } catch {}
+    const maxAttempts = 3;
+    let lastErr;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
-        const verify = httpsCallable(functions, 'verifyPaystackPayment');
-        await verify({ reference: ref, projectId: invoice.projectId, invoiceId: invoice.id, type: 'invoice' });
-      } catch (err) {
-        setError('Payment received but verification failed. Reference: ' + ref + '. Contact support.');
-        setStatus('error');
+        if (functions && invoice?.projectId) {
+          const verify = httpsCallable(functions, 'verifyPaystackPayment');
+          await verify({
+            reference: ref,
+            projectId: invoice.projectId,
+            invoiceId: invoice.id,
+            type: invoice.type || invoice.documentKind || 'invoice',
+            expectedAmountGHS: rawAmount,
+          });
+        }
+        try { localStorage.removeItem(`wl_pending_ref_${invoice.id || ''}`); } catch {}
+        await new Promise(r => setTimeout(r, 1500));
+        setStatus('success');
+        onSuccess(invoice.id);
         return;
+      } catch (err) {
+        lastErr = err;
+        if (attempt < maxAttempts) await new Promise(r => setTimeout(r, attempt * 1500));
       }
     }
-    // Small delay to allow Firestore writes from Cloud Function to propagate before UI reacts
-    await new Promise(r => setTimeout(r, 1500));
-    setStatus('success');
-    onSuccess(invoice.id);
+    setError(`Payment received but verification failed after ${maxAttempts} attempts. Reference: ${ref}. Contact support.`);
+    setStatus('error');
   };
 
   const handlePaystackClose = () => {

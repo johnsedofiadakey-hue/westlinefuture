@@ -19,10 +19,17 @@ export function PaymentScheduleCard({ project, notify, brand, invoices }) {
   const [editingBudget, setEditingBudget] = useState(false);
   const [budgetInput, setBudgetInput] = useState('');
   const [settingBudget, setSettingBudget] = useState(false);
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
 
   useEffect(() => {
     if (editingBudget) setBudgetInput(budget > 0 ? String(budget) : '');
   }, [editingBudget, budget]);
+
+  useEffect(() => {
+    const h = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener('resize', h);
+    return () => window.removeEventListener('resize', h);
+  }, []);
 
   const handleSetBudget = async () => {
     const parsed = parseFloat(String(budgetInput).replace(/[^0-9.]/g, '')) || 0;
@@ -247,7 +254,7 @@ export function PaymentScheduleCard({ project, notify, brand, invoices }) {
 
         {/* Schedule picker */}
         {changing && (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 16, padding: '14px', background: 'var(--bg-secondary)', borderRadius: 14 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)', gap: 10, marginBottom: 16, padding: '14px', background: 'var(--bg-secondary)', borderRadius: 14 }}>
             {Object.entries(SCHEDULE_CONFIGS).map(([key, cfg]) => (
               <button
                 key={key}

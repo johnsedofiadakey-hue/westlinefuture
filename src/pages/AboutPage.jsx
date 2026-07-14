@@ -22,7 +22,7 @@ export default function AboutPage({ brand, content, navigate }) {
   const visibleTeam = teamMembers.filter(m => m.role !== 'client' && m.name);
 
   return (
-    <div style={{ paddingTop: mob ? 80 : 120, fontFamily: 'Inter, Satoshi, sans-serif' }}>
+    <div style={{ paddingTop: mob ? 80 : 120 }}>
 
       {/* ── HERO ── */}
       <section style={{ padding: mob ? '60px 24px 40px' : '80px 5vw 60px', background: `var(--bg-secondary)` }}>

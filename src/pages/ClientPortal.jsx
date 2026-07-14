@@ -17,7 +17,7 @@ import { db, functions } from '../lib/firebase';
 import { httpsCallable } from 'firebase/functions';
 import {
   collection, onSnapshot, query, where, orderBy, limit, addDoc, serverTimestamp,
-  updateDoc, doc
+  updateDoc, doc, setDoc
 } from 'firebase/firestore';
 import ClientRenderingVault from '../components/ClientRenderingVault';
 import UnifiedPaymentGateway from '../components/UnifiedPaymentGateway';
@@ -27,6 +27,8 @@ import ClientUploadsTab from '../components/ClientUploadsTab';
 import SecureVault from '../components/SecureVault';
 import { clientPortalGateState, deriveWorkflowStep, workflowProgress, WORKFLOW_STEP } from '../lib/projectWorkflow';
 import PortalRefreshButton from '../components/PortalRefreshButton';
+import VideoCallModal from '../components/VideoCallModal';
+import { Video } from 'lucide-react';
 
 const AC = `var(--accent-secondary)`;
 
@@ -623,14 +625,72 @@ function applyContractVariables(template, project, user, brand) {
         ? new Date(project.targetCompletionDate.seconds * 1000).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
         : new Date(project.targetCompletionDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }))
     : 'Pending Scheduling';
+  const blank = '________________';
   return (template || '')
     .replace(/\{\{clientName\}\}/g,     user?.name || project?.clientName || 'Valued Client')
+    .replace(/\{\{clientPhone\}\}/g,    user?.phone || user?.id || project?.clientPhone || blank)
+    .replace(/\{\{clientAddress\}\}/g,  user?.address || project?.location || blank)
     .replace(/\{\{projectTitle\}\}/g,   project?.title || 'Your Project')
     .replace(/\{\{budget\}\}/g,         budgetStr)
     .replace(/\{\{company\}\}/g,        brand?.name || 'Westline Future')
+    .replace(/\{\{companyName\}\}/g,    brand?.name || 'Westline Future')
+    .replace(/\{\{companyPhone\}\}/g,   brand?.phone || brand?.contactPhone || blank)
+    .replace(/\{\{companyAddress\}\}/g, brand?.address || blank)
+    .replace(/\{\{remitAccountName\}\}/g,   brand?.finSettings?.remitAccountName || blank)
+    .replace(/\{\{remitAccountNumber\}\}/g, brand?.finSettings?.remitAccountNumber || blank)
     .replace(/\{\{date\}\}/g,           new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }))
     .replace(/\{\{completionDate\}\}/g, completionDate);
 }
+
+// ─── Onboarding Service Agreement (signed before the project opens) ──────────
+const DEFAULT_ONBOARDING_AGREEMENT = `DESIGN SERVICES COOPERATION AGREEMENT
+
+Party A (the Client): {{clientName}}
+Phone: {{clientPhone}}
+Address: {{clientAddress}}
+
+Party B (the Designer): {{companyName}}
+Phone: {{companyPhone}}
+Address: {{companyAddress}}
+
+In accordance with the principle of voluntary equality, the parties enter into the following agreement on cooperation in design services, which they abide by jointly.
+
+I. CONTENTS OF THE SERVICE
+
+Party A commissions Party B to carry out the "{{projectTitle}}" design project.
+Party B completes the complete design and delivers the electronic document in accordance with the style, requirements and content confirmed by both parties.
+
+II. DESIGN COSTS
+
+1. Total cost of the project: {{budget}}
+The price is the total design cost and includes design, routine modifications, and delivery charges for the finished product.
+2. Top design fee: After the client orders the company's products, the design fee is covered by a 3% return on the amount ordered (in terms of the product amount, excluding customs and shipping).
+
+III. PAYMENT TERMS
+
+1. Payment method: Full payment.
+2. After receiving the corresponding payment, Party B initiates the design / delivery of the final draft.
+3. Remittance information:
+Account Name: {{remitAccountName}}
+Account Number: {{remitAccountNumber}}
+
+IV. DELIVERY AND MODIFICATION
+
+1. Delivery cycle: 7 working days.
+2. Number of free modifications: 2 times (fine tuning, text, colour matching); additional modifications are charged separately.
+3. If Party A does not provide feedback within 7 days, the design is considered to be approved.
+
+V. COPYRIGHT
+
+After the full amount is settled, Party A obtains the right to normal use of the work.
+Until payment is made, the copyright of the work is owned by Party B. Party A shall not commercialise, copy, or redistribute it.
+
+VI. GENERAL PROVISIONS
+
+1. Party A provides information in a timely manner and pays on time; Party B completes the design on time and in good faith.
+2. If either party breaches this agreement, the parties shall resolve it in consultation; failing negotiation, the matter may be dealt with in the local courts.
+
+Date: {{date}}`;
 
 // ─── Typed Name → Signature Image ────────────────────────────────────────────
 function nameToSignatureDataUrl(name, ac) {
@@ -885,7 +945,7 @@ function SpecApprovalCard({ project, user, brand, isMobile, invoices = [] }) {
 }
 
 // ─── ContractAgreementModal ───────────────────────────────────────────────────
-function ContractAgreementModal({ project, user, brand, onClose, onSigned, isMobile }) {
+function ContractAgreementModal({ project, user, brand, onClose, onSigned, isMobile, mode = 'contract' }) {
   const ac = brand?.color || AC;
   const [step, setStep] = useState(1); // 1=read, 2=sign
   const [scrolled, setScrolled] = useState(false);
@@ -896,9 +956,12 @@ function ContractAgreementModal({ project, user, brand, onClose, onSigned, isMob
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const scrollRef = useRef(null);
+  const isOnboarding = mode === 'onboarding';
 
   // Build contract body text
-  const rawTemplate = project?.contractTerms || brand?.finSettings?.contractTemplate || '';
+  const rawTemplate = isOnboarding
+    ? (brand?.finSettings?.onboardingAgreementTemplate || DEFAULT_ONBOARDING_AGREEMENT)
+    : (project?.contractTerms || brand?.finSettings?.contractTemplate || '');
   const budget = Number(project?.budget || 0);
 
   const contractBody = rawTemplate
@@ -963,13 +1026,14 @@ function ContractAgreementModal({ project, user, brand, onClose, onSigned, isMob
     setError(null);
     try {
       const sigDataUrl = drawnSig || nameToSignatureDataUrl(name, ac);
-      const signAgreement = httpsCallable(functions, 'signProjectAgreement');
+      const signAgreement = httpsCallable(functions, isOnboarding ? 'signOnboardingAgreement' : 'signProjectAgreement');
       const result = await signAgreement({
         projectId: project.id,
         typedName: name || user?.name || 'Client Signature',
         signatureData: sigDataUrl,
         legalConsent: true,
         userAgent: navigator.userAgent,
+        ...(isOnboarding ? { agreementText: contractBody || '' } : {}),
       });
 
       onSigned?.(result.data);
@@ -991,7 +1055,7 @@ function ContractAgreementModal({ project, user, brand, onClose, onSigned, isMob
         <div style={{ padding: '20px 24px 16px', borderBottom: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
           <div>
             <div style={{ fontSize: 14, fontWeight: 900, color: 'var(--accent-secondary)', display: 'flex', alignItems: 'center', gap: 8 }}>
-              <FileCheck size={16} color={ac} /> Contract Agreement
+              <FileCheck size={16} color={ac} /> {isOnboarding ? 'Design Services Agreement' : 'Contract Agreement'}
             </div>
             <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 2 }}>{project?.title}</div>
           </div>
@@ -1011,7 +1075,7 @@ function ContractAgreementModal({ project, user, brand, onClose, onSigned, isMob
           <>
             <div ref={scrollRef} onScroll={handleScroll} style={{ flex: 1, overflowY: 'auto', padding: '24px 24px 8px' }}>
               <div style={{ marginBottom: 20 }}>
-                <div style={{ fontSize: 18, fontWeight: 900, color: 'var(--accent-secondary)', marginBottom: 4 }}>Review Your Contract</div>
+                <div style={{ fontSize: 18, fontWeight: 900, color: 'var(--accent-secondary)', marginBottom: 4 }}>{isOnboarding ? 'Review Your Service Agreement' : 'Review Your Contract'}</div>
                 <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
                   Please read this agreement carefully. You must scroll to the bottom before you can accept and sign.
                 </div>
@@ -1582,56 +1646,66 @@ function ClientNextActionCard({ project, invoices = [], renderingPackages = [], 
     project.specDoc?.status !== 'rejected';
 
   let action;
-  if (!noRendering && !renderingPaid) {
+  if (workflowStep === WORKFLOW_STEP.ONBOARDING || workflowStep === WORKFLOW_STEP.RENDERING_PAYMENT) {
     action = { tone: '#D97706', bg: '#FFF7ED', icon: <Lock size={18} />, title: 'Design fee payment needed', body: 'Pay the design fee to unlock your 3D renders.', button: 'View Designs', tab: 'designs' };
   } else if (workflowStep === WORKFLOW_STEP.SITE_VISIT_SCHEDULING) {
-    action = { tone: '#2563EB', bg: '#EFF6FF', icon: <Calendar size={18} />, title: 'Choose your site visit date', body: 'Your rendering fee is confirmed. Select when our technical team can visit for measurements and photos.', button: 'Schedule Below', tab: 'overview' };
+    action = { tone: '#2563EB', bg: '#EFF6FF', icon: <Calendar size={18} />, title: 'Technical site visit being scheduled', body: 'Your rendering fee is confirmed. Your project manager will contact you to arrange the technical site visit date.', button: 'View Timeline', tab: 'overview' };
   } else if (workflowStep === WORKFLOW_STEP.SITE_SURVEY) {
     const visitDate = project.siteVisit?.startAt ? new Date(project.siteVisit.startAt).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' }) : '';
     action = { tone: '#2563EB', bg: '#EFF6FF', icon: <Calendar size={18} />, title: 'Site visit confirmed', body: visitDate ? `Our technical team is scheduled for ${visitDate}.` : 'Your technical site visit is scheduled.', button: 'View Timeline', tab: 'overview' };
-  } else if (!noRendering && project.siteVisit?.status === 'completed' && projectPackages.length === 0) {
-    action = { tone: '#2563EB', bg: '#EFF6FF', icon: <Clock size={18} />, title: 'Your 3D rendering is being prepared', body: 'The site survey is complete. Westline Future has been prompted to prepare and upload your rendering package.', button: 'View Timeline', tab: 'overview' };
-  } else if (!noRendering && lockedRendering) {
-    action = { tone: '#D97706', bg: '#FFF7ED', icon: <Lock size={18} />, title: 'Design package is being verified', body: 'Your payment or rendering access is still being verified.', button: 'View Designs', tab: 'designs' };
-  } else if (!noRendering && project.changeRequestPending) {
-    action = { tone: '#D97706', bg: '#FFF7ED', icon: <Clock size={18} />, title: 'Rendering revision in progress', body: 'Your change request is with the design team. You will be notified when the revised 3D rendering is ready for review.', button: 'View Request', tab: 'designs' };
-  } else if (!noRendering && reviewRendering) {
-    action = { tone: 'var(--accent-primary)', bg: '#F4EFE6', icon: <PenTool size={18} />, title: 'Review your rendering', body: 'Your design package is unlocked. Review it, leave pins, request changes, or approve the final version.', button: 'Review Design', tab: 'designs' };
-  } else if (pendingQuote && renderingApproved && !project.quoteApproved && String(pendingQuote.status || '').toLowerCase() === 'changes requested') {
-    action = { tone: '#D97706', bg: '#FFF7ED', icon: <Clock size={18} />, title: 'Revised quotation in progress', body: 'Your quotation feedback was sent. The project manager is preparing the next version.', button: 'View Negotiation', tab: 'vault' };
-  } else if (pendingQuote && renderingApproved && !project.quoteApproved) {
-    action = { tone: 'var(--accent-primary)', bg: '#FDFAF6', icon: <FileText size={18} />, title: 'Quotation ready for negotiation', body: 'Review the project cost. Approve it or request changes before the contract is issued.', button: 'Review Quotation', tab: 'vault' };
-  } else if (project.quoteApproved && !project.contractAccepted) {
+  } else if (workflowStep === WORKFLOW_STEP.RENDERING_REVIEW) {
+    if (projectPackages.length === 0) {
+      action = { tone: '#2563EB', bg: '#EFF6FF', icon: <Clock size={18} />, title: 'Your 3D rendering is being prepared', body: 'The site survey is complete. Westline Future has been prompted to prepare and upload your rendering package.', button: 'View Timeline', tab: 'overview' };
+    } else if (project.changeRequestPending) {
+      action = { tone: '#D97706', bg: '#FFF7ED', icon: <Clock size={18} />, title: 'Rendering revision in progress', body: 'Your change request is with the design team. You will be notified when the revised 3D rendering is ready for review.', button: 'View Request', tab: 'designs' };
+    } else if (lockedRendering) {
+      action = { tone: '#D97706', bg: '#FFF7ED', icon: <Lock size={18} />, title: 'Design package is being verified', body: 'Your payment or rendering access is still being verified.', button: 'View Designs', tab: 'designs' };
+    } else {
+      action = { tone: 'var(--accent-primary)', bg: '#F4EFE6', icon: <PenTool size={18} />, title: 'Review your rendering', body: 'Your design package is unlocked. Review it, leave pins, request changes, or approve the final version.', button: 'Review Design', tab: 'designs' };
+    }
+  } else if (workflowStep === WORKFLOW_STEP.QUOTE_NEGOTIATION) {
+    if (pendingQuote && String(pendingQuote.status || '').toLowerCase() === 'changes requested') {
+      action = { tone: '#D97706', bg: '#FFF7ED', icon: <Clock size={18} />, title: 'Revised quotation in progress', body: 'Your quotation feedback was sent. The project manager is preparing the next version.', button: 'View Negotiation', tab: 'vault' };
+    } else if (pendingQuote) {
+      action = { tone: 'var(--accent-primary)', bg: '#FDFAF6', icon: <FileText size={18} />, title: 'Quotation ready for negotiation', body: 'Review the project cost. Approve it or request changes before the contract is issued.', button: 'Review Quotation', tab: 'vault' };
+    } else {
+      action = { tone: '#6B7280', bg: '#F9FAFB', icon: <Clock size={18} />, title: 'Quotation being prepared', body: 'Your project manager is preparing the quotation. You will be notified when it is ready to review.', button: 'View Timeline', tab: 'overview' };
+    }
+  } else if (workflowStep === WORKFLOW_STEP.CONTRACT_SIGNING) {
     action = { tone: '#7C3AED', bg: '#F5F3FF', icon: <PenLine size={18} />, title: 'Sign the project contract', body: 'Your negotiated quotation is approved. Review and sign the contract and terms to unlock the initial payment.', button: 'Review Contract', tab: 'documents' };
-  } else if (project.contractAccepted && !project.depositPaid && !project.initialDepositPaid) {
+  } else if (workflowStep === WORKFLOW_STEP.INITIAL_PAYMENT) {
     action = { tone: '#16A34A', bg: '#F0FDF4', icon: <CreditCard size={18} />, title: 'Initial project payment required', body: 'Your contract is signed. Pay online or submit an offline payment for verification.', button: 'Open Payments', tab: 'financials' };
-  } else if ((project.depositPaid || project.initialDepositPaid) && !project.specDoc?.url) {
-    action = { tone: '#2563EB', bg: '#EFF6FF', icon: <Clock size={18} />, title: 'Final deliverables document is being prepared', body: 'Your initial payment is confirmed. Westline Future is preparing the final drawings, bill of materials, scope, exclusions, and deliverables.', button: 'View Documents', tab: 'documents' };
-  } else if (specPending && (project.depositPaid || project.initialDepositPaid)) {
-    action = { tone: '#1D4ED8', bg: '#EFF6FF', icon: <FileCheck size={18} />, title: 'Sign the final deliverables document', body: 'Review the final drawings, bill of materials, scope, deliverables, exclusions, and outcomes. Signing authorises production.', button: 'Review Deliverables', tab: 'documents' };
-  } else if (pendingAddOn) {
-    action = { tone: '#B45309', bg: '#FFFBEB', icon: <Gift size={18} />, title: 'Add-on needs decision', body: `${pendingAddOn.title || pendingAddOn.description || 'A project variation'} is waiting for your approval.`, button: 'Review Add-ons', tab: 'financials' };
-  } else if (unpaidAddOn) {
-    const linkedInvoice = projectInvoices.find(i => i.id === unpaidAddOn.linkedInvoiceId);
-    const amount = parseAmount(linkedInvoice?.amount || linkedInvoice?.total || unpaidAddOn.amount);
-    action = {
-      tone: '#D97706',
-      bg: '#FFF7ED',
-      icon: <CreditCard size={18} />,
-      title: 'New add-on invoice ready',
-      body: `${unpaidAddOn.title || 'Project add-on'} requires payment${amount ? `: GH₵ ${amount.toLocaleString()}` : ''}. Open Financials to review the invoice and pay securely.`,
-      button: 'View & Pay Invoice',
-      tab: 'financials',
-    };
-  } else if (unpaidInvoice) {
-    const amount = parseAmount(unpaidInvoice.amount || unpaidInvoice.total);
-    action = { tone: '#16A34A', bg: '#F0FDF4', icon: <CreditCard size={18} />, title: 'Payment pending', body: `${unpaidInvoice.title || 'An invoice'} is outstanding${amount ? `: GH₵ ${amount.toLocaleString()}` : ''}.`, button: 'Open Payments', tab: 'financials' };
+  } else if (workflowStep === WORKFLOW_STEP.DELIVERABLES_APPROVAL) {
+    if (!project.specDoc?.url || project.specDoc?.status === 'rejected') {
+      action = { tone: '#2563EB', bg: '#EFF6FF', icon: <Clock size={18} />, title: 'Final deliverables document is being prepared', body: 'Your initial payment is confirmed. Westline Future is preparing the final drawings, bill of materials, scope, exclusions, and deliverables.', button: 'View Documents', tab: 'documents' };
+    } else {
+      action = { tone: '#1D4ED8', bg: '#EFF6FF', icon: <FileCheck size={18} />, title: 'Sign the final deliverables document', body: 'Review the final drawings, bill of materials, scope, deliverables, exclusions, and outcomes. Signing authorises production.', button: 'Review Deliverables', tab: 'documents' };
+    }
   } else {
-    const currentStage = CLIENT_PROJECT_STAGES.find(s => s.id === project.stageId);
-    const stageTitle = Number(project.stageId || 1) >= 4
-      ? `${currentStage?.name || 'Project work'} is in progress`
-      : 'Everything is on track';
-    action = { tone: '#16A34A', bg: '#F0FDF4', icon: <CheckCircle2 size={18} />, title: stageTitle, body: currentStage?.clientMsg || 'Your project is moving. We will notify you when your next action is required.', button: 'View Timeline', tab: 'overview' };
+    if (pendingAddOn) {
+      action = { tone: '#B45309', bg: '#FFFBEB', icon: <Gift size={18} />, title: 'Add-on needs decision', body: `${pendingAddOn.title || pendingAddOn.description || 'A project variation'} is waiting for your approval.`, button: 'Review Add-ons', tab: 'financials' };
+    } else if (unpaidAddOn) {
+      const linkedInvoice = projectInvoices.find(i => i.id === unpaidAddOn.linkedInvoiceId);
+      const amount = parseAmount(linkedInvoice?.amount || linkedInvoice?.total || unpaidAddOn.amount);
+      action = {
+        tone: '#D97706',
+        bg: '#FFF7ED',
+        icon: <CreditCard size={18} />,
+        title: 'New add-on invoice ready',
+        body: `${unpaidAddOn.title || 'Project add-on'} requires payment${amount ? `: GH₵ ${amount.toLocaleString()}` : ''}. Open Financials to review the invoice and pay securely.`,
+        button: 'View & Pay Invoice',
+        tab: 'financials',
+      };
+    } else if (unpaidInvoice) {
+      const amount = parseAmount(unpaidInvoice.amount || unpaidInvoice.total);
+      action = { tone: '#16A34A', bg: '#F0FDF4', icon: <CreditCard size={18} />, title: 'Payment pending', body: `${unpaidInvoice.title || 'An invoice'} is outstanding${amount ? `: GH₵ ${amount.toLocaleString()}` : ''}.`, button: 'Open Payments', tab: 'financials' };
+    } else {
+      const currentStage = CLIENT_PROJECT_STAGES.find(s => s.id === project.stageId);
+      const stageTitle = Number(project.stageId || 1) >= 4
+        ? `${currentStage?.name || 'Project work'} is in progress`
+        : 'Everything is on track';
+      action = { tone: '#16A34A', bg: '#F0FDF4', icon: <CheckCircle2 size={18} />, title: stageTitle, body: currentStage?.clientMsg || 'Your project is moving. We will notify you when your next action is required.', button: 'View Timeline', tab: 'overview' };
+    }
   }
 
   return (
@@ -2907,9 +2981,10 @@ function DocumentsTab({ projectId, project, user, brand, isMobile, invoices = []
                 </div>
               </div>
               {doc.type === 'handover' ? (
-                <div style={{ flexShrink: 0 }}>
+                <div style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-end' }}>
                   <button
                     onClick={() => {
+                      const deliverySection = doc.deliveryNotes ? `<div class="divider"></div><div style="text-align:left;max-width:560px;margin:32px auto 0;"><div style="font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:#8b6d3a;margin-bottom:10px;">Delivered Scope</div><div style="font-size:14px;line-height:1.8;color:#333;">${doc.deliveryNotes}</div></div>` : '';
                       const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Project Handover Certificate</title>
 <style>
   body { font-family: 'Georgia', serif; background: #f9f6f2; margin: 0; padding: 40px 24px; color: #1a1a1a; }
@@ -2942,6 +3017,7 @@ function DocumentsTab({ projectId, project, user, brand, isMobile, invoices = []
     <div class="meta-item"><div class="meta-label">Project Type</div><div class="meta-value">${doc.projectType || 'Interior Design'}</div></div>
     <div class="meta-item"><div class="meta-label">Handover Date</div><div class="meta-value">${doc.handoverDate || '—'}</div></div>
   </div>
+  ${deliverySection}
   <div class="divider"></div>
   <div class="seal">Official<br>Handover<br>Issued</div>
 </div>
@@ -2959,6 +3035,32 @@ function DocumentsTab({ projectId, project, user, brand, isMobile, invoices = []
                   >
                     <Award size={13} /> View Certificate
                   </button>
+                  {!project?.handoverCertificate?.acknowledgedAt && (
+                    <button
+                      onClick={async () => {
+                        try {
+                          const now = new Date();
+                          await updateDoc(doc(db, 'projects', project.id), {
+                            'handoverCertificate.acknowledgedAt': serverTimestamp(),
+                            'handoverCertificate.acknowledgedBy': user?.uid || user?.id || null,
+                            'handoverCertificate.status': 'acknowledged',
+                          });
+                        } catch (e) { console.error(e); }
+                      }}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 6,
+                        padding: '7px 14px', borderRadius: 10,
+                        background: '#F0FDF4', color: '#15803D',
+                        border: '1.5px solid #BBF7D0',
+                        fontSize: 11, fontWeight: 700, cursor: 'pointer',
+                      }}
+                    >
+                      ✓ Acknowledge Receipt
+                    </button>
+                  )}
+                  {project?.handoverCertificate?.acknowledgedAt && (
+                    <span style={{ fontSize: 11, color: '#15803D', fontWeight: 700 }}>✓ Acknowledged</span>
+                  )}
                 </div>
               ) : doc.url ? (
                 <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
@@ -4378,6 +4480,8 @@ function ProjectRoadmap({ project, invoices = [], renderingPackages = [], setAct
     const typeStages = PROJECT_TYPES[project.projectType]?.stages || CLIENT_PROJECT_STAGES.map(s => s.id);
     return typeStages.includes(s.id);
   });
+  const computedTimeline = calculateTimeline(project.createdAt, project.timeline || {}, applicableStages);
+  const fmtDate = d => new Date(d + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
   const projectInvoices = invoices.filter(i => i.projectId === project.id || i.parentId === project.id);
   const currentStageId = Math.max(
     Number(project.stageId || 1),
@@ -4540,6 +4644,35 @@ function ProjectRoadmap({ project, invoices = [], renderingPackages = [], setAct
                     <div style={{ fontSize: 9, fontWeight: 800, color: '#16A34A', textTransform: 'uppercase', letterSpacing: '.05em' }}>✓ Done</div>
                   )}
                 </div>
+                {computedTimeline[stage.id]?.startDate && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6, flexWrap: 'wrap' }}>
+                    {isPast ? (
+                      <span style={{ fontSize: 10, fontWeight: 700, color: '#16A34A', background: '#F0FDF4', padding: '2px 8px', borderRadius: 20, border: '1px solid #BBF7D0' }}>
+                        {fmtDate(computedTimeline[stage.id].startDate)} – {fmtDate(computedTimeline[stage.id].endDate)}
+                      </span>
+                    ) : isCurrent ? (
+                      <>
+                        <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--accent-primary)', background: '#F4EFE6', padding: '2px 8px', borderRadius: 20, border: '1px solid var(--accent-primary)30' }}>
+                          Started {fmtDate(computedTimeline[stage.id].startDate)}
+                        </span>
+                        {computedTimeline[stage.id].endDate && (
+                          <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-secondary)', background: 'var(--bg-secondary)', padding: '2px 8px', borderRadius: 20 }}>
+                            Est. end {fmtDate(computedTimeline[stage.id].endDate)}
+                          </span>
+                        )}
+                      </>
+                    ) : (
+                      <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-secondary)', background: 'var(--bg-secondary)', padding: '2px 8px', borderRadius: 20 }}>
+                        {fmtDate(computedTimeline[stage.id].startDate)}{computedTimeline[stage.id].endDate ? ` – ${fmtDate(computedTimeline[stage.id].endDate)}` : ''}
+                      </span>
+                    )}
+                    {computedTimeline[stage.id].durationDays && (
+                      <span style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-secondary)', opacity: 0.7 }}>
+                        ~{computedTimeline[stage.id].durationDays}d
+                      </span>
+                    )}
+                  </div>
+                )}
                 {(isCurrent || isPast) && (
                   <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.55, marginBottom: guidance.action ? 10 : 0 }}>
                     {guidance.msg}
@@ -5576,6 +5709,71 @@ function ContractGate({ project, user, brand, isMobile }) {
   );
 }
 
+// ─── Client Meetings Card — shown in Overview tab ────────────────────────────
+function ClientMeetingsCard({ projectId, user, brand, accentColor, onJoin }) {
+  const ac = accentColor || brand?.color || 'var(--accent-secondary)';
+  const [meetings, setMeetings] = useState([]);
+
+  useEffect(() => {
+    if (!projectId) return;
+    const q = query(collection(db, 'projects', projectId, 'meetings'), orderBy('scheduledAt', 'asc'));
+    const unsub = onSnapshot(q, snap => setMeetings(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+    return unsub;
+  }, [projectId]);
+
+  const now = new Date();
+  const upcoming = meetings.filter(m => {
+    if (m.status === 'cancelled' || m.status === 'completed') return false;
+    const d = m.scheduledAt?.toDate ? m.scheduledAt.toDate() : new Date(m.scheduledAt || 0);
+    return d > new Date(now.getTime() - 30 * 60 * 1000); // show if within last 30 min (call may be running)
+  });
+
+  if (upcoming.length === 0) return null;
+
+  const fmtMtg = (ts) => {
+    if (!ts) return '';
+    const d = ts.toDate ? ts.toDate() : new Date(ts);
+    return d.toLocaleString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' });
+  };
+
+  return (
+    <div style={{ background: '#fff', borderRadius: 18, border: `1.5px solid ${ac}30`, padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div style={{ width: 32, height: 32, borderRadius: 10, background: `${ac}15`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <Video size={16} color={ac} />
+        </div>
+        <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--accent-secondary)' }}>Upcoming Video Calls</div>
+      </div>
+      {upcoming.map(mtg => {
+        const d = mtg.scheduledAt?.toDate ? mtg.scheduledAt.toDate() : new Date(mtg.scheduledAt || 0);
+        const canJoin = d <= new Date(now.getTime() + 5 * 60 * 1000); // joinable 5 min before
+        return (
+          <div key={mtg.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '14px 16px', borderRadius: 13, background: `${ac}08`, border: `1px solid ${ac}20` }}>
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--accent-secondary)', marginBottom: 3 }}>{mtg.title}</div>
+              <div style={{ fontSize: 12, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                <Calendar size={11} /> {fmtMtg(mtg.scheduledAt)}
+                <span style={{ opacity: 0.5 }}>·</span>
+                {mtg.durationMinutes} min
+              </div>
+              {mtg.notes && <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 4, fontStyle: 'italic' }}>{mtg.notes}</div>}
+            </div>
+            {canJoin && mtg.channelName ? (
+              <button onClick={() => onJoin(mtg)} style={{ flexShrink: 0, height: 38, padding: '0 16px', borderRadius: 11, background: ac, color: '#fff', border: 'none', fontSize: 13, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
+                <Video size={14} /> Join
+              </button>
+            ) : (
+              <div style={{ flexShrink: 0, fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', padding: '6px 12px', borderRadius: 20, background: 'var(--bg-secondary)' }}>
+                Soon
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // ─── Main ClientPortal ────────────────────────────────────────────────────────
 export default function ClientPortal({ client, onLogout, updateClientProfile, ...props }) {
   const user = props.user || client;
@@ -5593,6 +5791,9 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
       ? requestedTab
       : 'overview';
   });
+
+  const [activeMeeting, setActiveMeeting] = useState(null);
+  const [incomingCall, setIncomingCall] = useState(null);
 
   // Mobile detection — use UA (catches "Request Desktop Site" on iOS) + viewport width
   const detectMobile = () => {
@@ -5612,6 +5813,10 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
 
   // Kickoff gate: track which project IDs the client has cleared in this session
   const [gateCleared, setGateCleared] = useState({});
+  // Onboarding service agreement — must be signed before the project opens.
+  // Session-level map so the portal unlocks instantly after signing.
+  const [agreementSignedLocal, setAgreementSignedLocal] = useState({});
+  const [showOnboardingAgreement, setShowOnboardingAgreement] = useState(false);
 
   // Welcome card dismissal (keyed per user+project, persisted in localStorage)
   const [portalWelcomeDismissed, setPortalWelcomeDismissed] = useState(false);
@@ -5775,6 +5980,31 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
   const activeCount = projects.filter(p => p.status !== 'Completed').length;
   const completedCount = projects.filter(p => p.status === 'Completed').length;
 
+  // Component-level meetings list for selected project (used in Overview alert card)
+  const [portalMeetings, setPortalMeetings] = useState([]);
+  useEffect(() => {
+    if (!selected?.id) { setPortalMeetings([]); return; }
+    const q = query(collection(db, 'projects', selected.id, 'meetings'), orderBy('scheduledAt', 'asc'));
+    const unsub = onSnapshot(q, snap => setPortalMeetings(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+    return unsub;
+  }, [selected?.id]);
+
+  // Real-time incoming call listener — watches active project's meetings for status:'live'
+  useEffect(() => {
+    if (!selected?.id) return;
+    const q = query(collection(db, 'projects', selected.id, 'meetings'), where('status', '==', 'live'));
+    const unsub = onSnapshot(q, snap => {
+      const twoMinutesAgo = new Date(Date.now() - 2 * 60 * 1000);
+      const call = snap.docs.map(d => ({ id: d.id, ...d.data() })).find(m => {
+        const created = m.createdAt?.toDate ? m.createdAt.toDate() : new Date(m.createdAt || 0);
+        return created > twoMinutesAgo;
+      });
+      if (call) setIncomingCall(c => c ? c : call);
+      else setIncomingCall(null);
+    });
+    return unsub;
+  }, [selected?.id]);
+
   // ── Live invoices for selected project (needed by KickoffGate) ──────────────
   // The global props.invoices filters by clientId==user.id which may not match
   // phone-auth clients. This queries by projectId so KickoffGate always finds
@@ -5884,7 +6114,7 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
       {activeStageGuide && <StageExplainerModal stage={activeStageGuide} onDismiss={() => setActiveStageGuide(null)} ac={ac} />}
 
       {/* ── FLOATING HELP BUTTON ── */}
-      {!showPortalGuide && selected && (
+      {!showPortalGuide && selected && !(isMobile && activeTab === 'messages') && (
         <button
           onClick={() => setShowPortalGuide(true)}
           style={{
@@ -6001,6 +6231,8 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
         {/* Moved to Financials tab */}
 
         {activeTab === 'messages' ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <ClientMeetingsCard projectId={selected?.id} user={user} brand={props.brand} accentColor={ac} onJoin={mtg => setActiveMeeting(mtg)} />
           <div style={{
             padding: isMobile ? '20px 18px' : '24px 28px', background: '#fff',
             borderRadius: isMobile ? 24 : 20,
@@ -6010,7 +6242,44 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
             minHeight: isMobile ? 320 : 500,
             display: 'flex', flexDirection: 'column',
           }}>
-            <div style={{ fontSize: 15, fontWeight: 800, color: `var(--accent-secondary)`, marginBottom: 16, flexShrink: 0 }}>Messages</div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexShrink: 0 }}>
+              <div style={{ fontSize: 15, fontWeight: 800, color: `var(--accent-secondary)` }}>Messages</div>
+              {selected && (
+                <button onClick={async () => {
+                  const now = new Date();
+                  const mtgRef = doc(collection(db, 'projects', selected.id, 'meetings'));
+                  await setDoc(mtgRef, {
+                    title: 'Client Video Call',
+                    scheduledAt: now,
+                    durationMinutes: 60,
+                    notes: '',
+                    status: 'live',
+                    channelName: `meeting_${mtgRef.id}`,
+                    createdBy: user.id,
+                    createdAt: serverTimestamp(),
+                    projectId: selected.id,
+                    clientId: user.id,
+                  });
+                  await addDoc(collection(db, 'clients', user.id, 'messages'), {
+                    text: '📞 Client is requesting a video call — join now from your admin portal.',
+                    senderRole: 'client', senderId: user.id,
+                    senderName: user.name || 'Client',
+                    isInternal: false, createdAt: serverTimestamp(),
+                    projectId: selected.id, projectTitle: selected.project || selected.title || '',
+                    readByAdmin: false, readByClient: true,
+                  });
+                  await addDoc(collection(db, 'notifications'), {
+                    userId: 'admin', title: 'Incoming Client Video Call',
+                    message: `${user.name || 'Client'} is calling. Join from admin portal.`,
+                    type: 'meeting_scheduled', read: false, createdAt: serverTimestamp(),
+                    clientId: user.id, projectId: selected.id,
+                  });
+                  setActiveMeeting({ id: mtgRef.id, title: 'Video Call', channelName: `meeting_${mtgRef.id}`, status: 'live' });
+                }} style={{ height: 34, padding: '0 14px', borderRadius: 10, background: ac, color: '#fff', border: 'none', fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <Video size={13} /> Call PM
+                </button>
+              )}
+            </div>
             <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
               <WorldClassChat
                 clientId={user.id}
@@ -6023,6 +6292,7 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
                 viewerLanguage={props.lang || 'en'}
               />
             </div>
+          </div>
           </div>
         ) : showProjectsLoading ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginTop: isMobile ? 16 : 0 }}>
@@ -6107,8 +6377,54 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
                   </div>
                 </div>
 
+                {/* ── ONBOARDING SERVICE AGREEMENT GATE ── */}
+                {(() => {
+                  const agreementSigned = selected.onboardingAgreement?.signed === true || agreementSignedLocal[selected.id] === true;
+                  if (agreementSigned) return null;
+                  return (
+                    <>
+                      <div style={{ background: '#fff', borderRadius: 20, border: '1px solid var(--border-color)', padding: isMobile ? '28px 20px' : 40, textAlign: 'center', boxShadow: '0 8px 32px rgba(0,0,0,.04)' }}>
+                        <div style={{ width: 64, height: 64, borderRadius: 20, background: `${ac}12`, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 18px' }}>
+                          <FileCheck size={28} color={ac} />
+                        </div>
+                        <div style={{ fontSize: 11, fontWeight: 800, color: ac, textTransform: 'uppercase', letterSpacing: '.1em', marginBottom: 8 }}>Action Required</div>
+                        <div style={{ fontSize: isMobile ? 20 : 22, fontWeight: 900, color: 'var(--accent-secondary)', marginBottom: 10 }}>Sign Your Service Agreement</div>
+                        <div style={{ fontSize: 13.5, color: 'var(--text-secondary)', lineHeight: 1.7, maxWidth: 420, margin: '0 auto 24px' }}>
+                          Before your project becomes accessible, please read and sign the design services cooperation agreement between you and {props.brand?.name || 'Westline Future'}. It covers the scope, costs, delivery, and copyright terms for <strong>{selected.title}</strong>.
+                        </div>
+                        <button
+                          onClick={() => setShowOnboardingAgreement(true)}
+                          style={{ height: 52, padding: '0 32px', borderRadius: 16, border: 'none', background: ac, color: '#fff', fontSize: 15, fontWeight: 800, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 10 }}
+                        >
+                          <PenLine size={17} /> Read & Sign Agreement
+                        </button>
+                        <div style={{ marginTop: 16, fontSize: 11, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                          <ShieldCheck size={12} /> Legally binding electronic signature — takes about 2 minutes
+                        </div>
+                      </div>
+                      {showOnboardingAgreement && (
+                        <ContractAgreementModal
+                          mode="onboarding"
+                          project={selected}
+                          user={user}
+                          brand={props.brand}
+                          isMobile={isMobile}
+                          onClose={() => setShowOnboardingAgreement(false)}
+                          onSigned={() => {
+                            setShowOnboardingAgreement(false);
+                            setAgreementSignedLocal(prev => ({ ...prev, [selected.id]: true }));
+                            props.notify?.('success', 'Agreement signed — welcome aboard!');
+                          }}
+                        />
+                      )}
+                    </>
+                  );
+                })()}
+
                 {/* ── KICKOFF GATE ── */}
                 {(() => {
+                  const agreementSigned = selected.onboardingAgreement?.signed === true || agreementSignedLocal[selected.id] === true;
+                  if (!agreementSigned) return null;
                   if (!portalGate.active) return null;
                   const hasUnlockedDesignLocal = (props.renderingPackages || []).some(pkg => pkg.projectId === selected.id && (pkg.unlocked || pkg.status === 'Paid / Unlocked'));
                   return (
@@ -6150,8 +6466,8 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
                   );
                 })()}
 
-                {/* Hide tabs and content while kickoff gate is active */}
-                {!portalGate.active && (
+                {/* Hide tabs and content while onboarding agreement or kickoff gate is active */}
+                {(selected.onboardingAgreement?.signed === true || agreementSignedLocal[selected.id] === true) && !portalGate.active && (
                 <>
 
 
@@ -6192,7 +6508,8 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
 
                 {/* ── OVERVIEW TAB ── */}
                 {activeTab === 'overview' && (() => {
-                  const pendingInvoices = (props.invoices || []).filter(i => i.projectId === selected?.id && ['Sent', 'Partially Paid'].includes(i.status) && i.type !== 'Quotation');
+                  const projectFullyPaid = selected?.paidAmount > 0 && selected?.budget > 0 && selected?.paidAmount >= selected?.budget - 0.01;
+                  const pendingInvoices = projectFullyPaid ? [] : (props.invoices || []).filter(i => i.projectId === selected?.id && ['Sent', 'Partially Paid'].includes(i.status) && i.type !== 'Quotation' && !i.awaitingConfirmation);
                   const projectQuotes = (props.invoices || [])
                     .filter(invoice =>
                       (invoice.projectId === selected?.id || invoice.parentId === selected?.id) &&
@@ -6209,8 +6526,44 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
                     : pendingInvoices.length > 0 ? { title: 'Pending Invoice', desc: `You have ${pendingInvoices.length} unpaid invoice(s) on your account.`, tab: 'financials', btn: 'View Invoices', icon: <CreditCard size={18} color="#D97706" /> }
                     : null;
 
+                  const nowTs = Date.now();
+                  const nextMeeting = portalMeetings
+                    .filter(m => m.status === 'scheduled' || m.status === 'live')
+                    .map(m => ({ ...m, _ts: m.scheduledAt?.toDate ? m.scheduledAt.toDate().getTime() : new Date(m.scheduledAt || 0).getTime() }))
+                    .filter(m => m._ts > nowTs - 15 * 60 * 1000)
+                    .sort((a, b) => a._ts - b._ts)[0] || null;
+
+                  const fmtMeetingDate = (ts) => {
+                    const d = ts?.toDate ? ts.toDate() : new Date(ts || 0);
+                    return d.toLocaleString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' });
+                  };
+
+                  const msUntil = nextMeeting ? nextMeeting._ts - nowTs : null;
+                  const isLive = nextMeeting?.status === 'live' || (msUntil !== null && msUntil <= 5 * 60 * 1000);
+
                   return (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                      {nextMeeting && (
+                        <div style={{ padding: '16px 20px', borderRadius: 16, background: isLive ? '#F0FDF4' : '#EFF6FF', border: `1.5px solid ${isLive ? '#86EFAC' : '#BFDBFE'}`, display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
+                            <div style={{ width: 40, height: 40, borderRadius: 12, background: isLive ? '#22c55e' : ac, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+                            </div>
+                            <div>
+                              <div style={{ fontSize: 14, fontWeight: 900, color: isLive ? '#15803D' : '#1E40AF', marginBottom: 3 }}>
+                                {isLive ? '🟢 Video Call — Join Now' : `📅 Upcoming: ${nextMeeting.title}`}
+                              </div>
+                              <div style={{ fontSize: 12, color: isLive ? '#166534' : '#1D4ED8' }}>
+                                {isLive ? nextMeeting.title : fmtMeetingDate(nextMeeting.scheduledAt)}
+                                {nextMeeting.durationMinutes && !isLive ? ` · ${nextMeeting.durationMinutes} min` : ''}
+                              </div>
+                            </div>
+                          </div>
+                          <button onClick={() => isLive ? setActiveMeeting(nextMeeting) : setActiveTab('messages')} style={{ height: 38, padding: '0 18px', borderRadius: 10, background: isLive ? '#22c55e' : ac, color: '#fff', fontSize: 12, fontWeight: 800, border: 'none', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                            {isLive ? 'Join Call →' : 'View in Messages →'}
+                          </button>
+                        </div>
+                      )}
                       {actionReq ? (
                         <div style={{ padding: '16px 20px', borderRadius: 16, background: '#FEF2F2', border: '1.5px solid #FECACA', display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
                           <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
@@ -6233,6 +6586,15 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
                           </div>
                         </div>
                       )}
+
+                      <ClientNextActionCard
+                        project={selected}
+                        invoices={props.invoices || []}
+                        renderingPackages={props.renderingPackages || []}
+                        addOns={props.addOns || []}
+                        setActiveTab={setActiveTab}
+                        isMobile={isMobile}
+                      />
 
                       <ProjectHeaderCard project={selected} isMobile={isMobile} ac={ac} brand={props.brand} />
 
@@ -6336,16 +6698,6 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
                         </div>
                       )}
 
-                    <ClientNextActionCard
-                      project={selected}
-                      invoices={props.invoices || []}
-                      renderingPackages={props.renderingPackages || []}
-                      addOns={props.addOns || []}
-                      setActiveTab={setActiveTab}
-                      isMobile={isMobile}
-                    />
-                    <ClientSiteVisitScheduler project={selected} isMobile={isMobile} />
-
                     <ProjectRoadmap
                       project={selected}
                       invoices={props.invoices || []}
@@ -6354,6 +6706,7 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
                       isMobile={isMobile}
                       onStageGuide={setActiveStageGuide}
                     />
+
                     {(() => {
                       const contractSigned = !!selected.contractAccepted;
                       const renderingApproved = selected.renderingApproved === true ||
@@ -6766,6 +7119,36 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
             try { await updateDoc(doc(db, 'projects', selected.id), { reviewDismissed: true, reviewDismissedAt: serverTimestamp() }); } catch (_) {}
             setReviewDismissed(true);
           }}
+        />
+      )}
+
+      {/* Incoming call banner — real-time, shown when PM starts an instant call */}
+      {incomingCall && !activeMeeting && (
+        <div style={{ position: 'fixed', top: isMobile ? 16 : 32, left: '50%', transform: 'translateX(-50%)', zIndex: 99998, background: '#111', borderRadius: 20, padding: '18px 24px', display: 'flex', alignItems: 'center', gap: 20, boxShadow: '0 8px 40px rgba(0,0,0,.5)', minWidth: 300, maxWidth: 'calc(100vw - 40px)' }}>
+          <div style={{ width: 48, height: 48, borderRadius: 24, background: ac, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, animation: 'pulse 1.2s ease-in-out infinite' }}>
+            <Video size={22} color="#fff" />
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 13, fontWeight: 800, color: '#fff' }}>Incoming Video Call</div>
+            <div style={{ fontSize: 12, color: 'rgba(255,255,255,.6)', marginTop: 2 }}>Your Project Manager is calling</div>
+          </div>
+          <div style={{ display: 'flex', gap: 10, flexShrink: 0 }}>
+            <button onClick={() => { setIncomingCall(null); }} style={{ height: 38, padding: '0 14px', borderRadius: 10, background: '#EF4444', color: '#fff', border: 'none', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+              Decline
+            </button>
+            <button onClick={() => { setActiveMeeting(incomingCall); setIncomingCall(null); }} style={{ height: 38, padding: '0 14px', borderRadius: 10, background: '#16A34A', color: '#fff', border: 'none', fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
+              <Video size={13} /> Answer
+            </button>
+          </div>
+        </div>
+      )}
+
+      {activeMeeting && (
+        <VideoCallModal
+          meeting={activeMeeting}
+          user={user}
+          brand={props.brand}
+          onClose={() => setActiveMeeting(null)}
         />
       )}
 

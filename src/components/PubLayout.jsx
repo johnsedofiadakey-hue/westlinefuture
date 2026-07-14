@@ -5,430 +5,17 @@ import {
 } from 'lucide-react';
 import { useWindowWidth, isMob, DARK_TEXT } from '../pages/sharedHelpers';
 import LanguageFlagSwitch from './LanguageFlagSwitch';
+import { functions } from '../lib/firebase';
+import { httpsCallable } from 'firebase/functions';
 
-const PUBLIC_ZH = {
-  'Home': '首页',
-  'Westline Future Ltd.': '西线未来有限公司',
-  'WESTLINE FUTURE': '西线未来',
-  'Westline Future': '西线未来',
-  'Services': '服务',
-  'Products': '产品',
-  'Showroom': '展厅',
-  'Portfolio': '案例',
-  'About': '关于',
-  'Contact': '联系',
-  'Client Portal': '客户门户',
-  'Client Portal Login': '客户门户登录',
-  'DESIGN • SOURCING • INSTALLATION': '设计 • 采购 • 安装',
-  'Design. Source. Install.': '设计。采购。安装。',
-  'From concept to handover.': '从概念到交付。',
-  'A managed project system for premium interiors, CAD/3D rendering, global sourcing, logistics, installation, and handover.': '为高端室内项目提供完整管理系统，涵盖施工图/三维效果图、全球采购、物流、安装与交付。',
-  'Clients approve drawings, quotes, payments, timelines, and completion records through a controlled Westline workflow.': '客户可通过西线未来受控流程审批图纸、报价、付款、时间计划和完工记录。',
-  'Start Project Brief': '提交项目需求',
-  'How We Work': '工作流程',
-  'Projects': '项目',
-  'Years': '年经验',
-  'Satisfaction': '满意度',
-  'Countries': '服务国家',
-  'THE WESTLINE METHOD': '西线未来方法',
-  'A project system, not just a contractor.': '不只是承包商，而是项目系统。',
-  'Every serious project moves through a controlled journey: intake, paid design access, design approval, quote approval, deposit, production, logistics, installation, inspection, and handover.': '每个正式项目都经过受控流程：需求收集、付费设计访问、设计审批、报价审批、定金、生产、物流、安装、验收和交付。',
-  'View Full Workflow': '查看完整流程',
-  'Project Brief': '项目需求',
-  'Share the site, scope, budget range, preferred finish, and timeline so the team can qualify the request properly.': '提交现场、范围、预算区间、偏好材质和时间计划，便于团队准确评估需求。',
-  'Paid CAD / 3D Design': '付费施工图/三维设计',
-  'A separate rendering invoice unlocks the private design package. The project quote comes after design approval.': '单独的效果图发票付款后，客户才能查看私人设计包。项目报价在设计审批后生成。',
-  'Final Quote Approval': '最终报价审批',
-  'Westline issues a versioned quote based on the approved drawing, with revisions and scope changes tracked.': '西线未来根据已批准图纸出具版本化报价，并记录修订和范围变化。',
-  'Procure, Deliver, Install': '采购、配送、安装',
-  'Materials, logistics, installation updates, documents, payments, and approvals move through the client portal.': '材料、物流、安装进度、文件、付款和审批都通过客户门户管理。',
-  'EVERYTHING INTERIOR': '全案室内服务',
-  'One company,': '一家公司，',
-  'every service.': '全套服务。',
-  'All Services': '全部服务',
-  'Glass & Glazing': '玻璃与幕墙',
-  'Aluminium Windows': '铝合金窗',
-  'Bathroom Installation': '浴室安装',
-  'Kitchen Renovation': '厨房翻新',
-  'Wardrobes & Storage': '衣柜与收纳',
-  'Tiles Supply & Fixing': '瓷砖供应与铺贴',
-  'Doors Installation': '门类安装',
-  'Electrical Works': '电气工程',
-  'Plumbing Works': '给排水工程',
-  'Tiles & Flooring': '瓷砖与地面',
-  'Doors': '门类',
-  'Frameless glass, balustrades, curtain walls, glass partitions & shopfronts.': '无框玻璃、栏杆、幕墙、玻璃隔断与店面系统。',
-  'Casement, sliding & louvre aluminium windows and doors — fabricated to spec.': '平开、推拉与百叶铝窗铝门，按规格加工。',
-  'Full bathroom fit-out — shower cubicles, vanities, WC, tiles & plumbing.': '完整浴室装修，包括淋浴房、洗手台、马桶、瓷砖和管道。',
-  'Custom kitchen cabinets, worktops, sinks — modular kitchen supply & install.': '定制橱柜、台面、水槽，模块化厨房供应与安装。',
-  'Sliding wardrobes, walk-in closets & fitted storage systems for every room.': '滑门衣柜、步入式衣帽间和全屋定制收纳系统。',
-  'Porcelain, ceramic & outdoor tiles — supply only or full supply-and-fix.': '瓷砖、陶瓷砖和户外砖，可单供货或包工包料。',
-  'Timber, WPC & security doors — frames, handles & complete door systems.': '木门、WPC门、防盗门，含门框、五金和整套门系统。',
-  'Full wiring, LED lighting, smart switches, DB boards & socket installations.': '完整布线、LED照明、智能开关、配电箱和插座安装。',
-  'Plumbing installations, sanitary fittings, water heaters & pipe systems.': '管道安装、卫浴五金、热水器和管路系统。',
-  'Learn more': '了解更多',
-  'DESIGN BEFORE QUOTATION': '报价前先设计',
-  'Rendering access is controlled and paid separately.': '效果图访问受控，并单独收费。',
-  'The CAD/3D design fee is not part of the final project sum. It unlocks the rendering package for review, comments, revisions, and approval before the final project quote is prepared.': '施工图/三维设计费不属于最终项目总价。付款后客户可查看效果图包，进行审核、评论、修改和批准，之后才准备最终项目报价。',
-  'Start With A Design Brief': '从设计需求开始',
-  'Private upload': '私密上传',
-  'Admin uploads rendering files into a locked package.': '管理员将效果图文件上传到锁定包中。',
-  'Separate invoice': '单独发票',
-  'Client pays the CAD/3D rendering fee before access.': '客户付款施工图/三维效果图费用后才能访问。',
-  'Review & revise': '审核与修改',
-  'Client comments, requests changes, or approves the final version.': '客户可评论、申请修改或批准最终版本。',
-  'Quote after approval': '审批后报价',
-  'The actual project quote is based on the approved design version.': '正式项目报价基于已批准的设计版本。',
-  'WHY WESTLINE FUTURE': '为什么选择西线未来',
-  'Built to a': '以更高',
-  'higher standard.': '标准建造。',
-  'Guaranteed Quality': '质量保证',
-  'Every installation backed by a 2-year workmanship warranty and certified materials from vetted manufacturers.': '每项安装均享有2年工艺质保，并使用经审核厂家认证材料。',
-  'On-Time Delivery': '准时交付',
-  'Our dedicated logistics team tracks every shipment. 94% of projects completed on or ahead of schedule.': '专属物流团队跟踪每批货物。94%的项目按时或提前完成。',
-  'Direct China Sourcing': '中国源头直采',
-  'We cut out middlemen. Factory-direct procurement means premium glass at 20–35% below market rates.': '减少中间环节。工厂直采让高端玻璃成本比市场价低20–35%。',
-  'Technical Expertise': '技术实力',
-  'CNC precision, sub-millimeter tolerances. Our engineers have handled façades, curtain walls, and interior systems for 12+ years.': '数控精度，毫米级误差控制。工程团队拥有12年以上幕墙、立面和室内系统经验。',
-  'Start Your Project': '开始项目',
-  'CLIENT PORTAL INCLUDED': '包含客户门户',
-  'Clients see progress, payments, documents, and approvals in one place.': '客户可在一个地方查看进度、付款、文件和审批。',
-  'The public promise matches the operating system behind the scenes: fewer loose chats, fewer missing approvals, and a clearer record of every decision.': '对外承诺与后台运营系统一致：减少零散沟通、避免遗漏审批，并清晰记录每项决策。',
-  'Locked design packages': '锁定设计包',
-  'Quote approvals': '报价审批',
-  'Invoices and receipts': '发票与收据',
-  'Procurement updates': '采购进度',
-  'Shipping and delivery': '运输与配送',
-  'Installation photos': '安装照片',
-  'Inspection sign-off': '验收签字',
-  'Handover documents': '交付文件',
-  'Begin Intake': '开始需求收集',
-  'CLIENT STORIES': '客户故事',
-  'Trusted by': '深受',
-  'decision-makers.': '决策者信赖。',
-  'GET STARTED': '开始',
-  'Ready to build something remarkable?': '准备打造卓越项目？',
-  'Ready to build': '准备打造',
-  'something remarkable?': '卓越项目？',
-  'Westline Future transformed our office with exceptional precision. The structural glazing exceeded every expectation — on time and on budget.': '西线未来以出色精度完成了我们的办公室项目。结构玻璃效果超出预期，并且按时按预算交付。',
-  'Airport Hills Commercial Tower': '机场山商业大楼',
-  'Kwame Asante': '夸梅·阿桑特',
-  'From concept to installation — our team handles every detail.': '从概念到安装，我们的团队处理每一个细节。',
-  'Request a Quote': '申请报价',
-  'View Portfolio': '查看案例',
-  'Loading...': '加载中...',
-  'Loading About Page...': '正在加载关于页面...',
-  'Loading Contact Page...': '正在加载联系页面...',
-  'Loading Workflow...': '正在加载流程...',
-  'Loading Products...': '正在加载产品...',
-  'Loading Gallery...': '正在加载案例...',
-  'Loading Showcase...': '正在加载展厅...',
-  'Page Under Construction': '页面建设中',
-  "Global precision meets local delivery. Premium structural glass, aluminum works, and interior finishing solutions for the world's most ambitious architectural projects.": '全球精度结合本地交付。为高标准建筑项目提供高端结构玻璃、铝合金工程和室内精装解决方案。',
-  'Navigation': '导航',
-  'Capabilities': '服务能力',
-  'Follow Us': '关注我们',
-  'All rights reserved.': '版权所有。',
-  'Management Portal': '管理门户',
-  'Submit Project Intake': '提交项目需求',
-  'Project Intake': '项目需求',
-  'Send To Project Intake': '发送到项目需求',
-  'PLAN SIMILAR PROJECT': '规划类似项目',
-  'SOURCE • APPROVE • INSTALL': '采购 • 审批 • 安装',
-  'Selected Case Studies.': '精选案例。',
-  'Products &': '产品与',
-  'Materials.': '材料。',
-  'Search products...': '搜索产品...',
-  'Inquire for Procurement': '咨询采购',
-  'Share WhatsApp': 'WhatsApp分享',
-  'Submit': '提交',
-  'Full name': '姓名',
-  'Phone / WhatsApp': '电话 / WhatsApp',
-  'Email': '邮箱',
-  'Project Location': '项目地点',
-  'Budget Range': '预算范围',
-  'Timeline': '时间计划',
-  'Rendering Need': '效果图需求',
-  'Measurements': '测量信息',
-  'Message': '留言',
+// ── Google Translate API engine ───────────────────────────────────────────────
 
-  // ── New service categories ─────────────────────────────────────────────────
-  'Surface Finishes & Fixtures': '表面装修与洁具',
-  'Fixed Custom Carpentry': '定制固装木作',
-  'Home Furniture': '家居家具',
-  'Home Appliances': '家用电器',
-  'Décor & Accessories': '软装与配件',
-  'Tiles · Flooring · Doors · Sanitary ware · Countertops': '瓷砖·地板·门·洁具·台面',
-  'Kitchen cabinets · Wardrobes · Vanities · TV units': '橱柜·衣柜·浴室柜·电视柜',
-  'Sofas · Dining sets · Beds · Coffee tables · Sideboards': '沙发·餐桌椅·床·茶几·餐边柜',
-  'Fridges · Washing machines · Hoods · Hobs · Water heaters · TVs': '冰箱·洗衣机·抽油烟机·灶具·热水器·电视',
-  'Curtains · Lighting · Mirrors · Decorative trims': '窗帘·灯具·镜子·装饰线条',
-  'Surface Finishes & Fixtures (tiles, flooring, doors, sanitary ware)': '表面装修与洁具（瓷砖、地板、门、卫浴）',
-  'Fixed Custom Carpentry (kitchen cabinets, wardrobes, vanities)': '定制固装木作（橱柜、衣柜、浴室柜）',
-  'Home Furniture (sofas, dining sets, beds)': '家居家具（沙发、餐桌椅、床）',
-  'Home Appliances (fridges, washing machines, TVs)': '家用电器（冰箱、洗衣机、电视）',
-  'Décor & Accessories (curtains, lighting, mirrors)': '软装与配件（窗帘、灯具、镜子）',
-  'EVERYTHING YOUR HOME NEEDS': '家居所需，一应俱全',
-  'Surface finishes, custom carpentry, furniture, appliances and décor — every product your home interior needs, sourced from China and installed by our team.': '表面装修、定制木作、家具、电器与软装——您家居所需的一切产品，由我们从中国采购并完成安装。',
-  'Ready to furnish your home?': '准备好装饰您的家了吗？',
-  'Start with a paid 3D design — we handle everything from there.': '从付费三维设计开始——之后的一切都由我们来处理。',
-  // ── Updated service names ───────────────────────────────────────────────────
-  'Full Interior Decoration': '全案室内装修',
-  'Custom 3D Interior Design': '定制三维室内设计',
-  'Plasterboard & Ceiling': '石膏板与天花',
-  'Furniture & Fittings': '家具与配件',
-  'Full Interior Design': '全案室内设计',
-  'OUR SERVICE': '我们的服务',
-  'One company,': '一家公司，',
-  'your complete home.': '您的全案家居。',
-  'Design → Source → Install': '设计 → 采购 → 安装',
-  'Our flagship service — Design → Source → Install': '我们的旗舰服务 — 设计 → 采购 → 安装',
-  'End-to-end full-house interior finishing for newly completed residential buildings across Ghana.': '为加纳各地新竣工住宅提供端对端全屋室内精装服务。',
-  'STEP 01': '第一步',
-  'STEP 02': '第二步',
-  'STEP 03': '第三步',
-  'Pre-Interior Site Prep Support': '室内前期场地准备支持',
-  'Paid Custom 3D Interior Design': '付费定制三维室内设计',
-  'Full Material Sourcing + Turnkey Installation': '全材料采购 + 交钥匙安装',
-  'Full Interior Decoration · Design → Source → Install': '全案室内装修 · 设计 → 采购 → 安装',
-  'Start Your Project': '开始您的项目',
-  'Continue': '继续',
+// Session-level cache: { [cacheKey]: { [enText]: zhText } }
+const _translationCache = {};
 
-  // ── Why us / reasons section ───────────────────────────────────────────────
-  'Custom 3D Design': '定制三维设计',
-  'End-to-End Sourcing': '端对端采购',
-  'Turnkey Installation': '交钥匙安装',
-  'Global Materials': '全球材料',
-
-  // ── About page ─────────────────────────────────────────────────────────────
-  'About Westline Future': '关于西线未来',
-  'One company.': '一家公司。',
-  'Your complete home.': '您的全案家居。',
-  'Leadership': '领导团队',
-  'The people behind the vision': '愿景背后的人',
-  'CEO & Founding Partner': '首席执行官兼创始合伙人',
-  'Founding Partner': '创始合伙人',
-  'Accra Office': '阿克拉办公室',
-  'China Headquarters': '中国总部',
-  'Our People': '我们的团队',
-  'The team behind the work': '工作背后的团队',
-  'Ready to transform your home?': '准备好改造您的家居了吗？',
-  'From 3D design to full installation — we handle every detail so you don\'t have to.': '从三维设计到全套安装，我们处理每一个细节，让您无后顾之忧。',
-  'Contact Us': '联系我们',
-  'Our Services': '我们的服务',
-  '20+': '20+',
-  'Years Combined Experience': '年综合经验',
-  '100%': '100%',
-  'Full-Home Projects': '全屋项目',
-  '2': '2',
-  'Office Locations': '办公地点',
-  '5★': '5★',
-  'Client Satisfaction': '客户满意度',
-
-  // ── Contact page fields ────────────────────────────────────────────────────
-  'First Name *': '名字 *',
-  'Last Name': '姓氏',
-  'Phone / WhatsApp *': '电话 / WhatsApp *',
-  'Email Address': '电子邮件',
-  'Main Service / Project Type *': '主要服务 / 项目类型 *',
-  'Property Type': '物业类型',
-  'Project Location *': '项目地点 *',
-  'Approximate Budget': '预算范围',
-  'Target Timeline': '目标时间',
-  'Measurements Available?': '是否已有尺寸？',
-  'Need CAD / 3D Rendering?': '是否需要三维效果图？',
-  'Preferred Next Step': '首选下一步',
-  'Inspiration Links / References': '参考链接 / 灵感图',
-  'Project Description *': '项目描述 *',
-  'Submit Project Intake': '提交项目需求',
-  'Message received!': '消息已收到！',
-  'Select a service…': '选择服务…',
-  'Select budget range…': '选择预算范围…',
-  'Select option…': '选择选项…',
-  'Select preference…': '选择偏好…',
-  'Select property type…': '选择物业类型…',
-  'Select timeline…': '选择时间…',
-  'Direct Contact': '直接联系',
-  'Opening Hours': '营业时间',
-  'Our Response Promise': '我们的响应承诺',
-  'Usually replies within 1 hour': '通常在1小时内回复',
-  'WhatsApp': 'WhatsApp',
-  'Calls & SMS': '电话与短信',
-  'Site visits by appointment': '预约现场参观',
-  'Just ask.': '随时咨询。',
-
-  // ── Services page ──────────────────────────────────────────────────────────
-  'WHAT WE DO': '我们的服务',
-  'What we cover': '服务范围',
-  'OUR REACH': '我们的覆盖',
-  'Serving all of Ghana': '服务于加纳全境',
-  'Primary Location': '主要地点',
-  'Engineering Scope': '工程范围',
-  'Get Started': '立即开始',
-
-  // ── Portfolio page ─────────────────────────────────────────────────────────
-  'Selected Case Studies.': '精选案例。',
-  'Case Studies.': '案例研究。',
-  'AFTER': '完工后',
-  'BEFORE': '施工前',
-  'PLAN SIMILAR PROJECT': '规划类似项目',
-
-  // ── Products / Order modal ─────────────────────────────────────────────────
-  'Place Order': '下订单',
-  'Confirm & Pay': '确认并付款',
-  'Order Received!': '订单已收到！',
-  'Your Name *': '您的姓名 *',
-  'Your Name': '您的姓名',
-  'Phone Number *': '电话号码 *',
-  'Phone Number': '电话号码',
-  'Delivery Address': '配送地址',
-  'Notes (optional)': '备注（可选）',
-  'Quantity': '数量',
-  'Order via WhatsApp': '通过WhatsApp下单',
-  'Submit Order Request': '提交订单请求',
-  'Preparing checkout…': '正在准备结账…',
-  'We\'ll call you within 24 hours to confirm.': '我们将在24小时内致电确认。',
-  'Order Summary': '订单摘要',
-  'Order Now': '立即订购',
-  'Continue': '继续',
-  'Building a full package?': '在筹备整套方案？',
-  'Favorites Hub': '收藏中心',
-  'Review and source your curated materials': '审核并采购您精选的材料',
-  'Your Selected Items': '您选中的项目',
-  'Items Selected': '项目已选中',
-  'No products in this category yet': '此类别暂无产品',
-  'Syncing Global Catalog...': '正在同步全球目录...',
-  'Image Unavailable': '图片不可用',
-  'Additional Sourcing Notes (Optional)': '附加采购备注（可选）',
-  'Sourcing Information': '采购信息',
-  'Technical Comparison': '技术对比',
-  'Structural Glass Configuration': '结构玻璃配置',
-  'Standard Westline specifications apply.': '适用西线未来标准规格。',
-  'We can source any material from China — contact us for a custom order.': '我们可以从中国采购任何材料——请联系我们定制订单。',
-  'Finish Selection': '表面处理选择',
-  'Specifications': '规格参数',
-  'Specs': '规格',
-  'Product Overview': '产品概述',
-  'From': '起',
-  'Performance': '性能',
-  'Email Address': '电子邮件',
-  'Done': '完成',
-
-  // ── Footer ─────────────────────────────────────────────────────────────────
-  'Contact': '联系',
-  'Select a tour': '选择参观',
-
-  // ── General public UI ──────────────────────────────────────────────────────
-  'Book Site Measurement': '预约现场测量',
-
-  // ── Contact page — hero & intro ───────────────────────────────────────────
-  'Get in Touch': '联系我们',
-  "Let's build something": '让我们共同创造',
-  'exceptional together.': '非凡之作。',
-  'Submit a structured brief for design, sourcing, installation, or full project delivery. A technical specialist will qualify the next step within 24 hours.': '请提交设计、采购、安装或全项目交付的结构化需求表。技术专家将在24小时内评估下一步。',
-  'Message on WhatsApp': '通过WhatsApp留言',
-  'Project Enquiry': '项目咨询',
-  'Complete the intake so we can assess scope, rendering needs, timeline, and budget before issuing any formal quote.': '请完整填写需求表，以便我们在出具正式报价前评估范围、渲染需求、时间计划和预算。',
-  "We'll follow up within 24 hours. For urgent projects, WhatsApp us directly.": '我们将在24小时内跟进。紧急项目请直接通过WhatsApp联系我们。',
-  'Failed to send. Please try WhatsApp or call us directly.': '发送失败。请通过WhatsApp或直接致电我们。',
-  'Sending…': '发送中…',
-  'Send via WhatsApp': '通过WhatsApp发送',
-  'Your details are used only to respond to this enquiry.': '您的信息仅用于回复本次咨询。',
-
-  // ── Contact page — form validation ────────────────────────────────────────
-  'First name is required': '请输入名字',
-  'Phone number is required': '请输入电话号码',
-  'Enter a valid phone number': '请输入有效的电话号码',
-  'Enter a valid email address': '请输入有效的电子邮件地址',
-  'Select the main service or project type': '请选择主要服务或项目类型',
-  'Project location is required': '请输入项目地点',
-  'Tell us about your project': '请描述您的项目',
-  'Message too long (max 2000 characters)': '消息过长（最多2000字符）',
-  '(optional)': '（可选）',
-
-  // ── Contact page — info panel ─────────────────────────────────────────────
-  'Location': '地点',
-  'Monday – Friday': '周一 – 周五',
-  'Saturday': '周六',
-  'Sunday': '周日',
-  'Closed': '休息',
-  'All enquiries receive a personal response within 24 hours — not an automated reply. For urgent projects, WhatsApp us directly for the fastest service.': '所有咨询均在24小时内获得个人回复，而非自动回复。紧急项目请直接通过WhatsApp联系我们，获得最快服务。',
-
-  // ── Contact page — service & property options ──────────────────────────────
-  'Full Interior Decoration (complete home)': '全案室内装修（完整家居）',
-  'Other / Not Sure Yet': '其他 / 暂不确定',
-  'Private Residence': '私人住宅',
-  'Apartment / Rental Unit': '公寓 / 租赁单元',
-  'Commercial Space': '商业空间',
-  'Hotel / Hospitality': '酒店 / 餐饮',
-  'Office / Corporate': '办公室 / 企业',
-  'Developer / Multi-unit Project': '开发商 / 多单元项目',
-  'Other': '其他',
-  'Urgent — within 2 weeks': '紧急 — 2周内',
-  '1 month': '1个月',
-  '2–3 months': '2–3个月',
-  '3–6 months': '3–6个月',
-  'Flexible / planning stage': '灵活 / 规划阶段',
-  'Yes': '是',
-  'No': '否',
-  'Not sure yet': '暂不确定',
-  'Phone consultation': '电话咨询',
-  'WhatsApp follow-up': 'WhatsApp跟进',
-  'Site visit': '现场参观',
-  'Showroom appointment': '展厅预约',
-  'Below GH₵ 50,000': 'GH₵ 50,000以下',
-  'Above GH₵ 1,000,000': 'GH₵ 1,000,000以上',
-  'Prefer not to say': '不便透露',
-  'Paste Pinterest, Instagram, product links, or notes about the style you want.': '粘贴Pinterest、Instagram、产品链接，或描述您想要的风格。',
-  "Describe what you're looking to install — room type, dimensions if known, preferred finish, timeline…": '请描述您希望安装的内容——房间类型、已知尺寸、偏好材质、时间计划……',
-
-  // ── Services page extra ───────────────────────────────────────────────────
-  'Structural Glazing': '结构玻璃',
-  'Aluminium Systems': '铝合金系统',
-  'Full Bathroom Fit-out': '完整浴室装修',
-  'Custom Kitchen': '定制厨房',
-  'Wardrobe & Storage': '衣柜与收纳',
-  'Tiles & Flooring Supply': '瓷砖与地面供应',
-  'Door Systems': '门类系统',
-  'Electrical & Smart': '电气与智能',
-  'Plumbing & Sanitary': '管道与卫浴',
-  'Accra': '阿克拉',
-  'Kumasi': '库马西',
-  'Takoradi': '塔科拉迪',
-  'Koforidua': '科福里杜阿',
-  'All of Ghana': '加纳全境',
-  'Project Brief': '项目需求',
-
-  // ── About page extra ──────────────────────────────────────────────────────
-  'Our People': '我们的团队',
-  'The team behind the work': '工作背后的团队',
-  'Ready to transform your home?': '准备好改造您的家居了吗？',
-  'From 3D design to full installation — we handle every detail so you don\'t have to.': '从三维设计到全套安装，我们处理每一个细节，让您无后顾之忧。',
-  'Contact Us': '联系我们',
-  'Our Services': '我们的服务',
-};
-
-const PUBLIC_ZH_ENTRIES = Object.entries(PUBLIC_ZH).sort((a, b) => b[0].length - a[0].length);
-
-function translatePublicText(value, lang) {
-  if (lang !== 'zh') return value;
-  const trimmed = String(value || '').trim();
-  if (!trimmed) return value;
-  const normalized = trimmed.replace(/\s+/g, ' ');
-  if (PUBLIC_ZH[trimmed] || PUBLIC_ZH[normalized]) {
-    const start = value.match(/^\s*/)?.[0] || '';
-    const end = value.match(/\s*$/)?.[0] || '';
-    return `${start}${PUBLIC_ZH[trimmed] || PUBLIC_ZH[normalized]}${end}`;
-  }
-  let translated = value;
-  for (const [en, zh] of PUBLIC_ZH_ENTRIES) {
-    if (translated.includes(en)) translated = translated.split(en).join(zh);
-  }
-  return translated;
-}
-
-export function translatePublicDom(lang) {
-  if (typeof document === 'undefined') return;
+function _collectNodes() {
+  if (typeof document === 'undefined') return { textNodes: [], attrEls: [] };
+  const textNodes = [];
   const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
     acceptNode(node) {
       const parent = node.parentElement;
@@ -440,43 +27,103 @@ export function translatePublicDom(lang) {
       return NodeFilter.FILTER_ACCEPT;
     }
   });
+  while (walker.nextNode()) textNodes.push(walker.currentNode);
+  const attrEls = Array.from(document.querySelectorAll('[placeholder], [aria-label]'));
+  return { textNodes, attrEls };
+}
 
-  const nodes = [];
-  while (walker.nextNode()) nodes.push(walker.currentNode);
-  nodes.forEach(node => {
-    if (node.__publicOriginalText === undefined) {
-      node.__publicOriginalText = node.nodeValue;
-    }
-    const nextVal = translatePublicText(node.__publicOriginalText, lang);
-    if (node.nodeValue !== nextVal) node.nodeValue = nextVal;
+function _applyCache(textNodes, attrEls, cache, lang) {
+  textNodes.forEach(node => {
+    if (node.__pubOrig === undefined) node.__pubOrig = node.nodeValue;
+    const target = lang === 'zh' ? (cache[node.__pubOrig] ?? node.__pubOrig) : node.__pubOrig;
+    if (node.nodeValue !== target) node.nodeValue = target;
   });
-
-  document.querySelectorAll('[placeholder], [aria-label], [title]').forEach(el => {
-    ['placeholder', 'aria-label', 'title'].forEach(attr => {
+  attrEls.forEach(el => {
+    ['placeholder', 'aria-label'].forEach(attr => {
       if (!el.hasAttribute(attr)) return;
-      const key = `publicOriginal${attr.replace(/-([a-z])/g, (_, c) => c.toUpperCase())}`;
-      if (!el.dataset[key]) el.dataset[key] = el.getAttribute(attr);
-      const nextVal = translatePublicText(el.dataset[key], lang);
-      if (el.getAttribute(attr) !== nextVal) el.setAttribute(attr, nextVal);
+      if (!el.__pubOrigAttrs) el.__pubOrigAttrs = {};
+      if (el.__pubOrigAttrs[attr] === undefined) el.__pubOrigAttrs[attr] = el.getAttribute(attr);
+      const orig = el.__pubOrigAttrs[attr];
+      const target = lang === 'zh' ? (cache[orig] ?? orig) : orig;
+      if (el.getAttribute(attr) !== target) el.setAttribute(attr, target);
     });
   });
 }
 
+// Restore everything to English instantly (synchronous)
+function _restoreEnglish() {
+  if (typeof document === 'undefined') return;
+  const { textNodes, attrEls } = _collectNodes();
+  _applyCache(textNodes, attrEls, {}, 'en');
+}
+
+const _translatePublicPageFn = () => httpsCallable(functions, 'translatePublicPage');
+
+export async function translatePublicDom(lang) {
+  if (typeof document === 'undefined') return;
+
+  if (lang !== 'zh') {
+    _restoreEnglish();
+    return;
+  }
+
+  const { textNodes, attrEls } = _collectNodes();
+
+  // Collect unique non-empty originals
+  const originals = new Set();
+  textNodes.forEach(node => {
+    if (node.__pubOrig === undefined) node.__pubOrig = node.nodeValue;
+    const t = node.__pubOrig.trim();
+    if (t) originals.add(t);
+  });
+  attrEls.forEach(el => {
+    ['placeholder', 'aria-label'].forEach(attr => {
+      if (!el.hasAttribute(attr)) return;
+      if (!el.__pubOrigAttrs) el.__pubOrigAttrs = {};
+      if (el.__pubOrigAttrs[attr] === undefined) el.__pubOrigAttrs[attr] = el.getAttribute(attr);
+      const t = el.__pubOrigAttrs[attr]?.trim();
+      if (t) originals.add(t);
+    });
+  });
+
+  const cacheKey = window.location.pathname;
+  const cache = _translationCache[cacheKey] || {};
+
+  // Find strings not yet cached
+  const missing = [...originals].filter(s => !(s in cache));
+
+  if (missing.length > 0) {
+    try {
+      const fn = _translatePublicPageFn();
+      const result = await fn({ texts: missing, target: 'zh-CN' });
+      const translations = result.data?.translations || [];
+      missing.forEach((orig, i) => {
+        cache[orig] = translations[i] ?? orig;
+      });
+      _translationCache[cacheKey] = cache;
+    } catch (err) {
+      console.warn('Translation failed:', err.message);
+      // Apply whatever we have cached so far
+    }
+  }
+
+  _applyCache(textNodes, attrEls, cache, 'zh');
+}
+
 /**
  * Drop this hook into any public page component that is lazy-loaded inside
- * a Suspense boundary. It guarantees the DOM-walker translation fires after
- * React finishes painting — even when the page first renders while lang is
- * already 'zh'.
+ * a Suspense boundary. It fires translation after React finishes painting.
  */
 export function usePublicTranslation() {
   const { lang } = useContext(AppContext);
   useEffect(() => {
-    const apply = () => translatePublicDom(lang === 'zh' ? 'zh' : 'en');
-    // Two-pass: first after React commits, then a short delay to catch
-    // any async content that renders in a second wave (images, Firestore data).
-    const raf = requestAnimationFrame(apply);
-    const t = setTimeout(apply, 120);
-    return () => { cancelAnimationFrame(raf); clearTimeout(t); };
+    let cancelled = false;
+    const apply = async () => {
+      if (!cancelled) await translatePublicDom(lang === 'zh' ? 'zh' : 'en');
+    };
+    const raf = requestAnimationFrame(() => apply());
+    const t = setTimeout(() => apply(), 500);
+    return () => { cancelled = true; cancelAnimationFrame(raf); clearTimeout(t); };
   }, [lang]);
 }
 
@@ -513,11 +160,15 @@ export function PubNav({ brand, setPage, activePage, onPortal, menuOpen, setMenu
     }
   }[currentLang];
   useEffect(() => {
+    let debounceTimer = null;
     const apply = () => translatePublicDom(currentLang);
     apply();
-    const observer = new MutationObserver(() => requestAnimationFrame(apply));
-    observer.observe(document.body, { childList: true, subtree: true, characterData: true });
-    return () => observer.disconnect();
+    const observer = new MutationObserver(() => {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(apply, 600);
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+    return () => { observer.disconnect(); clearTimeout(debounceTimer); };
   }, [currentLang]);
 
   useEffect(() => {
@@ -780,7 +431,7 @@ export function PubNav({ brand, setPage, activePage, onPortal, menuOpen, setMenu
                       fontSize: 22, fontWeight: isActive ? 800 : 500,
                       color: isActive ? '#C8A96E' : 'rgba(255,255,255,0.85)',
                       transition: 'color 0.2s',
-                      fontFamily: '"Outfit", sans-serif',
+                      fontFamily: '"DM Sans", sans-serif',
                     }}>
                       {l.n}
                       {l.badge && (
@@ -967,6 +618,19 @@ export function Footer({ brand, setPage, onPortal, navigate }) {
             </div>
           )}
           <button onClick={() => navigate('/login')} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.1)', cursor: 'pointer', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.1em' }}>Management Portal</button>
+        </div>
+        <div style={{ marginTop: 24, textAlign: 'center' }}>
+          <a
+            href="https://stormglide.io"
+            target="_blank"
+            rel="noopener noreferrer"
+            data-no-public-translate
+            style={{ fontSize: 11, color: 'rgba(255,255,255,0.18)', textDecoration: 'none', letterSpacing: '0.05em', transition: 'color 0.2s' }}
+            onMouseOver={e => e.currentTarget.style.color = 'rgba(255,255,255,0.45)'}
+            onMouseOut={e => e.currentTarget.style.color = 'rgba(255,255,255,0.18)'}
+          >
+            Built & managed by Stormglide.io
+          </a>
         </div>
 
       </div>

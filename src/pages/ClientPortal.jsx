@@ -1200,8 +1200,8 @@ function ContractAgreementModal({ project, user, brand, onClose, onSigned, isMob
               <button onClick={() => setStep(1)} style={{ height: 50, padding: '0 20px', borderRadius: 14, border: '1.5px solid var(--border-color)', background: 'transparent', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Back</button>
               <button
                 onClick={handleSign}
-                disabled={busy || !accepted || (!typedName.trim() && !drawnSig)}
-                style={{ flex: 1, height: 50, borderRadius: 14, border: 'none', background: (busy || !accepted || (!typedName.trim() && !drawnSig)) ? 'var(--border-color)' : '#16A34A', color: '#fff', fontSize: 14, fontWeight: 800, cursor: (busy || !accepted || (!typedName.trim() && !drawnSig)) ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, transition: 'background .2s' }}
+                disabled={busy}
+                style={{ flex: 1, height: 50, borderRadius: 14, border: 'none', background: (busy || !accepted || (!typedName.trim() && !drawnSig)) ? 'var(--border-color)' : '#16A34A', color: '#fff', fontSize: 14, fontWeight: 800, cursor: busy ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, transition: 'background .2s' }}
               >
                 {busy ? <><Loader2 size={15} style={{ animation: 'spin 1s linear infinite' }} /> Signing…</> : <><CheckCircle2 size={16} /> Sign & Accept Contract</>}
               </button>

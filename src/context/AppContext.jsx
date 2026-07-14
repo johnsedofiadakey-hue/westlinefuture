@@ -260,9 +260,43 @@ export const AppProvider = ({ children }) => {
         snap => applyAssignedSnapshot('manager', snap),
         err => devWarn("Managed project sync error:", err)
       );
+      // projectManagerId only ever holds the FIRST entry of projectManagerIds
+      // (multi-PM support, CLAUDE.md #50) — a staff member added as the 2nd+
+      // project manager never matched the query above. Query the array too.
+      const unsubManagedProjectsMulti = onSnapshot(
+        query(collection(db, 'projects'), where('projectManagerIds', 'array-contains', staffUid)),
+        snap => applyAssignedSnapshot('managerIds', snap),
+        err => devWarn("Managed projects (multi-PM) sync error:", err)
+      );
+      // Legacy single-assignee field — AdminPortal.jsx's staff filter already
+      // checks assignedTo, but nothing fetched projects matching it into `clients`.
+      const unsubAssignedTo = onSnapshot(
+        query(collection(db, 'projects'), where('assignedTo', '==', staffUid)),
+        snap => applyAssignedSnapshot('assignedTo', snap),
+        err => devWarn("assignedTo project sync error:", err)
+      );
+      // Clients granted via the "Assign Clients" modal (assignedClients on the
+      // staff user doc, CLAUDE.md staff access-control docs) — was never queried
+      // here, so staff assigned only this way saw an empty project list. Chunked
+      // for Firestore's 'in' query limit (10 values per query).
+      const assignedClientIds = Array.from(new Set(user.assignedClients || [])).filter(Boolean);
+      const clientChunks = [];
+      for (let i = 0; i < assignedClientIds.length; i += 10) {
+        clientChunks.push(assignedClientIds.slice(i, i + 10));
+      }
+      const unsubAssignedClientProjects = clientChunks.map((chunk, idx) =>
+        onSnapshot(
+          query(collection(db, 'projects'), where('clientId', 'in', chunk)),
+          snap => applyAssignedSnapshot(`assignedClient${idx}`, snap),
+          err => devWarn("Assigned-client project sync error:", err)
+        )
+      );
       unsubProject = () => {
         unsubAssignedStaff();
         unsubManagedProjects();
+        unsubManagedProjectsMulti();
+        unsubAssignedTo();
+        unsubAssignedClientProjects.forEach(fn => fn());
       };
       publishAssignedProjects();
     } else if (isWorker) {

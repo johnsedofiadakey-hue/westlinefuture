@@ -22,6 +22,7 @@ export default function AdminClients({ dbClients, createClient, updateClient, de
   const [loading, setLoading] = useState(false);
   const [formErrors, setFormErrors] = useState({});
   const [directoryTab, setDirectoryTab] = useState('active');
+  const [sortBy, setSortBy] = useState('default');
 
   const PHONE_RE = /^\+?[\d\s\-().]{7,20}$/;
 
@@ -129,6 +130,21 @@ export default function AdminClients({ dbClients, createClient, updateClient, de
   const completedClients = allClients.filter(c => getClientStatus(c));
   const sourceList = directoryTab === 'completed' ? completedClients : activeClients;
 
+  // "Date added" for portal accounts is the user doc's createdAt; project-only
+  // clients (no portal account) fall back to their earliest project's createdAt.
+  const tsToMs = (v) => (v?.seconds ? v.seconds * 1000 : Date.parse(v || '') || 0);
+  const clientAddedMs = (c) => {
+    const own = tsToMs(c.createdAt);
+    if (own) return own;
+    const projectDates = projects
+      .filter(p => p.clientId === c.id || p.clientIds?.includes(c.id))
+      .map(p => tsToMs(p.createdAt))
+      .filter(Boolean);
+    return projectDates.length ? Math.min(...projectDates) : 0;
+  };
+  const clientProjectCount = (c) =>
+    projects.filter(p => p.clientId === c.id || p.clientIds?.includes(c.id)).length;
+
   const filtered = sourceList.filter(c =>
     c.name?.toLowerCase().includes(search.toLowerCase()) ||
     c.company?.toLowerCase().includes(search.toLowerCase()) ||
@@ -136,6 +152,13 @@ export default function AdminClients({ dbClients, createClient, updateClient, de
     c.email?.toLowerCase().includes(search.toLowerCase()) ||
     c.phone?.replace(/\D/g, '').includes(search.replace(/\D/g, ''))
   );
+  // filter() returns a fresh array, so sorting in place cannot mutate sourceList.
+  // 'default' applies no sort — preserves the pre-existing directory order.
+  if (sortBy === 'name-asc') filtered.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+  else if (sortBy === 'name-desc') filtered.sort((a, b) => (b.name || '').localeCompare(a.name || ''));
+  else if (sortBy === 'newest') filtered.sort((a, b) => clientAddedMs(b) - clientAddedMs(a));
+  else if (sortBy === 'oldest') filtered.sort((a, b) => clientAddedMs(a) - clientAddedMs(b));
+  else if (sortBy === 'projects') filtered.sort((a, b) => clientProjectCount(b) - clientProjectCount(a));
 
   return (
     <div className="p-fade admin-clients-container" style={{ padding: '20px 0' }}>
@@ -181,8 +204,8 @@ export default function AdminClients({ dbClients, createClient, updateClient, de
         ))}
       </div>
 
-      <div style={{ marginBottom: 24, display: 'flex', gap: 16 }}>
-         <div style={{ flex: 1, position: 'relative' }}>
+      <div style={{ marginBottom: 24, display: 'flex', gap: isMobile ? 10 : 16, flexWrap: isMobile ? 'wrap' : 'nowrap' }}>
+         <div style={{ flex: 1, position: 'relative', minWidth: isMobile ? '100%' : 0 }}>
             <Search style={{ position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)', color: `var(--text-secondary)` }} size={18} />
             <input
                className="p-inp"
@@ -192,6 +215,18 @@ export default function AdminClients({ dbClients, createClient, updateClient, de
                onChange={e => setSearch(e.target.value)}
             />
          </div>
+         <select
+           value={sortBy}
+           onChange={e => setSortBy(e.target.value)}
+           style={{ height: 52, padding: '0 20px', borderRadius: 14, border: '1px solid var(--border-color)', background: '#fff', fontSize: 14, fontWeight: 700 }}
+         >
+           <option value="default">Sort: Default</option>
+           <option value="newest">Newest First</option>
+           <option value="oldest">Oldest First</option>
+           <option value="name-asc">Name A–Z</option>
+           <option value="name-desc">Name Z–A</option>
+           <option value="projects">Most Projects</option>
+         </select>
          <select
            value={props.currency}
            onChange={e => props.setCurrency(e.target.value)}

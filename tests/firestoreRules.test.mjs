@@ -113,3 +113,16 @@ test('storage staff/worker checks fall back to the users doc role for claim-less
   assert.match(storageRules, /userDocRole\(\) == "staff"/);
   assert.match(storageRules, /userDocRole\(\) == "worker"/);
 });
+
+test('a worker/staff account can self-clear requiresPasswordReset after changing their Auth password', () => {
+  // ForcePasswordChange (src/App.jsx) updates Firebase Auth via updatePassword(),
+  // then writes requiresPasswordReset:false to the caller's own users/{uid} doc.
+  // Only role:'staff'/'admin' passed isAdmin() and could write this field —
+  // workers got permission-denied on this specific write, leaving the flag
+  // stuck true and re-triggering the forced password screen every login even
+  // though their real password had already changed.
+  assert.match(
+    rules,
+    /affectedKeys\(\)\.hasOnly\(\[\s*'name', 'address', 'preferredPaymentMethod', 'onboarded', 'updatedAt', 'requiresPasswordReset'\s*\]\)/,
+  );
+});

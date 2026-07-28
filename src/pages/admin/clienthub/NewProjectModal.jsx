@@ -59,7 +59,14 @@ export function NewProjectModal({ client, teamMembers = [], onClose, onCreate })
   const submit = async () => {
     if (!form.title.trim()) return;
     setSaving(true);
-    const payload = { ...form, clientId: client.id };
+    const payload = {
+      ...form,
+      clientId: client.id,
+      clientName: client.name || '',
+      clientPhone: client.phone || '',
+      clientEmail: client.email || '',
+      clientCompany: client.company || '',
+    };
     if (showBreakdown && bdTotal > 0) {
       payload.breakdown = {
         product:      { enabled: bd.product.enabled,      amount: Number(bd.product.amount)      || 0 },

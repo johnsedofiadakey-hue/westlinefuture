@@ -151,11 +151,17 @@ service cloud.firestore {
     match /users/{userId} {
       allow get: if isAdmin() || isClient(userId);
       allow list: if isAdmin();
-      // Clients can update their own non-sensitive profile fields only
+      // Clients (and workers/staff self-updating, since isClient() here just
+      // means "is this account's own uid") can update their own non-sensitive
+      // profile fields only. requiresPasswordReset included so a worker/staff
+      // account can clear the forced-password-change flag on their own doc
+      // after ForcePasswordChange updates their Auth password — previously
+      // missing, so that write was denied and the flag never cleared,
+      // re-triggering the forced password screen on every subsequent login.
       allow update: if isAdmin() || (
         isClient(userId) &&
         request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-          'name', 'address', 'preferredPaymentMethod', 'onboarded', 'updatedAt'
+          'name', 'address', 'preferredPaymentMethod', 'onboarded', 'updatedAt', 'requiresPasswordReset'
         ])
       );
       allow create, delete: if isAdmin();

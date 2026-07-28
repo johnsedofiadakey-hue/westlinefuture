@@ -899,6 +899,10 @@ export default function ClientHub({ clientId, dbClients = [], onBack, ...props }
   const [projects, setProjects] = useState([]);
   const [loadingProjects, setLoadingProjects] = useState(true);
   const [selectedId, setSelectedId] = useState(null);
+  // Newest project stays pinned to the top by default — admin can switch to
+  // action-required-first or oldest-first, and hide completed projects.
+  const [projectSortMode, setProjectSortMode] = useState('newest');
+  const [projectFilterMode, setProjectFilterMode] = useState('all');
   const [showNewModal, setShowNewModal] = useState(false);
   const [showAdvanceModal, setShowAdvanceModal] = useState(false);
   const [activeTab, setActiveTab] = useState('overview');
@@ -1148,7 +1152,32 @@ export default function ClientHub({ clientId, dbClients = [], onBack, ...props }
             <div style={{ fontSize: 13, fontWeight: 800, color: selectedId === 'MESSAGES' ? ac : 'var(--text-secondary)' }}>Client Messages</div>
           </button>
 
-          <div style={{ fontSize: 9, fontWeight: 800, color: `var(--text-secondary)`, textTransform: 'uppercase', letterSpacing: '.1em', paddingLeft: 2, paddingBottom: 4 }}>Projects</div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingLeft: 2, paddingBottom: 6 }}>
+            <div style={{ fontSize: 9, fontWeight: 800, color: `var(--text-secondary)`, textTransform: 'uppercase', letterSpacing: '.1em' }}>Projects</div>
+          </div>
+
+          {projects.length > 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10 }}>
+              <select
+                value={projectSortMode}
+                onChange={e => setProjectSortMode(e.target.value)}
+                style={{ width: '100%', fontSize: 11, fontWeight: 700, padding: '7px 8px', borderRadius: 9, border: '1px solid var(--border-color)', background: '#fff', color: 'var(--accent-secondary)', cursor: 'pointer' }}
+              >
+                <option value="newest">Sort: Newest First</option>
+                <option value="oldest">Sort: Oldest First</option>
+                <option value="action">Sort: Needs Action First</option>
+              </select>
+              <select
+                value={projectFilterMode}
+                onChange={e => setProjectFilterMode(e.target.value)}
+                style={{ width: '100%', fontSize: 11, fontWeight: 700, padding: '7px 8px', borderRadius: 9, border: '1px solid var(--border-color)', background: '#fff', color: 'var(--accent-secondary)', cursor: 'pointer' }}
+              >
+                <option value="all">Show: All Projects</option>
+                <option value="active">Show: Active Only</option>
+                <option value="completed">Show: Completed Only</option>
+              </select>
+            </div>
+          )}
 
           {loadingProjects ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -1161,29 +1190,53 @@ export default function ClientHub({ clientId, dbClients = [], onBack, ...props }
               <button onClick={() => setShowNewModal(true)} style={{ marginTop: 8, fontSize: 11, fontWeight: 700, color: ac, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>+ Create first project</button>
             </div>
           ) : (() => {
-            const sortedProjects = [...projects].sort((a, b) => {
-              const aHasUnpaid = (props.invoices || []).some(i => i.projectId === a.id && ['Sent', 'Overdue'].includes(i.status));
-              const bHasUnpaid = (props.invoices || []).some(i => i.projectId === b.id && ['Sent', 'Overdue'].includes(i.status));
-              if (aHasUnpaid && !bHasUnpaid) return -1;
-              if (!aHasUnpaid && bHasUnpaid) return 1;
-              return 0;
+            const projectAddedMs = (p) => {
+              const raw = p.createdAt;
+              if (!raw) return 0;
+              const d = raw?.toDate ? raw.toDate() : new Date(raw);
+              return isNaN(d.getTime()) ? 0 : d.getTime();
+            };
+            const hasUnpaidInvoice = (p) => (props.invoices || []).some(i => i.projectId === p.id && ['Sent', 'Overdue'].includes(i.status));
+
+            const filteredProjects = projects.filter(p => {
+              if (projectFilterMode === 'active') return p.status !== 'Completed';
+              if (projectFilterMode === 'completed') return p.status === 'Completed';
+              return true;
+            });
+
+            const sortedProjects = [...filteredProjects].sort((a, b) => {
+              if (projectSortMode === 'action') {
+                const aHasUnpaid = hasUnpaidInvoice(a);
+                const bHasUnpaid = hasUnpaidInvoice(b);
+                if (aHasUnpaid !== bHasUnpaid) return aHasUnpaid ? -1 : 1;
+                return projectAddedMs(b) - projectAddedMs(a);
+              }
+              if (projectSortMode === 'oldest') return projectAddedMs(a) - projectAddedMs(b);
+              // 'newest' (default) — the most recently added project is always pinned to the top.
+              return projectAddedMs(b) - projectAddedMs(a);
             });
 
             return sortedProjects.map(p => {
               const stg = CLIENT_PROJECT_STAGES.find(s => s.id === p.stageId);
               const isActive = p.id === selectedId;
-              const hasAction = (props.invoices || []).some(i => i.projectId === p.id && ['Sent', 'Overdue'].includes(i.status));
+              const hasAction = hasUnpaidInvoice(p);
+              const addedMs = projectAddedMs(p);
+              const budgetVal = Number(p.budget || p.projectTotal || 0);
 
               return (
                 <button key={p.id} onClick={() => { setSelectedId(p.id); setActiveTab('overview'); }}
                   style={{ width: '100%', textAlign: 'left', padding: '14px 16px', borderRadius: 14, border: `1.5px solid ${isActive ? ac : hasAction ? '#FCA5A5' : 'transparent'}`, background: isActive ? `${ac}10` : hasAction ? '#FEF2F2' : `var(--bg-secondary)`, cursor: 'pointer', transition: 'all .2s', position: 'relative', overflow: 'hidden' }}>
-                  
+
                   {hasAction && <div style={{ position: 'absolute', top: 14, right: 14, width: 8, height: 8, borderRadius: '50%', background: '#EF4444', boxShadow: '0 0 8px rgba(239,68,68,0.6)' }} />}
-                  
+
                   <div style={{ fontSize: 13, fontWeight: 800, color: hasAction ? '#991B1B' : `var(--accent-secondary)`, marginBottom: 4, paddingRight: 16 }}>{p.project || p.title}</div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
                     <span style={{ fontSize: 9, fontWeight: 800, color: stg?.color || `var(--text-secondary)`, background: `${stg?.color || `var(--text-secondary)`}18`, padding: '3px 8px', borderRadius: 20 }}>{stg?.short || 'Stage 1'}</span>
                     <span style={{ fontSize: 9, color: hasAction ? '#B91C1C' : `var(--text-secondary)` }}>{p.status === 'Completed' ? '✓ Done' : hasAction ? 'Action Required' : 'Active'}</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, fontSize: 9, color: hasAction ? '#B91C1C' : 'var(--text-secondary)' }}>
+                    <span>{addedMs ? `Added ${new Date(addedMs).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}` : 'Date unknown'}</span>
+                    {budgetVal > 0 && <span>· GH₵{budgetVal.toLocaleString()}</span>}
                   </div>
                   <div style={{ height: 4, background: hasAction ? '#FECACA' : `var(--border-color)`, borderRadius: 2, overflow: 'hidden' }}>
                     <div style={{ height: '100%', width: `${stg?.pct || 5}%`, background: hasAction ? '#EF4444' : (stg?.color || ac), borderRadius: 2 }} />

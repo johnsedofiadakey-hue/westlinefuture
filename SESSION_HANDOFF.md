@@ -1,6 +1,6 @@
 # Session Handoff — 2026-07-14
 
-Narrative summary of everything done in this working session, written for the next agent (human or AI) to pick up context fast. This complements — does not replace — the terse "THINGS THAT HAVE BEEN FIXED" table in `CLAUDE.md` (rows #45–#64 cover this session; cross-referenced below). **Read `CLAUDE.md` first** — it has the hard rules (protected files, "fix only what's asked") and the full fix history. This file explains the *why* and *how* behind the recent stretch of work in more detail, plus what's still open.
+Narrative summary of everything done in this working session, written for the next agent (human or AI) to pick up context fast. This complements — does not replace — the terse "THINGS THAT HAVE BEEN FIXED" table in `CLAUDE.md` (rows #45–#64 cover the main body of this session; a separate agent's security-audit batch landed as #65–#71 in between; row #72 is the newest entry, added below). **Read `CLAUDE.md` first** — it has the hard rules (protected files, "fix only what's asked") and the full fix history. This file explains the *why* and *how* behind the recent stretch of work in more detail, plus what's still open.
 
 ---
 
@@ -121,3 +121,17 @@ Full read-only audit performed, then fixes shipped in phases (CLAUDE.md #65–#6
 6. **Post-deploy verification asks for the owner**: (a) log in as admin and reset a test staff password (confirms allow-list didn't lock the real admin out — role fallback should cover any email, but confirm); (b) have one staff member log in, open a client, send a chat attachment (confirms storage rules fallback); (c) have a worker upload a field photo.
 
 Audit findings NOT yet acted on (by explicit scope choice): full firestore.rules staff-permission lockdown; admin realtime listeners are unbounded (fine at current scale); persistent translation cache; error monitoring (Sentry or similar); reCAPTCHA Enterprise support in phone login; bundle code-splitting; ClientPortal.jsx monolith split.
+
+---
+
+# Session addendum — per-client project list sort/filter (CLAUDE.md #74)
+
+User initially asked for "filter/sort by date added, show all information about the project" — first investigation targeted the wrong screen (Project Board/Kanban). User corrected: they meant the **per-client project list inside ClientHub** (the left sidebar shown after clicking "Open" on a client with multiple projects).
+
+- That sidebar previously had one hardcoded sort (unpaid-invoice-first, no user control) and each project card showed only title/stage/status/progress-bar.
+- Added: a Sort `<select>` (Newest First — new default / Oldest First / Needs Action First) and a Show `<select>` (All / Active Only / Completed Only), both above the project list in `ClientHub.jsx`.
+- User explicitly wants the newest project **automatically** pinned to the top — this is the new default (`projectSortMode = 'newest'`), not opt-in. Sort is fully reactive off `p.createdAt`, so any newly created project (serverTimestamp) naturally lands at the top with no special-casing.
+- Each card now also shows "Added {date}" and budget/value when set.
+- `createdAt` is mixed Firestore-Timestamp/ISO-string in this data model (depends on whether the project was backdated at creation) — reused the existing `.toDate ? .toDate() : new Date(...)` fallback pattern already present elsewhere in `ClientHub.jsx`, did not invent a new date-handling convention.
+
+**Numbering note for future sessions**: this row was originally drafted as CLAUDE.md #72, colliding with rows #65–73 added by later turns in the same long conversation that weren't visible when this row was first drafted (context compaction). Worse, only the CLAUDE.md *row* for this feature got committed at the time — the actual code (`ClientHub.jsx`) was built and deployed to production but never `git add`/`git commit`ed, discovered and fixed several turns later when the user asked "are you sure nothing broke" and a `git status` check turned up the gap. Renumbered to #74. **Before adding a new CLAUDE.md fix row, always `grep -n "^| [0-9]" CLAUDE.md | tail -5` to check the actual current highest number on disk** — don't trust a remembered number from earlier in a long conversation. **After any `firebase deploy`, always run `git status` before ending the turn** — deploying reads whatever is on disk, not what's committed, so it is fully possible to ship code to production that never made it into git.

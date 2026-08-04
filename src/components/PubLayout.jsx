@@ -190,6 +190,19 @@ export function PubNav({ brand, setPage, activePage, onPortal, menuOpen, setMenu
   const navigateToPublicPage = (pageId) => {
     setMenuOpen(false);
 
+    // Products always opens on www.westlinefuture.com specifically, regardless
+    // of which mirrored domain (westlinedecor.com, .web.app) the visitor is
+    // currently on. Guarded against localhost so local dev isn't redirected
+    // to the live site, and against the target host itself so visitors
+    // already there get an instant SPA transition, not a full reload.
+    if (pageId === 'products' && typeof window !== 'undefined') {
+      const host = window.location.hostname;
+      if (!/^(localhost|127\.0\.0\.1)$/.test(host) && host !== 'www.westlinefuture.com') {
+        window.location.href = 'https://www.westlinefuture.com/';
+        return;
+      }
+    }
+
     const routeByPage = {
       home: '/',
       products: '/products',
@@ -511,6 +524,16 @@ export function Footer({ brand, setPage, onPortal, navigate }) {
     || 'Global precision meets local delivery. Premium interior solutions for the world\'s most ambitious projects.';
 
   const navigateToPublicPage = (pageId) => {
+    // Products always opens on www.westlinefuture.com specifically — see the
+    // header nav's navigateToPublicPage for the full rationale, kept in sync.
+    if (pageId === 'products' && typeof window !== 'undefined') {
+      const host = window.location.hostname;
+      if (!/^(localhost|127\.0\.0\.1)$/.test(host) && host !== 'www.westlinefuture.com') {
+        window.location.href = 'https://www.westlinefuture.com/';
+        return;
+      }
+    }
+
     const routeByPage = {
       home: '/',
       products: '/products',

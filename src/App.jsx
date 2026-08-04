@@ -1996,7 +1996,16 @@ export default function App() {
   const updateClient = async (id, data) => {
     if (!db) return;
     try {
-      await updateDoc(doc(db, 'users', id), data);
+      // "Project-only" clients (a project exists but no users/{id} doc was ever
+      // created for them — see AdminClients.jsx's projectOnlyClients merge)
+      // have no document for updateDoc to update, so editing their name from
+      // the Client Directory silently failed with "No document to update."
+      // setDoc + merge both updates real client docs (unchanged behavior) and
+      // creates the missing doc for project-only clients, promoting them into
+      // a real portal-eligible client record. role:'client' is always applied
+      // here since this path is only ever reached from the Client Directory's
+      // own client-edit UI, never staff/worker editing.
+      await setDoc(doc(db, 'users', id), { role: 'client', ...data, updatedAt: serverTimestamp() }, { merge: true });
       notify('success', 'Client profile updated');
       logAction(null, 'CRM', `Updated Client: ${id}`);
     } catch (e) {

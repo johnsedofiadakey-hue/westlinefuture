@@ -190,17 +190,16 @@ export function PubNav({ brand, setPage, activePage, onPortal, menuOpen, setMenu
   const navigateToPublicPage = (pageId) => {
     setMenuOpen(false);
 
-    // Products always opens on www.westlinefuture.com specifically, regardless
-    // of which mirrored domain (westlinedecor.com, .web.app) the visitor is
-    // currently on. Guarded against localhost so local dev isn't redirected
-    // to the live site, and against the target host itself so visitors
-    // already there get an instant SPA transition, not a full reload.
+    // Products opens the client's real storefront (www.westlinefuture.com,
+    // a separate site run by a different team) in a NEW TAB rather than
+    // navigating away — it cannot be embedded in-page (their site blocks
+    // iframing, confirmed by testing: the frame renders blank), and a full
+    // redirect would take visitors out of this site entirely with no way
+    // back except browser Back. A new tab leaves this site untouched in its
+    // own tab — Home and every other nav item stay right where they are.
     if (pageId === 'products' && typeof window !== 'undefined') {
-      const host = window.location.hostname;
-      if (!/^(localhost|127\.0\.0\.1)$/.test(host) && host !== 'www.westlinefuture.com') {
-        window.location.href = 'https://www.westlinefuture.com/';
-        return;
-      }
+      window.open('https://www.westlinefuture.com/', '_blank', 'noopener,noreferrer');
+      return;
     }
 
     const routeByPage = {
@@ -524,14 +523,11 @@ export function Footer({ brand, setPage, onPortal, navigate }) {
     || 'Global precision meets local delivery. Premium interior solutions for the world\'s most ambitious projects.';
 
   const navigateToPublicPage = (pageId) => {
-    // Products always opens on www.westlinefuture.com specifically — see the
+    // Products opens the client's real storefront in a new tab — see the
     // header nav's navigateToPublicPage for the full rationale, kept in sync.
     if (pageId === 'products' && typeof window !== 'undefined') {
-      const host = window.location.hostname;
-      if (!/^(localhost|127\.0\.0\.1)$/.test(host) && host !== 'www.westlinefuture.com') {
-        window.location.href = 'https://www.westlinefuture.com/';
-        return;
-      }
+      window.open('https://www.westlinefuture.com/', '_blank', 'noopener,noreferrer');
+      return;
     }
 
     const routeByPage = {

@@ -424,18 +424,18 @@ export const AppProvider = ({ children }) => {
     const unsubNotes = listenMerged('notes', setNotes, 'Note');
     const unsubMedia = listenMerged('media', setMedia, 'Media');
 
-    const unsubWorkOrders = isWorker ? (() => {}) : onSnapshot(user.role === 'admin'
+    const unsubWorkOrders = isWorker ? (() => {}) : onSnapshot(isAdminOrStaff
       ? query(collection(db, 'work_orders'), orderBy('createdAt', 'desc'), limit(workOrderLimit))
       : query(collection(db, 'work_orders'), where('clientId', '==', user.id), limit(workOrderLimit)), (snap) => {
       const all = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      setWorkOrders(user.role === 'admin' ? all : all.sort((a,b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0)));
+      setWorkOrders(isAdminOrStaff ? all : all.sort((a,b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0)));
     }, (err) => devWarn("Work Order Sync Error:", err));
 
-    const unsubContainers = isWorker ? (() => {}) : onSnapshot(user.role === 'admin' ? collection(db, 'containers') : query(collection(db, 'containers'), where('clientId', '==', user.id)), (snap) => {
+    const unsubContainers = isWorker ? (() => {}) : onSnapshot(isAdminOrStaff ? collection(db, 'containers') : query(collection(db, 'containers'), where('clientId', '==', user.id)), (snap) => {
       setContainers(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     }, (err) => devWarn("Container Sync Error:", err));
 
-    const unsubShipments = isWorker ? (() => {}) : onSnapshot(user.role === 'admin' ? collection(db, 'shipments') : query(collection(db, 'shipments'), where('clientId', '==', user.id)), (snap) => {
+    const unsubShipments = isWorker ? (() => {}) : onSnapshot(isAdminOrStaff ? collection(db, 'shipments') : query(collection(db, 'shipments'), where('clientId', '==', user.id)), (snap) => {
       setShipments(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     }, (err) => devWarn("Shipment Sync Error:", err));
 

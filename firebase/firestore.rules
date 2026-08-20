@@ -150,7 +150,12 @@ service cloud.firestore {
     // --- USER PROFILES ---
     match /users/{userId} {
       allow get: if isAdmin() || isClient(userId);
-      allow list: if isAdmin();
+      // Matches isAdminOrStaff() used everywhere else (e.g. /projects) — plain
+      // isAdmin() excluded "project manager"/"finance manager"/"operations
+      // manager"/"project_manager" roles from listing /users at all, so their
+      // teamMembers/dbClients queries were silently permission-denied and
+      // those staff saw no assigned clients. See CLAUDE.md fix entry.
+      allow list: if isAdminOrStaff();
       // Clients (and workers/staff self-updating, since isClient() here just
       // means "is this account's own uid") can update their own non-sensitive
       // profile fields only. requiresPasswordReset included so a worker/staff

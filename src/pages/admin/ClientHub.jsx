@@ -4,7 +4,7 @@ import {
   User, DollarSign, Phone, Calendar, Loader2,
   Users, UserCheck, ChevronRight, CheckCircle2, RefreshCw, PenTool,
   FileText, Upload, ExternalLink, Trash2, ShieldCheck, X, Camera, Truck, Award,
-  Video, Clock, CheckCheck
+  Video, Clock, CheckCheck, Smartphone, Monitor
 } from 'lucide-react';
 import { PAv, PSBadge } from '../../components/Shared';
 import { CLIENT_PROJECT_STAGES, PROJECT_TYPES, GLASS_CATALOG_DATA } from '../../data';
@@ -2287,9 +2287,7 @@ export default function ClientHub({ clientId, dbClients = [], onBack, ...props }
         <ClientPreviewModal
           project={selected}
           client={client}
-          invoices={props.invoices || []}
-          renderingPackages={props.renderingPackages || []}
-          addOns={props.addOns || []}
+          projects={projects}
           brand={brand}
           onClose={() => setShowClientPreview(false)}
         />
@@ -2391,105 +2389,145 @@ export default function ClientHub({ clientId, dbClients = [], onBack, ...props }
   );
 }
 
-// ─── Client Preview Modal — shows admin exactly what the client sees ─────────
-function ClientPreviewModal({ project, client, invoices, renderingPackages, addOns, brand, onClose }) {
+// ─── Client Preview Modal — the REAL client portal, read-only, in a device frame ─
+// Loads the live ClientPortal (via the /portal-preview route) inside an iframe so
+// the PM sees byte-for-byte what the client sees. Phone frame by default since most
+// clients are on mobile; a Desktop toggle is available. All actions are blocked
+// inside the portal itself (previewMode) — the iframe cannot mutate anything.
+function ClientPreviewModal({ project, client, projects = [], brand, onClose }) {
   const ac = brand?.color || AC;
-  const projectInvoices = invoices.filter(i => i.projectId === project.id || i.parentId === project.id);
-  const projectPackages = renderingPackages.filter(pkg => pkg.projectId === project.id);
-  const projectAddOns = addOns.filter(a => a.projectId === project.id);
-  const isPaid = (s) => ['paid', 'paid in full'].includes(String(s || '').toLowerCase());
+  const [device, setDevice] = useState('phone'); // 'phone' | 'desktop'
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [scale, setScale] = useState(1);
 
-  // Replicate KickoffGate / Next Action logic
-  const renderingInv = projectInvoices.find(i =>
-    i.id === project.renderingFeeInvoiceId ||
-    ['rendering', 'design', 'rendering fee'].includes((i.type || '').toLowerCase())
+  const clientId = client?.id || project?.clientId || '';
+  const previewUrl = `/portal-preview?clientId=${encodeURIComponent(clientId)}&projectId=${encodeURIComponent(project?.id || '')}`;
+
+  // Phone frame is a fixed 390×800 device; scale it down to fit shorter screens.
+  const PHONE_W = 390, PHONE_H = 800, BEZEL = 12;
+  useEffect(() => {
+    if (device !== 'phone') { setScale(1); return; }
+    const recompute = () => {
+      const availH = window.innerHeight - 150; // header + outer padding
+      const availW = window.innerWidth - 60;
+      const frameH = PHONE_H + BEZEL * 2;
+      const frameW = PHONE_W + BEZEL * 2;
+      const s = Math.min(1, availH / frameH, availW / frameW);
+      setScale(Math.max(0.45, s));
+    };
+    recompute();
+    window.addEventListener('resize', recompute);
+    return () => window.removeEventListener('resize', recompute);
+  }, [device]);
+
+  useEffect(() => { setLoading(true); }, [device, refreshKey]);
+
+  const scaledFrameH = device === 'phone' ? (PHONE_H + BEZEL * 2) * scale : undefined;
+  const scaledFrameW = device === 'phone' ? (PHONE_W + BEZEL * 2) * scale : undefined;
+
+  const toggleBtn = (val, Icon, label) => (
+    <button
+      onClick={() => setDevice(val)}
+      style={{
+        display: 'flex', alignItems: 'center', gap: 6, height: 32, padding: '0 12px',
+        borderRadius: 9, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 700,
+        background: device === val ? '#fff' : 'transparent',
+        color: device === val ? 'var(--accent-secondary)' : 'rgba(255,255,255,0.75)',
+      }}
+    >
+      <Icon size={14} /> {label}
+    </button>
   );
-  const renderingPaid = !!project.renderingFeePaid || (renderingInv && isPaid(renderingInv.status));
-  const requiresRendering = project.kickoffMode === 'rendering-first';
-  const contractSigned = !!project.contractAccepted;
-  const kickoffActive = (requiresRendering && !renderingPaid) || (project.quoteApproved === true && !contractSigned);
-
-  const currentStage = CLIENT_PROJECT_STAGES.find(s => s.id === project.stageId);
 
   return (
     <div style={{
-      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)',
+      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.66)',
       backdropFilter: 'blur(6px)', zIndex: 9999,
-      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20
+      display: 'flex', flexDirection: 'column', alignItems: 'center',
+      padding: '18px 20px 24px',
     }} onClick={onClose}>
+      {/* Header bar */}
       <div onClick={e => e.stopPropagation()} style={{
-        background: '#F8F6F3', borderRadius: 24, maxWidth: 480, width: '100%',
-        maxHeight: '90vh', overflow: 'hidden', display: 'flex', flexDirection: 'column',
-        boxShadow: '0 24px 80px rgba(0,0,0,0.4)'
+        width: '100%', maxWidth: 1240, background: 'var(--accent-secondary)', color: '#fff',
+        borderRadius: 16, padding: '12px 16px', display: 'flex', alignItems: 'center',
+        justifyContent: 'space-between', gap: 12, boxShadow: '0 12px 40px rgba(0,0,0,0.3)', flexWrap: 'wrap',
       }}>
-        {/* Header */}
-        <div style={{ padding: '20px 24px', background: `var(--accent-secondary)`, color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div>
-            <div style={{ fontSize: 10, fontWeight: 800, opacity: 0.7, textTransform: 'uppercase', letterSpacing: '.1em', marginBottom: 4 }}>👁 Client View Preview</div>
-            <div style={{ fontSize: 15, fontWeight: 900 }}>{client?.name} · {project.title}</div>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: 10, fontWeight: 800, opacity: 0.65, textTransform: 'uppercase', letterSpacing: '.12em' }}>👁 Read-only client preview</div>
+          <div style={{ fontSize: 14, fontWeight: 900, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{client?.name || 'Client'} · {project?.title || 'Project'}</div>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 2, background: 'rgba(0,0,0,0.22)', borderRadius: 11, padding: 3 }}>
+            {toggleBtn('phone', Smartphone, 'Phone')}
+            {toggleBtn('desktop', Monitor, 'Desktop')}
           </div>
-          <button onClick={onClose} style={{ width: 32, height: 32, borderRadius: 10, background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <button title="Reload preview" onClick={() => setRefreshKey(k => k + 1)} style={{ width: 34, height: 34, borderRadius: 10, background: 'rgba(255,255,255,0.12)', border: 'none', color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <RefreshCw size={15} />
+          </button>
+          <a title="Open in a new tab" href={previewUrl} target="_blank" rel="noreferrer" style={{ width: 34, height: 34, borderRadius: 10, background: 'rgba(255,255,255,0.12)', border: 'none', color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <ExternalLink size={15} />
+          </a>
+          <button onClick={onClose} style={{ width: 34, height: 34, borderRadius: 10, background: 'rgba(255,255,255,0.12)', border: 'none', color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <X size={16} />
           </button>
         </div>
+      </div>
 
-        {/* Phone-frame body */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: 20, background: '#EDEAE6' }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 12, textAlign: 'center' }}>
-            This is what your client sees right now
-          </div>
-
-          {/* Kickoff Gate Preview */}
-          {kickoffActive ? (
-            <div style={{ background: 'linear-gradient(135deg, var(--accent-secondary), #4A3B32)', borderRadius: 18, padding: '22px 20px', color: '#fff', marginBottom: 14 }}>
-              <div style={{ fontSize: 10, fontWeight: 700, opacity: 0.7, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '.1em' }}>
-                🚦 Kickoff Gate
-              </div>
-              <div style={{ fontSize: 20, fontWeight: 900, marginBottom: 6 }}>
-                {requiresRendering && !renderingPaid ? '3D Rendering Fee' : 'Sign Your Contract'}
-              </div>
-              <div style={{ fontSize: 12, opacity: 0.75, lineHeight: 1.5 }}>
-                {requiresRendering && !renderingPaid
-                  ? `Pay GH₵ ${Number(renderingInv?.amount || project.renderingFee || 0).toLocaleString()} rendering fee to unlock the portal`
-                  : 'Read & sign the project agreement to begin'}
-              </div>
-              <div style={{ marginTop: 14, fontSize: 11, fontWeight: 700, padding: '6px 10px', background: 'rgba(255,255,255,0.15)', borderRadius: 8, display: 'inline-block' }}>
-                Step {requiresRendering && !renderingPaid ? 1 : 2} of {requiresRendering ? 2 : 1}
-              </div>
-            </div>
-          ) : (
-            <>
-              {/* Project Overview Card */}
-              <div style={{ background: '#fff', borderRadius: 18, padding: 18, marginBottom: 14, border: '1px solid var(--border-color)' }}>
-                <div style={{ fontSize: 10, fontWeight: 800, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '.1em', marginBottom: 6 }}>Project Overview</div>
-                <div style={{ fontSize: 17, fontWeight: 900, color: 'var(--accent-secondary)', marginBottom: 4 }}>{project.title}</div>
-                <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 12 }}>
-                  Stage {project.stageId} of {CLIENT_PROJECT_STAGES.length} · {currentStage?.short}
-                </div>
-                {currentStage && (
-                  <div style={{ padding: 10, background: `${currentStage.color}10`, borderRadius: 10, fontSize: 12, color: currentStage.color, fontWeight: 700 }}>
-                    {currentStage.emoji} {currentStage.clientMsg}
+      {/* Device stage */}
+      <div onClick={e => e.stopPropagation()} style={{ flex: 1, minHeight: 0, width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', paddingTop: 18, overflow: 'auto' }}>
+        {device === 'phone' ? (
+          <div style={{ position: 'relative', width: scaledFrameW, height: scaledFrameH, flexShrink: 0 }}>
+            <div style={{
+              position: 'absolute', top: 0, left: 0, width: PHONE_W + BEZEL * 2, height: PHONE_H + BEZEL * 2,
+              transform: `scale(${scale})`, transformOrigin: 'top left',
+              background: '#111', borderRadius: 46, padding: BEZEL,
+              boxShadow: '0 24px 70px rgba(0,0,0,0.5)',
+            }}>
+              {/* Notch */}
+              <div style={{ position: 'absolute', top: BEZEL + 6, left: '50%', transform: 'translateX(-50%)', width: 130, height: 22, background: '#111', borderRadius: 14, zIndex: 3 }} />
+              <div style={{ position: 'relative', width: PHONE_W, height: PHONE_H, borderRadius: 36, overflow: 'hidden', background: '#EDEAE6' }}>
+                {loading && (
+                  <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 10, color: 'var(--text-secondary)', zIndex: 2, background: '#EDEAE6' }}>
+                    <Loader2 size={26} className="lx-spin" style={{ animation: 'spin 1s linear infinite' }} />
+                    <div style={{ fontSize: 12, fontWeight: 700 }}>Loading client view…</div>
                   </div>
                 )}
+                <iframe
+                  key={`phone-${refreshKey}`}
+                  title="Client portal preview"
+                  src={previewUrl}
+                  onLoad={() => setLoading(false)}
+                  style={{ width: PHONE_W, height: PHONE_H, border: 'none', background: '#EDEAE6', display: 'block' }}
+                />
               </div>
-
-              {/* Visible tabs */}
-              <div style={{ background: '#fff', borderRadius: 16, padding: 12, fontSize: 11, color: 'var(--text-secondary)' }}>
-                <div style={{ fontWeight: 800, marginBottom: 8 }}>Available Tabs:</div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                  {['Progress', project.kickoffMode !== 'direct-kickoff' && 'Designs', 'Approvals', project.stageId >= 6 ? 'Photos' : '🔒Photos', 'Payments', 'Add-ons', 'Documents'].filter(Boolean).map(t => (
-                    <span key={t} style={{ padding: '4px 10px', background: 'var(--bg-secondary)', borderRadius: 12, fontSize: 10, fontWeight: 700 }}>{t}</span>
-                  ))}
-                </div>
-              </div>
-            </>
-          )}
-
-          {/* Open real portal link */}
-          <div style={{ marginTop: 16, padding: 14, background: '#fff', borderRadius: 14, fontSize: 11, color: 'var(--text-secondary)', textAlign: 'center' }}>
-            Need the real portal? Visit <a href="/portal" target="_blank" rel="noreferrer" style={{ color: ac, fontWeight: 700 }}>/portal</a> while logged in as this client.
+            </div>
           </div>
-        </div>
+        ) : (
+          <div style={{ width: '100%', maxWidth: 1240, height: '100%', display: 'flex', flexDirection: 'column', background: '#fff', borderRadius: 16, overflow: 'hidden', boxShadow: '0 24px 70px rgba(0,0,0,0.5)' }}>
+            <div style={{ height: 34, background: '#E9E6E1', display: 'flex', alignItems: 'center', gap: 7, padding: '0 14px', flexShrink: 0 }}>
+              <span style={{ width: 11, height: 11, borderRadius: '50%', background: '#FF5F57' }} />
+              <span style={{ width: 11, height: 11, borderRadius: '50%', background: '#FEBC2E' }} />
+              <span style={{ width: 11, height: 11, borderRadius: '50%', background: '#28C840' }} />
+              <div style={{ marginLeft: 12, flex: 1, height: 20, background: '#fff', borderRadius: 6, fontSize: 11, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', padding: '0 10px' }}>portal.westlinedecor.com</div>
+            </div>
+            <div style={{ position: 'relative', flex: 1, minHeight: 0 }}>
+              {loading && (
+                <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 10, color: 'var(--text-secondary)', zIndex: 2, background: '#F8F6F3' }}>
+                  <Loader2 size={26} style={{ animation: 'spin 1s linear infinite' }} />
+                  <div style={{ fontSize: 12, fontWeight: 700 }}>Loading client view…</div>
+                </div>
+              )}
+              <iframe
+                key={`desktop-${refreshKey}`}
+                title="Client portal preview"
+                src={previewUrl}
+                onLoad={() => setLoading(false)}
+                style={{ width: '100%', height: '100%', border: 'none', background: '#F8F6F3', display: 'block' }}
+              />
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

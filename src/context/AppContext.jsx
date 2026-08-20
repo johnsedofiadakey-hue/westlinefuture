@@ -1,11 +1,12 @@
 import { createContext, useState, useEffect, useContext } from 'react';
-import { db, isFirebaseEnabled } from '../lib/firebase';
+import { db, functions, isFirebaseEnabled } from '../lib/firebase';
 import { AuthContext } from './AuthContext';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   collection, query, onSnapshot, getDocs, getDoc, doc,
   orderBy, limit, where, collectionGroup
 } from 'firebase/firestore';
+import { httpsCallable } from 'firebase/functions';
 import { BRAND0, INITIAL_CONTENT, HERO_SLIDES, SERVICES_DATA, PORTFOLIO_DATA, ABOUT_DATA, GLASS_CATALOG_DATA, GLASS_CATALOG_CATEGORIES, CLIENTS_DATA, PROPOSALS_DATA, INVOICES_DATA, BOOKINGS_DATA, TEAM_MEMBERS, normalizeStageId } from '../data';
 
 export const AppContext = createContext();
@@ -128,12 +129,30 @@ export const AppProvider = ({ children }) => {
       return { id: direct.id, uid: authUser.uid, ...direct.data() };
     }
 
-    const q = query(collection(db, 'users'), where('email', '==', email), limit(1));
-    const snap = await getDocs(q);
-    if (!snap.empty) {
-      const uData = snap.docs[0].data();
-      return { id: snap.docs[0].id, uid: authUser.uid, ...uData };
+    // Admin/staff may list users by email; clients may not (list is admin-only),
+    // so guard the query — a permission error just means this is a client session.
+    try {
+      const q = query(collection(db, 'users'), where('email', '==', email), limit(1));
+      const snap = await getDocs(q);
+      if (!snap.empty) {
+        const uData = snap.docs[0].data();
+        return { id: snap.docs[0].id, uid: authUser.uid, ...uData };
+      }
+    } catch (_) { /* not permitted to list — fall through to the client resolver */ }
+
+    // Email-link client session: the client doc is keyed by phone and can't be
+    // read client-side (no phone_number claim), so resolve it server-side. This
+    // also bridges the uid into the client's projects so rules grant access.
+    if (functions) {
+      try {
+        const resolveFn = httpsCallable(functions, 'resolveClientByEmail');
+        const res = await resolveFn({});
+        if (res?.data?.user) {
+          return { ...res.data.user, uid: authUser.uid };
+        }
+      } catch (_) { /* not a registered client */ }
     }
+
     return { id: authUser.uid, uid: authUser.uid, email, role: null, profileMissing: true };
   };
 

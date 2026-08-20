@@ -40,6 +40,55 @@ import { formatDateTime } from './lib/formatTime'; // ✅ PHASE 4: Consistent ti
 const _dev = import.meta.env.DEV;
 const devLog = (...a) => { if (_dev) console.log(...a); };
 const devWarn = (...a) => { if (_dev) console.warn(...a); };
+
+// Read-only client-portal preview host (PM "see what the client sees"). Renders the
+// real ClientPortal in previewMode against a synthetic client. The admin's global
+// `invoices` prop is capped to the most-recent-N across ALL clients, so this project's
+// older invoices can be missing from it — which makes the portal misread payment/stage
+// status. Here we subscribe to THIS project's invoices directly (by projectId + parentId,
+// same pattern the portal uses internally) and pass them in as `invoices` so the gate,
+// roadmap, and next-action status all resolve correctly. Writes stay blocked by
+// previewMode + the no-op prop overrides below.
+function ClientPortalPreview({ client, projectId, commonProps }) {
+  const [projectInvoices, setProjectInvoices] = useState([]);
+  useEffect(() => {
+    if (!db || !projectId) { setProjectInvoices([]); return; }
+    let byProject = [], byParent = [];
+    const merge = () => {
+      const m = new Map();
+      [...byProject, ...byParent].forEach(inv => m.set(inv.id, inv));
+      setProjectInvoices([...m.values()]);
+    };
+    const u1 = onSnapshot(query(collection(db, 'invoices'), where('projectId', '==', projectId)),
+      s => { byProject = s.docs.map(d => ({ id: d.id, ...d.data() })); merge(); }, () => { byProject = []; merge(); });
+    const u2 = onSnapshot(query(collection(db, 'invoices'), where('parentId', '==', projectId)),
+      s => { byParent = s.docs.map(d => ({ id: d.id, ...d.data() })); merge(); }, () => { byParent = []; merge(); });
+    return () => { u1(); u2(); };
+  }, [projectId]);
+  const previewNoop = async () => {};
+  return (
+    <ClientPortal
+      {...commonProps}
+      previewMode
+      client={client}
+      user={client}
+      invoices={projectInvoices}
+      onLogout={previewNoop}
+      updateClientProfile={previewNoop}
+      userNotifications={[]}
+      approveQuote={previewNoop}
+      approveSignoff={previewNoop}
+      payInvoice={previewNoop}
+      updateProjectStage={previewNoop}
+      updateApproval={previewNoop}
+      submitTestimonial={previewNoop}
+      recordOfflinePayment={previewNoop}
+      addClientMessage={previewNoop}
+      addProjectMessage={previewNoop}
+      createNotification={previewNoop}
+    />
+  );
+}
 const devErr = (...a) => { if (_dev) console.error(...a); };
 import { useContext, useCallback } from 'react';
 import { AppContext } from './context/AppContext';
@@ -60,7 +109,7 @@ import { SCHEDULE_CONFIGS } from './pages/admin/clienthub/config.jsx';
 import { calculateTimeline } from './pages/sharedHelpers';
 import { auth, db, storage, functions, isFirebaseEnabled, firebaseConfig } from './lib/firebase';
 import { initializeApp, deleteApp } from 'firebase/app';
-import { onAuthStateChanged, signInWithEmailAndPassword, signOut, createUserWithEmailAndPassword, RecaptchaVerifier, signInWithPhoneNumber, getAuth, updatePassword, EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
+import { onAuthStateChanged, signInWithEmailAndPassword, signOut, createUserWithEmailAndPassword, RecaptchaVerifier, signInWithPhoneNumber, getAuth, updatePassword, EmailAuthProvider, reauthenticateWithCredential, isSignInWithEmailLink, signInWithEmailLink } from 'firebase/auth';
 import { httpsCallable } from 'firebase/functions';
 import { 
   collection, query, onSnapshot, getDocs, getDoc, doc, 
@@ -375,6 +424,7 @@ export default function App() {
       setAuthLoading(false);
       return;
     }
+    completeEmailLinkSignIn();
     const unsubscribe = onAuthStateChanged(auth, () => {
       setAuthLoading(false);
     });
@@ -2888,6 +2938,41 @@ export default function App() {
     }
   };
 
+  // Email magic-link login — fallback for clients whose phone OTP never arrives.
+  // Emails a Firebase sign-in link via the server (Brevo). Neutral either way so
+  // it never reveals whether an email is registered.
+  const sendClientLoginLink = async (email) => {
+    const clean = String(email || '').trim().toLowerCase();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(clean)) throw new Error('Please enter a valid email address.');
+    try { window.localStorage.setItem('wf_emailForSignIn', clean); } catch (_) {}
+    const fn = httpsCallable(functions, 'sendClientLoginLink');
+    await fn({ email: clean });
+    return true;
+  };
+
+  // Completes an email-link sign-in when the client returns from the emailed link.
+  // The profile (and uid→projects bridge) is resolved by AppContext's
+  // fetchUserProfile → resolveClientByEmail once onAuthStateChanged fires.
+  const completeEmailLinkSignIn = async () => {
+    try {
+      if (!auth || !isSignInWithEmailLink(auth, window.location.href)) return;
+      const params = new URLSearchParams(window.location.search);
+      let email = params.get('email') || window.localStorage.getItem('wf_emailForSignIn') || '';
+      if (!email) email = window.prompt('Please confirm your email to finish signing in:') || '';
+      if (!email) return;
+      notify('pending', 'Signing you in…');
+      await signInWithEmailLink(auth, email.trim().toLowerCase(), window.location.href);
+      try { window.localStorage.removeItem('wf_emailForSignIn'); } catch (_) {}
+      // Strip the consumed oobCode so a refresh doesn't retry a used link.
+      window.history.replaceState({}, '', '/portal');
+      setNotification(null);
+      navigate('/portal');
+    } catch (e) {
+      devErr('[emailLink] sign-in failed', e);
+      setNotification({ msg: 'That sign-in link has expired or was already used. Please request a new one.', type: 'error' });
+    }
+  };
+
   const handleLogout = async () => {
     try {
       if (auth) await signOut(auth);
@@ -3061,7 +3146,7 @@ export default function App() {
     updateStage, calculateProjectPulse,
     submitContact: submitContactInquiry,
     submitMarketplace: submitMarketplaceInquiry,
-    sendOTP, verifyOTP, findUserByPhone,
+    sendOTP, verifyOTP, sendClientLoginLink, findUserByPhone,
     loginWithCredentials, resetUserPassword, changeClientPassword,
     deleteClient, deleteAllClients, deleteSelectedClients,
     activeMagicCode, 
@@ -3255,6 +3340,47 @@ export default function App() {
               )}
             </ProtectedRoute>
           } />
+
+          {/* Read-only client-portal preview for PMs. Admin/staff only. Renders the
+              REAL ClientPortal in previewMode against a synthetic client built from
+              the ?clientId / ?projectId params, so PMs see exactly what a client sees
+              on their phone. All write actions are blocked inside ClientPortal. */}
+          <Route path="/portal-preview" element={
+            <ProtectedRoute>
+              {(user?.role === 'admin' || user?.role === 'staff') ? (() => {
+                const previewParams = new URLSearchParams(location.search);
+                const previewClientId = previewParams.get('clientId');
+                const previewProjectId = previewParams.get('projectId');
+                const previewProjects = clients || [];
+                const previewDbc = (uniqueDbClients || []).find(c => c.id === previewClientId || c.phone === previewClientId);
+                const previewClientProjects = previewProjects.filter(p =>
+                  p.clientId === previewClientId || (previewDbc?.phone && p.clientId === previewDbc.phone) ||
+                  (p.clientIds || []).includes(previewClientId) || (previewDbc?.phone && (p.clientIds || []).includes(previewDbc.phone))
+                );
+                const previewProj = previewProjects.find(p => p.id === previewProjectId);
+                const syntheticClient = {
+                  id: previewDbc?.id || previewProj?.clientId || previewClientId,
+                  uid: previewDbc?.uid || null,
+                  role: 'client',
+                  name: previewDbc?.name || previewProj?.clientName || 'Client',
+                  phone: previewDbc?.phone || previewProj?.clientPhone || '',
+                  email: previewDbc?.email || previewProj?.clientEmail || '',
+                  proxyEmail: previewDbc?.proxyEmail || null,
+                  projectIds: [...new Set([previewProjectId, ...previewClientProjects.map(p => p.id)].filter(Boolean))],
+                };
+                return (
+                  <ClientPortalPreview
+                    client={syntheticClient}
+                    projectId={previewProjectId}
+                    commonProps={commonProps}
+                  />
+                );
+              })() : (
+                <Navigate to="/admin" replace />
+              )}
+            </ProtectedRoute>
+          } />
+
           <Route path="/field-upload" element={<FieldUpload {...commonProps} />} />
           <Route path="/field-upload/:projectId" element={<FieldUpload {...commonProps} />} />
           <Route path="/work" element={

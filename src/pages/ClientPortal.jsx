@@ -9,7 +9,7 @@ import {
   Truck, Wrench, ShoppingCart, ArrowRight, Lock,
   Download, File, Image, Archive, Package, Camera,
   X, Copy, Check, RefreshCw, Gift, Edit3, ChevronDown,
-  ZoomIn, ScanSearch, PenTool, Printer, FileCheck, PenLine, ShieldCheck, Award, Map as MapIcon, HelpCircle, Calendar
+  ZoomIn, ScanSearch, PenTool, Printer, FileCheck, PenLine, ShieldCheck, Award, Map as MapIcon, HelpCircle, Calendar, Mail
 } from 'lucide-react';
 import { CLIENT_PROJECT_STAGES, PROJECT_TYPES } from '../data';
 import { calculateTimeline, minimumAppointmentDateTime } from './sharedHelpers';
@@ -31,6 +31,14 @@ import VideoCallModal from '../components/VideoCallModal';
 import { Video } from 'lucide-react';
 
 const AC = `var(--accent-secondary)`;
+
+// ─── Preview mode (PM read-only "see what the client sees") ───────────────────
+// When the portal is mounted in preview mode (by an admin/PM from ClientHub) it
+// renders exactly what the client sees but every write is blocked. Sub-components
+// read this context and call block() at the top of any write gesture. Default
+// value is inert, so the real client route is completely unaffected.
+const PreviewContext = React.createContext({ preview: false, block: () => false });
+const usePreview = () => React.useContext(PreviewContext);
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 function fmtShort(val) {
@@ -709,7 +717,8 @@ function nameToSignatureDataUrl(name, ac) {
 }
 
 // ─── SpecApprovalCard ─────────────────────────────────────────────────────────
-function SpecApprovalCard({ project, user, brand, isMobile, invoices = [] }) {
+function SpecApprovalCard({ project, user, brand, isMobile, invoices = [], setActiveTab }) {
+  const { block } = usePreview();
   const ac = brand?.color || AC;
   const spec = project?.specDoc;
   const [busy, setBusy] = useState(false);
@@ -757,6 +766,7 @@ function SpecApprovalCard({ project, user, brand, isMobile, invoices = [] }) {
   };
 
   const handleSign = async () => {
+    if (block('Signing')) return;
     if (busy || !documentAccepted || !legalConsent || typedName.trim().length < 3) return;
     setBusy(true);
     setError('');
@@ -803,6 +813,34 @@ function SpecApprovalCard({ project, user, brand, isMobile, invoices = [] }) {
           <div style={{ fontSize: 12, color: '#7F1D1D', marginTop: 2 }}>You've raised concerns. Our team will review and update the document shortly.</div>
           {spec.reviewNote && <div style={{ fontSize: 11, color: '#991B1B', marginTop: 6, fontStyle: 'italic' }}>Your note: "{spec.reviewNote}"</div>}
         </div>
+      </div>
+    );
+  }
+
+  // The server (signProjectSpecification) hard-requires the project contract to be signed
+  // before this document can be signed. Surface that up front instead of letting the client
+  // fill in the form and only find out on submit.
+  if (project.contractAccepted !== true) {
+    return (
+      <div style={{ padding: isMobile ? '20px 18px' : '24px 28px', borderRadius: 20, background: 'linear-gradient(135deg, #FFFBEB, #FEF3C7)', border: '1.5px solid #FDE68A' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+          <AlertCircle size={18} color="#D97706" />
+          <span style={{ fontSize: 12, fontWeight: 800, color: '#92400E', textTransform: 'uppercase', letterSpacing: '.06em' }}>
+            Sign your contract first
+          </span>
+        </div>
+        <div style={{ fontSize: 18, fontWeight: 900, color: 'var(--accent-secondary)', marginBottom: 6 }}>
+          This document isn't ready to sign yet
+        </div>
+        <div style={{ fontSize: 13, color: '#374151', lineHeight: 1.6, marginBottom: 20 }}>
+          Before you can review and sign the final deliverables document, you need to sign your <strong>project contract</strong>. Once that's done, come back here to finish this step.
+        </div>
+        <button
+          onClick={() => setActiveTab?.('overview')}
+          style={{ padding: '12px 22px', borderRadius: 12, border: 'none', background: '#D97706', color: '#fff', fontSize: 13, fontWeight: 800, cursor: 'pointer' }}
+        >
+          Go sign your contract →
+        </button>
       </div>
     );
   }
@@ -946,6 +984,7 @@ function SpecApprovalCard({ project, user, brand, isMobile, invoices = [] }) {
 
 // ─── ContractAgreementModal ───────────────────────────────────────────────────
 function ContractAgreementModal({ project, user, brand, onClose, onSigned, isMobile, mode = 'contract' }) {
+  const { block } = usePreview();
   const ac = brand?.color || AC;
   const [step, setStep] = useState(1); // 1=read, 2=sign
   const [scrolled, setScrolled] = useState(false);
@@ -1018,6 +1057,7 @@ function ContractAgreementModal({ project, user, brand, onClose, onSigned, isMob
   };
 
   const handleSign = async () => {
+    if (block('Signing')) return;
     if (busy) return;
     const name = typedName.trim();
     if (!name && !drawnSig) { setError('Please type your full name or draw your signature.'); return; }
@@ -1286,6 +1326,7 @@ function isImageType(fileType) {
 
 // ─── Stage Action Card ────────────────────────────────────────────────────────
 function StageActionCard({ project, user, approveQuote, approveSignoff, payInvoice, updateProjectStage, setActiveTab }) {
+  const { preview: previewMode, block } = usePreview();
   const applicableStages = CLIENT_PROJECT_STAGES.filter(s => {
     const typeStages = PROJECT_TYPES[project.projectType]?.stages || CLIENT_PROJECT_STAGES.map(x => x.id);
     return typeStages.includes(s.id);
@@ -1385,6 +1426,7 @@ function StageActionCard({ project, user, approveQuote, approveSignoff, payInvoi
           </div>
         ) : <button
           onClick={async () => {
+            if (block('Approval')) return;
             if (acting || renderingApprovalRequired) return;
             setActing(true);
             try {
@@ -1417,6 +1459,7 @@ function StageActionCard({ project, user, approveQuote, approveSignoff, payInvoi
         {!quoteMissing && currentStage.id === 3 && !project.quoteApproved && (
           <button
             onClick={async () => {
+              if (block('Request changes')) return;
               const note = window.prompt('What should be changed in this quotation?');
               if (!note?.trim()) return;
               setActing(true);
@@ -1482,6 +1525,7 @@ function StageActionCard({ project, user, approveQuote, approveSignoff, payInvoi
             ? 'This payment is required to initiate production and material procurement.'
             : 'Please settle this balance to continue to the next project stage.'}
         </div>
+        <div inert={previewMode ? '' : undefined} style={{ display: 'contents' }}>
         <UnifiedPaymentGateway
           label={`Pay ${fmt(dueAmount)}`}
           amountGHS={dueAmount}
@@ -1492,6 +1536,7 @@ function StageActionCard({ project, user, approveQuote, approveSignoff, payInvoi
           onSuccess={() => { setJustPaid(true); setTimeout(() => window.location.reload(), 3000); }}
           onError={(err) => alert("Verification Error: " + err)}
         />
+        </div>
       </div>
     );
   }
@@ -1797,6 +1842,7 @@ function ClientSiteVisitScheduler({ project, isMobile }) {
 }
 
 function ClientApprovalsTab({ project, invoices = [], approvals = [], approveQuote, approveSignoff, brand, user, isMobile, setActiveTab, updateProjectStage, updateApproval }) {
+  const { block } = usePreview();
   const [signOffBusy, setSignOffBusy] = useState(false);
   const [signOffDone, setSignOffDone] = useState(false);
   const [inspectionChecks, setInspectionChecks] = useState({});
@@ -1830,6 +1876,7 @@ function ClientApprovalsTab({ project, invoices = [], approvals = [], approveQuo
   const pastApprovals = (approvals || []).filter(a => a.projectId === project.id && a.status !== 'pending');
 
   const handleApprovalResponse = async (id, status) => {
+    if (block('Approval')) return;
     if (!updateApproval || approvalBusy[id]) return;
     setApprovalBusy(b => ({ ...b, [id]: true }));
     try {
@@ -1848,6 +1895,7 @@ function ClientApprovalsTab({ project, invoices = [], approvals = [], approveQuo
   const renderStatus = renderPkg?.status || (project.stageId >= 2 ? 'Awaiting Upload' : null);
 
   const handleInspectionSignOff = async () => {
+    if (block('Sign-off')) return;
     if (signOffBusy || signOffDone) return;
     setSignOffBusy(true);
     try {
@@ -1863,6 +1911,7 @@ function ClientApprovalsTab({ project, invoices = [], approvals = [], approveQuo
   };
 
   const handleQuoteChangeRequest = async () => {
+    if (block('Request changes')) return;
     if (!activeQuote || quoteChangeBusy) return;
     const isCounter = quoteAction === 'counter';
     const note = isCounter
@@ -2175,7 +2224,7 @@ function ClientApprovalsTab({ project, invoices = [], approvals = [], approveQuo
                         By approving this quotation you confirm the total of <strong>{fmtGHS(qTotal)}</strong> and the scope above. The project contract will be issued immediately and the 60% initial deposit invoice will become due within 7 days.
                       </div>
                       <button
-                        onClick={() => approveQuote && approveQuote(project.id)}
+                        onClick={() => { if (block('Approval')) return; approveQuote && approveQuote(project.id); }}
                         style={{ alignSelf: 'flex-end', padding: '11px 22px', borderRadius: 11, border: 'none', background: '#16A34A', color: '#fff', fontSize: 12, fontWeight: 900, cursor: 'pointer' }}
                       >
                         Approve Quotation →
@@ -2347,6 +2396,7 @@ function ClientApprovalsTab({ project, invoices = [], approvals = [], approveQuo
                 )}
                 <button
                   onClick={async () => {
+                    if (block('Sign-off')) return;
                     if (!allChecked || signOffBusy) return;
                     setSignOffBusy(true);
                     try {
@@ -2455,6 +2505,7 @@ function ClientApprovalsTab({ project, invoices = [], approvals = [], approveQuo
 
               <button
                 onClick={async () => {
+                  if (block('Submitting feedback')) return;
                   if (!handoverRating || !handoverFeedback.trim() || handoverBusy) return;
                   setHandoverBusy(true);
                   try {
@@ -2510,6 +2561,7 @@ function ClientApprovalsTab({ project, invoices = [], approvals = [], approveQuo
               <button
                 disabled={!reconsiderText.trim() || reconsiderBusy}
                 onClick={async () => {
+                  if (block('Reconsideration')) return;
                   if (!reconsiderText.trim() || reconsiderBusy) return;
                   setReconsiderBusy(true);
                   try {
@@ -2534,6 +2586,7 @@ function ClientApprovalsTab({ project, invoices = [], approvals = [], approveQuo
 }
 
 function ClientAddOnsTab({ project, addOns: propAddOns = [], invoices: propInvoices = [], user, isMobile }) {
+  const { preview: previewMode, block } = usePreview();
   // Own live queries — bypasses the clientId/UID mismatch in AppContext for phone-auth users
   const [liveAddOns, setLiveAddOns] = useState(null);
   const [liveInvoices, setLiveInvoices] = useState(null);
@@ -2558,6 +2611,7 @@ function ClientAddOnsTab({ project, addOns: propAddOns = [], invoices: propInvoi
   const parseAmount = value => parseFloat(String(value || '0').replace(/[^0-9.]/g, '')) || 0;
   const cardStyle = { padding: isMobile ? '20px 18px' : '24px 28px', background: '#fff', borderRadius: isMobile ? 24 : 20, border: isMobile ? 'none' : '1px solid var(--border-color)', boxShadow: isMobile ? '0 2px 16px rgba(0,0,0,.08)' : '0 4px 20px rgba(0,0,0,.05)' };
   const respondToAddOn = async (addOnId, decision) => {
+    if (block('Add-on response')) return;
     const note = decision === 'reject'
       ? window.prompt('Describe the change you need before approving this add-on:')?.trim()
       : '';
@@ -2648,7 +2702,7 @@ function ClientAddOnsTab({ project, addOns: propAddOns = [], invoices: propInvoi
                 )
               )}
               {unpaid && amount > 0 && (
-                <div style={{ width: isMobile ? '100%' : 260, maxWidth: '100%' }}>
+                <div inert={previewMode ? '' : undefined} style={{ width: isMobile ? '100%' : 260, maxWidth: '100%' }}>
                   <UnifiedPaymentGateway
                     label={`Pay Add-on — GH₵ ${amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}`}
                     amountGHS={amount}
@@ -2873,7 +2927,8 @@ function DocViewer({ doc, onClose }) {
 }
 
 // ─── Documents Tab ────────────────────────────────────────────────────────────
-function DocumentsTab({ projectId, project, user, brand, isMobile, invoices = [] }) {
+function DocumentsTab({ projectId, project, user, brand, isMobile, invoices = [], setActiveTab }) {
+  const { block } = usePreview();
   const [docs, setDocs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [viewingDoc, setViewingDoc] = useState(null);
@@ -2905,6 +2960,7 @@ function DocumentsTab({ projectId, project, user, brand, isMobile, invoices = []
       brand={brand}
       isMobile={isMobile}
       invoices={invoices}
+      setActiveTab={setActiveTab}
     />
   );
 
@@ -3038,6 +3094,7 @@ function DocumentsTab({ projectId, project, user, brand, isMobile, invoices = []
                   {!project?.handoverCertificate?.acknowledgedAt && (
                     <button
                       onClick={async () => {
+                        if (block('Acknowledge')) return;
                         try {
                           const now = new Date();
                           await updateDoc(doc(db, 'projects', project.id), {
@@ -3322,6 +3379,7 @@ function CostBreakdownCard({ project, fmt, card, pad, isMobile }) {
 
 // ─── Payments Tab ─────────────────────────────────────────────────────────────
 function PaymentsTab({ project, user, transactions: propTxns, invoices: propInvs, brand, isMobile, finSettings = {} }) {
+  const { preview: previewMode, block } = usePreview();
   const budget = Number(project.budget) || 0;
   const USD_RATE = Number(brand?.finSettings?.exchangeRate || brand?.exchangeRate) || 15.5;
   const [showUSD, setShowUSD] = useState(
@@ -3617,6 +3675,7 @@ function PaymentsTab({ project, user, transactions: propTxns, invoices: propInvs
 
                     {!offlineMethod ? (
                       <>
+                        <div inert={previewMode ? '' : undefined} style={{ display: 'contents' }}>
                         <UnifiedPaymentGateway
                           label={`Pay ${fmt(budget * currentDueMilestone.pct)} Now`}
                           amountGHS={budget * currentDueMilestone.pct}
@@ -3626,6 +3685,7 @@ function PaymentsTab({ project, user, transactions: propTxns, invoices: propInvs
                           paymentType={isInitialProjectDepositInvoice(currentDueMilestoneInv) ? 'deposit' : 'milestone'}
                           onSuccess={async () => { setPaySuccess(true); }}
                         />
+                        </div>
                         <div style={{ marginTop: 10, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                           <button onClick={() => setOfflineMethod('bank')} style={{ flex: 1, padding: '11px 14px', borderRadius: 12, border: '1.5px solid var(--border-color)', background: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', color: 'var(--accent-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
                             🏦 Bank Transfer
@@ -3660,6 +3720,7 @@ function PaymentsTab({ project, user, transactions: propTxns, invoices: propInvs
                         <button
                           disabled={offlineSubmitting}
                           onClick={async () => {
+                            if (block('Payment')) return;
                             if (offlineSubmitting) return;
                             setOfflineSubmitting(true);
                             try {
@@ -3858,7 +3919,7 @@ function PaymentsTab({ project, user, transactions: propTxns, invoices: propInvs
 
             {/* Pay button at bottom if unpaid */}
             {!isPaidStatus(viewInvoice.status) && parseAmount(viewInvoice.amount || viewInvoice.total) > 0 && (
-              <div style={{ padding: '16px 24px', borderTop: '1px solid var(--border-color)', background: '#fff' }}>
+              <div inert={previewMode ? '' : undefined} style={{ padding: '16px 24px', borderTop: '1px solid var(--border-color)', background: '#fff' }}>
                 <UnifiedPaymentGateway
                   label={`Pay ${fmt(parseAmount(viewInvoice.amount || viewInvoice.total))}`}
                   amountGHS={parseAmount(viewInvoice.amount || viewInvoice.total)}
@@ -4220,6 +4281,7 @@ function StageTimeline({ project, onRequestChange, isMobile, onStageClick }) {
 
 // ─── Change Request Modal ─────────────────────────────────────────────────────
 function ChangeRequestModal({ project, user, onClose }) {
+  const { block } = usePreview();
   const [type, setType] = useState('Design Change');
   const [description, setDescription] = useState('');
   const [urgency, setUrgency] = useState('Normal');
@@ -4231,6 +4293,7 @@ function ChangeRequestModal({ project, user, onClose }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (block('Change request')) return;
     if (!description.trim() || submitting) return;
     setSubmitting(true);
     try {
@@ -4358,6 +4421,7 @@ function ChangeRequestModal({ project, user, onClose }) {
 
 // ─── Review Modal ─────────────────────────────────────────────────────────────
 function ReviewModal({ project, user, onSubmit, onDismiss }) {
+  const { block } = usePreview();
   const [rating, setRating] = useState(0);
   const [hovered, setHovered] = useState(0);
   const [text, setText] = useState('');
@@ -4365,6 +4429,7 @@ function ReviewModal({ project, user, onSubmit, onDismiss }) {
   const [submitted, setSubmitted] = useState(false);
 
   const handleSubmit = async () => {
+    if (block('Review')) return;
     if (rating === 0 || submitting) return;
     setSubmitting(true);
     await onSubmit({ projectId: project.id, rating, text: text.trim(), clientName: user?.name, clientId: user?.id || user?.uid });
@@ -5325,6 +5390,7 @@ function AppInstallGuideModal({ onDismiss, ac }) {
 
 // ─── KickoffGate ─────────────────────────────────────────────────────────────
 function KickoffGate({ project, user, brand, isMobile, invoices = [], hasUnlockedDesign, onGateCleared, onPaymentSuccess, updateProjectStage }) {
+  const { preview: previewMode, block } = usePreview();
   const ac = brand?.color || AC;
   const [showContract, setShowContract] = useState(false);
   // Optimistic local state — set immediately when Paystack confirms payment,
@@ -5516,6 +5582,7 @@ function KickoffGate({ project, user, brand, isMobile, invoices = [], hasUnlocke
                   </div>
                   <button
                     onClick={async () => {
+                      if (block('Payment')) return;
                       try {
                         const { httpsCallable } = await import('firebase/functions');
                         const { functions: fns } = await import('../lib/firebase');
@@ -5535,6 +5602,7 @@ function KickoffGate({ project, user, brand, isMobile, invoices = [], hasUnlocke
                   </button>
                 </div>
               ) : (
+                <div inert={previewMode ? '' : undefined} style={{ display: 'contents' }}>
                 <UnifiedPaymentGateway
                   label={`Pay Rendering Fee — GH₵ ${Number(renderingInvoice.amount || renderingInvoice.total || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}`}
                   amountGHS={Number(renderingInvoice.amount || renderingInvoice.total || 0)}
@@ -5551,6 +5619,7 @@ function KickoffGate({ project, user, brand, isMobile, invoices = [], hasUnlocke
                     onPaymentSuccess?.();
                   }}
                 />
+                </div>
               )}
             </>
           ) : (
@@ -5775,9 +5844,94 @@ function ClientMeetingsCard({ projectId, user, brand, accentColor, onJoin }) {
 }
 
 // ─── Main ClientPortal ────────────────────────────────────────────────────────
+// Prompts a client with no email on file to add one, so they have a magic-link
+// fallback if their SMS code ever fails. Writes email + emailLower (rules allow
+// clients to self-edit these two fields); emailLower is what login matching uses.
+function ClientBackupEmailCard({ user, updateClientProfile, ac, isMobile }) {
+  const { block } = usePreview();
+  const [val, setVal] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [done, setDone] = useState(false);
+  const [err, setErr] = useState('');
+
+  const save = async () => {
+    if (block('Saving email')) return;
+    const clean = val.trim().toLowerCase();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(clean)) { setErr('Please enter a valid email address.'); return; }
+    setErr(''); setSaving(true);
+    try {
+      await updateClientProfile(user.id, { email: clean, emailLower: clean });
+      setDone(true);
+    } catch (_) {
+      setErr('Could not save. Please try again.');
+    }
+    setSaving(false);
+  };
+
+  if (done) {
+    return (
+      <div style={{ padding: '16px 20px', borderRadius: 16, background: '#F0FDF4', border: '1.5px solid #BBF7D0', display: 'flex', alignItems: 'center', gap: 14 }}>
+        <CheckCircle2 size={20} color="#16A34A" />
+        <div>
+          <div style={{ fontSize: 14, fontWeight: 800, color: '#15803D' }}>Backup email saved</div>
+          <div style={{ fontSize: 12, color: '#166534', marginTop: 2 }}>If an SMS code ever fails to arrive, you can now sign in with a one-tap link sent to <strong>{val.trim().toLowerCase()}</strong>.</div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ padding: '16px 20px', borderRadius: 16, background: '#FFFBEB', border: '1.5px solid #FDE68A' }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 12 }}>
+        <Mail size={20} color="#B45309" style={{ marginTop: 2, flexShrink: 0 }} />
+        <div>
+          <div style={{ fontSize: 14, fontWeight: 900, color: '#92400E', marginBottom: 3 }}>Add a backup email</div>
+          <div style={{ fontSize: 12.5, color: '#92400E', lineHeight: 1.5 }}>
+            You sign in with an SMS code. Add your email so you can still get in with a one-tap link if a code ever fails to arrive.
+          </div>
+        </div>
+      </div>
+      {err && <div style={{ fontSize: 12, color: '#B91C1C', marginBottom: 8 }}>{err}</div>}
+      <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: 10 }}>
+        <input
+          type="email"
+          inputMode="email"
+          placeholder="you@example.com"
+          value={val}
+          onChange={e => { setVal(e.target.value); setErr(''); }}
+          onKeyDown={e => e.key === 'Enter' && !saving && save()}
+          style={{ flex: 1, height: 46, padding: '0 14px', borderRadius: 12, border: '1.5px solid #FDE68A', background: '#fff', fontSize: 15, outline: 'none', color: '#1F2937', fontFamily: 'inherit' }}
+        />
+        <button
+          onClick={save}
+          disabled={saving}
+          style={{ height: 46, padding: '0 22px', borderRadius: 12, background: ac, color: '#fff', fontSize: 14, fontWeight: 800, border: 'none', cursor: saving ? 'default' : 'pointer', whiteSpace: 'nowrap' }}
+        >
+          {saving ? 'Saving…' : 'Save email'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function ClientPortal({ client, onLogout, updateClientProfile, ...props }) {
   const user = props.user || client;
   const ac = props.brand?.color || AC;
+
+  // Preview mode: PM viewing the portal read-only. Every write gesture is blocked.
+  const previewMode = props.previewMode === true;
+  const [previewBlockMsg, setPreviewBlockMsg] = useState(null);
+  const block = useCallback((what) => {
+    if (!previewMode) return false;
+    setPreviewBlockMsg(what ? `${what} is disabled in preview` : 'Disabled in preview mode');
+    return true;
+  }, [previewMode]);
+  useEffect(() => {
+    if (!previewBlockMsg) return;
+    const t = setTimeout(() => setPreviewBlockMsg(null), 2200);
+    return () => clearTimeout(t);
+  }, [previewBlockMsg]);
+  const previewCtx = useMemo(() => ({ preview: previewMode, block }), [previewMode, block]);
 
   const [projects, setProjects] = useState([]);
   const [loadingProjects, setLoadingProjects] = useState(true);
@@ -5828,6 +5982,7 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
 
   // Automatically show portal guide to completely new users
   useEffect(() => {
+    if (previewMode) return;
     if (user && projects.length > 0) {
       const hasSeenPortalGuide = localStorage.getItem('hasSeenPortalGuide');
       if (!hasSeenPortalGuide) {
@@ -5835,8 +5990,9 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
         localStorage.setItem('hasSeenPortalGuide', 'true');
       }
     }
-  }, [user, projects.length]);
+  }, [user, projects.length, previewMode]);
   useEffect(() => {
+    if (previewMode) return;
     // Check if the user is running the app as a PWA already
     const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
     if (isStandalone) return;
@@ -5850,7 +6006,7 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
       }, 2000);
       return () => clearTimeout(timer);
     }
-  }, [user]);
+  }, [user, previewMode]);
 
   const dismissInstallGuide = () => {
     localStorage.setItem('hasSeenInstallGuide', 'true');
@@ -5890,6 +6046,7 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
   // Intercept Hubtel Payment Returns
   const [verifyingPayment, setVerifyingPayment] = useState(false);
   useEffect(() => {
+    if (previewMode) return;
     const params = new URLSearchParams(window.location.search);
     const clientRef = params.get('verifyHubtel');
     const checkoutId = params.get('checkoutId'); // From Hubtel
@@ -6083,7 +6240,33 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
   };
 
   return (
+    <PreviewContext.Provider value={previewCtx}>
     <div className="lx-portal" style={{ minHeight: '100dvh', background: isMobile ? '#EDEAE6' : '#F8F6F3', fontFamily: 'Inter, Satoshi, sans-serif', overscrollBehavior: 'contain' }}>
+
+      {/* ── READ-ONLY PREVIEW BANNER (PM view — never shown to real clients) ── */}
+      {previewMode && (
+        <div style={{
+          position: 'sticky', top: 0, zIndex: 9999,
+          background: 'linear-gradient(90deg, #1F2937, #374151)', color: '#fff',
+          padding: '7px 14px', fontSize: 11, fontWeight: 800, letterSpacing: '.04em',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+          textAlign: 'center'
+        }}>
+          👁 READ-ONLY PREVIEW · This is exactly what your client sees. Actions are disabled.
+        </div>
+      )}
+
+      {/* ── PREVIEW BLOCK TOAST ── */}
+      {previewMode && previewBlockMsg && (
+        <div style={{
+          position: 'fixed', bottom: 88, left: '50%', transform: 'translateX(-50%)',
+          zIndex: 10001, background: '#1F2937', color: '#fff', padding: '10px 18px',
+          borderRadius: 100, fontSize: 12, fontWeight: 700, boxShadow: '0 8px 32px rgba(0,0,0,0.35)',
+          display: 'flex', alignItems: 'center', gap: 8, whiteSpace: 'nowrap',
+        }}>
+          <Lock size={13} /> {previewBlockMsg}
+        </div>
+      )}
 
       {/* ── NOTIFICATION TOAST ── */}
       {notifToast && (
@@ -6232,7 +6415,7 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
 
         {activeTab === 'messages' ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-            <ClientMeetingsCard projectId={selected?.id} user={user} brand={props.brand} accentColor={ac} onJoin={mtg => setActiveMeeting(mtg)} />
+            <ClientMeetingsCard projectId={selected?.id} user={user} brand={props.brand} accentColor={ac} onJoin={mtg => { if (block('Video call')) return; setActiveMeeting(mtg); }} />
           <div style={{
             padding: isMobile ? '20px 18px' : '24px 28px', background: '#fff',
             borderRadius: isMobile ? 24 : 20,
@@ -6246,6 +6429,7 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
               <div style={{ fontSize: 15, fontWeight: 800, color: `var(--accent-secondary)` }}>Messages</div>
               {selected && (
                 <button onClick={async () => {
+                  if (block('Video call')) return;
                   const now = new Date();
                   const mtgRef = doc(collection(db, 'projects', selected.id, 'meetings'));
                   await setDoc(mtgRef, {
@@ -6280,7 +6464,7 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
                 </button>
               )}
             </div>
-            <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+            <div inert={previewMode ? '' : undefined} style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
               <WorldClassChat
                 clientId={user.id}
                 user={user}
@@ -6377,10 +6561,31 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
                   </div>
                 </div>
 
+                {/* ── PREVIEW STATUS BANNER (PM only) — shows the client's current
+                    blocker (if any) but still renders the full portal below so the PM
+                    can see the real project status behind any gate. ── */}
+                {previewMode && (() => {
+                  const agreementSigned = selected.onboardingAgreement?.signed === true || agreementSignedLocal[selected.id] === true;
+                  const stage = CLIENT_PROJECT_STAGES.find(s => s.id === (selected.stageId ?? 0));
+                  let blocker = null;
+                  if (!agreementSigned) blocker = 'Client must sign the Service Agreement before the portal unlocks for them.';
+                  else if (portalGate.needsRenderingPayment) blocker = 'Client must pay the rendering fee to unlock the portal.';
+                  else if (portalGate.needsContractSignature) blocker = 'Client must sign the project contract to continue.';
+                  return (
+                    <div style={{ background: blocker ? '#FEF3C7' : '#ECFDF5', border: `1px solid ${blocker ? '#FDE68A' : '#A7F3D0'}`, borderRadius: 14, padding: '12px 16px', marginBottom: 16, fontSize: 12.5, color: blocker ? '#92400E' : '#065F46', lineHeight: 1.65 }}>
+                      <strong>Current status:</strong> Stage {selected.stageId ?? 0}{stage?.short ? ` · ${stage.short}` : ''} — {selected.status || 'Active'}.
+                      {blocker
+                        ? <> <br/><strong>Client is currently blocked:</strong> {blocker} The full portal is shown below so you can see the whole project.</>
+                        : <> The client has full access to everything below.</>}
+                    </div>
+                  );
+                })()}
+
                 {/* ── ONBOARDING SERVICE AGREEMENT GATE ── */}
                 {(() => {
                   const agreementSigned = selected.onboardingAgreement?.signed === true || agreementSignedLocal[selected.id] === true;
                   if (agreementSigned) return null;
+                  if (previewMode) return null; // PM sees the banner above + full portal below
                   return (
                     <>
                       <div style={{ background: '#fff', borderRadius: 20, border: '1px solid var(--border-color)', padding: isMobile ? '28px 20px' : 40, textAlign: 'center', boxShadow: '0 8px 32px rgba(0,0,0,.04)' }}>
@@ -6423,6 +6628,7 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
 
                 {/* ── KICKOFF GATE ── */}
                 {(() => {
+                  if (previewMode) return null; // PM sees the status banner above + full portal below
                   const agreementSigned = selected.onboardingAgreement?.signed === true || agreementSignedLocal[selected.id] === true;
                   if (!agreementSigned) return null;
                   if (!portalGate.active) return null;
@@ -6466,8 +6672,10 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
                   );
                 })()}
 
-                {/* Hide tabs and content while onboarding agreement or kickoff gate is active */}
-                {(selected.onboardingAgreement?.signed === true || agreementSignedLocal[selected.id] === true) && !portalGate.active && (
+                {/* Hide tabs and content while onboarding agreement or kickoff gate is active.
+                    In preview mode the PM always sees the full portal (gates are surfaced
+                    as the status banner above instead of blocking the view). */}
+                {(((selected.onboardingAgreement?.signed === true || agreementSignedLocal[selected.id] === true) && !portalGate.active) || previewMode) && (
                 <>
 
 
@@ -6520,7 +6728,12 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
                     projectQuotes.find(quote => !['approved', 'superseded', 'cancelled'].includes(String(quote.status || '').toLowerCase()));
                   const specNeedsReview = selected?.specDoc?.url && !['signed', 'rejected'].includes(selected?.specDoc?.status);
                   const initialPaymentCleared = selected?.depositPaid === true || selected?.initialDepositPaid === true;
-                  const actionReq = specNeedsReview && initialPaymentCleared ? { title: 'Final Deliverables Signature Required', desc: 'Review and sign the final drawings, bill of materials, scope, and deliverables to authorise production.', tab: 'documents', btn: 'Review & Sign', icon: <FileCheck size={18} color="#D97706" /> }
+                  const contractSignedForSpec = selected?.contractAccepted === true;
+                  // Contract must be signed before the final deliverables can be signed (enforced
+                  // server-side in signProjectSpecification). Surface that as the action item —
+                  // otherwise the client is sent straight to a sign screen that will reject them.
+                  const actionReq = specNeedsReview && initialPaymentCleared && contractSignedForSpec ? { title: 'Final Deliverables Signature Required', desc: 'Review and sign the final drawings, bill of materials, scope, and deliverables to authorise production.', tab: 'documents', btn: 'Review & Sign', icon: <FileCheck size={18} color="#D97706" /> }
+                    : specNeedsReview && initialPaymentCleared && !contractSignedForSpec ? { title: 'Sign Your Contract to Continue', desc: 'Your final deliverables are ready, but your project contract must be signed first before you can authorise production.', tab: 'overview', btn: 'Sign Contract', icon: <FileCheck size={18} color="#DC2626" />, onClick: () => { setActiveTab('overview'); setTimeout(() => document.getElementById('wl-contract-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60); } }
                     : unsignedQuote && !selected?.quoteApproved && String(unsignedQuote.status || '').toLowerCase() === 'changes requested' ? { title: 'Quotation Revision Requested', desc: 'Your feedback was sent. The project manager is preparing the next quotation version.', tab: 'vault', btn: 'View Negotiation', icon: <Clock size={18} color="#D97706" /> }
                     : unsignedQuote && !selected?.quoteApproved ? { title: 'Quotation Ready', desc: 'Review the negotiated project cost. Approve it or request a revised version.', tab: 'vault', btn: 'Review Quote', icon: <PenTool size={18} color="#DC2626" /> }
                     : pendingInvoices.length > 0 ? { title: 'Pending Invoice', desc: `You have ${pendingInvoices.length} unpaid invoice(s) on your account.`, tab: 'financials', btn: 'View Invoices', icon: <CreditCard size={18} color="#D97706" /> }
@@ -6543,6 +6756,9 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
 
                   return (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                      {!user?.email && (
+                        <ClientBackupEmailCard user={user} updateClientProfile={updateClientProfile} ac={ac} isMobile={isMobile} />
+                      )}
                       {nextMeeting && (
                         <div style={{ padding: '16px 20px', borderRadius: 16, background: isLive ? '#F0FDF4' : '#EFF6FF', border: `1.5px solid ${isLive ? '#86EFAC' : '#BFDBFE'}`, display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
                           <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
@@ -6573,7 +6789,7 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
                               <div style={{ fontSize: 13, color: '#7F1D1D', maxWidth: 400 }}>{actionReq.desc}</div>
                             </div>
                           </div>
-                          <button onClick={() => setActiveTab(actionReq.tab)} style={{ padding: '10px 20px', borderRadius: 10, background: '#DC2626', color: '#fff', fontSize: 13, fontWeight: 800, border: 'none', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                          <button onClick={() => actionReq.onClick ? actionReq.onClick() : setActiveTab(actionReq.tab)} style={{ padding: '10px 20px', borderRadius: 10, background: '#DC2626', color: '#fff', fontSize: 13, fontWeight: 800, border: 'none', cursor: 'pointer', whiteSpace: 'nowrap' }}>
                             {actionReq.btn} →
                           </button>
                         </div>
@@ -6680,9 +6896,13 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
                         );
                       })()}
 
-                      {/* ── Spec Doc Review Banner — shown when admin uploads spec but client hasn't approved ── */}
+                      {/* ── Spec Doc Review Banner — shown when admin uploads spec but client hasn't approved.
+                          Gated on contractAccepted (fix: this banner used to route straight to the
+                          sign screen even when the contract wasn't signed yet — see the actionReq
+                          card above, which is the single accurate source for this prompt now). ── */}
                       {Number(selected?.stageId || 1) >= 2 &&
                         selected?.specDoc?.url &&
+                        selected?.contractAccepted === true &&
                         !['signed', 'approved'].includes(selected.specDoc?.status) && (
                         <div style={{ padding: '16px 20px', borderRadius: 16, background: '#FFFBEB', border: '1.5px solid #FDE68A', display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
                           <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
@@ -6707,6 +6927,7 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
                       onStageGuide={setActiveStageGuide}
                     />
 
+                    <div id="wl-contract-section">
                     {(() => {
                       const contractSigned = !!selected.contractAccepted;
                       const renderingApproved = selected.renderingApproved === true ||
@@ -6841,8 +7062,13 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
                         </div>
                       );
                     })()}
+                    </div>
 
-                    {selected.quoteApproved && (
+                    {/* "Contract Executed" only once the contract is actually signed — this used to
+                        key off quoteApproved alone, so it could show "Contract Executed" (with a
+                        blank sign date) right next to the Contract Gate card above still asking the
+                        client to sign. */}
+                    {selected.contractAccepted === true && (
                       <div style={{
                         padding: '20px 24px', borderRadius: 20,
                         background: 'linear-gradient(135deg, #FDFBF7, #F4EFE6)',
@@ -6921,6 +7147,7 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
                 {/* ── DESIGNS TAB ── */}
                 {activeTab === 'designs' && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+                    <div inert={previewMode ? '' : undefined} style={{ display: 'contents' }}>
                     <ClientRenderingVault
                       project={selected}
                       brand={props.brand}
@@ -6928,6 +7155,7 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
                       invoices={props.invoices || []}
                       finSettings={props.brand?.finSettings || {}}
                     />
+                    </div>
                     {photosAvailable && (
                       <div style={{ padding: isMobile ? '20px 18px' : '24px 28px', background: '#fff', borderRadius: isMobile ? 24 : 20, border: isMobile ? 'none' : '1px solid var(--border-color)', boxShadow: isMobile ? '0 2px 16px rgba(0,0,0,.08)' : '0 4px 20px rgba(0,0,0,.05)' }}>
                         <div style={{ fontSize: 15, fontWeight: 800, color: `var(--accent-secondary)`, marginBottom: 20 }}>Site Photos</div>
@@ -6970,6 +7198,7 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
                     brand={props.brand}
                     isMobile={isMobile}
                     invoices={props.invoices || []}
+                    setActiveTab={setActiveTab}
                   />
                 )}
 
@@ -6997,7 +7226,9 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
                       <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 24 }}>
                         Access and electronically sign your legally binding contracts, formal approvals, and project blueprints here.
                       </p>
-                      <SecureVault projectId={selected.id} user={user} />
+                      <div inert={previewMode ? '' : undefined} style={{ display: 'contents' }}>
+                        <SecureVault projectId={selected.id} user={user} readOnly={previewMode} />
+                      </div>
                     </div>
                   </div>
                 )}
@@ -7006,7 +7237,9 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
                 {activeTab === 'uploads' && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
                     <div style={{ padding: isMobile ? '20px 18px' : '24px 28px', background: '#fff', borderRadius: isMobile ? 24 : 20, border: isMobile ? 'none' : '1px solid var(--border-color)', boxShadow: isMobile ? '0 2px 16px rgba(0,0,0,.08)' : '0 4px 20px rgba(0,0,0,.05)' }}>
-                      <ClientUploadsTab projectId={selected.id} user={user} brand={props.brand} />
+                      <div inert={previewMode ? '' : undefined} style={{ display: 'contents' }}>
+                        <ClientUploadsTab projectId={selected.id} user={user} brand={props.brand} />
+                      </div>
                     </div>
                   </div>
                 )}
@@ -7109,12 +7342,14 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
           project={selected}
           user={user}
           onSubmit={async (data) => {
+            if (previewMode) return;
             if (props.submitTestimonial) await props.submitTestimonial(data);
             // Persist so modal never shows again even after refresh
             try { await updateDoc(doc(db, 'projects', selected.id), { reviewSubmitted: true, reviewSubmittedAt: serverTimestamp() }); } catch (_) {}
             setReviewSubmitted(true);
           }}
           onDismiss={async () => {
+            if (previewMode) { setReviewDismissed(true); return; }
             // Persist dismiss so it survives page refreshes
             try { await updateDoc(doc(db, 'projects', selected.id), { reviewDismissed: true, reviewDismissedAt: serverTimestamp() }); } catch (_) {}
             setReviewDismissed(true);
@@ -7136,14 +7371,14 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
             <button onClick={() => { setIncomingCall(null); }} style={{ height: 38, padding: '0 14px', borderRadius: 10, background: '#EF4444', color: '#fff', border: 'none', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
               Decline
             </button>
-            <button onClick={() => { setActiveMeeting(incomingCall); setIncomingCall(null); }} style={{ height: 38, padding: '0 14px', borderRadius: 10, background: '#16A34A', color: '#fff', border: 'none', fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <button onClick={() => { if (block('Video call')) return; setActiveMeeting(incomingCall); setIncomingCall(null); }} style={{ height: 38, padding: '0 14px', borderRadius: 10, background: '#16A34A', color: '#fff', border: 'none', fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
               <Video size={13} /> Answer
             </button>
           </div>
         </div>
       )}
 
-      {activeMeeting && (
+      {activeMeeting && !previewMode && (
         <VideoCallModal
           meeting={activeMeeting}
           user={user}
@@ -7163,5 +7398,6 @@ export default function ClientPortal({ client, onLogout, updateClientProfile, ..
       `}</style>
       <PortalRefreshButton bottomOffset={isMobile ? 100 : 24} align={isMobile ? 'left' : 'right'} />
     </div>
+    </PreviewContext.Provider>
   );
 }

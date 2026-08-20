@@ -161,7 +161,8 @@ service cloud.firestore {
       allow update: if isAdmin() || (
         isClient(userId) &&
         request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-          'name', 'address', 'preferredPaymentMethod', 'onboarded', 'updatedAt', 'requiresPasswordReset'
+          'name', 'address', 'preferredPaymentMethod', 'onboarded', 'updatedAt', 'requiresPasswordReset',
+          'email', 'emailLower'
         ])
       );
       allow create, delete: if isAdmin();

@@ -3056,6 +3056,253 @@ exports.notifyClientOnAdminAction = onDocumentCreated(
   }
 );
 
+// ── Unified transactional email (Brevo) ──────────────────────────────────────
+// One sender for every portal email. Uses the Brevo HTTP API instead of SMTP —
+// outbound SMTP from Cloud Functions is flaky, the API is not. Set the key once:
+//   firebase functions:secrets:set BREVO_API_KEY
+// Deliverability ("not in spam") depends on SPF/DKIM/DMARC being published for
+// the sender domain (westlinedecor.com) in Brevo — the API key alone is not enough.
+const BREVO_API_KEY = defineSecret('BREVO_API_KEY');
+
+const PORTAL_SENDER = { name: 'Westline Future', email: 'noreply@westlinedecor.com' };
+const PORTAL_REPLY_TO = { name: 'Westline Future', email: 'info@westlinefuture.com' };
+const PORTAL_BASE_URL = 'https://westlinedecor.com';
+
+// Notification `type`s that must NOT generate an email — chat stays in-app only,
+// per the agreed "important alerts only" scope (high email volume on chat would
+// hurt deliverability and annoy clients).
+const EMAIL_SKIP_TYPES = new Set(['message', 'chat']);
+
+const escapeHtml = (s) => String(s == null ? '' : s)
+  .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+const truncate = (s, n) => { const t = String(s == null ? '' : s); return t.length > n ? t.slice(0, n - 1) + '…' : t; };
+
+function buildPortalUrl(link) {
+  const path = typeof link === 'string' && link ? link : '/portal';
+  if (/^https?:\/\//i.test(path)) return path;
+  return PORTAL_BASE_URL + (path.startsWith('/') ? path : '/' + path);
+}
+
+function renderPortalEmail({ heading, bodyText, ctaLabel, ctaUrl }) {
+  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;background:#F5F2EE;padding:24px;font-family:Inter,Arial,Helvetica,sans-serif;">
+  <div style="max-width:560px;margin:0 auto;background:#ffffff;border:1px solid #E7E0D8;border-radius:16px;overflow:hidden;">
+    <div style="background:#0D0B09;padding:20px 28px;">
+      <span style="color:#ffffff;font-size:18px;font-weight:700;letter-spacing:.3px;">Westline Future</span>
+    </div>
+    <div style="padding:28px;color:#2A2521;line-height:1.6;">
+      <h1 style="margin:0 0 12px;font-size:20px;color:#0D0B09;">${escapeHtml(heading)}</h1>
+      <p style="margin:0 0 24px;font-size:15px;color:#4A433C;">${escapeHtml(bodyText)}</p>
+      ${ctaUrl ? `<a href="${ctaUrl}" style="display:inline-block;background:#8C6C52;color:#ffffff;text-decoration:none;padding:12px 26px;border-radius:10px;font-weight:600;font-size:15px;">${escapeHtml(ctaLabel || 'Open Portal')}</a>` : ''}
+    </div>
+    <div style="padding:18px 28px;border-top:1px solid #F0EAE3;color:#9A9187;font-size:12px;">
+      This is an automated message from Westline Future. If a button doesn't work, sign in at ${PORTAL_BASE_URL}.
+    </div>
+  </div>
+</body></html>`;
+}
+
+async function sendPortalEmail({ to, toName, subject, heading, bodyText, ctaLabel, ctaUrl }) {
+  if (!to) return { skipped: 'no-recipient' };
+  const apiKey = BREVO_API_KEY.value();
+  if (!apiKey) { logger.warn('[email] BREVO_API_KEY not set — skipping email to', to); return { skipped: 'no-key' }; }
+  try {
+    const html = renderPortalEmail({ heading: heading || subject, bodyText, ctaLabel, ctaUrl });
+    const text = `${bodyText || ''}${ctaUrl ? `\n\n${ctaLabel || 'Open your portal'}: ${ctaUrl}` : ''}`;
+    const res = await axios.post('https://api.brevo.com/v3/smtp/email', {
+      sender: PORTAL_SENDER,
+      replyTo: PORTAL_REPLY_TO,
+      to: [{ email: to, ...(toName ? { name: toName } : {}) }],
+      subject,
+      htmlContent: html,
+      textContent: text,
+    }, {
+      headers: { 'api-key': apiKey, 'Content-Type': 'application/json', Accept: 'application/json' },
+      timeout: 15000,
+    });
+    logger.info('[email] sent to', to, 'messageId', res.data?.messageId || '');
+    return { sent: true };
+  } catch (err) {
+    logger.error('[email] Brevo send failed for', to, err.response?.status || '', err.response?.data || err.message);
+    return { error: true };
+  }
+}
+
+// Fires on every in-app notification and mirrors the important ones to email.
+// `notifications` is the single canonical alert pipeline (createNotification in
+// src/App.jsx), so hooking here covers every alert without touching call sites.
+exports.emailOnNotification = onDocumentCreated(
+  { document: 'notifications/{notifId}', secrets: [BREVO_API_KEY] },
+  async (event) => {
+    const snap = event.data;
+    if (!snap) return;
+    const n = snap.data() || {};
+    const type = String(n.type || '').toLowerCase();
+    if (EMAIL_SKIP_TYPES.has(type)) return; // chat stays in-app
+
+    const recipient = n.userId;
+    if (!recipient) return;
+    const body = n.message || n.msg || 'There is a new update in your Westline Future portal.';
+
+    // Admin/team notifications → the monitored team inbox.
+    if (recipient === 'admin') {
+      await sendPortalEmail({
+        to: PORTAL_REPLY_TO.email,
+        toName: 'Westline Future',
+        subject: truncate(body, 140),
+        heading: 'New portal activity',
+        bodyText: body,
+        ctaLabel: 'Open Admin Portal',
+        ctaUrl: buildPortalUrl(n.link || '/admin'),
+      });
+      return;
+    }
+
+    // Client notifications → resolve the email from the client's users doc.
+    // Client docs are keyed by phone id, which is exactly the `userId` stored here.
+    const db = getFirestore();
+    const userSnap = await db.collection('users').doc(String(recipient)).get();
+    if (!userSnap.exists) return;
+    const u = userSnap.data() || {};
+    if (u.role && u.role !== 'client') return; // only clients get portal emails here
+    if (!u.email) return; // no email on file — nothing to send to (admin can add one)
+
+    await sendPortalEmail({
+      to: u.email,
+      toName: u.name || 'Client',
+      subject: truncate(body, 140),
+      heading: 'Update on your project',
+      bodyText: body,
+      ctaLabel: 'View in your portal',
+      ctaUrl: buildPortalUrl(n.link || '/portal'),
+    });
+  }
+);
+
+// ── Email magic-link login (SMS OTP fallback) ────────────────────────────────
+// Clients whose phone OTP never arrives (common to Ghana/China) can sign in by
+// email. sendClientLoginLink emails a Firebase sign-in link via the same Brevo
+// sender; resolveClientByEmail completes it — matching the VERIFIED token email
+// to the phone-keyed client doc (Firestore rules can't do this client-side, as
+// email-link tokens carry no phone_number claim) and bridging the email-session
+// uid into the client's projects so the existing rules (`uid in clientIds`)
+// grant access. Requires "Email link (passwordless sign-in)" enabled on the
+// Email/Password provider in Firebase Console → Auth → Sign-in method.
+const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+
+async function findClientByEmail(dbRef, emailLower, rawEmail) {
+  const tryQuery = async (field, val) => {
+    if (!val) return null;
+    const snap = await dbRef.collection('users').where(field, '==', val).limit(5).get();
+    let hit = null;
+    snap.forEach((d) => {
+      if (hit) return;
+      const data = d.data() || {};
+      if (data.role === 'client' || !data.role) hit = { id: d.id, ...data };
+    });
+    return hit;
+  };
+  return (
+    (await tryQuery('emailLower', emailLower)) ||
+    (await tryQuery('email', emailLower)) ||
+    (rawEmail && rawEmail !== emailLower ? await tryQuery('email', rawEmail) : null)
+  );
+}
+
+exports.sendClientLoginLink = onCall(
+  { cors: true, invoker: 'public', secrets: [BREVO_API_KEY] },
+  async (request) => {
+    const rawEmail = String(request.data?.email || '').trim();
+    const emailLower = rawEmail.toLowerCase();
+    // Neutral response either way — never reveal whether an email is registered.
+    const neutral = { ok: true };
+    if (!EMAIL_RE.test(emailLower)) return neutral;
+
+    const db = getFirestore();
+    const client = await findClientByEmail(db, emailLower, rawEmail);
+    if (!client) {
+      logger.info('[loginLink] no client for that email — sending nothing');
+      return neutral;
+    }
+
+    // Normalise the stored email for reliable future matching (additive, no migration).
+    try {
+      if (client.emailLower !== emailLower) {
+        await db.collection('users').doc(client.id).update({ emailLower });
+      }
+    } catch (_) {}
+
+    const continueUrl = `${PORTAL_BASE_URL}/login?emailSignIn=1&email=${encodeURIComponent(emailLower)}`;
+    let link;
+    try {
+      link = await getAdminAuth().generateSignInWithEmailLink(emailLower, {
+        url: continueUrl,
+        handleCodeInApp: true,
+      });
+    } catch (err) {
+      logger.error('[loginLink] generateSignInWithEmailLink failed', err.message);
+      throw new HttpsError('internal', 'Could not create a sign-in link. Please try again.');
+    }
+
+    await sendPortalEmail({
+      to: emailLower,
+      toName: client.name || 'Client',
+      subject: 'Your Westline Future sign-in link',
+      heading: 'Sign in to your portal',
+      bodyText: 'Tap the button below to sign in to your Westline Future client portal. This link is single-use and expires in about an hour. If you did not request it, you can safely ignore this email.',
+      ctaLabel: 'Sign in to my portal',
+      ctaUrl: link,
+    });
+    return neutral;
+  }
+);
+
+exports.resolveClientByEmail = onCall({ cors: true, invoker: 'public' }, async (request) => {
+  const auth = request.auth;
+  if (!auth) throw new HttpsError('unauthenticated', 'Sign in first.');
+  const emailLower = String(auth.token?.email || '').trim().toLowerCase();
+  if (!emailLower) throw new HttpsError('failed-precondition', 'This session has no email.');
+
+  const db = getFirestore();
+  const client = await findClientByEmail(db, emailLower, emailLower);
+  if (!client) throw new HttpsError('not-found', "This email isn't registered as a client account. Contact Westline Future.");
+
+  // Link the email-session uid + normalised email onto the client doc.
+  try {
+    const patch = { emailLower };
+    if (client.uid !== auth.uid) patch.uid = auth.uid;
+    await db.collection('users').doc(client.id).update(patch);
+  } catch (_) {}
+
+  // Bridge this uid into the client's projects so the existing security rules
+  // (`request.auth.uid in project.clientIds`) grant read access — email-link
+  // sessions have no phone_number claim to match on.
+  try {
+    const variants = Array.from(new Set([
+      client.id,
+      client.phone,
+      client.phone ? String(client.phone).replace(/^\+/, '') : null,
+      '+' + client.id,
+    ].filter(Boolean))).slice(0, 10);
+
+    const refs = new Map();
+    const byClientId = await db.collection('projects').where('clientId', 'in', variants).get();
+    byClientId.forEach((p) => refs.set(p.id, p.ref));
+    for (const v of variants) {
+      const byArr = await db.collection('projects').where('clientIds', 'array-contains', v).get();
+      byArr.forEach((p) => refs.set(p.id, p.ref));
+    }
+    await Promise.all(Array.from(refs.values()).map((ref) =>
+      ref.update({ clientIds: FieldValue.arrayUnion(auth.uid) }).catch(() => {})
+    ));
+  } catch (err) {
+    logger.warn('[resolveClient] uid bridge skipped', err.message);
+  }
+
+  const { password, ...safe } = client;
+  return { user: { ...safe, id: client.id, uid: auth.uid } };
+});
+
 // ── Agora RTC Token Generation ────────────────────────────────────────────────
 // Set credentials once: firebase functions:secrets:set AGORA_APP_ID
 //                        firebase functions:secrets:set AGORA_APP_CERTIFICATE

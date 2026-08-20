@@ -107,6 +107,10 @@ export default function LoginPage({ onLogin, onBack, brand, type = 'client', ...
   const [verifyLoading, setVerifyLoading] = useState(false);
   const [clientErr, setClientErr] = useState('');
   const [resendTimer, setResendTimer] = useState(0);
+  const [clientEmailMode, setClientEmailMode] = useState(false);
+  const [clientEmail, setClientEmail] = useState('');
+  const [emailLinkSent, setEmailLinkSent] = useState(false);
+  const [emailLinkLoading, setEmailLinkLoading] = useState(false);
 
   const [email, setEmail] = useState('');
   const [pw, setPw] = useState('');
@@ -173,6 +177,20 @@ export default function LoginPage({ onLogin, onBack, brand, type = 'client', ...
       setClientErr(mapFirebaseError(e));
       setVerifyLoading(false);
     }
+  };
+
+  const sendEmailLink = async () => {
+    const clean = clientEmail.trim().toLowerCase();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(clean)) return setClientErr('Enter a valid email address.');
+    setClientErr('');
+    setEmailLinkLoading(true);
+    try {
+      await props.sendClientLoginLink(clean);
+      setEmailLinkSent(true);
+    } catch (e) {
+      setClientErr(e?.message || 'Could not send the login link. Please try again.');
+    }
+    setEmailLinkLoading(false);
   };
 
   // Admin login identifier — could be email OR phone
@@ -358,6 +376,50 @@ export default function LoginPage({ onLogin, onBack, brand, type = 'client', ...
             {props.activeMagicCode && import.meta.env.DEV && (
               <div style={{ padding: '10px 16px', background: '#FEF9EC', border: '1px solid #FDE68A', borderRadius: 12, fontSize: 12, color: '#92400E', textAlign: 'center', fontWeight: 700 }}>
                 DEV — OTP: {props.activeMagicCode}
+              </div>
+            )}
+
+            {/* ── Email sign-in fallback (for when SMS OTP doesn't arrive) ── */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '2px 0' }}>
+              <div style={{ flex: 1, height: 1, background: 'var(--border-color)' }} />
+              <span style={{ fontSize: 12, color: 'var(--text-secondary)', fontWeight: 600 }}>or</span>
+              <div style={{ flex: 1, height: 1, background: 'var(--border-color)' }} />
+            </div>
+            {!clientEmailMode ? (
+              <button
+                onClick={() => { setClientEmailMode(true); setClientErr(''); }}
+                style={{ height: 48, borderRadius: 14, background: 'transparent', color: 'var(--accent-secondary)', border: '1.5px solid var(--border-color)', fontSize: 15, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, touchAction: 'manipulation' }}
+              >
+                <Mail size={17} /> Sign in with email instead
+              </button>
+            ) : emailLinkSent ? (
+              <div style={{ padding: 16, background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', borderRadius: 14, textAlign: 'center' }}>
+                <Mail size={22} color={ac} style={{ marginBottom: 8 }} />
+                <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--accent-secondary)', marginBottom: 4 }}>Check your email</div>
+                <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+                  If <strong>{clientEmail.trim().toLowerCase()}</strong> is a registered client, a one-tap sign-in link is on its way. It expires in about an hour.
+                </div>
+                <button onClick={() => setEmailLinkSent(false)} style={{ marginTop: 10, fontSize: 13, fontWeight: 700, color: ac, background: 'none', border: 'none', cursor: 'pointer' }}>Use a different email</button>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <input
+                  type="email"
+                  inputMode="email"
+                  placeholder="you@example.com"
+                  value={clientEmail}
+                  onChange={e => { setClientEmail(e.target.value); setClientErr(''); }}
+                  onKeyDown={e => e.key === 'Enter' && !emailLinkLoading && sendEmailLink()}
+                  style={{ height: 52, padding: '0 16px', borderRadius: 14, border: '1.5px solid var(--border-color)', background: 'var(--bg-secondary)', fontSize: 16, outline: 'none', color: 'var(--accent-secondary)', fontFamily: 'inherit' }}
+                />
+                <button
+                  onClick={sendEmailLink}
+                  disabled={emailLinkLoading}
+                  style={{ height: 52, borderRadius: 14, background: 'var(--accent-secondary)', color: '#fff', border: 'none', fontSize: 15, fontWeight: 800, cursor: emailLinkLoading ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, touchAction: 'manipulation' }}
+                >
+                  {emailLinkLoading ? <><Loader2 size={17} className="lp-spin" /> Sending link…</> : <><Mail size={17} /> Email me a login link</>}
+                </button>
+                <button onClick={() => { setClientEmailMode(false); setClientErr(''); }} style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', background: 'none', border: 'none', cursor: 'pointer', padding: '6px 0' }}>← Back to phone</button>
               </div>
             )}
           </div>

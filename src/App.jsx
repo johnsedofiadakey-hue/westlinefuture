@@ -2296,11 +2296,157 @@ export default function App() {
         isInternal: false, createdAt: serverTimestamp(),
       });
       await createNotification(clientId, `New project "${data.title}" has been created for you.`, 'info', '/portal');
+
+      // Client already progressed through some stages offline before being added — backfill
+      // stage/gate state and retroactive paid invoices instead of leaving the project stuck at 1.
+      if (data.startingStageId && Number(data.startingStageId) > 1) {
+        await applyOfflineStageJump(docRef.id, Number(data.startingStageId), data.offlineJumpNote || '');
+      }
+
       notify('success', `Project "${data.title}" created`);
       logAction(clientId, 'Projects', `Created project: ${data.title}`);
       return docRef.id;
     } catch (e) {
       notify('error', 'Failed to create project: ' + e.message);
+    }
+  };
+
+  // Backfills stage/gate state + retroactive PAID invoices for a project whose client already
+  // progressed through some stages offline before being added (or was under-recorded after
+  // creation). Shared by createClientProject (starting-stage) and the ClientHub "Fast-Forward
+  // Stage" action — one source of truth so both entry points can never disagree with each other.
+  // Only moves FORWARD (never used to roll a project back) and never fabricates gates it can't
+  // reasonably imply (e.g. worker assignment for installation is left for admin to do for real).
+  const applyOfflineStageJump = async (pid, targetStageId, note = '') => {
+    if (!db || !pid) return;
+    try {
+      const snap = await getDoc(doc(db, 'projects', pid));
+      if (!snap.exists()) throw new Error('Project not found.');
+      const project = snap.data();
+      const currentStageId = project.stageId || 1;
+      const target = Math.max(1, Math.min(8, Number(targetStageId) || 1));
+      if (target <= currentStageId) {
+        notify('error', 'Target stage must be ahead of the current stage.');
+        return;
+      }
+
+      const kickoffMode = project.kickoffMode || 'rendering-first';
+      const projectType = project.projectType || 'full-service';
+      const budget = parseFloat(String(project.budget || project.projectTotal || '0').replace(/[^0-9.]/g, '')) || 0;
+      const scheduleConfig = SCHEDULE_CONFIGS[project.paymentSchedule || 'standard'] || SCHEDULE_CONFIGS.standard;
+      const nowISO = new Date().toISOString();
+      const today = nowISO.split('T')[0];
+
+      const updates = { stageId: target, updatedAt: serverTimestamp() };
+
+      // Cumulative gate booleans implied by reaching `target` — mirrors checkStageGates()
+      // (src/lib/projectGates.js) so the stage number and the real prerequisites always agree.
+      if (target >= 2) {
+        if (kickoffMode === 'rendering-first') updates.renderingFeePaid = true;
+        updates.siteSurveyCompleted = true;
+        updates['siteVisit.status'] = 'completed';
+      }
+      if (target >= 3) {
+        updates.renderingApproved = true;
+        updates.renderingStatus = 'Approved';
+        updates.quoteApproved = true;
+        updates.quoteStatus = 'approved';
+      }
+      if (target >= 4) {
+        updates.contractAccepted = true;
+        updates.depositPaid = true;
+        updates.initialDepositPaid = true;
+        updates.productionAuthorized = true;
+      }
+      if (target >= 6) {
+        updates.goodsArrivedInGhana = true;
+        updates.goodsBalancePaid = true;
+        updates.postProductionPaid = true;
+        if (projectType !== 'buy-only') updates.installationFeePaid = true;
+        // Deliberately NOT auto-setting assignedWorkers — that gate requires a real worker
+        // assignment and shouldn't be faked; admin still assigns via the Team tab.
+      }
+      if (target >= 8) {
+        updates.signOffApproved = true;
+      }
+
+      // One backfilled stage-history entry per stage crossed, so the Timeline tab tells a
+      // coherent story instead of jumping straight from stage 1 to the target with a gap.
+      const newHistory = [];
+      for (let s = currentStageId + 1; s <= target; s++) {
+        newHistory.push({
+          stageId: s,
+          note: note ? `Backfilled (offline progress): ${note}` : 'Backfilled — client had already reached this stage offline',
+          timestamp: nowISO,
+          byRole: 'admin',
+          backfilled: true,
+        });
+      }
+      updates.stageHistory = arrayUnion(...newHistory);
+
+      // Retroactive PAID invoices for implied milestone payments. Reuses/updates a matching
+      // existing invoice (e.g. the Pending rendering-fee invoice createClientProject just made)
+      // instead of creating a duplicate; only creates a new one if nothing matches.
+      const existingInvSnap = await getDocs(query(collection(db, 'invoices'), where('projectId', '==', pid)));
+      let paidAmountIncrement = 0;
+      const backfillInvoice = async ({ key, title, amount, purpose }) => {
+        if (!amount || amount <= 0) return;
+        const matchDoc = existingInvSnap.docs.find(d => {
+          const dd = d.data();
+          return (key && dd.milestoneKey === key) || (!dd.milestoneKey && (dd.title || '').toLowerCase() === title.toLowerCase());
+        });
+        let paidAmt = amount;
+        if (matchDoc) {
+          const dd = matchDoc.data();
+          if (dd.status === 'Paid') return; // already accounted for — don't double-count
+          paidAmt = Number(dd.amount || dd.total || amount);
+          await updateDoc(doc(db, 'invoices', matchDoc.id), {
+            status: 'Paid', amountPaid: paidAmt, paidAmount: paidAmt,
+            paidAt: nowISO, backfilled: true, updatedAt: serverTimestamp(),
+          });
+        } else {
+          const invRef = await addDoc(collection(db, 'invoices'), {
+            parentId: pid, projectId: pid, clientId: project.clientId || '',
+            clientName: project.clientName || '', clientEmail: project.clientEmail || '',
+            title, type: 'Milestone', milestoneKey: key || null, paymentPurpose: purpose || null,
+            amount: paidAmt, total: paidAmt, amountPaid: paidAmt, paidAmount: paidAmt,
+            currency: project.currency || 'GHS', status: 'Paid',
+            date: today, due: today, stageId: target, autoGenerated: true, backfilled: true,
+            createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+          });
+          await addDoc(collection(db, 'projects', pid, 'transactions'), {
+            parentId: pid, projectId: pid, invoiceId: invRef.id, amount: paidAmt, date: today,
+            method: 'Offline (backfilled)', status: 'verified', type: 'payment', backfilled: true,
+            clientId: project.clientId || '', createdAt: serverTimestamp(),
+          });
+        }
+        paidAmountIncrement += paidAmt;
+      };
+
+      const renderingFee = parseFloat(String(project.renderingFee || '0').replace(/[^0-9.]/g, '')) || 0;
+      if (target >= 2 && kickoffMode === 'rendering-first' && renderingFee > 0) {
+        await backfillInvoice({ key: null, title: 'Design & Rendering Fee', amount: renderingFee, purpose: 'rendering_fee' });
+      }
+      if (target >= 4 && budget > 0) {
+        const depositMilestone = (scheduleConfig.milestones || []).find(m => m.stageId === 3) || (scheduleConfig.milestones || [])[0];
+        if (depositMilestone) {
+          await backfillInvoice({ key: depositMilestone.key, title: depositMilestone.label || 'Deposit', amount: parseFloat((budget * depositMilestone.pct).toFixed(2)), purpose: 'initial_deposit' });
+        }
+      }
+      if (target >= 6 && budget > 0) {
+        const balanceMilestone = (scheduleConfig.milestones || []).find(m => m.stageId === 4 || m.stageId === 5);
+        if (balanceMilestone) {
+          await backfillInvoice({ key: balanceMilestone.key, title: balanceMilestone.label || 'Goods Balance', amount: parseFloat((budget * balanceMilestone.pct).toFixed(2)), purpose: 'goods_balance' });
+        }
+      }
+
+      if (paidAmountIncrement > 0) updates.paidAmount = increment(paidAmountIncrement);
+
+      await updateDoc(doc(db, 'projects', pid), updates);
+      await logAction(pid, 'Projects', `Fast-forwarded to stage ${target} (offline progress backfill)${note ? ': ' + note : ''}`, project.title);
+      notify('success', `Project moved to stage ${target} — offline progress recorded.`);
+    } catch (e) {
+      notify('error', 'Failed to backfill stage: ' + e.message);
     }
   };
 
@@ -3165,7 +3311,7 @@ export default function App() {
     lang, setLang, t, messages, sendMessage, testimonials, submitTestimonial, showVisualizer, setShowVisualizer,
     sendWhatsAppUpdate,
     jobs, createJob, updateJob,
-    createClientProject, updateProjectStage, addClientMessage, addProjectMessage, assignWorkerToProject, deleteProject,
+    createClientProject, updateProjectStage, applyOfflineStageJump, addClientMessage, addProjectMessage, assignWorkerToProject, deleteProject,
     approveQuote, approveSignoff, updateShippingDetails, addProjectDocument, createStaffAccount, deleteMember, updateMember,
     createQuoteVersion,
     workOrders, containers,

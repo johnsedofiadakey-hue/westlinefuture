@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import {
   ArrowLeft, Plus, MessageSquare, AlertCircle, Briefcase,
   User, DollarSign, Phone, Calendar, Loader2,
   Users, UserCheck, ChevronRight, CheckCircle2, RefreshCw, PenTool,
   FileText, Upload, ExternalLink, Trash2, ShieldCheck, X, Camera, Truck, Award,
-  Video, Clock, CheckCheck, Smartphone, Monitor
+  Video, Clock, CheckCheck, Smartphone, Monitor, FastForward, HelpCircle
 } from 'lucide-react';
 import { PAv, PSBadge } from '../../components/Shared';
 import { CLIENT_PROJECT_STAGES, PROJECT_TYPES, GLASS_CATALOG_DATA } from '../../data';
@@ -21,6 +22,28 @@ import { calculateTimeline, minimumAppointmentDateTime } from '../sharedHelpers'
 
 import VideoCallModal from '../../components/VideoCallModal';
 import { AC, STAGE_ICONS, SCHEDULE_CONFIGS, PREMIUM_CATALOG, BD_ITEMS_CONFIG } from './clienthub/config.jsx';
+
+// ─── Offline Stage Jump feature announcement ─────────────────────────────────
+// Shows up to 3 times (or until explicitly skipped), and stops on its own after
+// 5 days from the first time it was shown — after that the same explanation
+// stays available forever via the small "?" icon next to the Fast-Forward
+// button and the Starting Stage picker (i.e. it "moves to support").
+const OFFLINE_JUMP_TUT_KEY = 'wl_tut_offlineStageJump';
+const OFFLINE_JUMP_TUT_MAX_SHOWS = 3;
+const OFFLINE_JUMP_TUT_MAX_DAYS = 5;
+function readOfflineJumpTutState() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(OFFLINE_JUMP_TUT_KEY));
+    if (raw && typeof raw === 'object') return raw;
+  } catch {}
+  return { count: 0, firstSeenAt: null, skipped: false };
+}
+function offlineJumpTutShouldShow(s) {
+  if (s.skipped) return false;
+  if (s.count >= OFFLINE_JUMP_TUT_MAX_SHOWS) return false;
+  if (s.firstSeenAt && (Date.now() - new Date(s.firstSeenAt).getTime()) > OFFLINE_JUMP_TUT_MAX_DAYS * 24 * 60 * 60 * 1000) return false;
+  return true;
+}
 import { printInvoiceOrReceipt, printSignedContractDoc } from './clienthub/print';
 import { ProjectInvoicesLedger } from './clienthub/ProjectInvoicesLedger';
 import { PaymentScheduleCard } from './clienthub/PaymentScheduleCard';
@@ -905,6 +928,24 @@ export default function ClientHub({ clientId, dbClients = [], onBack, ...props }
   const [projectFilterMode, setProjectFilterMode] = useState('all');
   const [showNewModal, setShowNewModal] = useState(false);
   const [showAdvanceModal, setShowAdvanceModal] = useState(false);
+  const [showStageJumpModal, setShowStageJumpModal] = useState(false);
+  const [showOfflineJumpTut, setShowOfflineJumpTut] = useState(() => offlineJumpTutShouldShow(readOfflineJumpTutState()));
+  const [showOfflineJumpHelp, setShowOfflineJumpHelp] = useState(false);
+  useEffect(() => {
+    if (!showOfflineJumpTut) return;
+    const s = readOfflineJumpTutState();
+    localStorage.setItem(OFFLINE_JUMP_TUT_KEY, JSON.stringify({
+      count: s.count + 1,
+      firstSeenAt: s.firstSeenAt || new Date().toISOString(),
+      skipped: false,
+    }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const dismissOfflineJumpTut = (skip) => {
+    const s = readOfflineJumpTutState();
+    localStorage.setItem(OFFLINE_JUMP_TUT_KEY, JSON.stringify({ ...s, skipped: !!skip }));
+    setShowOfflineJumpTut(false);
+  };
   const [activeTab, setActiveTab] = useState('overview');
   const [settingDate, setSettingDate] = useState(false);
   const [estDate, setEstDate] = useState('');
@@ -1081,6 +1122,37 @@ export default function ClientHub({ clientId, dbClients = [], onBack, ...props }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 80px)', overflow: 'hidden' }}>
+
+      {showOfflineJumpTut && (
+        <div style={{ flexShrink: 0, marginBottom: 12, padding: '14px 16px', borderRadius: 14, background: '#EFF6FF', border: '1.5px solid #BFDBFE', display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+          <FastForward size={18} color="#2563EB" style={{ flexShrink: 0, marginTop: 1 }} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 13, fontWeight: 800, color: '#1E3A8A', marginBottom: 3 }}>New: Fast-Forward projects that already progressed offline</div>
+            <div style={{ fontSize: 12, color: '#1D4ED8', lineHeight: 1.5 }}>
+              If a client already paid a deposit, signed a contract, or reached a later stage before you added them here, you can now set that directly — look for "Starting Stage" when creating a project, or the "Fast-Forward" button on an existing one. Westline will mark the earlier stages complete and record matching paid invoices automatically.
+            </div>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flexShrink: 0 }}>
+            <button onClick={() => dismissOfflineJumpTut(false)} style={{ background: 'none', border: 'none', color: '#1D4ED8', cursor: 'pointer', fontSize: 11, fontWeight: 700, whiteSpace: 'nowrap' }}>Got it</button>
+            <button onClick={() => dismissOfflineJumpTut(true)} style={{ background: 'none', border: 'none', color: '#64748B', cursor: 'pointer', fontSize: 10, whiteSpace: 'nowrap' }}>Don't show again</button>
+          </div>
+        </div>
+      )}
+      {showOfflineJumpHelp && (
+        <div className="overlay-modal" onClick={() => setShowOfflineJumpHelp(false)} style={{ zIndex: 10600 }}>
+          <div className="modal-box lxf" style={{ maxWidth: 420 }} onClick={e => e.stopPropagation()}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+              <h3 className="lxfh" style={{ fontSize: 15, fontWeight: 800, margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <FastForward size={16} color="#2563EB" /> Fast-Forward Stage — how it works
+              </h3>
+              <button onClick={() => setShowOfflineJumpHelp(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)' }}><X size={18} /></button>
+            </div>
+            <p style={{ fontSize: 12.5, color: 'var(--text-secondary)', lineHeight: 1.6, margin: 0 }}>
+              Use this when a client already progressed through some stages offline — e.g. rendering approved, deposit paid, contract signed — before their project was fully tracked here. Pick the stage they've actually reached; Westline marks everything before it as done and creates matching paid invoice/transaction records so financials stay accurate. It only moves projects forward, and every use is logged in the project's activity log.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* TOP BAR */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 0 16px 0', flexShrink: 0, borderBottom: '1px solid var(--border-color)', marginBottom: 16 }}>
@@ -1330,6 +1402,16 @@ export default function ClientHub({ clientId, dbClients = [], onBack, ...props }
                         </button>
                       )}
                       {!nextStage && <div style={{ fontSize: 11, fontWeight: 800, color: '#16A34A', background: '#F0FDF4', padding: '5px 12px', borderRadius: 20 }}>✓ All Done</div>}
+                      {(selected.stageId || 1) < 8 && (
+                        <button onClick={() => setShowStageJumpModal(true)} title="Client already reached a later stage offline — set it directly"
+                          style={{ height: 34, padding: '0 12px', borderRadius: 10, background: '#fff', color: '#2563EB', border: '1.5px solid #BFDBFE', fontSize: 12, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}>
+                          <FastForward size={13} /> Fast-Forward
+                        </button>
+                      )}
+                      <button onClick={() => setShowOfflineJumpHelp(true)} title="What does Fast-Forward do?"
+                        style={{ width: 34, height: 34, borderRadius: 10, background: 'none', color: 'var(--text-secondary)', border: '1.5px solid var(--border-color)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <HelpCircle size={14} />
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -2273,6 +2355,9 @@ export default function ClientHub({ clientId, dbClients = [], onBack, ...props }
       {showAdvanceModal && selected && nextStage && (
         <AdvanceModal project={selected} stage={actualStageObj} nextStage={nextStage} invoices={props.invoices || []} onClose={() => setShowAdvanceModal(false)} onAdvance={props.updateProjectStage} />
       )}
+      {showStageJumpModal && selected && (
+        <StageJumpModal project={selected} onClose={() => setShowStageJumpModal(false)} onJump={props.applyOfflineStageJump} />
+      )}
       {showRequestPaymentModal && selected && (
         <RequestPaymentModal
           client={client}
@@ -2386,6 +2471,92 @@ export default function ClientHub({ clientId, dbClients = [], onBack, ...props }
         />
       )}
     </div>
+  );
+}
+
+// ─── Stage Jump Modal — backfill a project to a later stage when the client already ──
+// progressed offline before being added, or was under-recorded after creation. Only
+// offers stages ahead of the current one; calls the shared applyOfflineStageJump so
+// this and the New Project "Starting Stage" picker can never disagree on what a given
+// stage implies.
+function StageJumpModal({ project, onClose, onJump }) {
+  const currentStageId = project.stageId || 1;
+  const jumpableStages = CLIENT_PROJECT_STAGES.filter(s => s.id > currentStageId);
+  const [targetStageId, setTargetStageId] = useState(jumpableStages[0]?.id || currentStageId + 1);
+  const [note, setNote] = useState('');
+  const [confirming, setConfirming] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  const targetStage = CLIENT_PROJECT_STAGES.find(s => s.id === targetStageId);
+  const skippedStages = CLIENT_PROJECT_STAGES.filter(s => s.id > currentStageId && s.id <= targetStageId);
+
+  const handleConfirm = async () => {
+    setSaving(true);
+    await onJump?.(project.id, targetStageId, note.trim());
+    setSaving(false);
+    onClose();
+  };
+
+  return createPortal(
+    <div className="overlay-modal" onClick={onClose} style={{ zIndex: 10500 }}>
+      <div className="modal-box lxf" style={{ maxWidth: 460 }} onClick={e => e.stopPropagation()}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+          <h3 className="lxfh" style={{ fontSize: 17, fontWeight: 800, margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <FastForward size={17} color="#2563EB" /> Fast-Forward Stage
+          </h3>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)' }}><X size={20} /></button>
+        </div>
+
+        {!confirming ? (
+          <>
+            <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 16, lineHeight: 1.5 }}>
+              Use this when the client already reached a later stage offline — e.g. deposit already paid, contract already signed — before this was fully tracked in the system.
+            </p>
+            <label style={{ fontSize: 10, fontWeight: 800, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '.06em', display: 'block', marginBottom: 8 }}>Set stage to</label>
+            <select
+              value={targetStageId}
+              onChange={e => setTargetStageId(Number(e.target.value))}
+              style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid var(--border-color)', fontSize: 13, outline: 'none', fontFamily: 'inherit', marginBottom: 12, boxSizing: 'border-box' }}
+            >
+              {jumpableStages.map(s => <option key={s.id} value={s.id}>{s.id}. {s.name}</option>)}
+            </select>
+            <label style={{ fontSize: 10, fontWeight: 800, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '.06em', display: 'block', marginBottom: 8 }}>Note (kept for the record)</label>
+            <textarea
+              value={note}
+              onChange={e => setNote(e.target.value)}
+              placeholder="e.g. Client paid deposit via bank transfer before onboarding — confirmed on WhatsApp."
+              rows={2}
+              style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid var(--border-color)', fontSize: 13, outline: 'none', fontFamily: 'inherit', resize: 'vertical', marginBottom: 16, boxSizing: 'border-box' }}
+            />
+            <button
+              disabled={!jumpableStages.length}
+              onClick={() => setConfirming(true)}
+              className="p-btn-dark lxf"
+              style={{ width: '100%', padding: 12, opacity: jumpableStages.length ? 1 : 0.5 }}
+            >
+              Continue
+            </button>
+          </>
+        ) : (
+          <>
+            <div style={{ padding: 14, borderRadius: 12, background: '#FFFBEB', border: '1.5px solid #FDE68A', marginBottom: 16 }}>
+              <div style={{ fontSize: 12, fontWeight: 800, color: '#92400E', marginBottom: 8 }}>This will mark the following as complete:</div>
+              <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12, color: '#92400E', lineHeight: 1.7 }}>
+                {skippedStages.map(s => <li key={s.id}>{s.name}</li>)}
+              </ul>
+              <div style={{ fontSize: 11, color: '#92400E', marginTop: 8 }}>Any deposit, rendering fee, or goods-balance payment implied by reaching <strong>{targetStage?.name}</strong> will be recorded as paid. This can't be automatically undone — reversing it means manually editing the project.</div>
+            </div>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={() => setConfirming(false)} className="p-btn-light" style={{ flex: 1, padding: 12 }}>Back</button>
+              <button disabled={saving} onClick={handleConfirm} className="p-btn-dark lxf" style={{ flex: 1, padding: 12, opacity: saving ? 0.6 : 1 }}>
+                {saving ? 'Applying…' : 'Confirm & Apply'}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>,
+    document.body
   );
 }
 

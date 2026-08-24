@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Plus, Calendar, ChevronDown, CheckCircle2, Loader2 } from 'lucide-react';
-import { PROJECT_TYPES } from '../../../data';
+import { PROJECT_TYPES, CLIENT_PROJECT_STAGES } from '../../../data';
 import { AC, SCHEDULE_CONFIGS, BD_ITEMS_CONFIG } from './config.jsx';
 
 // ─── New Project Modal ────────────────────────────────────────────────────────
@@ -22,8 +22,11 @@ export function NewProjectModal({ client, teamMembers = [], onClose, onCreate })
     latitude: '',
     longitude: '',
     cat: '',
+    startingStageId: 1,
+    offlineJumpNote: '',
   });
   const [showBackdate, setShowBackdate] = useState(false);
+  const [showOfflineJump, setShowOfflineJump] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [showBreakdown, setShowBreakdown] = useState(false);
   // Custom payment milestone builder
@@ -394,6 +397,45 @@ export function NewProjectModal({ client, teamMembers = [], onClose, onCreate })
                       <label style={{ fontSize: 10, fontWeight: 800, color: '#DC2626', textTransform: 'uppercase', letterSpacing: '.06em', display: 'block', marginBottom: 8 }}>Project Start Date</label>
                       <input type="date" value={form.projectDate} onChange={e => set('projectDate', e.target.value)} max={new Date().toISOString().slice(0, 10)} style={{ padding: '9px 12px', borderRadius: 10, border: '1.5px solid #FECACA', fontSize: 13, outline: 'none', fontFamily: 'inherit', background: '#fff' }} />
                       <div style={{ fontSize: 11, color: '#DC2626', marginTop: 6 }}>Use for historical projects only.</div>
+                    </div>
+                  )}
+                </div>
+                <div style={{ marginTop: 14 }}>
+                  <button
+                    type="button"
+                    onClick={() => { setShowOfflineJump(p => !p); if (showOfflineJump) set('startingStageId', 1); }}
+                    style={{ fontSize: 11, fontWeight: 800, color: showOfflineJump ? '#2563EB' : 'var(--text-secondary)', background: 'transparent', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', gap: 5 }}
+                  >
+                    <ChevronDown size={12} style={{ transform: showOfflineJump ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }} />
+                    Client already progressed offline?
+                  </button>
+                  {showOfflineJump && (
+                    <div style={{ marginTop: 10, padding: '14px 16px', background: '#EFF6FF', borderRadius: 12, border: '1.5px solid #BFDBFE' }}>
+                      <div style={{ fontSize: 11, color: '#1E3A8A', marginBottom: 10, lineHeight: 1.5 }}>
+                        If this client was already partway through the process outside the system (e.g. rendering already approved, deposit already paid, contract already signed), pick where they actually are — Westline will automatically mark everything before that point as done and create matching paid records.
+                      </div>
+                      <label style={{ fontSize: 10, fontWeight: 800, color: '#1D4ED8', textTransform: 'uppercase', letterSpacing: '.06em', display: 'block', marginBottom: 8 }}>Starting Stage</label>
+                      <select
+                        value={form.startingStageId}
+                        onChange={e => set('startingStageId', Number(e.target.value))}
+                        style={{ width: '100%', padding: '9px 12px', borderRadius: 10, border: '1.5px solid #BFDBFE', fontSize: 13, outline: 'none', fontFamily: 'inherit', background: '#fff', marginBottom: 10 }}
+                      >
+                        {CLIENT_PROJECT_STAGES.map(s => (
+                          <option key={s.id} value={s.id}>{s.id}. {s.name}</option>
+                        ))}
+                      </select>
+                      {form.startingStageId > 1 && (
+                        <>
+                          <label style={{ fontSize: 10, fontWeight: 800, color: '#1D4ED8', textTransform: 'uppercase', letterSpacing: '.06em', display: 'block', marginBottom: 8 }}>Note (optional, kept for the record)</label>
+                          <textarea
+                            value={form.offlineJumpNote}
+                            onChange={e => set('offlineJumpNote', e.target.value)}
+                            placeholder="e.g. Client paid deposit via bank transfer before onboarding — confirmed with client on WhatsApp."
+                            rows={2}
+                            style={{ width: '100%', padding: '9px 12px', borderRadius: 10, border: '1.5px solid #BFDBFE', fontSize: 13, outline: 'none', fontFamily: 'inherit', background: '#fff', resize: 'vertical' }}
+                          />
+                        </>
+                      )}
                     </div>
                   )}
                 </div>
